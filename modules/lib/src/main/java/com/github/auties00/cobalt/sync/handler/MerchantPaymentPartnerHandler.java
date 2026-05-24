@@ -6,35 +6,60 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles merchant payment partner sync actions.
+ * Applies the {@code merchant_payment_partner} app-state sync action that
+ * persists the SMB merchant's payment service provider for Brazil.
  *
- * <p>Per WhatsApp Web {@code WAWebMerchantPaymentPartnerSync}, this handler
- * processes the {@code "merchant_payment_partner"} sync action in the
- * {@code RegularLow} collection at version {@code 7}. The handler is
- * restricted to SMB (Small/Medium Business) platforms with the
- * {@code payments_br_merchant_psp_account_status_sync} AB prop enabled, and
- * only {@code SET} operations are supported.
+ * @apiNote
+ * Drives the SMB Brazil merchant onboarding flow: when the primary
+ * device finishes the BR PSP onboarding the resulting partner record
+ * fans out across the {@link SyncPatchType#REGULAR_LOW} collection so
+ * companion devices can show the correct payment method. The handler
+ * is gated by the SMB platform check
+ * ({@link ClientPlatformType#IOS_BUSINESS} /
+ * {@link ClientPlatformType#ANDROID_BUSINESS}) and the
+ * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} A/B
+ * prop; while either gate is closed every mutation is reported as
+ * {@link MutationApplicationResult#unsupported()}, exactly mirroring
+ * WA Web. The mutation index has no variable parts and is always
+ * {@snippet :
+ *     ["merchant_payment_partner"]
+ * }
  *
- * <p>On {@code SET}, validates that {@code merchantPaymentPartnerAction} is
- * non-{@code null} and persists the partner to the store via
- * {@code setMerchantPaymentPartner}.
- *
- * <p>Index format: {@code ["merchant_payment_partner"]}
+ * @implNote
+ * This implementation persists the action through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}
+ * instead of WA Web's
+ * {@code WAWebUserPrefsMerchantPaymentPartner.setMerchantPaymentPartner}
+ * UserPrefs write, since Cobalt has no UserPrefs key-value store. The
+ * SMB and A/B-prop gates are evaluated per mutation rather than once
+ * for the batch, so a server-side prop flip reaches the next incoming
+ * sync without restarting the client.
  */
 public final class MerchantPaymentPartnerHandler implements WebAppStateActionHandler {
     /**
-     * The AB-props service consulted before applying any mutation.
+     * The {@link ABPropsService} consulted before every mutation to
+     * gate the handler on
+     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Creates a new {@code MerchantPaymentPartnerHandler}.
+     * Constructs a {@link MerchantPaymentPartnerHandler} bound to the
+     * given A/B-props service.
      *
-     * @param abPropsService the AB-props service consulted on every
+     * @apiNote
+     * The handler must consult
+     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC} on
+     * every mutation rather than caching the value, so server-side
+     * prop flips reach the next incoming sync without restarting the
+     * client.
+     *
+     * @param abPropsService the A/B-props service consulted on every
      *                       mutation
      */
     public MerchantPaymentPartnerHandler(ABPropsService abPropsService) {
@@ -42,8 +67,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
     }
 
     /**
-     * Returns the action name for merchant payment partner mutations.
-     * @return the action name {@code "merchant_payment_partner"}
+     * {@inheritDoc}
      */
     @Override
     public String actionName() {
@@ -51,8 +75,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
     }
 
     /**
-     * Returns the collection name for merchant payment partner mutations.
-     * @return {@link SyncPatchType#REGULAR_LOW}
+     * {@inheritDoc}
      */
     @Override
     public SyncPatchType collectionName() {
@@ -60,8 +83,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
     }
 
     /**
-     * Returns the mutation format version for merchant payment partner mutations.
-     * @return {@code 7}
+     * {@inheritDoc}
      */
     @Override
     public int version() {
@@ -69,38 +91,20 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
     }
 
     /**
-     * Applies a single merchant payment partner mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebMerchantPaymentPartnerSync.applyMutations}:
-     * <ol>
-     *   <li>If the platform is not SMB ({@code isSMB() !== true}), returns
-     *       {@code Unsupported} (WA Web logs a WARN and returns
-     *       {@code Unsupported} for the entire batch).</li>
-     *   <li>If the AB prop
-     *       {@code payments_br_merchant_psp_account_status_sync} is not
-     *       {@code true}, returns {@code Unsupported} (WA Web logs a WARN
-     *       and returns {@code Unsupported} for the entire batch).</li>
-     *   <li>If the operation is not {@code "set"}, returns {@code Unsupported}
-     *       (WA Web increments an unsupported-count warning at end of batch).</li>
-     *   <li>If {@code mutation.value.merchantPaymentPartnerAction} is
-     *       {@code null}, returns {@code Malformed} via
-     *       {@code WAWebSyncdIndexUtils.malformedActionValue(collectionName)}
-     *       (WA Web increments a malformed-count warning at end of batch).</li>
-     *   <li>Otherwise calls
-     *       {@code WAWebUserPrefsMerchantPaymentPartner.setMerchantPaymentPartner(action)}
-     *       and returns {@code Success}.</li>
-     * </ol>
-     *
-     * <p>WA Web's {@code WALogger.WARN} calls for the unsupported/malformed
-     * batch counters and the SMB/ABProp gate failures are intentionally
-     * omitted in Cobalt; the return semantics are preserved exactly.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation reads the SMB platform tag and the
+     * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}
+     * flag first; when either gate is closed the mutation is reported
+     * as {@link MutationApplicationResult#unsupported()} matching WA
+     * Web's batch-wide return shape. When both gates are open the
+     * value is persisted directly through
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)}.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        var platform = client.store().device().platform(); // ADAPTED: WAWebMobilePlatforms.isSMB — checks c === u.SMBA || c === u.SMBI where SMBA = "smba" (ANDROID_BUSINESS) and SMBI = "smbi" (IOS_BUSINESS)
+        var platform = client.store().device().platform();
         if (platform != ClientPlatformType.IOS_BUSINESS && platform != ClientPlatformType.ANDROID_BUSINESS) {
             return MutationApplicationResult.unsupported();
         }
@@ -117,7 +121,7 @@ public final class MerchantPaymentPartnerHandler implements WebAppStateActionHan
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        client.store().setMerchantPaymentPartner(action); // ADAPTED: WAWebUserPrefsMerchantPaymentPartner.setMerchantPaymentPartner -> WhatsAppStore.setMerchantPaymentPartner
+        client.store().setMerchantPaymentPartner(action);
         return MutationApplicationResult.success();
     }
 }

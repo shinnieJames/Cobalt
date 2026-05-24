@@ -414,55 +414,6 @@ public final class DeviceList {
     }
 
     /**
-     * Returns a new device list obtained by merging this list with another.
-     *
-     * <p>The devices of the two lists are deduplicated by their id; when
-     * the same id appears on both sides, the entry from {@code this}
-     * takes precedence. The timestamp of the result is the most recent of
-     * the two, and the remaining metadata fields are taken from whichever
-     * side has a value defined. The result is a brand new instance; the
-     * original lists are left untouched.
-     *
-     * <p>This operation is used, for example, when merging a freshly
-     * parsed USync response with the locally cached device list so that
-     * fields not carried by the response are preserved.
-     *
-     * @param other the other device list to merge with; {@code null} or
-     *              empty is treated as a no-op that returns {@code this}
-     * @return the merged device list, or {@code this} if there is nothing
-     *         to merge
-     */
-    public DeviceList merge(DeviceList other) {
-        if (other == null || other.devices.isEmpty()) {
-            return this;
-        }
-
-        var mergedDevices = new LinkedHashMap<Integer, DeviceInfo>();
-        for (var device : other.devices) {
-            mergedDevices.put(device.id(), device);
-        }
-        for (var device : devices) {
-            mergedDevices.put(device.id(), device);
-        }
-
-        var useThis = timestamp.isAfter(other.timestamp);
-        return new DeviceListBuilder()
-                .userJid(userJid)
-                .devices(List.copyOf(mergedDevices.values()))
-                .timestamp(useThis ? timestamp : other.timestamp)
-                .rawId(rawId != null ? rawId : other.rawId)
-                .deleted(deleted)
-                .deletedChangedToHost(deletedChangedToHost)
-                .advAccountType(advAccountType != null ? advAccountType : other.advAccountType)
-                .expectedTimestamp(expectedTimestamp != null ? expectedTimestamp : other.expectedTimestamp)
-                .expectedTimestampLastDeviceJobTimestamp(expectedTimestampLastDeviceJobTimestamp)
-                .expectedTimestampUpdateTimestamp(expectedTimestampUpdateTimestamp)
-                .currentIndex(currentIndex != 0 ? currentIndex : other.currentIndex)
-                .validIndexes(!validIndexes.isEmpty() ? validIndexes : other.validIndexes)
-                .build();
-    }
-
-    /**
      * Returns whether the ADV account type has changed between this list
      * and another list.
      *

@@ -13,10 +13,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the {@code <query/>} payload
- * (with optional {@code phash} dehydration hint and optional
- * {@code <add_request/>} probe) in the canonical
- * {@code <iq xmlns="w:g2" type="get" to="<groupJid>">} envelope.
+ * The outbound {@code <iq type="get" xmlns="w:g2" to="<groupJid>">} stanza that fetches a single group's
+ * metadata projection, optionally probing the V4-invite-link add-request flow at the same time.
+ *
+ * @apiNote
+ * Drives the chat-info refresh and invite-link landing surfaces backed by
+ * {@code WAWebGroupGetGroupInfoJob}, {@code WAWebGroupInviteV4Job}, and similar consumers. The optional
+ * {@link #queryPhash()} lets the relay skip parts of the projection that have not changed since the caller's
+ * last fetch; the optional add-request triple ({@link #addRequestExpiration()}, {@link #addRequestAdmin()},
+ * {@link #addRequestCode()}) attaches the V4 invite landing probe used by {@code WAWebGroupInviteV4Job}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -26,40 +31,42 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupInfoRequestTypeMixin")
 public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The group JID whose metadata is being queried. Routed verbatim
-     * into the IQ's {@code to} attribute.
+     * The group {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
      */
     private final Jid groupJid;
 
     /**
-     * The optional dehydration hash hint. When supplied, the relay
-     * may skip parts of the projection that haven't changed since
-     * the caller's last fetch and return a delta-only response.
+     * The optional dehydration-hash hint stamped on the inner {@code <query phash="...">} child; when
+     * supplied, the relay can return a delta-only projection.
      */
     private final String queryPhash;
 
     /**
-     * The optional V4-invite-link {@code <add_request expiration="…"
-     * admin="…"/>} expiration timestamp.
+     * The optional V4-invite-link {@code <add_request expiration="...">} attribute; non-null switches the
+     * request on the invite-landing probe.
      */
     private final Long addRequestExpiration;
 
     /**
-     * The optional V4-invite-link admin-targeted {@code add_request}
-     * recipient. Mutually exclusive with {@link #addRequestCode}.
+     * The optional V4-invite-link admin-targeted {@code <add_request admin="...">} recipient; mutually
+     * exclusive with {@link #addRequestCode}.
      */
     private final Jid addRequestAdmin;
 
     /**
-     * The optional V4-invite-link code-targeted {@code add_request}
-     * code. Mutually exclusive with {@link #addRequestAdmin}.
+     * The optional V4-invite-link code-targeted {@code <add_request code="...">} string; mutually exclusive
+     * with {@link #addRequestAdmin}.
      */
     private final String addRequestCode;
 
     /**
      * Constructs a metadata-only request for the given group.
      *
-     * @param groupJid the group JID; never {@code null}
+     * @apiNote
+     * Convenience constructor for callers that do not need the dehydration hint or the V4 invite-landing
+     * probe; delegates to the full constructor with all optional parameters set to {@code null}.
+     *
+     * @param groupJid the group {@link Jid}; never {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetGroupInfoRequest(Jid groupJid) {
@@ -69,15 +76,15 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Constructs a fully-parametrised request.
      *
-     * @param groupJid             the group JID; never {@code null}
-     * @param queryPhash           the optional dehydration hash hint;
-     *                             may be {@code null}
-     * @param addRequestExpiration the optional add-request expiration
-     *                             timestamp; may be {@code null}
-     * @param addRequestAdmin      the optional add-request admin
-     *                             target; may be {@code null}
-     * @param addRequestCode       the optional add-request code
-     *                             target; may be {@code null}
+     * @apiNote
+     * Pass either {@code addRequestAdmin} or {@code addRequestCode} (not both) when {@code addRequestExpiration}
+     * is supplied; the relay rejects requests carrying both target attributes.
+     *
+     * @param groupJid             the group {@link Jid}; never {@code null}
+     * @param queryPhash           the optional dehydration hash hint; may be {@code null}
+     * @param addRequestExpiration the optional add-request expiration timestamp; may be {@code null}
+     * @param addRequestAdmin      the optional add-request admin target; may be {@code null}
+     * @param addRequestCode       the optional add-request code target; may be {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetGroupInfoRequest(Jid groupJid, String queryPhash, Long addRequestExpiration,
@@ -90,7 +97,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns the group JID being queried.
+     * Returns the group {@link Jid} being queried.
      *
      * @return the group JID; never {@code null}
      */
@@ -101,18 +108,20 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Returns the optional dehydration hash.
      *
-     * @return an {@link Optional} carrying the hash, or empty when
-     *         the caller did not supply one
+     * @apiNote
+     * Empty means the request is for a full projection; a non-empty value lets the relay return a
+     * delta-only response.
+     *
+     * @return an {@link Optional} carrying the hash, or empty when the caller did not supply one
      */
     public Optional<String> queryPhash() {
         return Optional.ofNullable(queryPhash);
     }
 
     /**
-     * Returns the optional V4-invite-link add-request expiration.
+     * Returns the optional V4-invite-link add-request expiration timestamp.
      *
-     * @return an {@link Optional} carrying the expiration, or empty
-     *         when the caller did not supply one
+     * @return an {@link Optional} carrying the expiration, or empty when the caller did not supply one
      */
     public Optional<Long> addRequestExpiration() {
         return Optional.ofNullable(addRequestExpiration);
@@ -121,8 +130,7 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Returns the optional V4-invite-link add-request admin target.
      *
-     * @return an {@link Optional} carrying the admin JID, or empty
-     *         when the caller did not supply one
+     * @return an {@link Optional} carrying the admin JID, or empty when the caller did not supply one
      */
     public Optional<Jid> addRequestAdmin() {
         return Optional.ofNullable(addRequestAdmin);
@@ -131,18 +139,20 @@ public final class SmaxGroupsGetGroupInfoRequest implements SmaxOperation.Reques
     /**
      * Returns the optional V4-invite-link add-request code target.
      *
-     * @return an {@link Optional} carrying the code, or empty when
-     *         the caller did not supply one
+     * @return an {@link Optional} carrying the code, or empty when the caller did not supply one
      */
     public Optional<String> addRequestCode() {
         return Optional.ofNullable(addRequestCode);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <query/>} payload
+     * @implNote
+     * This implementation stamps {@code phash} on the {@code <query/>} child when {@link #queryPhash()} is
+     * non-empty, nests an {@code <add_request/>} child carrying the supplied expiration / admin / code
+     * attributes when {@link #addRequestExpiration()} is non-empty, then wraps the result in the canonical
+     * {@code <iq xmlns="w:g2" type="get" to="<groupJid>">} envelope.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetGroupInfoRequest",

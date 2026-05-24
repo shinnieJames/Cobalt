@@ -21,49 +21,88 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Fetches the full newsletter directory list filtered by country or category.
+ * Builds the MEX request that lists newsletters in the discovery directory under a given view.
  *
- * <p>This query powers the explore tab of the newsletter directory, returning paginated channels that match the supplied filter arguments such as country or category.
+ * @apiNote
+ * Drives the newsletter directory explore tab; the {@link NewsletterDirectoryListView}
+ * argument selects between the {@code RECOMMENDED}, {@code NEW}, {@code POPULAR},
+ * {@code FEATURED} and {@code TRENDING} pills, the {@code countryCodes} and
+ * {@code categories} arguments narrow the list to specific countries or topic
+ * categories, and {@code limit} plus {@code cursorToken} drive forward pagination.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDirectoryListJob")
 public final class FetchNewsletterDirectoryListMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterDirectoryList} compiled query.
-     *     */
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterDirectoryListJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
+     */
     public static final String QUERY_ID = "26125047313831973";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchNewsletterDirectoryList
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterDirectoryList";
+
+    /**
+     * The directory view pill being requested.
+     */
     private final NewsletterDirectoryListView view;
+
+    /**
+     * The list of ISO country codes to filter by, or {@code null} when no
+     * country filter is applied.
+     */
     private final List<String> countryCodes;
+
+    /**
+     * The list of category enum strings to filter by, or {@code null} when no
+     * category filter is applied.
+     */
     private final List<String> categories;
+
+    /**
+     * The page size, or {@code null} for the server default.
+     */
     private final Long limit;
+
+    /**
+     * The forward pagination cursor returned by the previous page, or
+     * {@code null} for the first page.
+     */
     private final String cursorToken;
+
+    /**
+     * Whether to populate the {@code status_metadata} fragment in the
+     * response.
+     */
     private final boolean fetchStatusMetadata;
 
     /**
-     * Constructs a new request for the newsletter directory list query.
+     * Constructs a request for one page of the directory list view.
      *
-     * @param view                the directory list view (filter pill) to query;
-     *                            translated to the uppercase enum string by
-     *                            {@code u(i)} in the JS source
-     * @param countryCodes        the country codes to filter by, may be {@code null}
-     * @param categories          the categories to filter by as upper-case
-     *                            on-wire values (e.g. {@code "BUSINESS"}); WA Web
-     *                            obtains these via
-     *                            {@code WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum}
+     * @apiNote
+     * The {@code view} value is mapped to the GraphQL uppercase enum by the
+     * {@link NewsletterDirectoryListView#value()} accessor; the
+     * {@code categories} list must already carry the on-wire enum names
+     * produced by {@code WAWebNewsletterDirectoryCategoryUtils.getCategoryValueFromEnum}
+     * in WA Web. The {@code fetchStatusMetadata} flag mirrors the result of
+     * {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}.
+     *
+     * @param view                the directory view pill
+     * @param countryCodes        the ISO country codes filter, may be {@code null}
+     * @param categories          the category enum-string filter, may be
+     *                            {@code null}
      * @param limit               the page size, may be {@code null}
-     * @param cursorToken         the start cursor for pagination, may be {@code null}
-     * @param fetchStatusMetadata whether to include
-     *                            {@code status_metadata} in the response, set
-     *                            from
-     *                            {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}     */
+     * @param cursorToken         the forward pagination cursor, may be
+     *                            {@code null}
+     * @param fetchStatusMetadata whether to request the optional
+     *                            {@code status_metadata} fragment
+     */
     public FetchNewsletterDirectoryListMexRequest(NewsletterDirectoryListView view,
                    List<String> countryCodes,
                    List<String> categories,
@@ -79,10 +118,10 @@ public final class FetchNewsletterDirectoryListMexRequest implements MexOperatio
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -90,10 +129,10 @@ public final class FetchNewsletterDirectoryListMexRequest implements MexOperatio
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -101,11 +140,24 @@ public final class FetchNewsletterDirectoryListMexRequest implements MexOperatio
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {view, filters: {country_codes, categories}, limit, start_cursor}, fetch_status_metadata}}}
+     * payload; the {@code filters} object is always emitted with both
+     * {@code country_codes} and {@code categories} keys (each as an empty
+     * array when the corresponding list is {@code null}) so the on-wire
+     * shape never drops the keys.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterDirectoryListJob", exports = "mexFetchNewsletterDirectoryList",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -168,10 +220,11 @@ public final class FetchNewsletterDirectoryListMexRequest implements MexOperatio
     }
 
     /**
-     * Writes a string array, emitting an empty array when the input is
-     * {@code null} so that the on-wire shape always contains the
-     * {@code country_codes} and {@code categories} keys (matching the
-     * JS object literal which never omits them).
+     * Writes a list of strings as a JSON array into the given writer.
+     *
+     * @apiNote
+     * Emits an empty array when {@code values} is {@code null} so the
+     * enclosing object always carries the array key.
      *
      * @param writer the JSON writer to emit into
      * @param values the string values to serialise, may be {@code null}

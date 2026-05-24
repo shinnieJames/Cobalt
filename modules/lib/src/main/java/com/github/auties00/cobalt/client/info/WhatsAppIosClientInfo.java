@@ -13,99 +13,111 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 /**
- * Represents the build identity of the native iOS WhatsApp application and
- * resolves it from the public Apple App Store lookup API.
+ * {@link WhatsAppMobileClientInfo} flavour for the consumer ({@code net.whatsapp.WhatsApp}) and business
+ * ({@code net.whatsapp.WhatsAppSMB}) iOS WhatsApp bundles.
  *
- * <p>The iOS registration protocol uses a much simpler token scheme than its
- * Android counterpart, namely an MD5 digest of a static 40 character secret
- * (different for consumer and business builds) concatenated with the MD5
- * build hash of the current version and the national phone number. Unlike
- * Android there is no need to download the signed binary because the secret
- * is embedded in this class; the only information that changes between
- * releases is the published version string, which this class retrieves from
- * the App Store lookup API.
- *
- * <p>Two flavours are supported. The consumer flavour uses the
- * {@code net.whatsapp.WhatsApp} bundle while the business flavour uses the
- * {@code net.whatsapp.WhatsAppSMB} bundle. Each flavour has its own lazily
- * initialised singleton protected by a double checked lock.
- *
- * @apiNote This class has no WhatsApp Web counterpart: it implements the
- *          native iOS registration token scheme that lives inside the iOS
- *          WhatsApp IPA. WhatsApp Web never touches the mobile registration
- *          protocol.
+ * @apiNote Selected automatically by {@link WhatsAppMobileClientInfo#of(com.github.auties00.cobalt.model.device.pairing.ClientPlatformType)}
+ *          for {@code IOS} and {@code IOS_BUSINESS}; embedders can also reach a flavour directly through
+ *          {@link #ofPersonal()} or {@link #ofBusiness()}. Resolution requires a single call to the public Apple App Store
+ *          {@code itunes.apple.com/lookup?bundleId=...} endpoint to read the published version string; no signed binary is
+ *          ever downloaded because the static secrets the iOS registration scheme needs are embedded in this class.
+ * @implNote This implementation has no WA Web counterpart; the iOS registration token scheme is reverse engineered from the
+ *           iOS WhatsApp IPA. The token algorithm is much simpler than the Android counterpart in
+ *           {@link WhatsAppAndroidClientInfo}: a single MD5 over a static 40 character secret plus the build hash plus the
+ *           phone number, with no per request signing material.
  * @see WhatsAppMobileClientInfo
  */
 final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     /**
-     * Holds the App Store lookup URL that returns JSON metadata for the
-     * consumer WhatsApp bundle.
+     * App Store lookup URL that returns JSON metadata for the consumer WhatsApp bundle.
+     *
+     * @apiNote Used by {@link #queryIpaInfo(boolean)} when {@code business} is {@code false}.
      */
     private static final URI MOBILE_PERSONAL_IOS_URL = URI.create("https://itunes.apple.com/lookup?bundleId=net.whatsapp.WhatsApp");
 
     /**
-     * Holds the App Store lookup URL that returns JSON metadata for the
-     * business WhatsApp bundle.
+     * App Store lookup URL that returns JSON metadata for the business WhatsApp bundle.
+     *
+     * @apiNote Used by {@link #queryIpaInfo(boolean)} when {@code business} is {@code true}.
      */
     private static final URI MOBILE_BUSINESS_IOS_URL = URI.create("https://itunes.apple.com/lookup?bundleId=net.whatsapp.WhatsAppSMB");
 
     /**
-     * Holds the User-Agent used when calling the App Store lookup API,
-     * mimicking a recent mobile Safari on an iPhone.
+     * User-Agent header sent when calling the App Store lookup API.
+     *
+     * @apiNote Mimics a recent mobile Safari on an iPhone so the lookup endpoint returns metadata identical to what a real
+     *          device would see; some catalog responses vary by User-Agent.
      */
     private static final String MOBILE_IOS_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1";
 
     /**
-     * Holds the cached instance for the consumer iOS flavour, populated on
-     * first access by {@link #ofPersonal()}.
+     * Cached singleton for the consumer iOS flavour.
+     *
+     * @apiNote Populated lazily by the first call to {@link #ofPersonal()}.
+     * @implNote This implementation pairs the field with {@link #personalIpaInfoLock} for the double checked locking idiom;
+     *           the {@code volatile} keyword publishes a fully constructed instance to readers on the unsynchronised fast
+     *           path.
      */
     private static volatile WhatsAppIosClientInfo personalIpaInfo;
 
     /**
-     * Holds the monitor used to serialise initialisation of
-     * {@link #personalIpaInfo}.
+     * Monitor that serialises initialisation of {@link #personalIpaInfo}.
+     *
+     * @apiNote Not exposed; callers go through {@link #ofPersonal()}.
      */
     private static final Object personalIpaInfoLock = new Object();
 
     /**
-     * Holds the cached instance for the business iOS flavour, populated on
-     * first access by {@link #ofBusiness()}.
+     * Cached singleton for the business iOS flavour.
+     *
+     * @apiNote Populated lazily by the first call to {@link #ofBusiness()}.
+     * @implNote This implementation pairs the field with {@link #businessIpaInfoLock} for the double checked locking idiom;
+     *           the {@code volatile} keyword publishes a fully constructed instance to readers on the unsynchronised fast
+     *           path.
      */
     private static volatile WhatsAppIosClientInfo businessIpaInfo;
 
     /**
-     * Holds the monitor used to serialise initialisation of
-     * {@link #businessIpaInfo}.
+     * Monitor that serialises initialisation of {@link #businessIpaInfo}.
+     *
+     * @apiNote Not exposed; callers go through {@link #ofBusiness()}.
      */
     private static final Object businessIpaInfoLock = new Object();
 
     /**
-     * Holds the static secret prefix used by the consumer iOS registration
-     * token algorithm.
+     * Static 40 character secret prefix used by the consumer iOS registration token algorithm.
+     *
+     * @apiNote Reverse engineered from the consumer iOS WhatsApp IPA; rotation requires a binary release on Apple's side.
      */
     private static final String MOBILE_IOS_STATIC = "0a1mLfGUIBVrMKF1RdvLI5lkRBvof6vn0fD2QRSM";
 
     /**
-     * Holds the static secret prefix used by the business iOS registration
-     * token algorithm.
+     * Static 40 character secret prefix used by the business iOS registration token algorithm.
+     *
+     * @apiNote Reverse engineered from the business iOS WhatsApp IPA; differs from {@link #MOBILE_IOS_STATIC} so consumer
+     *          and business builds cannot impersonate each other.
      */
     private static final String MOBILE_BUSINESS_IOS_STATIC = "USUDuDYDeQhY4RF2fCSp5m3F6kJ1M2J8wS7bbNA2";
 
     /**
-     * Holds the application version returned by the App Store lookup,
-     * normalised to the {@code 2.X.Y} form expected by WhatsApp servers.
+     * Resolved {@link ClientAppVersion} returned by the App Store lookup, normalised to the {@code 2.X.Y} form.
+     *
+     * @apiNote Returned verbatim from {@link #version()}.
      */
     private final ClientAppVersion version;
 
     /**
-     * Indicates whether this instance represents the WhatsApp Business IPA.
+     * Whether this instance represents the WhatsApp Business IPA rather than the consumer IPA.
+     *
+     * @apiNote Returned verbatim from {@link #business()}.
      */
     private final boolean business;
 
     /**
-     * Constructs a new instance from the App Store lookup result.
+     * Constructs an immutable instance from the App Store lookup result.
      *
-     * @param version the parsed application version
+     * @apiNote Package private; callers always go through {@link #ofPersonal()} or {@link #ofBusiness()}.
+     * @param version  the parsed application version
      * @param business whether this represents the business flavour
      */
     private WhatsAppIosClientInfo(ClientAppVersion version, boolean business) {
@@ -114,10 +126,13 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the cached consumer iOS info, performing the App Store lookup
-     * on the first call.
+     * Returns the cached consumer iOS identity, performing the App Store lookup on the first call.
      *
-     * @return the consumer iOS client info
+     * @apiNote Subsequent calls in the same JVM return the same instance. A failed lookup is not cached, so callers may
+     *          retry by simply calling this method again.
+     * @implNote This implementation uses double checked locking; the {@code volatile} {@link #personalIpaInfo} field
+     *           publishes the fully constructed instance to readers on the unsynchronised fast path.
+     * @return the consumer iOS client identity
      * @throws RuntimeException if the App Store lookup fails
      */
     public static WhatsAppIosClientInfo ofPersonal() {
@@ -132,10 +147,13 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the cached business iOS info, performing the App Store lookup
-     * on the first call.
+     * Returns the cached business iOS identity, performing the App Store lookup on the first call.
      *
-     * @return the business iOS client info
+     * @apiNote Subsequent calls in the same JVM return the same instance. A failed lookup is not cached, so callers may
+     *          retry by simply calling this method again.
+     * @implNote This implementation uses double checked locking; the {@code volatile} {@link #businessIpaInfo} field
+     *           publishes the fully constructed instance to readers on the unsynchronised fast path.
+     * @return the business iOS client identity
      * @throws RuntimeException if the App Store lookup fails
      */
     public static WhatsAppIosClientInfo ofBusiness() {
@@ -150,20 +168,17 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Calls the App Store lookup API for the requested bundle and parses
-     * the returned version string into a {@link ClientAppVersion}.
+     * Calls the App Store lookup API for the requested bundle and parses the returned version string into a
+     * {@link ClientAppVersion}.
      *
-     * <p>If the App Store returns an empty result array or a missing
-     * {@code version} field this method returns {@code null} and the
-     * calling accessor leaves the singleton unpopulated so that a later
-     * call can retry. Version strings returned without a leading
-     * {@code "2."} are prefixed to match the canonical WhatsApp versioning
-     * scheme.
-     *
-     * @param business {@code true} for the business flavour, {@code false}
-     *                 for the consumer flavour
-     * @return a populated {@code WhatsAppIosClientInfo}, or {@code null} if
-     *         the lookup returned no usable data
+     * @apiNote Called at most once per JVM per flavour by {@link #ofPersonal()} or {@link #ofBusiness()}. Returns
+     *          {@code null} when the response is empty or missing the {@code version} field so the calling accessor leaves
+     *          the singleton unpopulated and the next call retries.
+     * @implNote This implementation prepends {@code "2."} to App Store versions that lack the leading {@code "2."} prefix
+     *           because the iOS marketing version is sometimes published as {@code "23.X.Y"} ({@code 23.X.Y} year based)
+     *           while WhatsApp's wire scheme expects the canonical {@code "2.X.Y"} form.
+     * @param business {@code true} for the business flavour, {@code false} for the consumer flavour
+     * @return a populated {@link WhatsAppIosClientInfo}, or {@code null} if the lookup returned no usable data
      * @throws RuntimeException if the HTTP exchange fails
      */
     private static WhatsAppIosClientInfo queryIpaInfo(boolean business) {
@@ -204,10 +219,10 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the application version reported by the App Store for this
-     * flavour.
+     * {@inheritDoc}
      *
-     * @return the parsed version
+     * @apiNote The version is the {@code version} field returned by the Apple App Store lookup endpoint, normalised to the
+     *          canonical {@code 2.X.Y} form WhatsApp servers expect.
      */
     @Override
     public ClientAppVersion version() {
@@ -215,10 +230,10 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns whether this instance represents the WhatsApp Business iOS
-     * bundle.
+     * {@inheritDoc}
      *
-     * @return {@code true} for business, {@code false} for consumer
+     * @apiNote Determined by which App Store bundle the lookup queried
+     *          ({@link #MOBILE_PERSONAL_IOS_URL} versus {@link #MOBILE_BUSINESS_IOS_URL}).
      */
     @Override
     public boolean business() {
@@ -226,21 +241,13 @@ final class WhatsAppIosClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Computes the iOS registration token for the given national phone
-     * number.
+     * {@inheritDoc}
      *
-     * <p>The token is the lower case hex MD5 of the concatenation of the
-     * flavour specific static secret, the hex encoded build hash of the
-     * current version (see {@link ClientAppVersion#toHash()}) and the
-     * decimal national phone number. No key material from the signed
-     * binary is involved on iOS.
-     *
-     * @param nationalPhoneNumber the phone number in its national form,
-     *                            without the country code
-     * @return the hex encoded MD5 digest suitable for direct use as the
-     *         {@code token} form parameter
-     * @throws UnsupportedOperationException if MD5 is not available, which
-     *                                       should not happen on any JDK
+     * @implNote This implementation MD5s the lower case hex concatenation of the flavour specific static secret
+     *           ({@link #MOBILE_IOS_STATIC} or {@link #MOBILE_BUSINESS_IOS_STATIC}), the hex encoded build hash from
+     *           {@link ClientAppVersion#toHash()}, and the decimal national phone number; no signed binary key material is
+     *           involved on iOS, which is why no IPA download is needed.
+     * @throws UnsupportedOperationException if MD5 is not available on the running JDK
      */
     @Override
     public String computeRegistrationToken(long nationalPhoneNumber) {

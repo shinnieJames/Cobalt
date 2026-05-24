@@ -74,6 +74,9 @@ public interface BotJourneyEvent extends WamEventSpec {
     @WamProperty(index = 40, type = WamType.STRING)
     Optional<String> categoryType();
 
+    @WamProperty(index = 52, type = WamType.STRING)
+    Optional<String> commandName();
+
     @WamProperty(index = 22, type = WamType.STRING)
     Optional<String> conversationStarterCategory();
 

@@ -15,15 +15,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxNewslettersGetNewsletterMessagesRequest}.
+ * Sealed family of inbound reply variants for a
+ * {@link SmaxNewslettersGetNewsletterMessagesRequest}.
+ *
+ * @apiNote
+ * Pattern-match on the three permitted variants ({@link Success},
+ * {@link ClientError}, {@link ServerError}) when handling a reply from
+ * the Channels message-list / forward-message / invite-preview
+ * surfaces; WA Web's
+ * {@code WAWebNewsletterGetMessagesQueryJob.queryNewsletterMessagesByJid}
+ * routes every non-success variant through
+ * {@code ServerStatusCodeError} and skips the local store update.
  */
 public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends SmaxOperation.Response
         permits SmaxNewslettersGetNewsletterMessagesResponse.Success, SmaxNewslettersGetNewsletterMessagesResponse.ClientError, SmaxNewslettersGetNewsletterMessagesResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxNewslettersGetNewsletterMessagesResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Dispatches the inbound IQ stanza to the first matching variant
+     * parser.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code sendGetNewsletterMessagesRPC}
+     * entry-point: try {@link Success}, then {@link ClientError}, then
+     * {@link ServerError} in order and surface the first that parses.
+     * Returns {@link Optional#empty()} when none match.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
@@ -51,23 +66,20 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
     }
 
     /**
-     * The {@code Success} reply variant. The relay returned the
-     * requested message slice.
+     * The variant that carries the requested message slice.
      *
-     * <p>The {@code <messages>} envelope echoes the optional
-     * {@code jid} and {@code t} attributes (when the relay knows the
-     * newsletter's last activity timestamp). Each {@code <message>}
-     * child carries a {@code server_id}, an optional original message
-     * envelope, and a variable bundle of add-ons (reactions, polls,
-     * forwards, views, etc.) which Cobalt exposes as the raw child
-     * {@link Node} for further inspection.
+     * @apiNote
+     * Project {@link #messages()} onto the local newsletter store; the
+     * underlying {@link Node} on each entry exposes the add-on
+     * children (reactions, polls, forwards, views, paid-partnership
+     * content) which WA Web feeds into
+     * {@code WAWebNewsletterBackendAddOnsUtils.getMsgsAndAddOnsFromUpdates}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterMessagesResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageResponsePayloadMixin")
     final class Success implements SmaxNewslettersGetNewsletterMessagesResponse {
         /**
-         * The optional newsletter JID echoed by the relay on the
-         * {@code <messages>} envelope.
+         * The optional newsletter {@link Jid} echoed by the relay.
          */
         private final Jid newsletterJid;
 
@@ -77,18 +89,24 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         private final Long timestamp;
 
         /**
-         * The list of message entries returned by the relay.
+         * The list of newsletter message entries returned by the relay.
          */
         private final List<NewsletterMessage> messages;
 
         /**
          * Constructs a new successful reply.
          *
-         * @param newsletterJid the optional echoed JID; may be
+         * @apiNote
+         * Both {@code newsletterJid} and {@code timestamp} are optional
+         * because the relay only echoes them when the corresponding
+         * attributes were present on the wire.
+         *
+         * @param newsletterJid the optional echoed {@link Jid}; may be
          *                      {@code null}
-         * @param timestamp     the optional echoed timestamp; may be
-         *                      {@code null}
+         * @param timestamp     the optional echoed unix-second
+         *                      timestamp; may be {@code null}
          * @param messages      the message entries; never {@code null}
+         *                      (empty allowed)
          */
         public Success(Jid newsletterJid, Long timestamp, List<NewsletterMessage> messages) {
             this.newsletterJid = newsletterJid;
@@ -97,21 +115,20 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         }
 
         /**
-         * Returns the optional newsletter JID echoed by the relay.
+         * Returns the optional echoed newsletter {@link Jid}.
          *
-         * @return an {@link Optional} carrying the JID, or empty when
-         *         omitted
+         * @return an {@link Optional} carrying the {@link Jid}, or
+         *         empty when the relay omitted it
          */
         public Optional<Jid> newsletterJid() {
             return Optional.ofNullable(newsletterJid);
         }
 
         /**
-         * Returns the optional unix-second timestamp echoed by the
-         * relay.
+         * Returns the optional echoed unix-second timestamp.
          *
          * @return an {@link Optional} carrying the timestamp, or empty
-         *         when omitted
+         *         when the relay omitted it
          */
         public Optional<Long> timestamp() {
             return Optional.ofNullable(timestamp);
@@ -120,21 +137,28 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the message entries.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable {@link List} of entries; never
+         *         {@code null}
          */
         public List<NewsletterMessage> messages() {
             return messages;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the IQ envelope fails
+         * {@link SmaxIqResultResponseMixin} validation, the relay's
+         * {@code from} attribute is not {@link Jid#userServer()}, the
+         * {@code <messages>} envelope is missing, the {@code t}
+         * attribute is negative, or any nested {@code <message>} fails
+         * its own {@link NewsletterMessage#of(Node)} parse.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         *         empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInNewslettersGetNewsletterMessagesResponseSuccess",
                 exports = "parseGetNewsletterMessagesResponseSuccess",
@@ -171,6 +195,14 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return Optional.of(new Success(jid, timestamp, entries));
         }
 
+        /**
+         * Compares two replies for value equality on every field.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success}
+         *         carrying equal {@link #newsletterJid()},
+         *         {@link #timestamp()}, and {@link #messages()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -185,11 +217,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
                     && Objects.equals(this.messages, that.messages);
         }
 
+        /**
+         * Returns the hash code derived from every field.
+         *
+         * @return the combined hash of {@link #newsletterJid()},
+         *         {@link #timestamp()}, and {@link #messages()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(newsletterJid, timestamp, messages);
         }
 
+        /**
+         * Returns a debug representation including every field.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesResponse.Success[newsletterJid="
@@ -199,18 +242,21 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
     }
 
     /**
-     * One newsletter message entry. Projects the canonical
-     * {@code <message id? server_id t? is_sender?>} envelope into a
-     * typed bundle and exposes the underlying {@link Node} so callers
-     * can drill into the variable-shape add-on children (reactions,
-     * polls, responses, forwards, views, paid-partnership content).
+     * One typed projection of a {@code <message>} entry inside the
+     * {@code <messages>} envelope.
+     *
+     * @apiNote
+     * Carries the basic shape (stanza id, server-id, timestamp, sender
+     * flag) and exposes the underlying {@link Node} so downstream
+     * consumers can drill into the variable-shape add-on children
+     * (reactions, polls, responses, forwards, views, paid-partnership
+     * content) without re-parsing the envelope.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryWithAddOnsMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryMixin")
     final class NewsletterMessage {
         /**
-         * The optional client-supplied stanza id of the original
-         * message.
+         * The optional client-supplied stanza id of the message.
          */
         private final String stanzaId;
 
@@ -231,13 +277,18 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         private final boolean fromSelf;
 
         /**
-         * The raw underlying {@link Node}. Exposed so callers can
-         * project the variable-shape add-on children.
+         * The underlying {@link Node} exposing the variable-shape
+         * add-on children.
          */
         private final Node raw;
 
         /**
-         * Constructs a new newsletter message entry.
+         * Constructs a new newsletter-message projection.
+         *
+         * @apiNote
+         * The {@code stanzaId} and {@code timestamp} are optional
+         * because the relay only emits them when the message carries
+         * those attributes on the wire.
          *
          * @param stanzaId  the optional stanza id; may be {@code null}
          * @param serverId  the server-assigned id
@@ -246,6 +297,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
          * @param fromSelf  whether the message was authored by self
          * @param raw       the underlying {@link Node}; never
          *                  {@code null}
+         * @throws NullPointerException if {@code raw} is {@code null}
          */
         public NewsletterMessage(String stanzaId, long serverId, Long timestamp, boolean fromSelf, Node raw) {
             this.stanzaId = stanzaId;
@@ -256,10 +308,10 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         }
 
         /**
-         * Returns the optional stanza id.
+         * Returns the optional client-supplied stanza id.
          *
          * @return an {@link Optional} carrying the stanza id, or empty
-         *         when omitted
+         *         when the relay omitted it
          */
         public Optional<String> stanzaId() {
             return Optional.ofNullable(stanzaId);
@@ -268,7 +320,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the server-assigned message id.
          *
-         * @return the server id
+         * @return the server-assigned id
          */
         public long serverId() {
             return serverId;
@@ -278,7 +330,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
          * Returns the optional unix-second timestamp.
          *
          * @return an {@link Optional} carrying the timestamp, or empty
-         *         when omitted
+         *         when the relay omitted it
          */
         public Optional<Long> timestamp() {
             return Optional.ofNullable(timestamp);
@@ -288,18 +340,18 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
          * Returns whether the message was authored by the connected
          * client.
          *
-         * @return {@code true} when the {@code is_sender="true"}
-         *         attribute was present
+         * @return {@code true} when {@code is_sender="true"} was
+         *         present on the wire
          */
         public boolean fromSelf() {
             return fromSelf;
         }
 
         /**
-         * Returns the underlying {@link Node} for downstream
-         * inspection of the add-on children.
+         * Returns the underlying {@link Node}.
          *
-         * @return the raw node; never {@code null}
+         * @return the raw {@link Node} exposing the add-on children;
+         *         never {@code null}
          */
         public Node raw() {
             return raw;
@@ -307,12 +359,20 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
 
         /**
          * Tries to parse a {@link NewsletterMessage} from a
-         * {@code <message>} node.
+         * {@code <message>} {@link Node}.
          *
-         * @param messageNode the source {@code <message>} node; never
-         *                    {@code null}
+         * @apiNote
+         * Returns {@link Optional#empty()} when the node description
+         * is not {@code message}, the {@code server_id} attribute is
+         * missing or outside the
+         * {@code [99, 2147476647]} range, or the optional {@code t}
+         * attribute is negative. The bounds match WA Web's
+         * server-side validators.
+         *
+         * @param messageNode the source {@code <message>} {@link Node};
+         *                    never {@code null}
          * @return an {@link Optional} carrying the parsed entry, or
-         *         empty when the node does not match the schema
+         *         empty when the node fails validation
          */
         @WhatsAppWebExport(moduleName = "WASmaxInNewslettersNewsletterMessageHistoryWithAddOnsMixin",
                 exports = "parseNewsletterMessageHistoryWithAddOnsMixin",
@@ -343,6 +403,16 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return Optional.of(new NewsletterMessage(stanzaId, serverId, timestamp, fromSelf, messageNode));
         }
 
+        /**
+         * Compares two entries for value equality on every field.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link NewsletterMessage} carrying equal
+         *         {@link #stanzaId()}, {@link #serverId()},
+         *         {@link #timestamp()}, {@link #fromSelf()}, and
+         *         {@link #raw()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -359,11 +429,24 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
                     && Objects.equals(this.raw, that.raw);
         }
 
+        /**
+         * Returns the hash code derived from every field.
+         *
+         * @return the combined hash of {@link #stanzaId()},
+         *         {@link #serverId()}, {@link #timestamp()},
+         *         {@link #fromSelf()}, and {@link #raw()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(stanzaId, serverId, timestamp, fromSelf, raw);
         }
 
+        /**
+         * Returns a debug representation including the typed fields.
+         *
+         * @return a record-like rendering of this entry, excluding the
+         *         underlying {@link Node} for brevity
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesResponse.NewsletterMessage[stanzaId="
@@ -373,26 +456,38 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request as malformed, unauthorised, or referencing a
-     * non-existent newsletter / invite.
+     * The variant carrying a relay-side client-rejection.
+     *
+     * @apiNote
+     * WA Web routes every documented sub-error
+     * ({@code ItemNotFoundIQErrorResponse},
+     * {@code RateLimitedIQErrorResponse},
+     * {@code BadRequestIQErrorResponse},
+     * {@code SuspendedIQErrorResponse},
+     * {@code UnavailableForLegalReasonsResponse},
+     * {@code NotAllowedIQErrorResponse}) through the same
+     * {@code ServerStatusCodeError} type.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterMessagesResponseClientError")
     final class ClientError implements SmaxNewslettersGetNewsletterMessagesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new client-error reply.
          *
-         * @param errorCode the numeric error code
+         * @apiNote
+         * The text is optional because not every relay-side error
+         * carries a human-readable message.
+         *
+         * @param errorCode the numeric error code echoed by the relay
          * @param errorText the optional human-readable text; may be
          *                  {@code null}
          */
@@ -404,7 +499,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
@@ -413,19 +508,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the client-error
          *         schema
@@ -441,6 +539,14 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ClientError}
+         *         carrying equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -453,11 +559,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesResponse.ClientError[errorCode=" + errorCode
@@ -466,25 +583,34 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure while processing the request.
+     * The variant carrying a transient relay-side failure.
+     *
+     * @apiNote
+     * WA Web rejects the {@code Promise} with a
+     * {@code ServerStatusCodeError} on this variant; Cobalt callers
+     * can opt into a retry through the back-off helper in the
+     * consuming layer.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterMessagesResponseServerError")
     final class ServerError implements SmaxNewslettersGetNewsletterMessagesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
          *
-         * @param errorCode the numeric error code
+         * @apiNote
+         * Mirror of {@link ClientError} for relay-side internal
+         * failures; the text is optional.
+         *
+         * @param errorCode the numeric error code echoed by the relay
          * @param errorText the optional human-readable text; may be
          *                  {@code null}
          */
@@ -496,7 +622,7 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
@@ -505,19 +631,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the server-error
          *         schema
@@ -533,6 +662,14 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ServerError}
+         *         carrying equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -545,11 +682,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesResponse extends Sma
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesResponse.ServerError[errorCode=" + errorCode

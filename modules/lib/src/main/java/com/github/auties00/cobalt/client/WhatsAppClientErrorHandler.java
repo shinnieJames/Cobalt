@@ -145,61 +145,61 @@ public interface WhatsAppClientErrorHandler {
      * {@link WhatsAppException} hierarchy:
      *
      * <ul>
-     *   <li>{@link WhatsAppReconnectionException} &mdash; {@code DISCARD};
+     *   <li>{@link WhatsAppReconnectionException}: {@code DISCARD};
      *       WA Web's {@code socketLoop} waits for the next backoff tick.</li>
-     *   <li>{@link WhatsAppSessionException.Banned} &mdash; {@code BAN};
+     *   <li>{@link WhatsAppSessionException.Banned}: {@code BAN};
      *       matches WA Web's {@code LogoutReason.AccountLocked} path.</li>
-     *   <li>{@link WhatsAppSessionException.LoggedOut} &mdash; {@code LOG_OUT};
+     *   <li>{@link WhatsAppSessionException.LoggedOut}: {@code LOG_OUT};
      *       matches WA Web's {@code WAWebHandleStreamError} path for stream
      *       code {@code 516} and {@code conflict type="device_removed"}
      *       ({@code WAWebCompanionRegUtils.startLogout}).</li>
-     *   <li>{@link WhatsAppSessionException.Reconnect} &mdash; {@code RECONNECT};
+     *   <li>{@link WhatsAppSessionException.Reconnect}: {@code RECONNECT};
      *       matches WA Web's stream code {@code 515} path
-     *       ({@code WAWebCompanionRegUtils.startLogin} &rarr;
+     *       ({@code WAWebCompanionRegUtils.startLogin} then
      *       {@code WAWebStartBackend.startBackend}).</li>
-     *   <li>{@link WhatsAppSessionException.Conflict} &mdash; {@code DISCONNECT};
+     *   <li>{@link WhatsAppSessionException.Conflict}: {@code DISCONNECT};
      *       matches WA Web's {@code conflict type="replaced"} path which
      *       calls {@code WAComms.stopComms()} without resuming the socket
      *       loop.</li>
      *   <li>{@link WhatsAppSessionException.BadMac},
      *       {@link WhatsAppSessionException.Closed},
-     *       {@link WhatsAppStreamException} &mdash; {@code RECONNECT}; these
+     *       {@link WhatsAppStreamException}: {@code RECONNECT}; these
      *       collapse to WA Web's {@code "CLOSE_SOCKET"} resolution, which
      *       lets the {@code socketLoop} re-open the connection with fresh
      *       Noise state.</li>
-     *   <li>{@link WhatsAppLidMigrationException} &mdash; {@code LOG_OUT};
+     *   <li>{@link WhatsAppLidMigrationException}: {@code LOG_OUT};
      *       matches WA Web's {@code LogoutReason.LidMigration*} values.</li>
-     *   <li>{@link WhatsAppOwnDeviceListExpiredException} &mdash; {@code LOG_OUT};
+     *   <li>{@link WhatsAppOwnDeviceListExpiredException}: {@code LOG_OUT};
      *       matches WA Web's ADV check forced logout when the own device
      *       list exceeds the server-enforced staleness threshold.</li>
-     *   <li>{@link WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices}
-     *       &mdash; {@code LOG_OUT}; matches WA Web's
+     *   <li>{@link WhatsAppWebAppStateSyncException.MissingKeyOnAllDevices}:
+     *       {@code LOG_OUT}; matches WA Web's
      *       {@code SyncdFatalErrorType.MISSING_KEY_ON_ALL_CLIENTS} terminal
      *       state.</li>
-     *   <li>{@link WhatsAppWebAppStateSyncException} (other subtypes) &mdash;
+     *   <li>{@link WhatsAppWebAppStateSyncException} (other subtypes):
      *       {@code DISCARD}; {@code SyncdFatalError} and
      *       {@code SyncdRetryableError} re-sync the affected collection
      *       without disconnecting the session.</li>
      *   <li>{@link WhatsAppMessageException},
-     *       {@link WhatsAppMediaException} &mdash; {@code DISCARD}; WA Web
+     *       {@link WhatsAppMediaException}: {@code DISCARD}; WA Web
      *       emits a retry receipt or surfaces a UI error without tearing
      *       the session down.</li>
      *   <li>{@link WhatsAppAdvValidationException},
      *       {@link WhatsAppAdvCheckException},
      *       {@link WhatsAppDeviceSyncException},
-     *       {@link WhatsAppHistorySyncException} &mdash; {@code DISCARD};
+     *       {@link WhatsAppHistorySyncException}: {@code DISCARD};
      *       these are per-request failures in WA Web.</li>
      *   <li>{@link WhatsAppMalformedJidException},
      *       {@link WhatsAppABPropTypeMismatchException},
-     *       {@link WhatsAppServerRuntimeException} &mdash; {@code DISCARD};
+     *       {@link WhatsAppServerRuntimeException}: {@code DISCARD};
      *       informational/validation errors that do not impact the session.</li>
      *   <li>{@link WhatsAppConnectionException},
      *       {@link WhatsAppCorruptedStoreException},
-     *       {@link WhatsAppRegistrationException} &mdash; {@code DISCONNECT};
+     *       {@link WhatsAppRegistrationException}: {@code DISCONNECT};
      *       no session exists (or can exist) to recover.</li>
-     *   <li>Any other {@link WhatsAppException} &mdash; falls back to
-     *       {@link WhatsAppException#isFatal()}: fatal &rarr;
-     *       {@code DISCONNECT}, non-fatal &rarr; {@code DISCARD}.</li>
+     *   <li>Any other {@link WhatsAppException}: falls back to
+     *       {@link WhatsAppException#isFatal()}; a fatal exception maps to
+     *       {@code DISCONNECT}, a non-fatal one to {@code DISCARD}.</li>
      * </ul>
      *
      * @param printer consumer that renders the exception (for example to

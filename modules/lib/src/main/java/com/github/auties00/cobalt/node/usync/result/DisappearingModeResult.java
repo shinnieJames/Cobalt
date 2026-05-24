@@ -7,31 +7,53 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Success result of {@code WAWebUsyncDisappearingMode.disappearingModeParser}.
- * Carries the peer's current disappearing-message timer, the timestamp the
- * setting was last changed at, and the {@code ephemerality_disabled} flag.
+ * Success result of the
+ * {@code WAWebUsyncDisappearingMode.disappearingModeParser} parser.
+ *
+ * @apiNote
+ * Surfaced by USync queries that include
+ * {@code UsyncQuery.withDisappearingModeProtocol()}; WA Web callers include
+ * {@code WAWebGetDisappearingModeJob} (the interactive fetch for the
+ * disappearing-message picker), the background contact sync, and
+ * {@code WAWebQueryExistsJob}. Carries the peer's current
+ * disappearing-message timer, the timestamp the setting was last changed at,
+ * and the {@code ephemerality_disabled} flag for PA-thread support.
+ *
+ * @implNote
+ * This implementation always materialises {@link #ephemeralityDisabled()}
+ * regardless of the WA Web
+ * {@code WAWebPrivacyGatingUtils.isPAASupportForDisabledEphemeralityEnabled}
+ * gate, which only controls whether the field is propagated to the JS UI;
+ * callers that want gating behaviour ignore the value when the gate is off.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncDisappearingMode")
 public final class DisappearingModeResult implements UsyncProtocolResponse {
     /**
-     * Holds the disappearing-message timer (zero meaning "off").
+     * The disappearing-message timer, where {@link Duration#ZERO} means the
+     * peer has the feature off.
      */
     private final Duration duration;
 
     /**
-     * Holds the timestamp the setting was last changed at.
+     * The wall-clock instant the setting was last changed at, decoded from
+     * the {@code t} attribute.
      */
     private final Instant timestamp;
 
     /**
-     * Tracks whether ephemerality is disabled on the peer's PA thread.
+     * Whether ephemerality is disabled on the peer's PA (personal-assistant)
+     * thread, decoded from {@code ephemerality_disabled="true"}.
      */
     private final boolean ephemeralityDisabled;
 
     /**
      * Creates a new disappearing-mode result.
      *
-     * @param duration             the timer duration; must not be {@code null}
+     * @apiNote
+     * Instantiated by the disappearing-mode parser; embedders do not call
+     * this directly.
+     *
+     * @param duration             the timer; must not be {@code null}
      * @param timestamp            the last-changed timestamp; must not be
      *                             {@code null}
      * @param ephemeralityDisabled the {@code ephemerality_disabled} flag
@@ -45,7 +67,10 @@ public final class DisappearingModeResult implements UsyncProtocolResponse {
     /**
      * Returns the disappearing-message timer.
      *
-     * @return the duration, never {@code null}
+     * @apiNote
+     * {@link Duration#ZERO} means the peer disabled disappearing messages.
+     *
+     * @return the timer, never {@code null}
      */
     public Duration duration() {
         return duration;
@@ -54,6 +79,10 @@ public final class DisappearingModeResult implements UsyncProtocolResponse {
     /**
      * Returns the timestamp the setting was last changed at.
      *
+     * @apiNote
+     * Used by the picker UI to compare against the local "last edited"
+     * timestamp when deciding whose change wins on conflict.
+     *
      * @return the timestamp, never {@code null}
      */
     public Instant timestamp() {
@@ -61,9 +90,14 @@ public final class DisappearingModeResult implements UsyncProtocolResponse {
     }
 
     /**
-     * Returns whether ephemerality is disabled.
+     * Returns whether ephemerality is disabled on the peer's PA thread.
      *
-     * @return {@code true} if {@code ephemerality_disabled="true"}
+     * @apiNote
+     * PA (personal-assistant) threads do not honour the standard
+     * disappearing-message timer when this flag is true; the UI hides the
+     * timer chip in that case.
+     *
+     * @return {@code true} when {@code ephemerality_disabled="true"}
      */
     public boolean ephemeralityDisabled() {
         return ephemeralityDisabled;

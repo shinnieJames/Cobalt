@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.call.session;
 
-import com.github.auties00.cobalt.call.io.AudioFrame;
+import com.github.auties00.cobalt.call.frame.audio.AudioFrame;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.Objects;

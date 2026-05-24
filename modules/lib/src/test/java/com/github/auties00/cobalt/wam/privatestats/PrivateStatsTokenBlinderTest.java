@@ -13,27 +13,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Validates {@link WamPrivateStatsTokenBlinder} via the VOPRF round-trip
- * identity:
+ * Exercises {@link WamPrivateStatsTokenBlinder} through the
+ * VOPRF round-trip identity
  * {@code unblind(server.sign(blind(m, k)), k, server.pk) == server.sign(H(m))}.
  *
- * <p>The "server" is simulated in the test using the same Ed25519 primitives
- * (a private key {@code sk}, a public key {@code pk = sk*B}, and a "sign"
- * step that performs scalar multiplication of the blinded point by
- * {@code sk}). The expected unblinded value is computed independently as
- * {@code sk * H(m)}, so the test catches both blinding errors and
- * unblinding errors but cannot certify byte-identical agreement with the
- * WA Web JS bundle (that requires KAT vectors captured from the live
- * implementation).
+ * @apiNote
+ * Validates the blind and unblind composition that the WhatsApp Web
+ * private-stats token issuance protocol relies on. A simulated server
+ * runs the same Ed25519 primitives with a known secret scalar
+ * {@code sk}; the expected unblinded value is computed independently
+ * as {@code sk * H(m)} so any blinding or unblinding regression
+ * surfaces as a mismatch.
+ *
+ * @implNote
+ * This implementation cannot certify byte-identical agreement with
+ * the live WhatsApp Web JS bundle by itself; that is the role of
+ * {@code Ed25519LiveBundleKatTest}, which compares against captured
+ * vectors.
  */
 class PrivateStatsTokenBlinderTest {
     /**
-     * Number of round-trip iterations.
+     * The number of round-trip iterations exercised by each
+     * property-style test.
      */
     private static final int ITERATIONS = 16;
 
     /**
-     * Asserts the full client-side blind/unblind pipeline recovers
+     * Asserts the full client blind/unblind pipeline recovers
      * {@code sk * H(m)} for a server with a known {@code sk}.
      */
     @Test
@@ -58,8 +64,9 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Asserts unblinding with the wrong scalar returns a different value
-     * than {@code sk * H(m)} — guards against a no-op {@code unblind}.
+     * Asserts that unblinding with the wrong scalar does not
+     * recover {@code sk * H(m)}, guarding against a no-op
+     * {@code unblind}.
      */
     @Test
     void unblindWithWrongScalarYieldsDifferentValue() {
@@ -83,9 +90,9 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Asserts repeated blinds with different scalars produce different
-     * blinded outputs even for the same message — guards against a
-     * deterministic blinding bug.
+     * Asserts that repeated blinds of the same message with
+     * different scalars produce different outputs, guarding against
+     * a deterministic blinding bug.
      */
     @Test
     void differentScalarsProduceDifferentBlindedOutputs() {
@@ -101,8 +108,8 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Asserts {@link WamPrivateStatsTokenBlinder#blind} is deterministic: same
-     * inputs always produce the same output bytes.
+     * Asserts {@link WamPrivateStatsTokenBlinder#blind} is
+     * deterministic for identical inputs.
      */
     @Test
     void blindIsDeterministic() {
@@ -116,8 +123,9 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Asserts {@link WamPrivateStatsTokenBlinder#blind} does not mutate the
-     * caller's scalar buffer, even though it is clamped internally.
+     * Asserts {@link WamPrivateStatsTokenBlinder#blind} does not
+     * mutate the caller's scalar buffer even though it is clamped
+     * internally.
      */
     @Test
     void blindDoesNotMutateCallerScalar() {
@@ -131,7 +139,9 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Asserts the documented input-validation behaviour.
+     * Asserts the documented input-validation behaviour of
+     * {@link WamPrivateStatsTokenBlinder#blind} and
+     * {@link WamPrivateStatsTokenBlinder#unblind}.
      */
     @Test
     void rejectsInvalidInputs() {
@@ -152,16 +162,13 @@ class PrivateStatsTokenBlinderTest {
         assertThrows(IllegalArgumentException.class,
                 () -> WamPrivateStatsTokenBlinder.unblind(new byte[31], goodScalar, goodPoint));
 
-        // A point with a y > p (e.g. all-0xff) should be rejected by unpack.
         var badPoint = new byte[32];
         for (var i = 0; i < 32; i++) {
             badPoint[i] = (byte) 0xff;
         }
-        // Top bit is sign; clear it so we exercise the y-coord codepath.
         badPoint[31] = 0x7f;
         try {
             WamPrivateStatsTokenBlinder.unblind(goodPoint, goodScalar, badPoint);
-            // If unpack happens to accept this y, the test is informational only.
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("Edwards point"),
                     "expected an Edwards-point error message, got: " + expected.getMessage());
@@ -169,8 +176,14 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Returns a fresh 32-byte random scalar. No clamping is performed —
-     * {@link WamPrivateStatsTokenBlinder} clamps internally.
+     * Returns a fresh unclamped 32-byte scalar.
+     *
+     * @apiNote
+     * Returned without clamping; {@link WamPrivateStatsTokenBlinder}
+     * clamps the scalar internally before any scalar multiplication.
+     *
+     * @param rng the random source
+     * @return the freshly generated scalar bytes
      */
     private static byte[] freshScalar(Random rng) {
         var s = new byte[WamPrivateStatsTokenBlinder.TOKEN_BYTES];
@@ -179,11 +192,22 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Derives a "server" public key {@code pk = sk*B} as a 32-byte
-     * compressed Ed25519 point. Uses the same {@link Ed25519Point}
-     * primitives as {@link WamPrivateStatsTokenBlinder}.
+     * Derives a simulated server public key
+     * {@code pk = sk * B} as a 32-byte compressed Ed25519 point.
      *
-     * @param sk the server private scalar (will be clamped internally)
+     * @apiNote
+     * Uses the same {@link Ed25519Point} primitives as
+     * {@link WamPrivateStatsTokenBlinder}; the helper exists so the
+     * test can simulate a server with a known secret scalar.
+     *
+     * @implNote
+     * This implementation clamps {@code sk} the same way
+     * {@link WamPrivateStatsTokenBlinder#blind} clamps its scalar so
+     * the simulated server agrees with the production code on what
+     * "the scalar" means.
+     *
+     * @param sk the secret scalar
+     * @return the 32-byte compressed encoding of {@code sk * B}
      */
     private static byte[] derivePublicKey(byte[] sk) {
         var clamped = sk.clone();
@@ -198,8 +222,20 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Simulates a server signature: decodes the blinded point, multiplies
-     * by the server private scalar, and re-encodes.
+     * Simulates a server signature on a blinded point.
+     *
+     * @apiNote
+     * Used by the round-trip identity tests; the test does not call
+     * the real WhatsApp server.
+     *
+     * @implNote
+     * This implementation decodes the blinded point, multiplies it
+     * by the clamped server scalar, and re-encodes it; mirrors the
+     * arithmetic the WhatsApp ACS server performs in production.
+     *
+     * @param blinded the 32-byte compressed blinded point
+     * @param sk      the server secret scalar
+     * @return the 32-byte compressed signed point
      */
     private static byte[] serverSign(byte[] blinded, byte[] sk) {
         var clamped = sk.clone();
@@ -218,7 +254,16 @@ class PrivateStatsTokenBlinderTest {
     }
 
     /**
-     * Returns {@code sk * H(m)} as a 32-byte compressed point.
+     * Computes the expected unblinded value {@code sk * H(m)} as a
+     * 32-byte compressed point.
+     *
+     * @apiNote
+     * Used as the oracle against which the blind/unblind round-trip
+     * result is compared.
+     *
+     * @param sk  the server secret scalar
+     * @param msg the message
+     * @return the 32-byte compressed encoding of {@code sk * H(m)}
      */
     private static byte[] scalarTimesHashPoint(byte[] sk, byte[] msg) {
         var clamped = sk.clone();

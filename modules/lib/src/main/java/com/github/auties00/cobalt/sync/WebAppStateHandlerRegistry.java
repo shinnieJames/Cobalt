@@ -13,38 +13,57 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Registry mapping action names to their handlers.
+ * Dispatch table that maps every supported sync action name onto the
+ * {@link WebAppStateActionHandler} that processes incoming mutations of
+ * that action.
  *
- * <p>Per WhatsApp Web {@code WAWebSyncdGetActionHandler}: the registry
- * stores all action handlers and provides lookup by action name and a
- * global max-supported-version query for version gating.
+ * @apiNote Owned by {@link WebAppStateService} and used by every incoming
+ * patch the server delivers: the syncd response parser pulls each
+ * decrypted mutation's action name out of its
+ * {@code WAWebProtobufSyncAction.pb SyncActionValueSpec}, looks up the
+ * handler here, and invokes its {@code applyMutation} hook. Outgoing
+ * mutation generation does NOT live here; per-handler factories under
+ * {@code com.github.auties00.cobalt.sync.factory} build the WAM-side
+ * payloads that callers like
+ * {@link com.github.auties00.cobalt.client.linked.LinkedWhatsAppClient}
+ * enqueue for upload, so the registry stays a pure incoming-mutation
+ * router. {@link #maxSupportedVersion()} is consumed by the response
+ * parser to drop mutations whose declared version exceeds any handler's
+ * capability, mirroring WA Web's
+ * {@code WAWebSyncdGetActionHandler.maxSupportedVersion} fast-path.
  *
- * <p>This registry owns the incoming-mutation routing only. Outgoing
- * mutation generation lives in the
- * {@code com.github.auties00.cobalt.sync.factory} package, where each
- * factory is instantiated independently by the caller that needs it.
+ * @implNote This implementation eagerly registers every default handler in
+ * the constructor, matching the once-only initialisation pattern of WA
+ * Web's {@code WAWebSyncdGetActionHandler.setActionHandlers}, which is
+ * called by the success handler in {@code WAWebHandleSuccess} with the
+ * full {@code WAWebCollectionHandlerActions.ActionHandlers} array.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdGetActionHandler")
 public final class WebAppStateHandlerRegistry {
     /**
-     * Map of action names to their registered handlers, used by the
-     * incoming-mutation router.
+     * The action-name to handler map populated at construction time and
+     * mutable through {@link #registerHandler(WebAppStateActionHandler)}.
      */
     private final Map<String, WebAppStateActionHandler> handlers;
 
     /**
-     * Constructs a new handler registry and registers the default
-     * handlers.
+     * Builds a registry pre-populated with every default handler.
      *
-     * @param abPropsService      the AB-props service injected into
-     *                            handlers that gate behaviour on feature
-     *                            flags
-     * @param lidMigrationService the LID migration service injected into
+     * @apiNote Called once by {@link WebAppStateService} during its own
+     * construction; the dependencies are forwarded to the handlers that
+     * need them. Callers that want a custom dispatch table should
+     * register additional or replacement handlers via
+     * {@link #registerHandler(WebAppStateActionHandler)} after
+     * construction.
+     *
+     * @param abPropsService      the AB-prop service forwarded to every
+     *                            handler that gates behaviour on remote
+     *                            configuration
+     * @param lidMigrationService the LID migration service forwarded to
      *                            handlers that observe LID 1:1 migration
      *                            state
-     * @param wamService          the WAM telemetry service shared with
-     *                            handlers that commit per-mutation
-     *                            telemetry events
+     * @param wamService          the WAM telemetry service forwarded to
+     *                            handlers that emit per-mutation events
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdGetActionHandler", exports = "setActionHandlers", adaptation = WhatsAppAdaptation.ADAPTED)
     public WebAppStateHandlerRegistry(ABPropsService abPropsService, LidMigrationService lidMigrationService, WamService wamService) {
@@ -53,111 +72,110 @@ public final class WebAppStateHandlerRegistry {
     }
 
     /**
-     * Registers all default action handlers that correspond to the WA Web
-     * {@code WAWebCollectionHandlerActions.ActionHandlers} array, which
-     * is passed to {@code WAWebSyncdGetActionHandler.setActionHandlers}
-     * during the success handler flow in {@code WAWebHandleSuccess}.
+     * Instantiates every handler in the
+     * {@code WAWebCollectionHandlerActions.ActionHandlers} catalog and
+     * registers it under its declared action name.
      *
-     * @param abPropsService      the AB-props service injected into
-     *                            feature-gated handlers
+     * @apiNote Internal helper invoked exactly once from the constructor;
+     * not exposed because callers that want to swap a handler should
+     * call {@link #registerHandler(WebAppStateActionHandler)} after
+     * construction instead of going through this method.
+     *
+     * @param abPropsService      the AB-prop service injected into every
+     *                            feature-gated handler
      * @param lidMigrationService the LID migration service injected into
      *                            handlers that observe LID 1:1 migration
-     * @param wamService          the WAM telemetry service to inject
-     *                            into handlers that require it
+     * @param wamService          the WAM telemetry service injected into
+     *                            handlers that emit per-mutation events
      */
     private void registerDefaultHandlers(ABPropsService abPropsService, LidMigrationService lidMigrationService, WamService wamService) {
         var userStatusMuteHandler = new UserStatusMuteHandler();
 
-        // Chat actions
-        registerHandler(new ArchiveChatHandler()); // WAWebArchiveChatSync
-        registerHandler(new PinChatHandler(wamService)); // WAWebPinChatSync
-        registerHandler(new MuteChatHandler(abPropsService)); // WAWebMuteChatSync
-        registerHandler(new MarkChatAsReadHandler()); // WAWebMarkChatAsReadSync
-        registerHandler(new ClearChatHandler()); // WAWebClearChatSync
-        registerHandler(new DeleteChatHandler()); // WAWebDeleteChatSync
-        registerHandler(new LockChatHandler()); // WAWebLockChatSync
+        registerHandler(new ArchiveChatHandler());
+        registerHandler(new PinChatHandler(wamService));
+        registerHandler(new MuteChatHandler(abPropsService));
+        registerHandler(new MarkChatAsReadHandler());
+        registerHandler(new ClearChatHandler());
+        registerHandler(new DeleteChatHandler());
+        registerHandler(new LockChatHandler());
 
-        // Message actions
-        registerHandler(new StarMessageHandler()); // WAWebStarMessageSync
-        registerHandler(new DeleteMessageForMeHandler()); // WAWebDeleteMessageForMeSync
-        registerHandler(new InteractiveMessageHandler()); // WAWebInteractiveMessageSync
+        registerHandler(new StarMessageHandler());
+        registerHandler(new DeleteMessageForMeHandler());
+        registerHandler(new InteractiveMessageHandler());
 
-        // Contact actions
-        registerHandler(new ContactActionHandler(abPropsService, userStatusMuteHandler)); // WAWebContactSync
-        registerHandler(new LidContactHandler(abPropsService, userStatusMuteHandler)); // WAWebLidContactSync
-        registerHandler(new PnForLidChatHandler(abPropsService)); // WAWebPnForLidChatSync
-        registerHandler(new ShareOwnPnHandler(abPropsService)); // WAWebShareOwnPnSync
+        registerHandler(new ContactActionHandler(abPropsService, userStatusMuteHandler));
+        registerHandler(new LidContactHandler(abPropsService, userStatusMuteHandler));
+        registerHandler(new PnForLidChatHandler(abPropsService));
+        registerHandler(new ShareOwnPnHandler(abPropsService));
 
-        // Label actions
-        registerHandler(new LabelEditHandler()); // WAWebLabelSync
-        registerHandler(new LabelAssociationHandler()); // WAWebLabelJidSync
-        registerHandler(new LabelReorderingHandler()); // WAWebLabelReorderingSync
+        registerHandler(new LabelEditHandler());
+        registerHandler(new LabelAssociationHandler());
+        registerHandler(new LabelReorderingHandler());
 
-        // Business actions
-        registerHandler(new QuickReplyHandler()); // WAWebQuickRepliesSync
-        registerHandler(new AgentActionHandler()); // WAWebAgentSync
-        registerHandler(new ChatAssignmentHandler()); // WAWebChatAssignmentSync
-        registerHandler(new ChatAssignmentOpenedStatusHandler()); // WAWebChatAssignmentOpenedStatusSync
-        registerHandler(new MarketingMessageHandler()); // WAWebPremiumMessageSync
-        registerHandler(new MarketingMessageBroadcastHandler()); // WAWebPremiumMessageBroadcastSync
-        registerHandler(new BusinessBroadcastListHandler()); // WAWebBroadcastListSync
-        registerHandler(new BusinessBroadcastCampaignHandler()); // WAWebBroadcastCampaignSync
-        registerHandler(new BusinessBroadcastInsightsHandler()); // WAWebBusinessBroadcastInsightsSync
-        registerHandler(new CustomerDataHandler()); // WAWebCustomerDataSync
-        registerHandler(new MerchantPaymentPartnerHandler(abPropsService)); // WAWebMerchantPaymentPartnerSync
-        registerHandler(new NoteEditHandler()); // WAWebNoteSync
+        registerHandler(new QuickReplyHandler());
+        registerHandler(new AgentActionHandler());
+        registerHandler(new ChatAssignmentHandler());
+        registerHandler(new ChatAssignmentOpenedStatusHandler());
+        registerHandler(new MarketingMessageHandler());
+        registerHandler(new MarketingMessageBroadcastHandler());
+        registerHandler(new BusinessBroadcastListHandler());
+        registerHandler(new BusinessBroadcastCampaignHandler());
+        registerHandler(new BusinessBroadcastInsightsHandler());
+        registerHandler(new CustomerDataHandler());
+        registerHandler(new MerchantPaymentPartnerHandler(abPropsService));
+        registerHandler(new NoteEditHandler());
 
-        // Sticker and avatar actions
-        registerHandler(new FavoriteStickerHandler()); // WAWebStickersFavoriteSyncAction
-        registerHandler(new RemoveRecentStickerHandler()); // WAWebStickersRemoveRecentSyncAction
-        registerHandler(new AvatarUpdatedHandler(abPropsService)); // WAWebStickersAvatarUpdatedSyncAction
+        registerHandler(new FavoriteStickerHandler());
+        registerHandler(new RemoveRecentStickerHandler());
+        registerHandler(new AvatarUpdatedHandler(abPropsService));
 
-        // AI actions
-        registerHandler(new AiThreadDeleteHandler()); // WAWebAiThreadDeleteSync
-        registerHandler(new AiThreadRenameHandler()); // WAWebAiThreadRenameSync
+        registerHandler(new AiThreadDeleteHandler());
+        registerHandler(new AiThreadRenameHandler());
 
-        // Payment actions
-        registerHandler(new PaymentInfoHandler(abPropsService)); // WAWebPaymentInfoSync
-        registerHandler(new PaymentTosHandler(abPropsService)); // WAWebPaymentTosSync
-        registerHandler(new CustomPaymentMethodsHandler(abPropsService)); // WAWebCustomPaymentMethodsSync
+        registerHandler(new PaymentInfoHandler(abPropsService));
+        registerHandler(new PaymentTosHandler(abPropsService));
+        registerHandler(new CustomPaymentMethodsHandler(abPropsService));
 
-        // User preference actions
-        registerHandler(userStatusMuteHandler); // WAWebUserStatusMuteSync
-        registerHandler(new TimeFormatHandler()); // WAWebTimeFormatSync
-        registerHandler(new FavoritesHandler()); // WAWebFavoritesSync
+        registerHandler(userStatusMuteHandler);
+        registerHandler(new TimeFormatHandler());
+        registerHandler(new FavoritesHandler());
 
-        // System actions
-        registerHandler(new NuxActionHandler()); // WAWebNuxSync
-        registerHandler(new PrimaryVersionHandler()); // WAWebPrimaryVersionSync
-        registerHandler(new SentinelHandler()); // WAWebSentinelMutationSync
-        registerHandler(new PrimaryFeatureHandler()); // WAWebPrimaryFeatureSync
-        registerHandler(new AndroidUnsupportedActionsHandler()); // WAWebAndroidUnsupportedActionsSync
-        registerHandler(new DeviceCapabilitiesHandler(lidMigrationService, wamService)); // WAWebDeviceCapabilitiesSync
-        registerHandler(new BotWelcomeRequestHandler()); // WAWebBotWelcomeRequestSync
-        registerHandler(new DetectedOutcomesStatusHandler()); // WAWebDetectedOutcomesStatusSync
-        registerHandler(new WaffleAccountLinkStateHandler(abPropsService, wamService)); // WAWebWaffleAccountLinkStateSync
-        registerHandler(new CtwaPerCustomerDataSharingHandler()); // WAWebCtwaPerCustomerDataSharingSync
+        registerHandler(new NuxActionHandler());
+        registerHandler(new PrimaryVersionHandler());
+        registerHandler(new SentinelHandler());
+        registerHandler(new PrimaryFeatureHandler());
+        registerHandler(new AndroidUnsupportedActionsHandler());
+        registerHandler(new DeviceCapabilitiesHandler(lidMigrationService, wamService));
+        registerHandler(new BotWelcomeRequestHandler());
+        registerHandler(new DetectedOutcomesStatusHandler());
+        registerHandler(new WaffleAccountLinkStateHandler(abPropsService, wamService));
+        registerHandler(new CtwaPerCustomerDataSharingHandler());
 
-        // Settings
-        registerHandler(new PushNameSettingHandler(wamService)); // WAWebPushNameSync
-        registerHandler(new LocaleSettingHandler()); // WAWebLocaleSettingSync
-        registerHandler(new UnarchiveChatsSettingHandler()); // WAWebArchiveSettingSync
-        registerHandler(new StatusPrivacyHandler()); // WAWebStatusPrivacySettingSync
-        registerHandler(new DisableLinkPreviewsHandler()); // WAWebDisableLinkPreviewsSync
-        registerHandler(new VoipRelayAllCallsHandler()); // WAWebVoipRelayAllCallsSettingSync
-        registerHandler(new ChatLockSettingsHandler()); // WAWebChatLockSettingsSync
-        registerHandler(new ExternalWebBetaHandler(abPropsService)); // WAWebExternalWebBetaSync
-        registerHandler(new SettingsSyncHandler(abPropsService)); // WAWebSettingsSync
-        registerHandler(new NctSaltSyncHandler()); // WAWebNctSaltSync
-        registerHandler(new CallLogHandler()); // WAWebCallLogSync
-        registerHandler(new SubscriptionHandler()); // WAWebSubscriptionsSyncV2Sync
-        registerHandler(new OutContactHandler(abPropsService)); // WAWebOutContactSync
+        registerHandler(new PushNameSettingHandler(wamService));
+        registerHandler(new LocaleSettingHandler());
+        registerHandler(new UnarchiveChatsSettingHandler());
+        registerHandler(new StatusPrivacyHandler());
+        registerHandler(new DisableLinkPreviewsHandler());
+        registerHandler(new VoipRelayAllCallsHandler());
+        registerHandler(new ChatLockSettingsHandler());
+        registerHandler(new ExternalWebBetaHandler(abPropsService));
+        registerHandler(new SettingsSyncHandler(abPropsService));
+        registerHandler(new NctSaltSyncHandler());
+        registerHandler(new CallLogHandler());
+        registerHandler(new SubscriptionHandler());
+        registerHandler(new OutContactHandler(abPropsService));
     }
 
     /**
-     * Registers a handler for its declared action name.
+     * Stores {@code handler} under its declared
+     * {@link WebAppStateActionHandler#actionName()} key, replacing any
+     * existing entry.
      *
-     * <p>Stores the handler keyed by its {@code actionName()}.
+     * @apiNote Public so test suites and integration cycles can register a
+     * custom handler over a default one (the registry behaves like a
+     * map: last writer wins per action name, mirroring WA Web's
+     * {@code new Map(u.map(...))} pattern in
+     * {@code WAWebSyncdGetActionHandler.getActionHandler}).
      *
      * @param handler the handler to register
      */
@@ -167,14 +185,18 @@ public final class WebAppStateHandlerRegistry {
     }
 
     /**
-     * Finds a handler by action name.
+     * Looks up a handler by action name.
      *
-     * <p>Looks up the handler map by action string and returns
-     * {@code Optional.empty()} when no handler is registered for the
-     * given action.
+     * @apiNote Called by the syncd response parser for every decrypted
+     * mutation; an empty result means the action name is unknown to
+     * this version of Cobalt and the mutation is recorded as orphan,
+     * matching WA Web's
+     * {@code WAWebSyncdGetActionHandler.getActionHandler} miss path.
      *
-     * @param actionName the action name to look up
-     * @return the handler, or empty when no handler is registered
+     * @param actionName the action name read from the mutation's
+     *                   {@code SyncActionValueSpec}
+     * @return the registered handler wrapped in {@link Optional}, or
+     *         {@link Optional#empty()} when no handler was registered
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdGetActionHandler", exports = "getActionHandler", adaptation = WhatsAppAdaptation.ADAPTED)
     public Optional<WebAppStateActionHandler> findHandler(String actionName) {
@@ -182,13 +204,17 @@ public final class WebAppStateHandlerRegistry {
     }
 
     /**
-     * Returns the maximum version supported by any registered handler.
+     * Returns the maximum
+     * {@link WebAppStateActionHandler#version()} over every registered
+     * handler.
      *
-     * <p>Computes the maximum of all handler versions, used for fast
-     * pre-filtering of mutations whose version exceeds any handler's
-     * capability.
+     * @apiNote Read by the syncd response parser to drop mutations whose
+     * declared version exceeds any registered handler's capability,
+     * matching WA Web's
+     * {@code WAWebSyncdGetActionHandler.maxSupportedVersion} fast-path
+     * filter. Returns {@code 0} when no handlers are registered.
      *
-     * @return the maximum supported version across all handlers
+     * @return the highest supported action version across the registry
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdGetActionHandler", exports = "maxSupportedVersion", adaptation = WhatsAppAdaptation.ADAPTED)
     public int maxSupportedVersion() {

@@ -17,47 +17,63 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Checks whether a candidate username is available for registration and returns a list of alternative suggestions when
- * it is not.
+ * Builds the MEX IQ stanza that checks whether a candidate username can be
+ * claimed.
  *
- * <p>This is the query that powers the live-validation indicator in the username picker. The response carries a status
- * token (available, taken, invalid, reserved) together with a list of suggested alternatives the client may present to
- * the user.
+ * @apiNote Powers the live-validation indicator on the username picker
+ * (WA Web's {@code WAWebCheckUsernameAvailabilityJob}) and the
+ * {@code usernameCheckDebug} developer command in
+ * {@code WAWebDebugUsername}. Pair the dispatched stanza with
+ * {@link UsernameAvailabilityMexResponse} to consume the reply.
+ *
+ * @see UsernameAvailabilityMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUsernameAvailability")
 public final class UsernameAvailabilityMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexUsernameAvailabilityQuery.graphql} for the snapshot
+     * this file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsernameAvailabilityQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9615795045169045";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexUsernameAvailabilityQuery.graphql}; WA Web tags the
+     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsernameAvailabilityQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexCheckUsernameAvailabilityQueryJob";
 
     /**
-     * The candidate username to check for availability.
+     * The {@code input} GraphQL variable carrying the candidate username.
      */
     private final String input;
 
     /**
-     * Constructs a new request carrying the given candidate username.
+     * Constructs a username-availability check request.
      *
-     * @param input the candidate username, or {@code null} to omit the variable
+     * @apiNote {@code input} is forwarded verbatim as the {@code input}
+     * variable; the relay validates length, charset, and reservation
+     * status server-side.
+     *
+     * @param input the candidate username, or {@code null} to omit the
+     *              variable
      */
     public UsernameAvailabilityMexRequest(String input) {
         this.input = input;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -65,9 +81,7 @@ public final class UsernameAvailabilityMexRequest implements MexOperation.Reques
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -75,9 +89,12 @@ public final class UsernameAvailabilityMexRequest implements MexOperation.Reques
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {"input": <input>}}}
+     * (or {@code {"variables": {}}} when {@code input} is {@code null}) and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsernameAvailability", exports = "mexCheckUsernameAvailabilityQueryJob",
             adaptation = WhatsAppAdaptation.ADAPTED)

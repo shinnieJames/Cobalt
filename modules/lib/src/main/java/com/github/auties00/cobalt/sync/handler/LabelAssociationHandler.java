@@ -15,39 +15,51 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles label JID association sync actions.
+ * Applies the {@code label_jid} app-state sync action that pins or unpins a
+ * chat or contact under a given chat label.
  *
- * <p>This handler processes mutations that associate chat/contact JIDs with
- * labels (the "label_jid" action). It corresponds to the WhatsApp Web module
- * {@code WAWebLabelJidSync} which extends {@code ChatOrContactSyncdActionBase}
- * with {@code chatJidIndex = 2} and collection {@code Regular}.
+ * @apiNote
+ * Drives the SMB/Business "label this chat" affordance: when the primary
+ * device tags a conversation with a colour-coded label the resulting
+ * association fans out across the {@link SyncPatchType#REGULAR}
+ * collection so companion devices show the same label badge. The
+ * mutation index encodes the label id and the target JID, formatted as
+ * {@snippet :
+ *     ["label_jid", labelId, chatJid]
+ * }
  *
- * <p>Index format: {@code ["label_jid", "labelId", "chatJid"]}
- *
- * <p>On a {@code SET} operation with {@code labeled = true}, the {@code chatJid}
- * is added to the {@code labelId}'s association set. With {@code labeled = false}
- * (or absent), the association is removed. Non-{@code SET} operations are
- * reported as unsupported. Per WhatsApp Web, the {@code chatJid} is validated
- * as a WID, resolved to a chat via {@code resolveChatForMutationIndex}, and
- * (when LID 1:1 migration is active) a LID target is transparently mapped to
- * the user's phone number JID.
+ * @implNote
+ * This implementation stores associations directly on the
+ * {@link Label#assignments()} set rather than in a separate
+ * label-association table the way WA Web's
+ * {@code WAWebDBLabelAssociationDatabaseApi.addOrEditLabelAssociations}
+ * does, so the
+ * {@code applyLabelAssociationChanges} frontend RPC is not modelled.
+ * Target-JID resolution mirrors WA Web's chat-table-first, then
+ * LID-to-phone fallback order. The
+ * {@code biz_automatically_labeled_chat_system_message} notification
+ * emitted by WA Web for the {@code DO_NEW_ORDER} and {@code DO_LEAD}
+ * predefined labels and the
+ * {@code WAWebWamLabelSyncTrackingReporter} telemetry are not modelled.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelJidSync")
 public final class LabelAssociationHandler implements WebAppStateActionHandler {
 
     /**
-     * Index of the chat JID within the mutation {@code indexParts} array.
+     * The position of the target JID inside the parsed mutation
+     * {@code indexParts} array.
      *
-     * <p>Per WhatsApp Web, {@code WAWebLabelJidSync} sets {@code chatJidIndex = 2}
-     * in its constructor. This is used by the base class
-     * ({@code ChatOrContactSyncdActionBase}) for cross-index conflict detection
-     * and chat JID extraction.
+     * @apiNote
+     * Mirrors WA Web's {@code chatJidIndex = 2} assignment in the
+     * constructor of {@code WAWebLabelJidSync}; preserving the constant
+     * keeps the wire-level layout visible if WA Web ever reshapes the
+     * index.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final int CHAT_JID_INDEX = 2;
 
     /**
-     * Creates a new {@code LabelAssociationHandler}.
+     * Constructs a new singleton {@link LabelAssociationHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LabelAssociationHandler() {
@@ -55,8 +67,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for label JID sync.
-     * @return the action name string
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -65,8 +76,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for this handler.
-     * @return the {@link SyncPatchType#REGULAR} collection
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -75,8 +85,7 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for label JID sync.
-     * @return the version number
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -85,45 +94,24 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single label JID mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebLabelJidSync.applyMutations}, for each
-     * mutation:
-     * <ol>
-     *   <li>If {@code operation !== "set"}, returns {@code Unsupported}</li>
-     *   <li>Extracts {@code labelId = indexParts[1]} and {@code chatJid = indexParts[2]};
-     *       if either is empty, returns {@code malformedActionIndex}</li>
-     *   <li>Reads {@code labeled = value.labelAssociationAction.labeled}. Per Cobalt
-     *       project convention, a {@code null} value is coalesced to {@code false}
-     *       (WA Web returns {@code malformedActionValue} in that case)</li>
-     *   <li>Validates the {@code chatJid} string is a WID; if not, returns
-     *       {@code malformedActionIndex}</li>
-     *   <li>Resolves the chat via {@code resolveChatForMutationIndex}. If the
-     *       chat is not found and LID 1:1 migration is active and the target is
-     *       a LID, attempts to resolve the LID to a phone number JID</li>
-     *   <li>If {@code labeled} is {@code true}, adds the {@code chatJid} to the
-     *       label's association set (creating the label stub if absent). If
-     *       {@code false}, removes the association</li>
-     * </ol>
-     *
-     * <p>After the batch is processed, WA Web calls
-     * {@code WAWebDBLabelAssociationDatabaseApi.removeLabelAssociations(removals)} and
-     * {@code addOrEditLabelAssociations(additions)} to persist the changes, then fires
-     * {@code frontendFireAndForget("applyLabelAssociationChanges", ...)}. In Cobalt,
-     * the association is stored directly inside the {@link Label} object, so there
-     * is no separate database update — assignments are updated inline.
-     *
-     * <p>Per WhatsApp Web, when the label is a predefined "Detected Outcome"
-     * label ({@code DO_NEW_ORDER} or {@code DO_LEAD}) and detected outcome
-     * onboarding is enabled, a business automation notification system message
-     * is generated. In Cobalt, that UI/notification feature is skipped.
-     *
-     * <p>WA Web also emits WAM label-sync telemetry events via
-     * {@code WAWebWamLabelSyncTrackingReporter}. In Cobalt, WAM telemetry is
-     * intentionally omitted.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation classifies a missing index slot as
+     * {@link MutationApplicationResult#malformed()} explicitly so the
+     * outer try/catch does not turn the malformed index into
+     * {@link MutationApplicationResult#failed()} via an
+     * {@code IndexOutOfBoundsException} from {@code JSON.parseArray}.
+     * The {@link LabelAssociationAction#labeled()} accessor coalesces a
+     * {@code null} protobuf field to {@code false} per the project's
+     * "no Optional&lt;Boolean&gt;" rule, so a {@code null}
+     * {@code labeled} is treated as remove rather than as
+     * {@link MutationApplicationResult#malformed()}. When the label is
+     * not yet known locally a stub
+     * {@link Label} with empty name and zero colour is created so the
+     * association can be recorded, mirroring WA Web's behaviour where
+     * {@code addOrEditLabelAssociations} writes the row even if the
+     * label table has not yet seen the corresponding edit.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelJidSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -134,9 +122,6 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
             }
 
             var indexArray = JSON.parseArray(mutation.index());
-            // WAWebLabelJidSync.applyMutations reads indexParts[1] (label id) and indexParts[CHAT_JID_INDEX] (target jid);
-            // a missing slot is undefined in JS which fails the falsy check. Mirror with explicit size guard so the
-            // outer try/catch returns MALFORMED instead of FAILED.
             if (indexArray.size() <= CHAT_JID_INDEX) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
@@ -150,9 +135,6 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
                 return SyncdIndexUtils.malformedActionValue(collectionName().name());
             }
 
-            // ADAPTED: WAWebLabelJidSync.applyMutations, var g = (t = s.labelAssociationAction) == null ? void 0 : t.labeled; if (g == null) { p++; ... return malformedActionValue(a.collectionName) }
-            // Cobalt's LabelAssociationAction.labeled() coalesces null Boolean to false per project convention,
-            // so the null-vs-false distinction is intentionally lost here; a null labeled is treated as "remove".
             var labeled = action.labeled();
 
             Jid targetJid;
@@ -165,23 +147,19 @@ public final class LabelAssociationHandler implements WebAppStateActionHandler {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
-            // ADAPTED: WAWebLabelJidSync.applyMutations, var v = yield o("WAWebSyncdGetChat").resolveChatForMutationIndex(b); if (v.success === true) b = createWid(v.chat.id); else if (isLidMigrated() && b.isLid()) { var S = getPhoneNumber(b); S != null && (b = S) }
-            // Cobalt collapses the multi-strategy chat lookup into findChatByJid + LID-to-PN mapping fallback.
             var resolvedTargetJid = targetJid;
             var resolvedChat = client.store().findChatByJid(targetJid);
             if (resolvedChat.isPresent()) {
                 resolvedTargetJid = resolvedChat.get().toJid();
             } else if (targetJid.hasLidServer()) {
-                var phoneJid = client.store().getPhoneNumberByLid(targetJid);
+                var phoneJid = client.store().findPhoneByLid(targetJid);
                 if (phoneJid.isPresent()) {
                     resolvedTargetJid = phoneJid.get();
                 }
             }
 
-            // ADAPTED: WAWebLabelJidSync.applyMutations, WA Web stores label associations in a separate LabelAssociation table; Cobalt stores them inside the Label object's assignments set.
-            // If the label does not exist locally, we create a stub to hold the association (WA Web's addOrEditLabelAssociations would add the record even if the label row is absent).
             var label = client.store()
-                    .findLabel(labelId) // ADAPTED: WAWebLabelJidSync.applyMutations, getLabelTable().get(u) is used in WA Web only to read predefinedId for biz notifications; Cobalt reuses it to hold assignments
+                    .findLabel(labelId)
                     .orElseGet(() -> {
                         var newLabel = new LabelBuilder()
                                 .id(labelId)

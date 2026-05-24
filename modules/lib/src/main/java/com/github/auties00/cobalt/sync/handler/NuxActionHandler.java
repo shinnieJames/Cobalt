@@ -13,29 +13,46 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles NUX (New User Experience) sync mutations.
+ * Applies the {@code nux} app-state action that records acknowledgement
+ * of New User Experience prompts (onboarding hints, first-run dialogs).
  *
- * <p>This handler processes mutations that track completion of onboarding
- * steps and new feature introductions. Per WhatsApp Web
- * {@code WAWebNuxSync}, the handler belongs to the {@code RegularLow}
- * collection, uses version {@code 7}, and routes on action name
- * {@code "nux"}.
+ * @apiNote
+ * Drives the per-account NUX surface: when the user dismisses a
+ * one-shot tip on any device the resulting acknowledgement fans out
+ * across the {@link SyncPatchType#REGULAR_LOW} collection so the same
+ * tip does not reappear on the other paired devices. The mutation
+ * index keys each entry by the NUX key, formatted as
+ * {@snippet :
+ *     ["nux", nuxKey]
+ * }
  *
- * <p>Index format: {@code ["nux", nuxKey]}
- *
- * <p>On {@code SET}, the handler validates that {@code indexParts[1]} (the
- * {@code nuxKey}) is a string and extracts the {@code acknowledged} flag
- * from the nested {@code nuxAction} value. If {@code nuxAction} is absent,
- * {@code acknowledged} defaults to {@code false}. The resolved state is
- * written to the local NUX store.
- *
- * <p>All non-{@code SET} operations are classified as {@code UNSUPPORTED}.
+ * @implNote
+ * This implementation collapses WA Web's two-tier
+ * {@code (NUX_LIST, NUX_DATA)} preference layout into a single
+ * {@code Map<String, Boolean>} keyed by NUX key on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore}; the
+ * timestamp WA Web carries in {@code NUX_DATA} is not preserved
+ * because no Cobalt consumer reads it. Per the WA Web source, a
+ * missing {@code nuxAction} on the value defaults
+ * {@code acknowledged} to {@code false} and still returns
+ * {@link MutationApplicationResult#success()} (the per-batch
+ * {@code WALogger.WARN} counters are dropped). Unlike the previous
+ * Cobalt implementation, there is no AB-prop gate: WA Web registers
+ * the handler unconditionally.
  */
 @WhatsAppWebModule(moduleName = "WAWebNuxSync")
 public final class NuxActionHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates the singleton NUX sync handler.
+     * Constructs the singleton NUX sync handler.
+     *
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; the handler holds no
+     * AB-prop / store / WAM dependency.
      */
     @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public NuxActionHandler() {
@@ -70,44 +87,21 @@ public final class NuxActionHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a NUX mutation and returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebNuxSync.applyMutations}, the handler
-     * iterates the batch and, for each mutation:
-     * <ol>
-     *   <li>If {@code operation !== "set"}, records {@code Unsupported} and
-     *       moves on (Cobalt returns {@link MutationApplicationResult#unsupported()})</li>
-     *   <li>Reads {@code indexParts[1]} as the {@code nuxKey}; if it is not
-     *       a string, records {@code malformedActionIndex()} and moves on</li>
-     *   <li>Collects {@code {nuxKey, acknowledged: value.nuxAction?.acknowledged === true,
-     *       timestamp: Number(value.timestamp)}} into a list</li>
-     * </ol>
-     *
-     * <p>After the loop, WA Web logs the unsupported/malformed counts via
-     * {@code WALogger.WARN} and, if the collected list is non-empty, calls
-     * {@code WAWebUserPrefsNuxPreferences.updateNuxSyncList(list)} which
-     * merges each entry into the {@code NUX_LIST} set (acknowledged keys)
-     * and the {@code NUX_DATA} map (full {@code {acknowledged, timestamp}}
-     * record).
-     *
-     * <p>In Cobalt, the store is simplified to a single
-     * {@code Map<String, Boolean>} indexed by {@code nuxKey}, so the
-     * timestamp from {@code NUX_DATA} is dropped; the {@code acknowledged}
-     * flag is still written for both {@code true} and {@code false} values
-     * (matching the {@code NUX_DATA} merge semantics). WAM logging is
-     * intentionally omitted. Unlike WA Web, which iterates the whole batch
-     * inside the handler, Cobalt processes mutations one-by-one through the
-     * shared {@link WebAppStateActionHandler} interface; the cumulative
-     * behavior is equivalent because the NUX handler has no batch-level
-     * deduplication.
-     *
-     * <p>Note that, unlike the previous Cobalt implementation, there is no
-     * {@code ABProp.NUX_SYNC} gate: {@code WAWebNuxSync} does not check any
-     * AB prop, and {@code WAWebCollectionHandlerActions} registers the NUX
-     * handler unconditionally.
-     * @param client   the WhatsApp client
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation walks the per-mutation arms of WA Web's
+     * batch {@code WAWebNuxSync.applyMutations}: only
+     * {@link SyncdOperation#SET} is accepted; a missing or
+     * non-string {@code indexParts[1]} surfaces as
+     * {@link SyncdIndexUtils#malformedActionIndex(String, String)}; a
+     * missing {@code nuxAction} coalesces {@code acknowledged} to
+     * {@code false} and STILL writes the hint state (matching WA Web's
+     * {@code (e.value.nuxAction)?.acknowledged === !0} expression).
+     * The resolved {@code (nuxKey, dismissed)} pair is persisted via
+     * {@code WhatsAppStore.putOnboardingHintState}; the WA Web
+     * timestamp on {@code NUX_DATA} is dropped because Cobalt's typed
+     * store has no consumer for it.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -117,8 +111,6 @@ public final class NuxActionHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebNuxSync.applyMutations: var s=e.indexParts[1]; return isString(s) ? success : malformedActionIndex().
-        // indexParts[1] is undefined when missing, which is not a string and yields malformed.
         if (indexArray.size() <= 1) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
@@ -127,16 +119,10 @@ public final class NuxActionHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
 
-        // If nuxAction is absent, `acknowledged` defaults to false (WA Web does NOT
-        // return malformed in this branch — it still records the nux key with
-        // acknowledged=false and returns Success).
         var nuxAction = mutation.value().action().orElse(null);
         var acknowledged = nuxAction instanceof NuxAction action && action.acknowledged();
 
-        // into the NUX_LIST set (add on true, remove on false) and the NUX_DATA map
-        // ({acknowledged, timestamp}). Cobalt drops the timestamp and stores just the
-        // boolean.
-        client.store().putOnboardingHintState(new OnboardingHintStateBuilder().hintId(nuxKey).dismissed(acknowledged).build()); // ADAPTED: WAWebUserPrefsNuxPreferences.updateNuxSyncList — Cobalt uses typed store quintet
+        client.store().putOnboardingHintState(new OnboardingHintStateBuilder().hintId(nuxKey).dismissed(acknowledged).build());
 
         return MutationApplicationResult.success();
     }

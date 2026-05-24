@@ -41,5 +41,6 @@ public enum AutomaticEventsTargetComponentEnum {
     @WamEnumConstant(30) AE_ONBOARDING_BIOMETRIC_BYPASS,
     @WamEnumConstant(31) AE_ONBOARDING_BIOMETRIC_SUCCESS,
     @WamEnumConstant(32) AE_ONBOARDING_BIOMETRIC_CANCELLED,
-    @WamEnumConstant(33) AE_ONBOARDING_BIOMETRIC_ERROR
+    @WamEnumConstant(33) AE_ONBOARDING_BIOMETRIC_ERROR,
+    @WamEnumConstant(34) AE_PRECHECK_FINISH
 }

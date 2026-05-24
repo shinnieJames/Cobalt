@@ -16,36 +16,37 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Loads WAM-package fixtures captured from a live WhatsApp Web session
- * and exposes them to JUnit tests.
+ * Shared loader for WAM-package fixtures captured from a live
+ * WhatsApp Web session.
  *
- * <p>Fixture provenance follows the same model as
- * {@code DeviceFixtures} and {@code MessageFixtures}:
- *
+ * @apiNote
+ * Consumed by every KAT and oracle test in this package; centralises
+ * the three on-disk fixture shapes Cobalt uses so individual tests
+ * declare only what they need:
  * <ul>
- *   <li>{@code .json} vector fixtures (keyed by a captured snapshot
- *       revision header) are loaded via {@link #loadVectors(String, Function)}
- *       and {@link #loadJson(String)}.</li>
+ *   <li>{@code .json} vector fixtures whose header pins a captured
+ *       snapshot revision, loaded via {@link #loadJson(String)} or
+ *       mapped via {@link #loadVectors(String, Function)};</li>
  *   <li>{@code .expected.json} oracle outputs captured by
- *       {@code mcp__whatsapp__web_live_debug_eval_to_file} are exposed
- *       through {@link #loadExpected(String)} (raw) and
- *       {@link #loadOracle(String)} (unwrapped from the
- *       {@code result.value} stringified payload).</li>
+ *       {@code mcp__whatsapp__web_live_debug_eval_to_file}, exposed
+ *       raw through {@link #loadExpected(String)} and unwrapped
+ *       through {@link #loadOracle(String)};</li>
  *   <li>{@code .jsonl} stanza captures emitted by
- *       {@code mcp__whatsapp__web_live_stanza_dump_to_file} (for example
- *       upload IQs) are loaded by {@link #loadEvents(String)}.</li>
+ *       {@code mcp__whatsapp__web_live_stanza_dump_to_file}, loaded
+ *       through {@link #loadEvents(String)}.</li>
  * </ul>
  *
- * <p>All WAM fixtures live under
- * {@code modules/lib/src/test/resources/fixtures/wam/}. Each fixture is
- * pinned to a snapshot revision documented in its header; tests are
- * expected to call {@link #requireSnapshotRevision(JSONObject, long)} on
- * load to fail loudly when the live WA Web revision moves away from the
- * captured one.
+ * @implNote
+ * All WAM fixtures live under
+ * {@code modules/lib/src/test/resources/fixtures/wam/}. Tests are
+ * expected to call {@link #requireSnapshotRevision(JSONObject, long)}
+ * on load so revision drift against the live WA Web bundle fails
+ * loudly rather than silently passing against stale captures.
  */
 public final class WamFixtures {
     /**
-     * Classpath prefix for every WAM fixture.
+     * The classpath prefix every WAM fixture sits under, relative to
+     * {@code src/test/resources/}.
      */
     private static final String FIXTURE_ROOT = "fixtures/wam";
 
@@ -57,15 +58,18 @@ public final class WamFixtures {
     }
 
     /**
-     * Loads a JSON document from the WAM fixture corpus.
+     * Loads and parses a JSON object from the WAM fixture corpus.
      *
-     * <p>The document must be a JSON object; vector fixtures typically
-     * carry a header section ({@code snapshotRevision},
-     * {@code liveRuntimeRevision}, {@code capturedAt}, {@code capturedVia})
-     * alongside a {@code vectors} array.
+     * @apiNote
+     * Vector-style fixtures typically carry a header
+     * ({@code snapshotRevision}, {@code liveRuntimeRevision},
+     * {@code capturedAt}, {@code capturedVia}) alongside a
+     * {@code vectors} array; the caller should immediately call
+     * {@link #requireSnapshotRevision(JSONObject, long)} on the
+     * returned object.
      *
-     * @param resource the resource path relative to the WAM fixture
-     *                 root, e.g. {@code "ed25519-live-bundle-vectors.json"}
+     * @param resource the resource path relative to
+     *                 {@link #FIXTURE_ROOT}
      * @return the parsed JSON object
      * @throws UncheckedIOException if the fixture is missing or
      *                              malformed
@@ -81,21 +85,24 @@ public final class WamFixtures {
     }
 
     /**
-     * Loads a vector-style fixture and maps each entry of the
-     * {@code vectors} JSON array through {@code mapper} into a typed
+     * Loads a vector-style fixture and maps each entry of its
+     * {@code vectors} array through {@code mapper} into a typed
      * record.
      *
-     * <p>This is the shared loader for KAT-style tests, mirroring the
+     * @apiNote
+     * The shared loader for KAT tests; same shape as the
      * {@code Ed25519LiveBundleKatTest.loadVectors} pattern.
      *
      * @param <T>      the vector record type
-     * @param resource the resource path under {@link #FIXTURE_ROOT}
-     * @param mapper   a function turning each vector {@link JSONObject}
-     *                 into a {@code T}
+     * @param resource the resource path relative to
+     *                 {@link #FIXTURE_ROOT}
+     * @param mapper   the per-vector mapper
      * @return the list of mapped vectors, in capture order
-     * @throws UncheckedIOException  if the fixture is missing or malformed
+     * @throws UncheckedIOException  if the fixture is missing or
+     *                               malformed
      * @throws IllegalStateException if the fixture has no
-     *                               {@code vectors} array
+     *                               {@code vectors} array or an entry
+     *                               is not a JSON object
      */
     public static <T> List<T> loadVectors(String resource, Function<JSONObject, T> mapper) {
         Objects.requireNonNull(mapper, "mapper");
@@ -115,8 +122,8 @@ public final class WamFixtures {
     }
 
     /**
-     * Returns the expected-output JSON document paired with the given
-     * fixture topic, loaded from {@code <topic>.expected.json}.
+     * Returns the expected-output JSON document paired with
+     * {@code topic}, loaded from {@code <topic>.expected.json}.
      *
      * @param topic the fixture topic
      * @return the parsed expected document
@@ -129,17 +136,18 @@ public final class WamFixtures {
     }
 
     /**
-     * Returns the live-runtime result payload for an eval-style oracle
-     * fixture, unwrapping the {@code result.value} stringified JSON
-     * produced by {@code web_live_debug_eval_to_file}.
+     * Returns the live-runtime result payload for an eval-style
+     * oracle fixture, unwrapping the {@code result.value} stringified
+     * JSON produced by
+     * {@code mcp__whatsapp__web_live_debug_eval_to_file}.
      *
-     * <p>{@code web_live_debug_eval_to_file} captures wrap the
-     * evaluation outcome as
-     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
-     * The vast majority of oracle invocations stringify their result
-     * before returning so the live runtime can deliver it through CDP
-     * without structured-clone hazards; this helper undoes that
-     * stringification.
+     * @apiNote
+     * The captures wrap the evaluation outcome as
+     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}};
+     * most oracle invocations stringify their result before returning
+     * so the live runtime can ship it through CDP without
+     * structured-clone hazards. This helper undoes the
+     * stringification and returns the inner document directly.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
@@ -165,7 +173,8 @@ public final class WamFixtures {
      * Returns every event in the given JSONL fixture, in capture
      * order.
      *
-     * <p>Used for stanza-style captures of WAM upload IQs emitted by
+     * @apiNote
+     * Used by stanza-style captures of WAM upload IQs emitted by
      * {@code mcp__whatsapp__web_live_stanza_dump_to_file}; each
      * captured line is expected to carry an {@code event} sub-object
      * shaped like the rest of the MCP stanza logger output.
@@ -173,7 +182,10 @@ public final class WamFixtures {
      * @param topic the fixture topic (without the {@code .jsonl}
      *              extension)
      * @return the list of {@code event} sub-objects
-     * @throws UncheckedIOException if the fixture is missing or malformed
+     * @throws UncheckedIOException  if the fixture is missing or
+     *                               malformed
+     * @throws IllegalStateException if a captured line has no
+     *                               {@code event} sub-object
      */
     public static List<JSONObject> loadEvents(String topic) {
         Objects.requireNonNull(topic, "topic");
@@ -198,15 +210,16 @@ public final class WamFixtures {
     }
 
     /**
-     * Returns whether the given JSON fixture exists on the classpath.
+     * Returns whether the given JSON fixture is present on the test
+     * classpath.
      *
-     * <p>Allows tests to skip cleanly when a corpus has not yet been
-     * captured.
+     * @apiNote
+     * Lets a test skip cleanly when a corpus has not yet been
+     * captured rather than failing with a missing-resource error.
      *
-     * @param resource the resource path relative to the WAM fixture
-     *                 root (e.g. {@code "wam-tags-roundtrip.json"})
-     * @return {@code true} when the resource is present on the
-     *         classpath
+     * @param resource the resource path relative to
+     *                 {@link #FIXTURE_ROOT}
+     * @return {@code true} when the resource is present
      */
     public static boolean isAvailable(String resource) {
         Objects.requireNonNull(resource, "resource");
@@ -214,14 +227,19 @@ public final class WamFixtures {
     }
 
     /**
-     * Asserts that the given fixture header pins the given snapshot
-     * revision, failing the test loudly if the captured revision drifts
-     * away from what the live WA Web bundle is now on.
+     * Asserts that the given fixture header pins {@code expected} as
+     * its captured snapshot revision.
      *
-     * @param fixtureHeader  the JSON object carrying a
-     *                       {@code snapshotRevision} numeric field
-     * @param expected       the snapshot revision the test was written
-     *                       against
+     * @apiNote
+     * Every KAT test in this package calls this immediately after
+     * loading a fixture so a captured-vs-live revision drift fails
+     * the test loudly rather than passing silently against stale
+     * captures.
+     *
+     * @param fixtureHeader the JSON object carrying a
+     *                      {@code snapshotRevision} numeric field
+     * @param expected      the snapshot revision the test was written
+     *                      against
      * @throws AssertionError if the header has no
      *                        {@code snapshotRevision} or it does not
      *                        match {@code expected}
@@ -238,11 +256,16 @@ public final class WamFixtures {
     }
 
     /**
-     * Returns the {@code vectors} array of a vector-style fixture as a
-     * raw {@link JSONArray}, for callers that prefer to iterate without
-     * a per-row mapper.
+     * Returns the {@code vectors} array of a vector-style fixture as
+     * a raw {@link JSONArray}.
      *
-     * @param resource the resource path under {@link #FIXTURE_ROOT}
+     * @apiNote
+     * For callers that prefer to iterate without a per-row mapper;
+     * use {@link #loadVectors(String, Function)} when the mapping is
+     * stable.
+     *
+     * @param resource the resource path relative to
+     *                 {@link #FIXTURE_ROOT}
      * @return the {@code vectors} array
      * @throws IllegalStateException if the fixture has no
      *                               {@code vectors} array
@@ -257,9 +280,9 @@ public final class WamFixtures {
     }
 
     /**
-     * Opens the named classpath resource.
+     * Opens the named classpath resource for reading.
      *
-     * @param resourcePath the resource path under
+     * @param resourcePath the resource path relative to
      *                     {@code src/test/resources/}
      * @return an input stream over the resource bytes
      * @throws IOException if the resource is missing

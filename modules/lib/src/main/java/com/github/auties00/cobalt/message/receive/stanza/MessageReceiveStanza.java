@@ -12,407 +12,468 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Holds the fully parsed structural representation of an incoming {@code <message>}
- * stanza before the payload is decrypted.
+ * The fully parsed, pre-decryption representation of an incoming
+ * {@code <message>} stanza.
  *
- * <p>Captures every metadata field extracted from the raw XML node: identifier and
- * timestamp, addressing information (including the LID/PN migration fields), the
- * encrypted payloads, the bot/business/payment metadata, the reporting tokens, the
- * broadcast participant lists, and every {@code <meta>} attribute. Decryption and
- * downstream processing operate on this structured form rather than re-scanning the
- * raw node.
+ * <p>An instance is produced by {@link MessageReceiveStanzaParser#parse} for
+ * every message the socket delivers. It captures the entire structural
+ * extract: the {@code id} / {@code t} pair, the {@code from} /
+ * {@code participant} addressing plus the full LID/PN/username migration
+ * triplets, every {@code <enc>} ciphertext, the bot / business / payment /
+ * reporting children, the broadcast contact list, the {@code <hsm>} tags,
+ * and every {@code <meta>} attribute that influences downstream routing or
+ * rendering. Decryption, dedup, sender-key processing, receipt emission, and
+ * UI dispatch all consume this record instead of re-scanning the raw node.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgCommon")
 public final class MessageReceiveStanza {
     /**
-     * {@code edit} attribute value representing the absence of an edit.
+     * The {@code edit} attribute value that means "no edit", used when the
+     * attribute is absent from the stanza.
+     *
+     * @apiNote
+     * Compare {@link #editAttribute()} against this constant to detect the
+     * default no-edit case before branching on the other {@code EDIT_*}
+     * values.
+     *
+     * @implNote
+     * This implementation uses {@code 0} as the absent-attribute sentinel
+     * because the parser passes {@code 0} as the default to
+     * {@code getAttributeAsInt("edit", 0)}; WA Web's {@code EDIT_ATTR.NONE}
+     * is {@code -1} and never appears on the wire either. Both sentinels are
+     * "no edit", neither is observable inside a real stanza.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "EDIT_ATTR",
-            adaptation = WhatsAppAdaptation.DIRECT)
+    @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
+            adaptation = WhatsAppAdaptation.ADAPTED)
     public static final int EDIT_NONE = 0;
 
     /**
-     * {@code edit} attribute value indicating a message edit.
+     * The {@code edit} attribute value that marks the stanza as an in-place
+     * message edit of a previously sent message.
+     *
+     * @apiNote
+     * The {@code target_id} attribute (see
+     * {@link #targetId()}) identifies the original message being edited.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "EDIT_ATTR",
+    @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final int EDIT_MESSAGE = 1;
 
     /**
-     * {@code edit} attribute value indicating a pin-in-chat operation.
+     * The {@code edit} attribute value that marks the stanza as a
+     * pin-in-chat operation.
+     *
+     * @apiNote
+     * Used to pin or unpin the message referenced by {@link #targetId()}
+     * inside the chat; the inner protobuf carries the action.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "EDIT_ATTR",
+    @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final int EDIT_PIN = 2;
 
     /**
-     * {@code edit} attribute value indicating that the sender revoked the message.
+     * The {@code edit} attribute value that marks the stanza as a
+     * sender-side revoke.
+     *
+     * @apiNote
+     * Drives the "deleted for everyone" UI when the original sender revokes
+     * one of their own messages.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "EDIT_ATTR",
+    @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final int EDIT_SENDER_REVOKE = 7;
 
     /**
-     * {@code edit} attribute value indicating that an admin revoked the message.
+     * The {@code edit} attribute value that marks the stanza as a group-admin
+     * revoke.
+     *
+     * @apiNote
+     * Drives the "deleted by admin" UI inside groups; the {@code target_id}
+     * attribute identifies the revoked message.
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "EDIT_ATTR",
+    @WhatsAppWebExport(moduleName = "WAWebAck", exports = "EDIT_ATTR",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final int EDIT_ADMIN_REVOKE = 8;
 
     /**
-     * {@code context_source} value identifying a stanza originating from a channel
-     * invitation.
+     * The {@code context_source} attribute value identifying a stanza that
+     * was sent in response to a channel invitation.
+     *
+     * @apiNote
+     * Compare {@link #contextSource()} against this constant when filtering
+     * stanzas that originated from the channels-onboarding surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgCommon", exports = "CONTEXT_SOURCE",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String CONTEXT_SOURCE_CHANNELS_INVITATION = "channels_invitation";
 
     /**
-     * Stanza's {@code id} attribute.
+     * The stanza's {@code id} attribute.
      */
     private final String id;
 
     /**
-     * Message timestamp parsed from the {@code t} attribute.
+     * The message timestamp parsed from the {@code t} attribute.
      */
     private final Instant timestamp;
 
     /**
-     * Chat JID derived from the {@code from} attribute. For 1:1 messages this equals
-     * the sender; for groups, broadcasts, and status feeds this identifies the
-     * group/broadcast/status chat.
+     * The chat JID derived from the {@code from} attribute; the user for 1:1
+     * chats, the group for group messages, the broadcast or status JID for
+     * broadcast messages.
      */
     private final Jid chatJid;
 
     /**
-     * Actual sender's device JID. For 1:1 messages this equals {@link #chatJid}; for
-     * groups and broadcasts it is the {@code participant} attribute.
+     * The actual sender's device JID; equal to {@link #chatJid} for 1:1
+     * messages, the {@code participant} attribute for group/broadcast/status
+     * messages.
      */
     private final Jid senderJid;
 
     /**
-     * {@code participant} attribute present on group, broadcast, and status messages,
-     * identifying the sender's device within the group.
+     * The raw {@code participant} attribute when present, identifying the
+     * sender's device inside a group or broadcast.
      */
     private final Jid participant;
 
     /**
-     * Classified message type derived from the addressing.
+     * The addressing-derived message classification.
      */
     private final MessageType messageType;
 
     /**
-     * {@code edit} attribute, defaulting to {@link #EDIT_NONE}.
+     * The {@code edit} attribute value; defaults to {@link #EDIT_NONE} when
+     * the attribute is absent.
      */
     private final int editAttribute;
 
     /**
-     * Sender's push name from the {@code notify} attribute.
+     * The sender's push name carried by the {@code notify} attribute.
      */
     private final String pushName;
 
     /**
-     * Message category. The only defined value is {@code "peer"} for peer protocol
-     * messages.
+     * The {@code category} attribute; the only defined value is
+     * {@code "peer"} for peer-protocol messages.
      */
     private final String category;
 
     /**
-     * {@code offline} attribute value, present on messages delivered while the client
-     * was offline.
+     * The {@code offline} attribute, present on messages the server delivers
+     * after the client comes back online.
      */
     private final String offline;
 
     /**
-     * Addressing mode for group messages: either {@code "pn"} (phone number) or
-     * {@code "lid"}.
+     * The {@code addressing_mode} attribute on group messages, either
+     * {@code "pn"} (phone-number addressing) or {@code "lid"} (LID
+     * addressing).
      */
     private final String addressingMode;
 
     /**
-     * Whether the stanza has an {@code <hsm>} child indicating a highly structured
-     * message (business template).
+     * {@code true} when the stanza has an {@code <hsm>} child, indicating a
+     * highly-structured (business template) message.
      */
     private final boolean isHsm;
 
     /**
-     * Optional {@code count} attribute.
+     * The {@code count} attribute, when present.
      */
     private final Integer count;
 
     /**
-     * Sender's phone number JID from the {@code sender_pn} attribute. Used on
-     * LID-addressed groups to carry the PN mapping.
+     * The sender's phone-number JID from the {@code sender_pn} attribute,
+     * present on LID-addressed groups to carry the PN mapping.
      */
     private final Jid senderPn;
 
     /**
-     * Sender's LID from the {@code sender_lid} attribute.
+     * The sender's LID from the {@code sender_lid} attribute.
      */
     private final Jid senderLid;
 
     /**
-     * Recipient's phone number from the {@code recipient_pn} attribute, present on
-     * peer messages.
+     * The recipient's phone-number JID from the {@code recipient_pn}
+     * attribute, present on peer-protocol messages.
      */
     private final Jid recipientPn;
 
     /**
-     * Recipient's LID from the {@code recipient_lid} attribute.
+     * The recipient's LID from the {@code recipient_lid} attribute.
      */
     private final Jid recipientLid;
 
     /**
-     * Peer recipient's phone number from the {@code peer_recipient_pn} attribute,
-     * used on peer broadcast messages.
+     * The peer recipient's phone-number JID from the
+     * {@code peer_recipient_pn} attribute, present on peer-broadcast
+     * messages.
      */
     private final Jid peerRecipientPn;
 
     /**
-     * Peer recipient's LID from the {@code peer_recipient_lid} attribute.
+     * The peer recipient's LID from the {@code peer_recipient_lid}
+     * attribute.
      */
     private final Jid peerRecipientLid;
 
     /**
-     * Peer recipient's username from the {@code peer_recipient_username} attribute.
+     * The peer recipient's username from the {@code peer_recipient_username}
+     * attribute.
      */
     private final String peerRecipientUsername;
 
     /**
-     * Most recent LID known for the recipient from the {@code recipient_latest_lid}
-     * attribute.
+     * The most recent LID known by the server for the recipient, from the
+     * {@code recipient_latest_lid} attribute.
      */
     private final Jid recipientLatestLid;
 
     /**
-     * Recipient's username from the {@code recipient_username} attribute.
+     * The recipient's username from the {@code recipient_username}
+     * attribute.
      */
     private final String recipientUsername;
 
     /**
-     * Group participant's phone number from the {@code participant_pn} attribute.
+     * The group participant's phone-number JID from the
+     * {@code participant_pn} attribute.
      */
     private final Jid participantPn;
 
     /**
-     * Group participant's LID from the {@code participant_lid} attribute.
+     * The group participant's LID from the {@code participant_lid}
+     * attribute.
      */
     private final Jid participantLid;
 
     /**
-     * Group participant's username from the {@code participant_username} attribute.
+     * The group participant's username from the
+     * {@code participant_username} attribute.
      */
     private final String participantUsername;
 
     /**
-     * Sender's username from the {@code username} attribute.
+     * The sender's username from the {@code username} attribute.
      */
     private final String username;
 
     /**
-     * Sender's display name from the {@code display_name} attribute.
+     * The sender's display name from the {@code display_name} attribute.
      */
     private final String displayName;
 
     /**
-     * Stanza's {@code type} attribute. Defined values are {@code "text"},
-     * {@code "media"}, {@code "medianotify"}, {@code "pay"}, {@code "poll"},
-     * {@code "reaction"}, and {@code "event"}.
+     * The {@code type} attribute of the stanza; defined values are
+     * {@code "text"}, {@code "media"}, {@code "medianotify"}, {@code "pay"},
+     * {@code "poll"}, {@code "reaction"}, and {@code "event"}.
      */
     private final String stanzaType;
 
     /**
-     * Whether the stanza has an {@code <unavailable>} child indicating the payload is
-     * absent (fanout placeholder).
+     * {@code true} when the stanza has an {@code <unavailable>} child,
+     * indicating a fanout placeholder for which the payload is missing.
      */
     private final boolean unavailable;
 
     /**
-     * Whether the {@code <unavailable>} child carries {@code hosted="true"}, meaning
-     * a hosted-device fanout placeholder.
+     * {@code true} when the {@code <unavailable>} child carries
+     * {@code hosted="true"}, marking a hosted-device fanout placeholder.
      */
     private final boolean hostedUnavailable;
 
     /**
-     * Whether the {@code <unavailable>} child carries {@code type="view_once"},
-     * meaning a view-once fanout placeholder.
+     * {@code true} when the {@code <unavailable>} child carries
+     * {@code type="view_once"}, marking a view-once fanout placeholder.
      */
     private final boolean viewOnceUnavailable;
 
     /**
-     * {@code polltype} attribute from the {@code <meta>} node. Defined values are
-     * {@code "creation"}, {@code "quiz_creation"}, {@code "vote"},
+     * The {@code polltype} attribute on the {@code <meta>} child; defined
+     * values are {@code "creation"}, {@code "quiz_creation"}, {@code "vote"},
      * {@code "result_snapshot"}, and {@code "edit"}.
      */
     private final String pollType;
 
     /**
-     * {@code event_type} attribute from the {@code <meta>} node. Defined values are
-     * {@code "creation"}, {@code "response"}, and {@code "edit"}. Populated only when
-     * the stanza type is {@code "event"}.
+     * The {@code event_type} attribute on the {@code <meta>} child, populated
+     * only when the stanza type is {@code "event"}; defined values are
+     * {@code "creation"}, {@code "response"}, and {@code "edit"}.
      */
     private final String eventType;
 
     /**
-     * {@code origin} attribute from the {@code <meta>} node. The only defined value
-     * is {@code "ctwa"} (click-to-WhatsApp ads).
+     * The {@code origin} attribute on the {@code <meta>} child; the only
+     * defined value is {@code "ctwa"} for click-to-WhatsApp ad-originated
+     * conversations.
      */
     private final String origin;
 
     /**
-     * Whether the stanza has a {@code <url_number>} child.
+     * {@code true} when the stanza has a {@code <url_number>} child.
      */
     private final boolean urlNumber;
 
     /**
-     * Whether the stanza has a {@code <url_text>} child.
+     * {@code true} when the stanza has a {@code <url_text>} child.
      */
     private final boolean urlText;
 
     /**
-     * Whether the {@code <meta>} node has {@code status_mentioned="true"}.
+     * {@code true} when the {@code <meta>} child carries
+     * {@code status_mentioned="true"}, marking a status post that mentions
+     * the local user.
      */
     private final boolean statusMentioned;
 
     /**
-     * {@code appdata} attribute from the {@code <meta>} node. Defined values are
-     * {@code "default"}, {@code "member_tag"}, and {@code "group_history"}.
+     * The {@code appdata} attribute on the {@code <meta>} child; defined
+     * values are {@code "default"}, {@code "member_tag"}, and
+     * {@code "group_history"}.
      */
     private final String appdata;
 
     /**
-     * {@code biz_source} attribute from the {@code <meta>} node.
+     * The {@code biz_source} attribute on the {@code <meta>} child.
      */
     private final String bizSource;
 
     /**
-     * {@code thread_msg_id} attribute from the {@code <meta>} node, identifying the
-     * parent message of a comment thread.
+     * The {@code thread_msg_id} attribute on the {@code <meta>} child,
+     * referencing the parent of a comment thread.
      */
     private final String threadMsgId;
 
     /**
-     * {@code thread_msg_sender_jid} attribute from the {@code <meta>} node.
+     * The {@code thread_msg_sender_jid} attribute on the {@code <meta>}
+     * child.
      */
     private final Jid threadMsgSenderJid;
 
     /**
-     * {@code target_id} attribute from the {@code <meta>} node, referencing the
-     * parent message for addon messages (reactions, poll votes, etc.).
+     * The {@code target_id} attribute on the {@code <meta>} child; used by
+     * addon messages (reactions, poll votes, edits, revokes) to point at the
+     * parent message.
      */
     private final String targetId;
 
     /**
-     * {@code target_sender_jid} attribute from the {@code <meta>} node.
+     * The {@code target_sender_jid} attribute on the {@code <meta>} child.
      */
     private final Jid targetSenderJid;
 
     /**
-     * {@code target_chat_jid} attribute from the {@code <meta>} node.
+     * The {@code target_chat_jid} attribute on the {@code <meta>} child.
      */
     private final Jid targetChatJid;
 
     /**
-     * {@code target_chat_jid_lid} attribute from the {@code <meta>} node.
+     * The {@code target_chat_jid_lid} attribute on the {@code <meta>} child.
      */
     private final Jid targetChatJidLid;
 
     /**
-     * Whether the {@code <meta>} node has {@code capi="true"}.
+     * {@code true} when the {@code <meta>} child carries {@code capi="true"}.
      */
     private final boolean capi;
 
     /**
-     * {@code context_source} attribute from the {@code <meta>} node. The known value
-     * is {@code "channels_invitation"}.
+     * The {@code context_source} attribute on the {@code <meta>} child;
+     * compare against {@link #CONTEXT_SOURCE_CHANNELS_INVITATION}.
      */
     private final String contextSource;
 
     /**
-     * Sender's country code parsed from the {@code <meta>} node's
-     * {@code sender_country_code} attribute.
+     * The sender's country code from the {@code sender_country_code}
+     * attribute on the {@code <meta>} child.
      */
     private final String senderCountryCode;
 
     /**
-     * List of encrypted payloads parsed from {@code <enc>} child nodes.
+     * Every {@code <enc>} child parsed into a payload record.
      */
     private final List<MessageReceiveEncryptedPayload> encs;
 
     /**
-     * Device identity bytes from the {@code <device-identity>} child, used for ADV
-     * validation of companion devices.
+     * The raw bytes of the {@code <device-identity>} child, fed to ADV
+     * validation for companion devices.
      */
     private final byte[] deviceIdentity;
 
     /**
-     * Parsed bot info from the {@code <bot>} child.
+     * The {@code <bot>} child parsed into a typed record, when present.
      */
     private final MessageReceiveBotInfo botInfo;
 
     /**
-     * Parsed business info from stanza attributes and the {@code <biz>} child.
+     * The business metadata parsed from the stanza attributes and the
+     * {@code <biz>} child, when any business field is present.
      */
     private final MessageReceiveBizInfo bizInfo;
 
     /**
-     * Parsed reporting token info from the {@code <reporting>} child.
+     * The {@code <reporting>} child parsed into a typed record, when present.
      */
     private final MessageReceiveReportingInfo reportingInfo;
 
     /**
-     * List of broadcast contact list participants from the {@code <participants>}
-     * child. Populated for PEER_BROADCAST and DIRECT_PEER_STATUS messages.
+     * The broadcast contact list parsed from the {@code <participants>}
+     * child; populated for {@link MessageType#PEER_BROADCAST} and
+     * {@link MessageType#DIRECT_PEER_STATUS} stanzas.
      */
     private final List<MessageReceiveBroadcastParticipant> bclParticipants;
 
     /**
-     * Parsed payment info from the {@code <pay>} and {@code <transaction>} children.
+     * The {@code <pay>} or {@code <transaction>} child parsed into a typed
+     * record, when present.
      */
     private final MessageReceivePaymentInfo paymentInfo;
 
     /**
-     * Content bytes of the {@code <rcat>} child node, used for content binding
+     * The raw bytes of the {@code <rcat>} child, used for content-binding
      * verification.
      */
     private final byte[] rcat;
 
     /**
-     * Stanza-level {@code eph_setting} attribute, present on OTHER_BROADCAST messages
-     * for ephemeral message settings.
+     * The stanza-level {@code eph_setting} attribute, present on
+     * {@link MessageType#OTHER_BROADCAST} messages.
      */
     private final String ephSetting;
 
     /**
-     * {@code tag} attribute from the {@code <hsm>} child node.
+     * The {@code tag} attribute on the {@code <hsm>} child.
      */
     private final String hsmTag;
 
     /**
-     * {@code category} attribute from the {@code <hsm>} child node.
+     * The {@code category} attribute on the {@code <hsm>} child.
      */
     private final String hsmCategory;
 
     /**
-     * Constructs a new parsed stanza record.
+     * Constructs a fully populated stanza record from the values extracted
+     * by {@link MessageReceiveStanzaParser}.
      *
-     * <p>Intended to be called by {@link MessageReceiveStanzaParser} after completing
-     * its extraction pass; callers outside the parser rarely need to invoke it
-     * directly.
+     * @apiNote
+     * Not intended for direct use outside the parser; the constructor
+     * remains public so the parser (in the same package) and the test
+     * fixtures can build instances.
      *
      * @param id                    the stanza identifier
      * @param timestamp             the message timestamp
      * @param chatJid               the chat JID from the {@code from} attribute
      * @param senderJid             the sender's device JID
-     * @param participant           the participant attribute, or {@code null}
-     * @param messageType           the classified message type
-     * @param editAttribute         the edit attribute value
+     * @param participant           the raw participant attribute, or {@code null}
+     * @param messageType           the addressing-derived classification
+     * @param editAttribute         the edit-attribute integer
      * @param pushName              the sender push name, or {@code null}
      * @param category              the message category, or {@code null}
      * @param offline               the offline attribute, or {@code null}
-     * @param addressingMode        the addressing mode, or {@code null}
-     * @param isHsm                 whether the stanza carries an HSM child
+     * @param addressingMode        the group addressing mode, or {@code null}
+     * @param isHsm                 whether the stanza carries an {@code <hsm>} child
      * @param count                 the count attribute, or {@code null}
      * @param senderPn              the sender phone-number JID, or {@code null}
      * @param senderLid             the sender LID, or {@code null}
@@ -421,46 +482,46 @@ public final class MessageReceiveStanza {
      * @param peerRecipientPn       the peer recipient phone-number JID, or {@code null}
      * @param peerRecipientLid      the peer recipient LID, or {@code null}
      * @param peerRecipientUsername the peer recipient username, or {@code null}
-     * @param recipientLatestLid    the latest known recipient LID, or {@code null}
+     * @param recipientLatestLid    the latest recipient LID, or {@code null}
      * @param recipientUsername     the recipient username, or {@code null}
      * @param participantPn         the participant phone-number JID, or {@code null}
      * @param participantLid        the participant LID, or {@code null}
      * @param participantUsername   the participant username, or {@code null}
      * @param username              the sender username, or {@code null}
      * @param displayName           the sender display name, or {@code null}
-     * @param stanzaType            the stanza type
-     * @param unavailable           whether the stanza is unavailable
-     * @param hostedUnavailable     whether the unavailable placeholder is hosted
-     * @param viewOnceUnavailable   whether the unavailable placeholder is a view-once
+     * @param stanzaType            the {@code type} attribute
+     * @param unavailable           whether the stanza is an unavailable placeholder
+     * @param hostedUnavailable     whether the placeholder is hosted
+     * @param viewOnceUnavailable   whether the placeholder is view-once
      * @param pollType              the poll type, or {@code null}
      * @param eventType             the event type, or {@code null}
      * @param origin                the origin attribute, or {@code null}
-     * @param urlNumber             whether the stanza has a url_number child
-     * @param urlText               whether the stanza has a url_text child
-     * @param statusMentioned       whether the status mentions the user
+     * @param urlNumber             whether a {@code <url_number>} child is present
+     * @param urlText               whether a {@code <url_text>} child is present
+     * @param statusMentioned       whether the status mentions the local user
      * @param appdata               the appdata attribute, or {@code null}
      * @param bizSource             the biz_source attribute, or {@code null}
-     * @param threadMsgId           the thread parent message id, or {@code null}
+     * @param threadMsgId           the thread parent id, or {@code null}
      * @param threadMsgSenderJid    the thread parent sender JID, or {@code null}
-     * @param targetId              the target message id, or {@code null}
-     * @param targetSenderJid       the target sender JID, or {@code null}
-     * @param targetChatJid         the target chat JID, or {@code null}
-     * @param targetChatJidLid      the target chat LID, or {@code null}
-     * @param capi                  whether the stanza has capi="true"
+     * @param targetId              the addon target id, or {@code null}
+     * @param targetSenderJid       the addon target sender JID, or {@code null}
+     * @param targetChatJid         the addon target chat JID, or {@code null}
+     * @param targetChatJidLid      the addon target chat LID, or {@code null}
+     * @param capi                  whether the {@code capi} attribute is {@code "true"}
      * @param contextSource         the context_source value, or {@code null}
      * @param senderCountryCode     the sender country code, or {@code null}
-     * @param encs                  the list of encrypted payloads
+     * @param encs                  the parsed encrypted payloads (defensively copied)
      * @param deviceIdentity        the device identity bytes, or {@code null}
-     * @param botInfo               the parsed bot info, or {@code null}
-     * @param bizInfo               the parsed biz info, or {@code null}
-     * @param reportingInfo         the parsed reporting info, or {@code null}
-     * @param bclParticipants       the broadcast participant list
-     * @param paymentInfo           the parsed payment info, or {@code null}
-     * @param ephSetting            the stanza-level eph_setting, or {@code null}
+     * @param botInfo               the parsed bot record, or {@code null}
+     * @param bizInfo               the parsed business record, or {@code null}
+     * @param reportingInfo         the parsed reporting record, or {@code null}
+     * @param bclParticipants       the broadcast contact list (defensively copied; may be {@code null} to denote empty)
+     * @param paymentInfo           the parsed payment record, or {@code null}
+     * @param ephSetting            the stanza-level ephemeral setting, or {@code null}
      * @param rcat                  the rcat content bytes, or {@code null}
      * @param hsmTag                the HSM tag, or {@code null}
      * @param hsmCategory           the HSM category, or {@code null}
-     * @throws NullPointerException if any non-nullable argument is {@code null}
+     * @throws NullPointerException if any required argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -589,12 +650,21 @@ public final class MessageReceiveStanza {
     /**
      * Returns the stanza's {@code id} attribute.
      *
+     * @apiNote
+     * The canonical message identifier; reused as the persisted message key
+     * and as the value matched by retry receipts and addon {@code target_id}
+     * references.
+     *
      * @return the stanza identifier
      */
     public String id() { return id; }
 
     /**
-     * Returns the message timestamp.
+     * Returns the message timestamp parsed from the {@code t} attribute.
+     *
+     * @apiNote
+     * The server's authoritative receive timestamp; used for chat-ordering
+     * and for binding the reporting token to a specific delivery.
      *
      * @return the message timestamp
      */
@@ -603,6 +673,10 @@ public final class MessageReceiveStanza {
     /**
      * Returns the chat JID derived from the {@code from} attribute.
      *
+     * @apiNote
+     * The conversation key under which the message is stored: a user JID for
+     * 1:1, a group JID for groups, a broadcast or status JID for broadcasts.
+     *
      * @return the chat JID
      */
     public Jid chatJid() { return chatJid; }
@@ -610,166 +684,266 @@ public final class MessageReceiveStanza {
     /**
      * Returns the actual sender's device JID.
      *
+     * @apiNote
+     * For 1:1 messages this equals {@link #chatJid()}; for group, broadcast,
+     * and status messages it is the {@code participant} JID. Used to select
+     * the Signal session that decrypts each {@code <enc>} payload.
+     *
      * @return the sender's device JID
      */
     public Jid senderJid() { return senderJid; }
 
     /**
-     * Returns the optional {@code participant} attribute.
+     * Returns the raw {@code participant} attribute, when present.
+     *
+     * @apiNote
+     * Distinct from {@link #senderJid()} in that it stays {@code null} for
+     * 1:1 messages; useful when downstream code needs to know whether the
+     * attribute was on the wire.
      *
      * @return an {@link Optional} wrapping the participant JID
      */
     public Optional<Jid> participant() { return Optional.ofNullable(participant); }
 
     /**
-     * Returns the classified message type.
+     * Returns the addressing-derived classification.
      *
-     * @return the message type
+     * @apiNote
+     * The single discriminator the receive pipeline branches on; see
+     * {@link MessageType} for what each value implies.
+     *
+     * @return the classified message type
      */
     public MessageType messageType() { return messageType; }
 
     /**
      * Returns the {@code edit} attribute value.
      *
+     * @apiNote
+     * Compare against {@link #EDIT_NONE}, {@link #EDIT_MESSAGE},
+     * {@link #EDIT_PIN}, {@link #EDIT_SENDER_REVOKE}, or
+     * {@link #EDIT_ADMIN_REVOKE} to dispatch the appropriate edit-handling
+     * path.
+     *
      * @return the edit attribute integer
      */
     public int editAttribute() { return editAttribute; }
 
     /**
-     * Returns the optional push name from the {@code notify} attribute.
+     * Returns the sender's push name from the {@code notify} attribute,
+     * when present.
+     *
+     * @apiNote
+     * Surfaces the contact's display name as set in their WhatsApp profile;
+     * used to update the local contacts cache opportunistically.
      *
      * @return an {@link Optional} wrapping the push name
      */
     public Optional<String> pushName() { return Optional.ofNullable(pushName); }
 
     /**
-     * Returns the optional message category.
+     * Returns the {@code category} attribute, when present.
+     *
+     * @apiNote
+     * Compare against {@code "peer"} (or use {@link #isPeer()}) to detect a
+     * peer-protocol message.
      *
      * @return an {@link Optional} wrapping the category string
      */
     public Optional<String> category() { return Optional.ofNullable(category); }
 
     /**
-     * Returns the optional {@code offline} attribute.
+     * Returns the {@code offline} attribute, when present.
+     *
+     * @apiNote
+     * Set by the server on stanzas it delivers after a reconnect to flag
+     * them as offline-queued; pairs with {@link #isOffline()}.
      *
      * @return an {@link Optional} wrapping the offline value
      */
     public Optional<String> offline() { return Optional.ofNullable(offline); }
 
     /**
-     * Returns the optional addressing mode ({@code "pn"} or {@code "lid"}).
+     * Returns the group {@code addressing_mode} attribute, when present.
+     *
+     * @apiNote
+     * Either {@code "pn"} or {@code "lid"}; lets the receive pipeline pick
+     * the right Signal protocol address for the participant in
+     * LID-migrating groups.
      *
      * @return an {@link Optional} wrapping the addressing mode
      */
     public Optional<String> addressingMode() { return Optional.ofNullable(addressingMode); }
 
     /**
-     * Returns whether the stanza has an {@code <hsm>} child.
+     * Returns whether the stanza carried an {@code <hsm>} child.
+     *
+     * @apiNote
+     * Indicates the message is a highly-structured (business template)
+     * message; pair with {@link #hsmTag()} and {@link #hsmCategory()} for
+     * the template metadata.
      *
      * @return {@code true} if the HSM child is present
      */
     public boolean isHsm() { return isHsm; }
 
     /**
-     * Returns the optional {@code count} attribute.
+     * Returns the {@code count} attribute, when present.
+     *
+     * @apiNote
+     * Carries server-side reporting of how many recipients a fanout was
+     * addressed to.
      *
      * @return an {@link Optional} wrapping the count value
      */
     public Optional<Integer> count() { return Optional.ofNullable(count); }
 
     /**
-     * Returns the optional sender phone-number JID.
+     * Returns the sender's phone-number JID, when present.
+     *
+     * @apiNote
+     * Part of the LID-to-PN migration mapping the server attaches on
+     * LID-addressed groups so the recipient can resolve the sender's PN
+     * identity.
      *
      * @return an {@link Optional} wrapping the sender PN JID
      */
     public Optional<Jid> senderPn() { return Optional.ofNullable(senderPn); }
 
     /**
-     * Returns the optional sender LID.
+     * Returns the sender's LID, when present.
+     *
+     * @apiNote
+     * Pairs with {@link #senderPn()} for the LID/PN mapping.
      *
      * @return an {@link Optional} wrapping the sender LID
      */
     public Optional<Jid> senderLid() { return Optional.ofNullable(senderLid); }
 
     /**
-     * Returns the optional recipient phone-number JID.
+     * Returns the recipient's phone-number JID, when present.
+     *
+     * @apiNote
+     * Present on peer-protocol messages where the server identifies the
+     * intended recipient by PN.
      *
      * @return an {@link Optional} wrapping the recipient PN JID
      */
     public Optional<Jid> recipientPn() { return Optional.ofNullable(recipientPn); }
 
     /**
-     * Returns the optional recipient LID.
+     * Returns the recipient's LID, when present.
+     *
+     * @apiNote
+     * Pairs with {@link #recipientPn()} for the LID/PN mapping.
      *
      * @return an {@link Optional} wrapping the recipient LID
      */
     public Optional<Jid> recipientLid() { return Optional.ofNullable(recipientLid); }
 
     /**
-     * Returns the optional peer recipient phone-number JID.
+     * Returns the peer recipient's phone-number JID, when present.
+     *
+     * @apiNote
+     * Present on peer-broadcast messages to identify the peer device whose
+     * broadcast the local user mirrors.
      *
      * @return an {@link Optional} wrapping the peer recipient PN JID
      */
     public Optional<Jid> peerRecipientPn() { return Optional.ofNullable(peerRecipientPn); }
 
     /**
-     * Returns the optional peer recipient LID.
+     * Returns the peer recipient's LID, when present.
+     *
+     * @apiNote
+     * Pairs with {@link #peerRecipientPn()} for the LID/PN mapping.
      *
      * @return an {@link Optional} wrapping the peer recipient LID
      */
     public Optional<Jid> peerRecipientLid() { return Optional.ofNullable(peerRecipientLid); }
 
     /**
-     * Returns the optional peer recipient username.
+     * Returns the peer recipient's username, when present.
+     *
+     * @apiNote
+     * Populated only when WA Web's username-display gate is on.
      *
      * @return an {@link Optional} wrapping the peer recipient username
      */
     public Optional<String> peerRecipientUsername() { return Optional.ofNullable(peerRecipientUsername); }
 
     /**
-     * Returns the optional latest LID known for the recipient.
+     * Returns the freshest LID the server knows for the recipient, when
+     * present.
+     *
+     * @apiNote
+     * Lets the receive pipeline learn an updated LID for the recipient
+     * without an explicit query.
      *
      * @return an {@link Optional} wrapping the latest recipient LID
      */
     public Optional<Jid> recipientLatestLid() { return Optional.ofNullable(recipientLatestLid); }
 
     /**
-     * Returns the optional recipient username.
+     * Returns the recipient's username, when present.
+     *
+     * @apiNote
+     * Mirrors {@link #peerRecipientUsername()} but for the standard recipient
+     * field.
      *
      * @return an {@link Optional} wrapping the recipient username
      */
     public Optional<String> recipientUsername() { return Optional.ofNullable(recipientUsername); }
 
     /**
-     * Returns the optional group participant phone-number JID.
+     * Returns the group participant's phone-number JID, when present.
+     *
+     * @apiNote
+     * Part of the LID/PN migration mapping for LID-addressed groups; absence
+     * on a LID-addressed group message triggers a WA Web error log.
      *
      * @return an {@link Optional} wrapping the participant PN JID
      */
     public Optional<Jid> participantPn() { return Optional.ofNullable(participantPn); }
 
     /**
-     * Returns the optional group participant LID.
+     * Returns the group participant's LID, when present.
+     *
+     * @apiNote
+     * Pairs with {@link #participantPn()} for the LID/PN mapping.
      *
      * @return an {@link Optional} wrapping the participant LID
      */
     public Optional<Jid> participantLid() { return Optional.ofNullable(participantLid); }
 
     /**
-     * Returns the optional group participant username.
+     * Returns the group participant's username, when present.
+     *
+     * @apiNote
+     * Populated only when WA Web's username-display gate is on; surfaces the
+     * group member's public username.
      *
      * @return an {@link Optional} wrapping the participant username
      */
     public Optional<String> participantUsername() { return Optional.ofNullable(participantUsername); }
 
     /**
-     * Returns the optional sender username.
+     * Returns the sender's username, when present.
+     *
+     * @apiNote
+     * Used to update the contact cache opportunistically; mirrors
+     * {@link #pushName()} but for the username-display surface.
      *
      * @return an {@link Optional} wrapping the sender username
      */
     public Optional<String> username() { return Optional.ofNullable(username); }
 
     /**
-     * Returns the optional sender display name.
+     * Returns the sender's display name, when present.
+     *
+     * @apiNote
+     * Used as a fallback display label on LID groups where the participant
+     * carries no PN mapping.
      *
      * @return an {@link Optional} wrapping the sender display name
      */
@@ -778,233 +952,387 @@ public final class MessageReceiveStanza {
     /**
      * Returns the stanza's {@code type} attribute.
      *
+     * @apiNote
+     * Mirrors WA Web's {@code STANZA_MSG_TYPES} enum; downstream code
+     * branches on this string to pick between text, media, poll, event,
+     * reaction, and pay handling.
+     *
      * @return the stanza type
      */
     public String stanzaType() { return stanzaType; }
 
     /**
-     * Returns whether the message is an unavailable fanout placeholder.
+     * Returns whether this stanza is an unavailable fanout placeholder.
      *
-     * @return {@code true} if the stanza has an {@code <unavailable>} child
+     * @apiNote
+     * The server emits these placeholders when the per-recipient ciphertext
+     * is missing; the receive pipeline treats them as "decryption deferred"
+     * and waits for the actual fanout.
+     *
+     * @return {@code true} if an {@code <unavailable>} child is present
      */
     public boolean isUnavailable() { return unavailable; }
 
     /**
-     * Returns whether the unavailable placeholder is for a hosted device.
+     * Returns whether the unavailable placeholder is tagged as hosted.
+     *
+     * @apiNote
+     * Only meaningful when {@link #isUnavailable()} is {@code true}; flags
+     * placeholders that target a hosted companion device rather than a
+     * device the local user controls.
      *
      * @return {@code true} if hosted
      */
     public boolean isHostedUnavailable() { return hostedUnavailable; }
 
     /**
-     * Returns whether the unavailable placeholder is for a view-once message.
+     * Returns whether the unavailable placeholder is a view-once message.
+     *
+     * @apiNote
+     * Only meaningful when {@link #isUnavailable()} is {@code true}; flags
+     * placeholders that will resolve into a view-once media payload.
      *
      * @return {@code true} if view-once
      */
     public boolean isViewOnceUnavailable() { return viewOnceUnavailable; }
 
     /**
-     * Returns the optional {@code polltype} attribute from the {@code <meta>} node.
+     * Returns the {@code polltype} attribute on the {@code <meta>} child,
+     * when present.
+     *
+     * @apiNote
+     * Only populated when {@link #stanzaType()} is {@code "poll"}; values
+     * mirror WA Web's {@code POLL_TYPES} enum.
      *
      * @return an {@link Optional} wrapping the poll type
      */
     public Optional<String> pollType() { return Optional.ofNullable(pollType); }
 
     /**
-     * Returns the optional {@code event_type} attribute from the {@code <meta>} node.
+     * Returns the {@code event_type} attribute on the {@code <meta>} child,
+     * when present.
+     *
+     * @apiNote
+     * Only populated when {@link #stanzaType()} is {@code "event"}; values
+     * mirror WA Web's {@code EVENT_TYPES} enum.
      *
      * @return an {@link Optional} wrapping the event type
      */
     public Optional<String> eventType() { return Optional.ofNullable(eventType); }
 
     /**
-     * Returns the optional {@code origin} attribute from the {@code <meta>} node.
+     * Returns the {@code origin} attribute on the {@code <meta>} child,
+     * when present.
+     *
+     * @apiNote
+     * The only defined value is {@code "ctwa"} (click-to-WhatsApp ads);
+     * used by the chat-header pipeline to badge ad-originated conversations.
      *
      * @return an {@link Optional} wrapping the origin
      */
     public Optional<String> origin() { return Optional.ofNullable(origin); }
 
     /**
-     * Returns whether the stanza has a {@code <url_number>} child.
+     * Returns whether the stanza had a {@code <url_number>} child.
+     *
+     * @apiNote
+     * Indicates the message references a URL-encoded phone number; the
+     * receive pipeline routes such messages to the link-preview path.
      *
      * @return {@code true} if present
      */
     public boolean urlNumber() { return urlNumber; }
 
     /**
-     * Returns whether the stanza has a {@code <url_text>} child.
+     * Returns whether the stanza had a {@code <url_text>} child.
+     *
+     * @apiNote
+     * Companion to {@link #urlNumber()} for URL-encoded text payloads.
      *
      * @return {@code true} if present
      */
     public boolean urlText() { return urlText; }
 
     /**
-     * Returns whether the status message mentions the current user.
+     * Returns whether the {@code <meta>} child carried
+     * {@code status_mentioned="true"}.
+     *
+     * @apiNote
+     * Marks status posts that mention the local user so the status feed can
+     * surface a notification.
      *
      * @return {@code true} if mentioned
      */
     public boolean statusMentioned() { return statusMentioned; }
 
     /**
-     * Returns the optional {@code appdata} attribute from the {@code <meta>} node.
+     * Returns the {@code appdata} attribute on the {@code <meta>} child,
+     * when present.
+     *
+     * @apiNote
+     * Values mirror WA Web's {@code APPDATA} enum
+     * ({@code "default"}, {@code "member_tag"}, {@code "group_history"});
+     * drives content-categorization for the inbox.
      *
      * @return an {@link Optional} wrapping the appdata value
      */
     public Optional<String> appdata() { return Optional.ofNullable(appdata); }
 
     /**
-     * Returns the optional {@code biz_source} attribute from the {@code <meta>} node.
+     * Returns the {@code biz_source} attribute on the {@code <meta>} child,
+     * when present.
+     *
+     * @apiNote
+     * Carries the WhatsApp Business attribution source so the chat-header
+     * pipeline can render the right business badge.
      *
      * @return an {@link Optional} wrapping the biz source
      */
     public Optional<String> bizSource() { return Optional.ofNullable(bizSource); }
 
     /**
-     * Returns the optional {@code thread_msg_id} attribute.
+     * Returns the {@code thread_msg_id} attribute, when present.
+     *
+     * @apiNote
+     * References the parent message of a comment thread; pair with
+     * {@link #threadMsgSenderJid()} to identify the parent fully.
      *
      * @return an {@link Optional} wrapping the thread parent id
      */
     public Optional<String> threadMsgId() { return Optional.ofNullable(threadMsgId); }
 
     /**
-     * Returns the optional {@code thread_msg_sender_jid} attribute.
+     * Returns the {@code thread_msg_sender_jid} attribute, when present.
+     *
+     * @apiNote
+     * The author of the comment-thread parent; companion to
+     * {@link #threadMsgId()}.
      *
      * @return an {@link Optional} wrapping the thread parent sender JID
      */
     public Optional<Jid> threadMsgSenderJid() { return Optional.ofNullable(threadMsgSenderJid); }
 
     /**
-     * Returns the optional {@code target_id} attribute.
+     * Returns the {@code target_id} attribute, when present.
+     *
+     * @apiNote
+     * Identifies the parent message for addon payloads such as reactions,
+     * poll votes, edits, and revokes; the addon dispatcher reads this to
+     * locate the message being acted on.
      *
      * @return an {@link Optional} wrapping the target id
      */
     public Optional<String> targetId() { return Optional.ofNullable(targetId); }
 
     /**
-     * Returns the optional {@code target_sender_jid} attribute.
+     * Returns the {@code target_sender_jid} attribute, when present.
+     *
+     * @apiNote
+     * The author of the addon-parent message; companion to
+     * {@link #targetId()}.
      *
      * @return an {@link Optional} wrapping the target sender JID
      */
     public Optional<Jid> targetSenderJid() { return Optional.ofNullable(targetSenderJid); }
 
     /**
-     * Returns the optional {@code target_chat_jid} attribute.
+     * Returns the {@code target_chat_jid} attribute, when present.
+     *
+     * @apiNote
+     * The chat in which the addon-parent message lives; used for bot replies
+     * that arrive on a different chat than the original question.
      *
      * @return an {@link Optional} wrapping the target chat JID
      */
     public Optional<Jid> targetChatJid() { return Optional.ofNullable(targetChatJid); }
 
     /**
-     * Returns the optional {@code target_chat_jid_lid} attribute.
+     * Returns the {@code target_chat_jid_lid} attribute, when present.
+     *
+     * @apiNote
+     * The LID form of {@link #targetChatJid()}; WA Web prefers it over the
+     * PN form when both are present.
      *
      * @return an {@link Optional} wrapping the target chat LID
      */
     public Optional<Jid> targetChatJidLid() { return Optional.ofNullable(targetChatJidLid); }
 
     /**
-     * Returns whether the {@code <meta>} node has {@code capi="true"}.
+     * Returns whether the {@code <meta>} child carried {@code capi="true"}.
      *
-     * @return {@code true} if capi is set to true
+     * @apiNote
+     * Identifies stanzas originated through the WhatsApp Cloud API; surfaces
+     * to the UI as a "sent via Cloud API" indicator.
+     *
+     * @return {@code true} if {@code capi} was set to {@code "true"}
      */
     public boolean isCapi() { return capi; }
 
     /**
-     * Returns the optional {@code context_source} attribute.
+     * Returns the {@code context_source} attribute, when present.
+     *
+     * @apiNote
+     * Compare against {@link #CONTEXT_SOURCE_CHANNELS_INVITATION} to detect
+     * channels-invitation-originated stanzas.
      *
      * @return an {@link Optional} wrapping the context source
      */
     public Optional<String> contextSource() { return Optional.ofNullable(contextSource); }
 
     /**
-     * Returns the optional sender country code.
+     * Returns the sender's country code, when present.
+     *
+     * @apiNote
+     * Used by the safety pipeline (and only logged for employee accounts on
+     * WA Web) to flag cross-region messaging anomalies.
      *
      * @return an {@link Optional} wrapping the sender country code
      */
     public Optional<String> senderCountryCode() { return Optional.ofNullable(senderCountryCode); }
 
     /**
-     * Returns the list of encrypted payloads parsed from {@code <enc>} children.
+     * Returns every {@code <enc>} child parsed into a payload record.
      *
-     * @return the encrypted payloads list
+     * @apiNote
+     * Always non-{@code null}, defensively copied at construction time so it
+     * cannot be mutated externally; iterate to dispatch each ciphertext to
+     * its Signal cipher.
+     *
+     * @return the encrypted payloads
      */
     public List<MessageReceiveEncryptedPayload> encs() { return encs; }
 
     /**
-     * Returns the optional device identity bytes used for ADV validation.
+     * Returns the raw {@code <device-identity>} bytes, when present.
+     *
+     * @apiNote
+     * Fed to the ADV validator to verify that a companion device's signed
+     * identity matches the one the server attests.
      *
      * @return an {@link Optional} wrapping the device identity bytes
      */
     public Optional<byte[]> deviceIdentity() { return Optional.ofNullable(deviceIdentity); }
 
     /**
-     * Returns the optional parsed bot info from the {@code <bot>} child.
+     * Returns the parsed {@code <bot>} child, when present.
+     *
+     * @apiNote
+     * Populated for Meta AI and 1P/3P business bot replies; consumed by the
+     * AI-rich-response stitcher to assemble streaming chunks.
      *
      * @return an {@link Optional} wrapping the bot info
      */
     public Optional<MessageReceiveBotInfo> botInfo() { return Optional.ofNullable(botInfo); }
 
     /**
-     * Returns the optional parsed business info.
+     * Returns the parsed business metadata, when present.
+     *
+     * @apiNote
+     * Populated when the stanza carries any business attribute or a
+     * {@code <biz>} child; consumed by the business-chat rendering path.
      *
      * @return an {@link Optional} wrapping the biz info
      */
     public Optional<MessageReceiveBizInfo> bizInfo() { return Optional.ofNullable(bizInfo); }
 
     /**
-     * Returns the optional parsed reporting token info.
+     * Returns the parsed reporting token, when present.
+     *
+     * @apiNote
+     * Populated only when WA Web's reporting-token-receive gate is on;
+     * stored with the message so a later abuse report can include the token.
      *
      * @return an {@link Optional} wrapping the reporting info
      */
     public Optional<MessageReceiveReportingInfo> reportingInfo() { return Optional.ofNullable(reportingInfo); }
 
     /**
-     * Returns the broadcast contact list participants.
+     * Returns the broadcast contact list, defensively copied at construction
+     * time.
      *
-     * @return the list of BCL participants
+     * @apiNote
+     * Populated only for {@link MessageType#PEER_BROADCAST} and
+     * {@link MessageType#DIRECT_PEER_STATUS} messages; empty otherwise. The
+     * list lets the receiving device mirror the recipient list that the
+     * primary device used.
+     *
+     * @return the broadcast contact list
      */
     public List<MessageReceiveBroadcastParticipant> bclParticipants() { return bclParticipants; }
 
     /**
-     * Returns the optional parsed payment info.
+     * Returns the parsed payment metadata, when present.
+     *
+     * @apiNote
+     * Populated when the stanza carries a {@code <pay>} or
+     * {@code <transaction>} child; consumed by the WhatsApp Pay rendering
+     * path.
      *
      * @return an {@link Optional} wrapping the payment info
      */
     public Optional<MessageReceivePaymentInfo> paymentInfo() { return Optional.ofNullable(paymentInfo); }
 
     /**
-     * Returns the optional stanza-level {@code eph_setting} attribute.
+     * Returns the stanza-level {@code eph_setting} attribute, when present.
+     *
+     * @apiNote
+     * Carried by {@link MessageType#OTHER_BROADCAST} messages to convey the
+     * per-recipient ephemeral setting active for this broadcast delivery.
      *
      * @return an {@link Optional} wrapping the ephemeral setting
      */
     public Optional<String> ephSetting() { return Optional.ofNullable(ephSetting); }
 
     /**
-     * Returns the optional {@code <rcat>} content bytes.
+     * Returns the raw {@code <rcat>} content bytes, when present.
+     *
+     * @apiNote
+     * Used by the protobuf decoder for content-binding verification on
+     * specific message types; opaque to the receive pipeline.
      *
      * @return an {@link Optional} wrapping the rcat bytes
      */
     public Optional<byte[]> rcat() { return Optional.ofNullable(rcat); }
 
     /**
-     * Returns the optional HSM tag from the {@code <hsm>} child.
+     * Returns the {@code tag} attribute on the {@code <hsm>} child, when
+     * present.
+     *
+     * @apiNote
+     * Identifies the highly-structured-message template applied to this
+     * stanza; consumed by the business-template renderer.
      *
      * @return an {@link Optional} wrapping the HSM tag
      */
     public Optional<String> hsmTag() { return Optional.ofNullable(hsmTag); }
 
     /**
-     * Returns the optional HSM category from the {@code <hsm>} child.
+     * Returns the {@code category} attribute on the {@code <hsm>} child,
+     * when present.
+     *
+     * @apiNote
+     * Identifies the HSM category (utility, marketing, authentication, etc.);
+     * consumed alongside {@link #hsmTag()} by the business-template renderer.
      *
      * @return an {@link Optional} wrapping the HSM category
      */
     public Optional<String> hsmCategory() { return Optional.ofNullable(hsmCategory); }
 
     /**
-     * Returns the retry count from the first encrypted payload, when non-zero, used
-     * to determine the retry receipt count.
+     * Returns the retry count from the first encrypted payload, when
+     * non-zero.
      *
-     * @return an {@link OptionalInt} wrapping the retry count, empty when no retries
-     *         were recorded
+     * @apiNote
+     * The receive pipeline emits a {@code retry} receipt with this count
+     * when a previously failed decryption finally succeeds; returns empty
+     * when no retry attempt has been made yet.
+     *
+     * @implNote
+     * This implementation reads only the first payload's count because
+     * WA Web's retry-receipt path mirrors that behaviour: a stanza-level
+     * retry count is reported per delivery, not per ciphertext.
+     *
+     * @return an {@link OptionalInt} wrapping the retry count
      */
     public OptionalInt retryCount() {
         if (encs.isEmpty()) {
@@ -1015,38 +1343,56 @@ public final class MessageReceiveStanza {
     }
 
     /**
-     * Returns whether any encrypted payload has {@code decrypt-fail="hide"}, used by
-     * the dedup layer to decide whether to suppress placeholders on decryption
-     * failure.
+     * Returns whether any encrypted payload carried
+     * {@code decrypt-fail="hide"}.
      *
-     * @return {@code true} if any payload hides failures
+     * @apiNote
+     * Used by the dedup layer to suppress the usual decryption-failure
+     * placeholder when the sender requested silent drop semantics; common on
+     * sender-key distribution messages.
+     *
+     * @return {@code true} when at least one payload hides failures
      */
     public boolean hasHideFailPayload() {
         return encs.stream().anyMatch(MessageReceiveEncryptedPayload::hideFail);
     }
 
     /**
-     * Returns whether the message was received while the client was offline.
+     * Returns whether the message was queued offline before delivery.
      *
-     * @return {@code true} if the {@code offline} attribute was set
+     * @apiNote
+     * Pairs with {@link #offline()}; lets the receive pipeline collapse the
+     * "is the attribute present" check into a primitive boolean.
+     *
+     * @return {@code true} when the {@code offline} attribute was set
      */
     public boolean isOffline() {
         return offline != null;
     }
 
     /**
-     * Returns whether this is a peer message (category is {@code "peer"}).
+     * Returns whether the stanza is a peer-protocol message.
      *
-     * @return {@code true} if the category is {@code "peer"}
+     * @apiNote
+     * Equivalent to {@code "peer".equals(category)}; peer-protocol messages
+     * are routed away from chat storage and into the peer handler.
+     *
+     * @return {@code true} when the category is {@code "peer"}
      */
     public boolean isPeer() {
         return "peer".equals(category);
     }
 
     /**
-     * Returns whether every encrypted payload uses direct (non-SKMSG) encryption.
+     * Returns whether every encrypted payload uses direct (non-SKMSG)
+     * encryption.
      *
-     * @return {@code true} if no SKMSG payload is present
+     * @apiNote
+     * Mirrors WA Web's {@code isDirect} flag; pivots the broadcast/status
+     * classification between peer-broadcast and other-broadcast as well as
+     * between direct-peer-status and other-status.
+     *
+     * @return {@code true} when no payload is a sender-key message
      */
     public boolean isDirect() {
         return encs.stream().noneMatch(enc ->
@@ -1054,18 +1400,27 @@ public final class MessageReceiveStanza {
     }
 
     /**
-     * Returns whether the sender is a companion device (device id is not zero).
+     * Returns whether the sender is a companion device.
      *
-     * @return {@code true} if the sender is a companion device
+     * @apiNote
+     * A device id of zero identifies the primary device; any other value is
+     * a companion. Used by the receive pipeline to gate companion-only code
+     * paths.
+     *
+     * @return {@code true} when the sender's device id is non-zero
      */
     public boolean isCompanionDevice() {
         return senderJid.device() != 0;
     }
 
     /**
-     * Returns whether any encrypted payload carries a non-zero retry count.
+     * Returns whether any encrypted payload was a retry.
      *
-     * @return {@code true} if at least one payload is a retry
+     * @apiNote
+     * Companion to {@link #retryCount()}; signals whether the receive
+     * pipeline should treat this delivery as a retry attempt at all.
+     *
+     * @return {@code true} when at least one payload's retry count is non-zero
      */
     public boolean isRetry() {
         return encs.stream().anyMatch(enc -> enc.retryCount() > 0);

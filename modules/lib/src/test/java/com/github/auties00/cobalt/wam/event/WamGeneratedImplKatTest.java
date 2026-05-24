@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.wam.event;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.wam.WamFixtures;
+import com.github.auties00.cobalt.wam.annotation.WamEnumConstant;
 import com.github.auties00.cobalt.wam.binary.WamEventDecoder;
 import com.github.auties00.cobalt.wam.binary.WamEventEncoder;
 import com.github.auties00.cobalt.wam.binary.WamTags;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.DynamicTest.dynamicTest;
  * happens to exercise.
  *
  * <p>Vectors live in {@code fixtures/wam/wam-events-multi-field.json};
- * see {@code tools/web/wam-fixtures/README.md} for the re-capture
+ * see {@code src/test/resources/fixtures/wam/README.md} for the re-capture
  * procedure.
  */
 @DisplayName("WAM generated *Impl encode KAT")
@@ -79,7 +80,7 @@ class WamGeneratedImplKatTest {
     /**
      * Returns one dynamic test per Cobalt-backed scenario asserting
      * the decode direction (captured bytes →
-     * {@link com.github.auties00.cobalt.wam.event.WamEventRegistry#decode}
+     * {@link WamEventRegistry#decode}
      * → {@code *Impl} → re-encode → byte-identical with the input).
      *
      * <p>Synthetic scenarios are skipped because they don't have a
@@ -107,7 +108,7 @@ class WamGeneratedImplKatTest {
 
     /**
      * Decodes the captured bytes via
-     * {@link com.github.auties00.cobalt.wam.event.WamEventRegistry},
+     * {@link WamEventRegistry},
      * re-encodes the decoded spec at the same weight, and asserts
      * the re-encoded bytes are byte-identical to the captured input.
      *
@@ -124,7 +125,7 @@ class WamGeneratedImplKatTest {
         var bytes = HexFormat.of().parseHex(expectedHex);
 
         var decoder = WamEventDecoder.of(bytes, 0, bytes.length);
-        var decoded = com.github.auties00.cobalt.wam.event.WamEventRegistry.decode(decoder);
+        var decoded = WamEventRegistry.decode(decoder);
 
         var reencodeBuffer = new byte[MAX_BUFFER];
         var encoder = WamEventEncoder.of(reencodeBuffer);
@@ -345,7 +346,7 @@ class WamGeneratedImplKatTest {
         for (var constant : enumType.getEnumConstants()) {
             try {
                 var field = enumType.getField(((Enum<?>) constant).name());
-                var ann = field.getAnnotation(com.github.auties00.cobalt.wam.annotation.WamEnumConstant.class);
+                var ann = field.getAnnotation(WamEnumConstant.class);
                 if (ann != null && ann.value() == wireValue) {
                     return constant;
                 }

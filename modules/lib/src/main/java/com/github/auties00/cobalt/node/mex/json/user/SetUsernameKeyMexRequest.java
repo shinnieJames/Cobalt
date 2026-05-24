@@ -14,46 +14,67 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Sets or rotates the recovery PIN associated with the authenticated user's WhatsApp username.
+ * Builds the MEX IQ stanza that registers or rotates the username recovery
+ * PIN.
  *
- * <p>The username PIN is the secret that allows account recovery when the primary phone number is unavailable. This
- * mutation registers a new PIN or updates the existing one after the user completes the username PIN flow in
- * settings.
+ * @apiNote Powers the username PIN settings screen. WA Web's
+ * {@code WAWebSetUsernameKeyQueryJob} dispatches this mutation under the
+ * {@code UI_ACTION} job-priority bucket and treats a {@code null} pin as
+ * the "clear PIN" intent. Pair the dispatched stanza with
+ * {@link SetUsernameKeyMexResponse} to consume the reply.
+ *
+ * @implNote This implementation omits the {@code pin} variable when
+ * {@code null}, mirroring WA Web's {@code t!=null?{pin:t}:{}} call site;
+ * the relay then interprets the absent variable as the clear-PIN action.
+ *
+ * @see SetUsernameKeyMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexSetUsernameKeyJob")
 public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL mutation.
+     * The compiled-document id the relay maps to the persisted mutation.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexSetUsernameKeyJobMutation.graphql} for the snapshot
+     * this file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9749436995157074";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this mutation is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexSetUsernameKeyJobMutation.graphql}; WA Web tags the
+     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJobMutation.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexSetUsernameKeyQueryJob";
 
     /**
-     * The new recovery PIN to register against the username.
+     * The {@code pin} GraphQL variable carrying the new recovery PIN.
      */
     private final String pin;
 
     /**
-     * Constructs a new request carrying the given PIN.
+     * Constructs a set-username-key mutation request.
      *
-     * @param pin the new recovery PIN, or {@code null} to omit the variable
+     * @apiNote Pass the cleartext PIN; the relay performs the hashing
+     * server-side. Passing {@code null} omits the variable, which signals
+     * the relay to clear any existing PIN.
+     *
+     * @param pin the new recovery PIN, or {@code null} to clear the
+     *            existing PIN
      */
     public SetUsernameKeyMexRequest(String pin) {
         this.pin = pin;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -61,9 +82,7 @@ public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -71,9 +90,12 @@ public final class SetUsernameKeyMexRequest implements MexOperation.Request.Json
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {"pin": <pin>}}}
+     * (or {@code {"variables": {}}} when {@code pin} is {@code null}) and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexSetUsernameKeyJob", exports = "mexSetUsernameKeyQueryJob",
             adaptation = WhatsAppAdaptation.ADAPTED)

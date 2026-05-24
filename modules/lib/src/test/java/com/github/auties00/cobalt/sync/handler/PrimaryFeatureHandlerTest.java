@@ -25,12 +25,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link PrimaryFeatureHandler} â€” Cobalt's adapter for
- * {@code WAWebPrimaryFeatureSync}.
+ * Exercises {@link PrimaryFeatureHandler} against the
+ * {@code WAWebPrimaryFeatureSync.applyMutations} per-mutation flow.
  *
- * <p>The handler persists the primary device's advertised feature flag set
- * into {@link com.github.auties00.cobalt.store.WhatsAppStore#setPrimaryFeatures(List)},
- * applying only the latest mutation in a batch.
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: a {@link SyncdOperation#SET} carrying a non-empty
+ * (or empty) flags list persists the flags via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setPrimaryFeatures(List)};
+ * a wrong-typed value surfaces as
+ * {@link SyncActionState#MALFORMED};
+ * {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED};
+ * {@link PrimaryFeatureHandler#applyMutationBatch} writes only the
+ * latest-by-timestamp mutation's flags to the store; the default
+ * {@code resolveConflicts} chooses the later timestamp. An empty
+ * batch is a no-op.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * {@code primaryFeatureMutation} helper because the action carries
+ * no fixed mutation factory.
  */
 @DisplayName("PrimaryFeatureHandler")
 class PrimaryFeatureHandlerTest {

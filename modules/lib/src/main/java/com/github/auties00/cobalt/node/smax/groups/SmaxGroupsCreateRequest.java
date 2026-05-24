@@ -17,55 +17,51 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the {@code <create/>} payload
- * in the canonical {@code <iq xmlns="w:g2" type="set" to="g.us">}
- * envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2" to="g.us">} stanza that creates a new group, community
+ * sub-group, or community parent.
+ *
+ * @apiNote Drives every group-creation pipeline surfaced by {@code WAWebGroupCreateJob} and
+ * {@code WAWebGroupCommunityJob}: regular group, breakout sub-group, community-parent, hidden sub-group, and so
+ * on. The wide field surface mirrors the WA Web {@code WASmaxOutGroupsCreateRequest} mixin family which fuses
+ * every optional child into one envelope. Prefer the fluent {@link Builder} over the all-args constructor.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
-     * The new group's subject (display name); transmitted as the
-     * {@code subject} attribute on the {@code <iq>} via the
-     * {@code NamedSubjectOrUnnamedSubjectFallbackMixinGroup}.
+     * The group's subject (display name) emitted as the {@code <create subject="...">} attribute.
      */
     private final String subject;
 
     /**
-     * The list of participants to seed the new group with. Must be
-     * non-empty (1..19999 entries server-side).
+     * The seed-participant rows emitted as {@code <participant>} children.
      */
     private final List<RequestParticipant> participants;
 
     /**
-     * The optional description body (transmitted under
-     * {@code <description><body/></description>}).
+     * The optional description body, emitted under {@code <description><body/></description>}.
      */
     private final String descriptionBody;
 
     /**
-     * The optional description ID — emitted as the
-     * {@code <description id/>} attribute.
+     * The optional description id emitted as the {@code <description id="...">} attribute.
      */
     private final String descriptionId;
 
     /**
-     * Whether to attach a {@code <locked/>} child (chat-info edits
-     * become admin-only).
+     * Whether to attach a {@code <locked/>} child marking chat-info edits as admin-only.
      */
     private final boolean locked;
 
     /**
-     * Whether to attach an {@code <announcement/>} child (only
-     * admins may post).
+     * Whether to attach an {@code <announcement/>} child restricting posting to admins.
      */
     private final boolean announcement;
 
     /**
-     * Whether to attach a {@code <parent/>} child with the literal
-     * {@code default_membership_approval_mode="request_required"}
-     * attribute (the only mode value the WA Web mixin emits).
+     * Whether to attach a {@code <parent default_membership_approval_mode="request_required"/>} child marking
+     * this group as a community parent.
      */
     private final boolean parentDefaultMembershipApprovalMode;
 
@@ -75,26 +71,23 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     private final boolean noFrequentlyForwarded;
 
     /**
-     * The optional ephemeral-message expiration in seconds — non-null
-     * triggers an {@code <ephemeral expiration trigger/>} child.
+     * The optional ephemeral-message expiration in seconds; non-null emits an {@code <ephemeral/>} child.
      */
     private final Integer ephemeralExpiration;
 
     /**
-     * The optional ephemeral-message trigger value (paired with
-     * {@link #ephemeralExpiration}); may be {@code null}.
+     * The optional ephemeral-message trigger value, paired with {@link #ephemeralExpiration}.
      */
     private final Integer ephemeralTrigger;
 
     /**
-     * The optional membership-approval join-mode — non-null triggers
-     * a {@code <membership_approval_mode group_join_mode/>} child.
+     * The optional membership-approval join-mode value; non-null emits a {@code <membership_approval_mode/>}
+     * child.
      */
     private final String membershipApprovalGroupJoinMode;
 
     /**
-     * Whether to attach a {@code <breakout/>} child (creates a
-     * breakout sub-group of an existing community).
+     * Whether to attach a {@code <breakout/>} child marking the new group as a breakout sub-group.
      */
     private final boolean breakout;
 
@@ -104,27 +97,22 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     private final boolean createdAsLid;
 
     /**
-     * The optional addressing-mode-override value — non-null
-     * triggers an {@code <addressing_mode_override mode/>} child.
+     * The optional {@code addressing_mode_override mode="..."} value.
      */
     private final String addressingModeOverrideMode;
 
     /**
-     * The optional parent community JID — non-null triggers a
-     * {@code <linked_parent jid/>} child that links the new group to
-     * an existing community.
+     * The optional parent-community {@link Jid}; non-null emits a {@code <linked_parent jid="..."/>} child.
      */
     private final Jid linkedParentJid;
 
     /**
-     * Whether to attach a {@code <hidden_group/>} child (the new
-     * group is hidden from the community directory).
+     * Whether to attach a {@code <hidden_group/>} child hiding the new group from the community directory.
      */
     private final boolean hiddenGroup;
 
     /**
-     * Whether to attach an
-     * {@code <allow_non_admin_sub_group_creation/>} child.
+     * Whether to attach an {@code <allow_non_admin_sub_group_creation/>} child.
      */
     private final boolean allowNonAdminSubGroupCreation;
 
@@ -139,115 +127,56 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     private final boolean capi;
 
     /**
-     * The optional dedup token attached as the {@code dedup} root
-     * attribute (mixin override).
+     * The optional {@code dedup} attribute attached to the {@code <create/>} root.
      */
     private final String dedupAttr;
 
     /**
-     * The optional member-add-mode value attached as the root
-     * attribute (mixin override).
+     * The optional {@code member_add_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberAddMode;
 
     /**
-     * The optional member-link-mode value attached as the root
-     * attribute (mixin override).
+     * The optional {@code member_link_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberLinkMode;
 
     /**
-     * The optional member-share-group-history-mode value attached
-     * as the root attribute (mixin override).
+     * The optional {@code member_share_group_history_mode} attribute attached to the {@code <create/>} root.
      */
     private final String memberShareGroupHistoryMode;
 
     /**
-     * Constructs a request directly. Use {@link #builder()} for a
-     * fluent alternative.
+     * Constructs a fully-parametrised create-group request.
      *
-     * @param subject                                  the group
-     *                                                 subject; never
-     *                                                 {@code null}
-     * @param participants                             the list of
-     *                                                 seed
-     *                                                 participants;
-     *                                                 never
-     *                                                 {@code null}
-     *                                                 and must be
-     *                                                 non-empty
-     * @param descriptionBody                          the optional
-     *                                                 description
-     *                                                 body; may be
-     *                                                 {@code null}
-     * @param descriptionId                            the optional
-     *                                                 description ID
-     *                                                 attribute; may
-     *                                                 be
-     *                                                 {@code null}
-     * @param locked                                   see
-     *                                                 {@link #locked()}
-     * @param announcement                             see
-     *                                                 {@link #announcement()}
-     * @param parentDefaultMembershipApprovalMode      whether to
-     *                                                 attach the
-     *                                                 {@code <parent/>}
-     *                                                 child with the
-     *                                                 literal
-     *                                                 default-membership-approval
-     *                                                 attribute
-     * @param noFrequentlyForwarded                    see
-     *                                                 {@link #noFrequentlyForwarded()}
-     * @param ephemeralExpiration                      the optional
-     *                                                 ephemeral
-     *                                                 expiration in
-     *                                                 seconds; may
-     *                                                 be
-     *                                                 {@code null}
-     * @param ephemeralTrigger                         the optional
-     *                                                 ephemeral
-     *                                                 trigger value;
-     *                                                 may be
-     *                                                 {@code null}
-     * @param membershipApprovalGroupJoinMode          the optional
-     *                                                 membership-approval
-     *                                                 join mode
-     * @param breakout                                 see
-     *                                                 {@link #breakout()}
-     * @param createdAsLid                             see
-     *                                                 {@link #createdAsLid()}
-     * @param addressingModeOverrideMode               the optional
-     *                                                 addressing-mode-override
-     *                                                 value
-     * @param linkedParentJid                          the optional
-     *                                                 parent
-     *                                                 community JID;
-     *                                                 may be
-     *                                                 {@code null}
-     * @param hiddenGroup                              see
-     *                                                 {@link #hiddenGroup()}
-     * @param allowNonAdminSubGroupCreation            see
-     *                                                 {@link #allowNonAdminSubGroupCreation()}
-     * @param createGeneralChat                        see
-     *                                                 {@link #createGeneralChat()}
-     * @param capi                                     see
-     *                                                 {@link #capi()}
-     * @param dedupAttr                                the optional
-     *                                                 dedup token
-     * @param memberAddMode                            the optional
-     *                                                 member-add
-     *                                                 mode
-     * @param memberLinkMode                           the optional
-     *                                                 member-link
-     *                                                 mode
-     * @param memberShareGroupHistoryMode              the optional
-     *                                                 member-share-history
-     *                                                 mode
-     * @throws NullPointerException     if {@code subject} or
-     *                                  {@code participants} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException when {@code participants} is
-     *                                  empty
+     * @apiNote Prefer {@link #builder()} for new call sites; the all-args constructor is intentionally
+     * package-friendly to keep the {@link Builder#build()} path single-call.
+     *
+     * @param subject                             the group subject
+     * @param participants                        the seed participants
+     * @param descriptionBody                     the optional description body
+     * @param descriptionId                       the optional description id
+     * @param locked                              see {@link #locked()}
+     * @param announcement                        see {@link #announcement()}
+     * @param parentDefaultMembershipApprovalMode see {@link #parentDefaultMembershipApprovalMode()}
+     * @param noFrequentlyForwarded               see {@link #noFrequentlyForwarded()}
+     * @param ephemeralExpiration                 the optional ephemeral expiration in seconds
+     * @param ephemeralTrigger                    the optional ephemeral trigger value
+     * @param membershipApprovalGroupJoinMode     the optional membership-approval join mode
+     * @param breakout                            see {@link #breakout()}
+     * @param createdAsLid                        see {@link #createdAsLid()}
+     * @param addressingModeOverrideMode          the optional addressing-mode override value
+     * @param linkedParentJid                     the optional parent community {@link Jid}
+     * @param hiddenGroup                         see {@link #hiddenGroup()}
+     * @param allowNonAdminSubGroupCreation       see {@link #allowNonAdminSubGroupCreation()}
+     * @param createGeneralChat                   see {@link #createGeneralChat()}
+     * @param capi                                see {@link #capi()}
+     * @param dedupAttr                           the optional dedup token
+     * @param memberAddMode                       the optional member-add-mode value
+     * @param memberLinkMode                      the optional member-link-mode value
+     * @param memberShareGroupHistoryMode         the optional member-share-history-mode value
+     * @throws NullPointerException     if {@code subject} or {@code participants} is {@code null}
+     * @throws IllegalArgumentException if {@code participants} is empty
      */
     public SmaxGroupsCreateRequest(String subject,
                    List<RequestParticipant> participants,
@@ -305,7 +234,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns a fresh {@link Builder} for fluent construction.
      *
-     * @return a new builder instance; never {@code null}
+     * @apiNote The canonical entry point for new call sites; the all-args constructor is provided primarily for
+     * the builder's {@link Builder#build()} method.
+     *
+     * @return a new {@link Builder}; never {@code null}
      */
     public static Builder builder() {
         return new Builder();
@@ -323,7 +255,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns the seed participants.
      *
-     * @return an unmodifiable list of participants; never empty
+     * @return an unmodifiable list of {@link RequestParticipant}s; never empty
      */
     public List<RequestParticipant> participants() {
         return participants;
@@ -332,18 +264,16 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns the optional description body.
      *
-     * @return an {@link Optional} carrying the body, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the body, or empty when omitted
      */
     public Optional<String> descriptionBody() {
         return Optional.ofNullable(descriptionBody);
     }
 
     /**
-     * Returns the optional description ID.
+     * Returns the optional description id.
      *
-     * @return an {@link Optional} carrying the ID, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the id, or empty when omitted
      */
     public Optional<String> descriptionId() {
         return Optional.ofNullable(descriptionId);
@@ -351,6 +281,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
 
     /**
      * Returns whether the {@code <locked/>} child is attached.
+     *
+     * @apiNote When {@code true} the relay marks chat-info edits (subject, picture, description) as
+     * admin-only.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -361,6 +294,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns whether the {@code <announcement/>} child is attached.
      *
+     * @apiNote When {@code true} the relay restricts posting to admins; the UI renders this as an
+     * "announcement group".
+     *
      * @return {@code true} when the marker is emitted
      */
     public boolean announcement() {
@@ -368,20 +304,21 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the parent-default membership-approval
-     * marker is attached.
+     * Returns whether the {@code <parent default_membership_approval_mode="request_required"/>} marker is
+     * attached.
      *
-     * @return {@code true} when the {@code <parent/>} child with
-     *         the literal default-membership-approval attribute is
-     *         emitted
+     * @apiNote When {@code true} the new group becomes a community parent whose sub-groups inherit the
+     * approval-required default; the {@code request_required} attribute is the only value the WA Web mixin
+     * emits.
+     *
+     * @return {@code true} when the marker is emitted
      */
     public boolean parentDefaultMembershipApprovalMode() {
         return parentDefaultMembershipApprovalMode;
     }
 
     /**
-     * Returns whether the {@code <no_frequently_forwarded/>} child
-     * is attached.
+     * Returns whether the {@code <no_frequently_forwarded/>} child is attached.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -390,20 +327,18 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional ephemeral expiration value.
+     * Returns the optional ephemeral-message expiration.
      *
-     * @return an {@link Optional} carrying the expiration in
-     *         seconds, or empty when omitted
+     * @return an {@link Optional} carrying the expiration in seconds, or empty when omitted
      */
     public Optional<Integer> ephemeralExpiration() {
         return Optional.ofNullable(ephemeralExpiration);
     }
 
     /**
-     * Returns the optional ephemeral trigger value.
+     * Returns the optional ephemeral-message trigger value.
      *
-     * @return an {@link Optional} carrying the trigger, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the trigger, or empty when omitted
      */
     public Optional<Integer> ephemeralTrigger() {
         return Optional.ofNullable(ephemeralTrigger);
@@ -412,8 +347,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns the optional membership-approval join-mode value.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the value, or empty when omitted
      */
     public Optional<String> membershipApprovalGroupJoinMode() {
         return Optional.ofNullable(membershipApprovalGroupJoinMode);
@@ -422,6 +356,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns whether the {@code <breakout/>} child is attached.
      *
+     * @apiNote When {@code true} the new group is materialised as a breakout sub-group inside an existing
+     * community; the {@link #linkedParentJid()} must point at the community parent.
+     *
      * @return {@code true} when the marker is emitted
      */
     public boolean breakout() {
@@ -429,8 +366,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the {@code <created_as_lid/>} child is
-     * attached.
+     * Returns whether the {@code <created_as_lid/>} child is attached.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -441,18 +377,16 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Returns the optional addressing-mode-override value.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the value, or empty when omitted
      */
     public Optional<String> addressingModeOverrideMode() {
         return Optional.ofNullable(addressingModeOverrideMode);
     }
 
     /**
-     * Returns the optional parent community JID.
+     * Returns the optional parent-community {@link Jid}.
      *
-     * @return an {@link Optional} carrying the JID, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the {@link Jid}, or empty when omitted
      */
     public Optional<Jid> linkedParentJid() {
         return Optional.ofNullable(linkedParentJid);
@@ -468,9 +402,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the
-     * {@code <allow_non_admin_sub_group_creation/>} child is
-     * attached.
+     * Returns whether the {@code <allow_non_admin_sub_group_creation/>} child is attached.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -479,8 +411,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns whether the {@code <create_general_chat/>} child is
-     * attached.
+     * Returns whether the {@code <create_general_chat/>} child is attached.
      *
      * @return {@code true} when the marker is emitted
      */
@@ -498,51 +429,54 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional dedup token attribute.
+     * Returns the optional dedup token.
      *
-     * @return an {@link Optional} carrying the token, or empty when
-     *         omitted
+     * @apiNote When supplied, the relay uses the {@code (creator, dedup)} tuple to suppress duplicate creations
+     * and answer with {@link SmaxGroupsCreateResponse.GroupAlreadyExists} carrying the original group's
+     * {@link Jid}.
+     *
+     * @return an {@link Optional} carrying the token, or empty when omitted
      */
     public Optional<String> dedupAttr() {
         return Optional.ofNullable(dedupAttr);
     }
 
     /**
-     * Returns the optional member-add-mode attribute.
+     * Returns the optional member-add-mode value.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the value, or empty when omitted
      */
     public Optional<String> memberAddMode() {
         return Optional.ofNullable(memberAddMode);
     }
 
     /**
-     * Returns the optional member-link-mode attribute.
+     * Returns the optional member-link-mode value.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the value, or empty when omitted
      */
     public Optional<String> memberLinkMode() {
         return Optional.ofNullable(memberLinkMode);
     }
 
     /**
-     * Returns the optional member-share-group-history-mode
-     * attribute.
+     * Returns the optional member-share-group-history-mode value.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the value, or empty when omitted
      */
     public Optional<String> memberShareGroupHistoryMode() {
         return Optional.ofNullable(memberShareGroupHistoryMode);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <create/>} payload
+     * @apiNote The resulting envelope wraps a {@code <create subject="..." [dedup="..." ...]/>} root carrying
+     * one or more {@code <participant>} children plus every opt-in feature flag listed above as a marker child.
+     * Send via {@code WASmaxGroupsCreateRPC} (WA Web) and dispatch the reply via
+     * {@link SmaxGroupsCreateResponse#of(Node, Node)}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <create/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsCreateRequest",
@@ -656,6 +590,12 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
                 .content(createNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsCreateRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -690,6 +630,15 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
                 && Objects.equals(this.memberShareGroupHistoryMode, that.memberShareGroupHistoryMode);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @implNote The hash is split into two {@code Objects.hash} batches because the all-args field list exceeds
+     * the practical width of a single varargs call; the {@code primary * 31 + secondary} mix preserves
+     * permutation-sensitive distribution across the batches.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         var primary = Objects.hash(subject, participants, descriptionBody, descriptionId, locked, announcement,
@@ -701,6 +650,11 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         return primary * 31 + secondary;
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsCreateRequest[subject=" + subject
@@ -729,46 +683,43 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Single seed-participant entry inside the outbound
-     * {@code <create/>} payload.
+     * A single seed-participant entry inside the outbound {@code <create/>} payload.
+     *
+     * @apiNote Carries the participant's primary {@link Jid} plus optional secondary identity mixins
+     * (phone-number JID, username, permission token); WA Web's
+     * {@code WASmaxOutGroupsPermissionTokenMixin} surfaces the same shape.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateRequest")
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsPermissionTokenMixin")
     public static final class RequestParticipant {
         /**
-         * The participant user JID.
+         * The participant {@link Jid}.
          */
         private final Jid jid;
 
         /**
-         * The optional phone-number JID (mixin).
+         * The optional phone-number {@link Jid}.
          */
         private final Jid phoneNumber;
 
         /**
-         * The optional username string (mixin).
+         * The optional username.
          */
         private final String username;
 
         /**
-         * The optional permission-token string attached as a mixin
-         * attribute.
+         * The optional permission token attached as the {@code permission_token} attribute.
          */
         private final String permissionToken;
 
         /**
-         * Constructs a participant entry.
+         * Constructs a {@link RequestParticipant} entry.
          *
-         * @param jid             the participant JID; never
-         *                        {@code null}
-         * @param phoneNumber     the optional phone-number JID; may
-         *                        be {@code null}
-         * @param username        the optional username; may be
-         *                        {@code null}
-         * @param permissionToken the optional permission token; may
-         *                        be {@code null}
-         * @throws NullPointerException if {@code jid} is
-         *                              {@code null}
+         * @param jid             the participant {@link Jid}
+         * @param phoneNumber     the optional phone-number {@link Jid}; may be {@code null}
+         * @param username        the optional username; may be {@code null}
+         * @param permissionToken the optional permission token; may be {@code null}
+         * @throws NullPointerException if {@code jid} is {@code null}
          */
         public RequestParticipant(Jid jid, Jid phoneNumber, String username, String permissionToken) {
             this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -778,19 +729,18 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Returns the participant JID.
+         * Returns the participant {@link Jid}.
          *
-         * @return the JID; never {@code null}
+         * @return the {@link Jid}; never {@code null}
          */
         public Jid jid() {
             return jid;
         }
 
         /**
-         * Returns the optional phone-number JID.
+         * Returns the optional phone-number {@link Jid}.
          *
-         * @return an {@link Optional} carrying the phone JID, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the phone JID, or empty when omitted
          */
         public Optional<Jid> phoneNumber() {
             return Optional.ofNullable(phoneNumber);
@@ -799,8 +749,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Returns the optional username.
          *
-         * @return an {@link Optional} carrying the username, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the username, or empty when omitted
          */
         public Optional<String> username() {
             return Optional.ofNullable(username);
@@ -809,15 +758,14 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Returns the optional permission token.
          *
-         * @return an {@link Optional} carrying the token, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the token, or empty when omitted
          */
         public Optional<String> permissionToken() {
             return Optional.ofNullable(permissionToken);
         }
 
         /**
-         * Builds the {@code <participant/>} child node.
+         * Materialises the {@code <participant/>} child {@link Node} for this entry.
          *
          * @return the materialised {@link Node}
          */
@@ -837,6 +785,12 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
             return builder.build();
         }
 
+        /**
+         * Compares this participant to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link RequestParticipant} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -852,11 +806,21 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
                     && Objects.equals(this.permissionToken, that.permissionToken);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(jid, phoneNumber, username, permissionToken);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCreateRequest.RequestParticipant[jid=" + jid
@@ -869,10 +833,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
     /**
      * Fluent builder for {@link SmaxGroupsCreateRequest}.
      *
-     * <p>Mandatory inputs are the {@code subject} and at least one
-     * participant via {@link #addParticipant(RequestParticipant)};
-     * every other setter is optional. Call {@link #build()} once
-     * the desired toggles have been chosen.
+     * @apiNote Mandatory inputs are {@link #subject(String)} and at least one participant via
+     * {@link #addParticipant(RequestParticipant)} or {@link #addParticipants(List)}; every other setter is
+     * optional. Call {@link #build()} once the toggles are picked; the builder validates the mandatory inputs at
+     * that point.
      */
     public static final class Builder {
         /**
@@ -886,114 +850,114 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         private final List<RequestParticipant> participants = new ArrayList<>();
 
         /**
-         * Optional description body.
+         * The accumulating optional description body.
          */
         private String descriptionBody;
 
         /**
-         * Optional description ID.
+         * The accumulating optional description id.
          */
         private String descriptionId;
 
         /**
-         * Locked toggle.
+         * The accumulating locked toggle.
          */
         private boolean locked;
 
         /**
-         * Announcement toggle.
+         * The accumulating announcement toggle.
          */
         private boolean announcement;
 
         /**
-         * Whether to attach the parent-default
-         * membership-approval marker.
+         * The accumulating parent-default membership-approval toggle.
          */
         private boolean parentDefaultMembershipApprovalMode;
 
         /**
-         * No-frequently-forwarded toggle.
+         * The accumulating no-frequently-forwarded toggle.
          */
         private boolean noFrequentlyForwarded;
 
         /**
-         * Optional ephemeral expiration (seconds).
+         * The accumulating optional ephemeral expiration in seconds.
          */
         private Integer ephemeralExpiration;
 
         /**
-         * Optional ephemeral trigger value.
+         * The accumulating optional ephemeral trigger value.
          */
         private Integer ephemeralTrigger;
 
         /**
-         * Optional membership-approval join-mode.
+         * The accumulating optional membership-approval join-mode value.
          */
         private String membershipApprovalGroupJoinMode;
 
         /**
-         * Breakout toggle.
+         * The accumulating breakout toggle.
          */
         private boolean breakout;
 
         /**
-         * Created-as-lid toggle.
+         * The accumulating created-as-lid toggle.
          */
         private boolean createdAsLid;
 
         /**
-         * Optional addressing-mode-override value.
+         * The accumulating optional addressing-mode-override value.
          */
         private String addressingModeOverrideMode;
 
         /**
-         * Optional linked parent community JID.
+         * The accumulating optional linked parent community {@link Jid}.
          */
         private Jid linkedParentJid;
 
         /**
-         * Hidden-group toggle.
+         * The accumulating hidden-group toggle.
          */
         private boolean hiddenGroup;
 
         /**
-         * Allow-non-admin-sub-group-creation toggle.
+         * The accumulating allow-non-admin-sub-group-creation toggle.
          */
         private boolean allowNonAdminSubGroupCreation;
 
         /**
-         * Create-general-chat toggle.
+         * The accumulating create-general-chat toggle.
          */
         private boolean createGeneralChat;
 
         /**
-         * Capi toggle.
+         * The accumulating capi toggle.
          */
         private boolean capi;
 
         /**
-         * Optional dedup token.
+         * The accumulating optional dedup token.
          */
         private String dedupAttr;
 
         /**
-         * Optional member-add-mode value.
+         * The accumulating optional member-add-mode value.
          */
         private String memberAddMode;
 
         /**
-         * Optional member-link-mode value.
+         * The accumulating optional member-link-mode value.
          */
         private String memberLinkMode;
 
         /**
-         * Optional member-share-group-history-mode value.
+         * The accumulating optional member-share-group-history-mode value.
          */
         private String memberShareGroupHistoryMode;
 
         /**
-         * Constructs a fresh builder. Use {@link SmaxGroupsCreateRequest#builder()}
-         * for the canonical entry point.
+         * Constructs a fresh builder.
+         *
+         * @apiNote Prefer {@link SmaxGroupsCreateRequest#builder()} as the canonical entry point.
          */
         public Builder() {
         }
@@ -1001,10 +965,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Sets the group subject.
          *
-         * @param subject the subject text; never {@code null}
-         * @return this builder
-         * @throws NullPointerException if {@code subject} is
-         *                              {@code null}
+         * @param subject the subject text
+         * @return this {@link Builder}
+         * @throws NullPointerException if {@code subject} is {@code null}
          */
         public Builder subject(String subject) {
             this.subject = Objects.requireNonNull(subject, "subject cannot be null");
@@ -1014,10 +977,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Appends a single participant.
          *
-         * @param participant the participant; never {@code null}
-         * @return this builder
-         * @throws NullPointerException if {@code participant} is
-         *                              {@code null}
+         * @param participant the participant
+         * @return this {@link Builder}
+         * @throws NullPointerException if {@code participant} is {@code null}
          */
         public Builder addParticipant(RequestParticipant participant) {
             Objects.requireNonNull(participant, "participant cannot be null");
@@ -1028,11 +990,9 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Appends every participant from the supplied collection.
          *
-         * @param entries the participants to append; never
-         *                {@code null}
-         * @return this builder
-         * @throws NullPointerException if {@code entries} or any
-         *                              entry is {@code null}
+         * @param entries the participants to append
+         * @return this {@link Builder}
+         * @throws NullPointerException if {@code entries} or any entry is {@code null}
          */
         public Builder addParticipants(List<RequestParticipant> entries) {
             Objects.requireNonNull(entries, "entries cannot be null");
@@ -1045,9 +1005,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Sets the optional description body.
          *
-         * @param descriptionBody the body text; may be
-         *                        {@code null}
-         * @return this builder
+         * @param descriptionBody the body text; may be {@code null}
+         * @return this {@link Builder}
          */
         public Builder descriptionBody(String descriptionBody) {
             this.descriptionBody = descriptionBody;
@@ -1055,11 +1014,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional description ID attribute.
+         * Sets the optional description id attribute.
          *
-         * @param descriptionId the description ID; may be
-         *                      {@code null}
-         * @return this builder
+         * @param descriptionId the description id; may be {@code null}
+         * @return this {@link Builder}
          */
         public Builder descriptionId(String descriptionId) {
             this.descriptionId = descriptionId;
@@ -1070,7 +1028,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the locked toggle.
          *
          * @param locked the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder locked(boolean locked) {
             this.locked = locked;
@@ -1081,7 +1039,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the announcement toggle.
          *
          * @param announcement the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder announcement(boolean announcement) {
             this.announcement = announcement;
@@ -1089,11 +1047,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets whether the parent-default membership-approval
-         * marker is attached.
+         * Sets the parent-default membership-approval toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder parentDefaultMembershipApprovalMode(boolean flag) {
             this.parentDefaultMembershipApprovalMode = flag;
@@ -1104,7 +1061,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the no-frequently-forwarded toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder noFrequentlyForwarded(boolean flag) {
             this.noFrequentlyForwarded = flag;
@@ -1114,10 +1071,8 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         /**
          * Sets the optional ephemeral expiration in seconds.
          *
-         * @param expiration the expiration value; may be
-         *                   {@code null} to omit the
-         *                   {@code <ephemeral/>} child
-         * @return this builder
+         * @param expiration the expiration value; may be {@code null} to omit the {@code <ephemeral/>} child
+         * @return this {@link Builder}
          */
         public Builder ephemeralExpiration(Integer expiration) {
             this.ephemeralExpiration = expiration;
@@ -1128,7 +1083,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the optional ephemeral trigger value.
          *
          * @param trigger the trigger value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder ephemeralTrigger(Integer trigger) {
             this.ephemeralTrigger = trigger;
@@ -1136,10 +1091,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional membership-approval join-mode.
+         * Sets the optional membership-approval join-mode value.
          *
          * @param mode the mode value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder membershipApprovalGroupJoinMode(String mode) {
             this.membershipApprovalGroupJoinMode = mode;
@@ -1150,7 +1105,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the breakout toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder breakout(boolean flag) {
             this.breakout = flag;
@@ -1161,7 +1116,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the created-as-lid toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder createdAsLid(boolean flag) {
             this.createdAsLid = flag;
@@ -1172,7 +1127,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the optional addressing-mode-override value.
          *
          * @param mode the mode value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder addressingModeOverrideMode(String mode) {
             this.addressingModeOverrideMode = mode;
@@ -1180,10 +1135,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional parent community JID.
+         * Sets the optional parent community {@link Jid}.
          *
-         * @param jid the parent JID; may be {@code null}
-         * @return this builder
+         * @param jid the parent {@link Jid}; may be {@code null}
+         * @return this {@link Builder}
          */
         public Builder linkedParentJid(Jid jid) {
             this.linkedParentJid = jid;
@@ -1194,7 +1149,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the hidden-group toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder hiddenGroup(boolean flag) {
             this.hiddenGroup = flag;
@@ -1205,7 +1160,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the allow-non-admin-sub-group-creation toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder allowNonAdminSubGroupCreation(boolean flag) {
             this.allowNonAdminSubGroupCreation = flag;
@@ -1216,7 +1171,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the create-general-chat toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder createGeneralChat(boolean flag) {
             this.createGeneralChat = flag;
@@ -1227,7 +1182,7 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
          * Sets the capi toggle.
          *
          * @param flag the desired flag value
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder capi(boolean flag) {
             this.capi = flag;
@@ -1235,10 +1190,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional dedup token attribute.
+         * Sets the optional dedup token.
          *
          * @param dedupAttr the dedup token; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder dedupAttr(String dedupAttr) {
             this.dedupAttr = dedupAttr;
@@ -1246,10 +1201,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional member-add-mode attribute.
+         * Sets the optional member-add-mode value.
          *
          * @param mode the mode value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder memberAddMode(String mode) {
             this.memberAddMode = mode;
@@ -1257,10 +1212,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional member-link-mode attribute.
+         * Sets the optional member-link-mode value.
          *
          * @param mode the mode value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder memberLinkMode(String mode) {
             this.memberLinkMode = mode;
@@ -1268,11 +1223,10 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Sets the optional member-share-group-history-mode
-         * attribute.
+         * Sets the optional member-share-group-history-mode value.
          *
          * @param mode the mode value; may be {@code null}
-         * @return this builder
+         * @return this {@link Builder}
          */
         public Builder memberShareGroupHistoryMode(String mode) {
             this.memberShareGroupHistoryMode = mode;
@@ -1280,13 +1234,11 @@ public final class SmaxGroupsCreateRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Materialises a {@link SmaxGroupsCreateRequest}.
+         * Materialises a {@link SmaxGroupsCreateRequest} from the accumulated state.
          *
          * @return the constructed request; never {@code null}
-         * @throws NullPointerException     if the subject was never
-         *                                  set
-         * @throws IllegalArgumentException when no participants
-         *                                  were added
+         * @throws NullPointerException     if {@link #subject(String)} was never called
+         * @throws IllegalArgumentException if no participants were added
          */
         public SmaxGroupsCreateRequest build() {
             Objects.requireNonNull(subject, "subject must be set before build()");

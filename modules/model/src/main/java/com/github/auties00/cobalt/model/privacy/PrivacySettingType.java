@@ -24,10 +24,10 @@ public enum PrivacySettingType {
      * Controls who can see the timestamp of the last time the user was online.
      *
      * <p>Supports the {@link PrivacySettingValue#EVERYONE}, {@link PrivacySettingValue#CONTACTS},
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NO_ONE}
+     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NOBODY}
      * audiences.
      */
-    LAST_SEEN(0, "last", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NO_ONE)),
+    LAST_SEEN(0, "last", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NOBODY)),
     /**
      * Controls who can see whether the user is currently online.
      *
@@ -40,19 +40,19 @@ public enum PrivacySettingType {
      * Controls who can see the user's profile picture.
      *
      * <p>Supports the {@link PrivacySettingValue#EVERYONE}, {@link PrivacySettingValue#CONTACTS},
-     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NO_ONE}
+     * {@link PrivacySettingValue#CONTACTS_EXCEPT} and {@link PrivacySettingValue#NOBODY}
      * audiences.
      */
-    PROFILE_PIC(2, "profile", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NO_ONE)),
+    PROFILE_PIC(2, "profile", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.NOBODY)),
     /**
      * Controls who can see the user's status updates.
      *
      * <p>Supports {@link PrivacySettingValue#CONTACTS}, {@link PrivacySettingValue#CONTACTS_EXCEPT},
-     * {@link PrivacySettingValue#CONTACTS_ONLY} and {@link PrivacySettingValue#NO_ONE}. Unlike
+     * {@link PrivacySettingValue#CONTACTS_ONLY} and {@link PrivacySettingValue#NOBODY}. Unlike
      * other settings, status updates can be restricted to an explicit allowlist of contacts
      * rather than only a blocklist.
      */
-    STATUS(3, "status", Set.of(PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.CONTACTS_ONLY, PrivacySettingValue.NO_ONE)),
+    STATUS(3, "status", Set.of(PrivacySettingValue.CONTACTS, PrivacySettingValue.CONTACTS_EXCEPT, PrivacySettingValue.CONTACTS_ONLY, PrivacySettingValue.NOBODY)),
     /**
      * Controls who can add the user to new group chats without an explicit invitation.
      *
@@ -65,11 +65,11 @@ public enum PrivacySettingType {
      * Controls whether read receipts are exchanged for one-to-one chats.
      *
      * <p>Supports only {@link PrivacySettingValue#EVERYONE} and
-     * {@link PrivacySettingValue#NO_ONE}. When disabled the user neither sends nor receives
+     * {@link PrivacySettingValue#NOBODY}. When disabled the user neither sends nor receives
      * read receipts in private conversations, while read receipts in group chats are always
      * exchanged regardless of this setting.
      */
-    READ_RECEIPTS(5, "readreceipts", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.NO_ONE)),
+    READ_RECEIPTS(5, "readreceipts", Set.of(PrivacySettingValue.EVERYONE, PrivacySettingValue.NOBODY)),
     /**
      * Controls who can add the user to ongoing voice or video calls.
      *

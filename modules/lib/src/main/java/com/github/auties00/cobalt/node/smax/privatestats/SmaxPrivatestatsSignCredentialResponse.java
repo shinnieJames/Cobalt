@@ -14,20 +14,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The closed family of inbound reply variants to a
+ * {@link SmaxPrivatestatsSignCredentialRequest}.
+ *
+ * @apiNote
+ * Permits {@link Success} (the relay signed the credential and returned
+ * the signature plus DLEQ proof), {@link ErrorNoRetry} (a permanent
+ * rejection), and {@link ErrorRetry} (a transient
+ * {@code 500 internal-server-error}). Embedders that drive the
+ * privatestats credential cache reissue the request only on the
+ * {@link ErrorRetry} variant; the {@link ErrorNoRetry} variant is
+ * surfaced verbatim to the caller.
  */
 public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOperation.Response
         permits SmaxPrivatestatsSignCredentialResponse.Success, SmaxPrivatestatsSignCredentialResponse.ErrorNoRetry, SmaxPrivatestatsSignCredentialResponse.ErrorRetry {
 
     /**
-     * Tries each {@link SmaxPrivatestatsSignCredentialResponse} variant in priority order.
+     * Tries each {@link SmaxPrivatestatsSignCredentialResponse}
+     * variant in priority order and returns the first that parses
+     * cleanly.
      *
-     * @param node    the inbound IQ stanza. Never {@code null}
-     * @param request the original outbound stanza. Never
-     *                {@code null}
-     * @return an {@link Optional} carrying the parsed variant
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WASmaxPrivatestatsSignCredentialRPC.sendSignCredentialRPC}
+     * dispatcher: tries {@link Success} first, then
+     * {@link ErrorNoRetry} (the {@code 400}/{@code 501}/{@code 503}
+     * disjunction), then {@link ErrorRetry} (the
+     * {@code 500 internal-server-error} fallback).
+     *
+     * @param node the inbound IQ stanza; never {@code null}
+     * @param request the original outbound stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or
+     *         empty when no documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPrivatestatsSignCredentialRPC",
             exports = "sendSignCredentialRPC",
@@ -47,9 +66,15 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
     }
 
     /**
-     * The {@code Success} reply variant. The relay signed the
-     * blinded credential and returned the signature, the ACS public
-     * key, and the DLEQ proof bytes.
+     * The {@code Success} reply variant; the relay signed the blinded
+     * credential.
+     *
+     * @apiNote
+     * Carries the signed credential, the ACS public key the local
+     * client must use to verify it, the DLEQ proof
+     * {@code (c, s)} pair, the project-name echo, and a server-stamped
+     * timestamp. The fixed-32-byte sizing on the four byte fields
+     * reflects the ACS Curve25519 parameter sizes.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseSuccess")
     final class Success implements SmaxPrivatestatsSignCredentialResponse {
@@ -87,27 +112,26 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Constructs a new success reply.
          *
-         * @param signCredentialT             the timestamp
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after the stanza shape and
+         * the four 32-byte length predicates have been validated;
+         * embedders typically do not instantiate this directly.
+         *
+         * @param signCredentialT the timestamp echo
          * @param signedCredentialElementValue the signed credential
-         *                                    bytes. Never
-         *                                    {@code null}. Exactly
-         *                                    {@code 32} bytes
-         * @param acsPublicKeyElementValue    the ACS public key
-         *                                    bytes. Never
-         *                                    {@code null}. Exactly
-         *                                    {@code 32} bytes
-         * @param dleqProofCElementValue      the DLEQ proof
-         *                                    {@code c} bytes;
-         *                                    never {@code null};
-         *                                    exactly {@code 32}
-         *                                    bytes
-         * @param dleqProofSElementValue      the DLEQ proof
-         *                                    {@code s} bytes;
-         *                                    never {@code null};
-         *                                    exactly {@code 32}
-         *                                    bytes
-         * @param projectNameElementValue     the project name echo;
-         *                                    never {@code null}
+         *                                     bytes; never {@code null};
+         *                                     exactly 32 bytes
+         * @param acsPublicKeyElementValue the ACS public key bytes;
+         *                                 never {@code null}; exactly
+         *                                 32 bytes
+         * @param dleqProofCElementValue the DLEQ proof {@code c}
+         *                               bytes; never {@code null};
+         *                               exactly 32 bytes
+         * @param dleqProofSElementValue the DLEQ proof {@code s}
+         *                               bytes; never {@code null};
+         *                               exactly 32 bytes
+         * @param projectNameElementValue the project-name echo; never
+         *                                {@code null}
          * @throws NullPointerException if any required argument is
          *                              {@code null}
          */
@@ -142,7 +166,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the signed credential bytes.
          *
-         * @return the bytes. Never {@code null}
+         * @return the bytes; never {@code null}
          */
         public byte[] signedCredentialElementValue() {
             return signedCredentialElementValue;
@@ -151,7 +175,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the ACS public key bytes.
          *
-         * @return the bytes. Never {@code null}
+         * @return the bytes; never {@code null}
          */
         public byte[] acsPublicKeyElementValue() {
             return acsPublicKeyElementValue;
@@ -160,7 +184,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the DLEQ proof {@code c} component.
          *
-         * @return the bytes. Never {@code null}
+         * @return the bytes; never {@code null}
          */
         public byte[] dleqProofCElementValue() {
             return dleqProofCElementValue;
@@ -169,7 +193,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the DLEQ proof {@code s} component.
          *
-         * @return the bytes. Never {@code null}
+         * @return the bytes; never {@code null}
          */
         public byte[] dleqProofSElementValue() {
             return dleqProofSElementValue;
@@ -178,16 +202,33 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the project-name echo.
          *
-         * @return the project name. Never {@code null}
+         * @return the project name; never {@code null}
          */
         public String projectNameElementValue() {
             return projectNameElementValue;
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Parses a {@link Success} variant from the given inbound
+         * stanza.
          *
-         * @param node    the inbound IQ stanza
+         * @apiNote
+         * Returns {@link Optional#empty()} when any required child is
+         * missing or any of the four byte payloads is not exactly
+         * 32 bytes long.
+         *
+         * @implNote
+         * This implementation walks
+         * {@code <sign_credential t><signed_credential>BYTES</signed_credential>
+         * <acs_public_key>BYTES</acs_public_key>
+         * <dleq_proof><c>BYTES</c><s>BYTES</s></dleq_proof>
+         * <project_name>STRING</project_name></sign_credential>}
+         * top-down via {@link Node#getChild(String)} and rejects on
+         * the first missing or oversized field; the envelope shape
+         * check is delegated to
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}.
+         *
+         * @param node the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
          */
@@ -244,6 +285,13 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
                     dleqProofC, dleqProofS, projectName));
         }
 
+        /**
+         * Returns whether the given object is a {@link Success} with
+         * equal timestamp, byte payloads, and project name.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when every field matches
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -261,6 +309,11 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
                     && Objects.equals(this.projectNameElementValue, that.projectNameElementValue);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             var result = Objects.hash(signCredentialT, projectNameElementValue);
@@ -271,6 +324,12 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
             return result;
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this
+         * variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxPrivatestatsSignCredentialResponse.Success[signCredentialT=" + signCredentialT
@@ -285,13 +344,16 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
     }
 
     /**
-     * The {@code ErrorNoRetry} reply variant. A permanent
-     * rejection that the local client must NOT retry.
+     * The {@code ErrorNoRetry} reply variant; a permanent rejection
+     * that the local client must not retry.
      *
-     * <p>Carries one of three documented {@code (code, text)} pairs:
+     * @apiNote
+     * Carries one of three documented {@code (code, text)} pairs:
      * {@code (400, "bad-request")},
      * {@code (501, "feature-not-implemented")}, or
-     * {@code (503, "service-unavailable")}.
+     * {@code (503, "service-unavailable")}. The privatestats credential
+     * cache should evict the in-flight request and surface the
+     * rejection to the caller rather than reissuing the RPC.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorNoRetry")
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialNoRetryError")
@@ -300,13 +362,13 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsIQErrorServiceUnavailableMixin")
     final class ErrorNoRetry implements SmaxPrivatestatsSignCredentialResponse {
         /**
-         * The numeric error code. One of {@code 400}, {@code 501},
+         * The numeric error code; one of {@code 400}, {@code 501},
          * or {@code 503}.
          */
         private final int errorCode;
 
         /**
-         * The error text. One of {@code "bad-request"},
+         * The error text; one of {@code "bad-request"},
          * {@code "feature-not-implemented"}, or
          * {@code "service-unavailable"}.
          */
@@ -316,7 +378,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
          * Constructs a new no-retry error reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text. May be
+         * @param errorText the optional error text; may be
          *                  {@code null}
          */
         public ErrorNoRetry(int errorCode, String errorText) {
@@ -336,16 +398,31 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the text
+         * @return an {@link Optional} carrying the text, or empty
+         *         when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse an {@link ErrorNoRetry} variant.
+         * Parses an {@link ErrorNoRetry} variant from the given
+         * inbound stanza.
          *
-         * @param node    the inbound IQ stanza
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope does not
+         * match one of the three documented {@code (code, text)}
+         * pairs; unknown codes are deliberately not absorbed so they
+         * fall through to the {@link ErrorRetry} parser.
+         *
+         * @implNote
+         * This implementation routes a 4xx envelope through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * and a 5xx envelope through
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
+         * the validator then accepts only the three documented pairs.
+         *
+         * @param node the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
          */
@@ -353,7 +430,6 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
                 exports = "parseSignCredentialResponseErrorNoRetry",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<ErrorNoRetry> of(Node node, Node request) {
-            // 4xx → ClientError envelope, 5xx → ServerError envelope.
             var clientEnvelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
             var serverEnvelope = clientEnvelope == null
                     ? SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null)
@@ -364,7 +440,6 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
             }
             var code = envelope.code();
             var text = envelope.text();
-            // Validate the code/text pair against the documented disjunction.
             if ((code == 400 && "bad-request".equals(text))
                     || (code == 501 && "feature-not-implemented".equals(text))
                     || (code == 503 && "service-unavailable".equals(text))) {
@@ -373,6 +448,13 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
             return Optional.empty();
         }
 
+        /**
+         * Returns whether the given object is an {@link ErrorNoRetry}
+         * with an equal code and text.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when both fields match
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -386,11 +468,22 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this
+         * variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxPrivatestatsSignCredentialResponse.ErrorNoRetry[errorCode=" + errorCode
@@ -399,23 +492,32 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
     }
 
     /**
-     * The {@code ErrorRetry} reply variant. A transient
-     * {@code 500 internal-server-error} rejection. The local client
-     * may retry on the next flush window.
+     * The {@code ErrorRetry} reply variant; a transient
+     * {@code 500 internal-server-error} rejection.
+     *
+     * @apiNote
+     * Embedders driving the privatestats credential cache may reissue
+     * the request on the next flush window; the variant carries no
+     * payload because the {@code (500, "internal-server-error")} pair
+     * is implied by the type.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsSignCredentialResponseErrorRetry")
     @WhatsAppWebModule(moduleName = "WASmaxInPrivatestatsIQErrorInternalServerErrorMixin")
     final class ErrorRetry implements SmaxPrivatestatsSignCredentialResponse {
         /**
-         * Constructs a new retry-error reply. The shape carries no
-         * payload beyond the asserted {@code (500,
-         * "internal-server-error")} pair.
+         * Constructs a new retry-error reply.
+         *
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after the envelope shape
+         * has been validated against the
+         * {@code (500, "internal-server-error")} pair; embedders
+         * typically do not instantiate this directly.
          */
         public ErrorRetry() {
         }
 
         /**
-         * Returns the numeric error code. Always {@code 500}.
+         * Returns the numeric error code; always {@code 500}.
          *
          * @return the code
          */
@@ -424,7 +526,7 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         }
 
         /**
-         * Returns the error text. Always
+         * Returns the error text; always
          * {@code "internal-server-error"}.
          *
          * @return the text
@@ -434,9 +536,15 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
         }
 
         /**
-         * Tries to parse an {@link ErrorRetry} variant.
+         * Parses an {@link ErrorRetry} variant from the given inbound
+         * stanza.
          *
-         * @param node    the inbound IQ stanza
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope is not a
+         * server-range error or when its code/text pair is not exactly
+         * {@code (500, "internal-server-error")}.
+         *
+         * @param node the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
          */
@@ -454,6 +562,14 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
             return Optional.of(new ErrorRetry());
         }
 
+        /**
+         * Returns whether the given object is also an
+         * {@link ErrorRetry}.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when {@code obj} is an
+         *         {@link ErrorRetry}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -462,11 +578,22 @@ public sealed interface SmaxPrivatestatsSignCredentialResponse extends SmaxOpera
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a constant hash code; the variant carries no fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return ErrorRetry.class.hashCode();
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this
+         * variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxPrivatestatsSignCredentialResponse.ErrorRetry[]";

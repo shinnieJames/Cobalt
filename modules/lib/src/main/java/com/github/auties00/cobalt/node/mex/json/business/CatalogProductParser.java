@@ -19,17 +19,31 @@ import java.util.Optional;
  * Stateless utility that parses GraphQL product objects into Cobalt
  * {@link BusinessCatalogEntry} values.
  *
- * <p>The parsing logic mirrors WA Web's
- * {@code WAWebBizParseProductGraphql.parseProductGraphQL}, invoked from both
- * the catalog query and the product-collections query response decoders.
- * Cobalt centralises the projection here so that the two decoders share the
- * same field handling.
+ * @apiNote Adapts WA Web's {@code WAWebBizParseProductGraphql.parseProductGraphQL},
+ * invoked from both {@link QueryCatalogMexResponse} (the catalog query
+ * decoder) and {@link QueryProductCollectionsMexResponse} (the product
+ * collections query decoder). Cobalt centralises the projection here so that
+ * the two decoders share identical field handling without duplicating
+ * defensive null checks.
+ *
+ * @implNote This implementation drops the WA Web business surface that is
+ * never used at the Cobalt layer: compliance-info (country of origin),
+ * variant info, sale-price metadata, video media, signed shimmed URLs and
+ * {@code is_sanctioned} are not projected onto {@link BusinessCatalogEntry}.
+ * Only the fields {@code id}, {@code retailer_id}, {@code name},
+ * {@code description}, {@code url}, {@code currency}, {@code price},
+ * {@code is_hidden}, {@code product_availability}, {@code status_info.status}
+ * and the first image's {@code original_image_url} are read; everything else
+ * is silently ignored.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizParseProductGraphql")
 @WhatsAppWebModule(moduleName = "WAWebBizParseProductGraphql_product.graphql")
 public final class CatalogProductParser {
     /**
      * Prevents instantiation of this stateless utility class.
+     *
+     * @apiNote The class is a namespace for static parsing helpers; all entry
+     * points are {@code static}.
      *
      * @throws AssertionError always
      */
@@ -40,6 +54,18 @@ public final class CatalogProductParser {
     /**
      * Parses an array of GraphQL product objects into a list of
      * {@link BusinessCatalogEntry} values.
+     *
+     * @apiNote Surfaced through {@link QueryCatalogMexResponse} and
+     * {@link QueryProductCollectionsMexResponse} to project the
+     * {@code product_catalog.products} and
+     * {@code collections[i].products} arrays returned by WA Web's catalog and
+     * product-collections GraphQL queries.
+     *
+     * @implNote This implementation discards entries that
+     * {@link #parseProduct(JSONObject)} cannot project (currently only
+     * {@code null} entries). The result is wrapped in
+     * {@link List#copyOf(java.util.Collection)} so callers receive an
+     * unmodifiable list.
      *
      * @param array the GraphQL products array, possibly {@code null}
      * @return the parsed entries, never {@code null}
@@ -60,6 +86,16 @@ public final class CatalogProductParser {
     /**
      * Parses a single GraphQL product object into a
      * {@link BusinessCatalogEntry}.
+     *
+     * @apiNote Invoked by {@link #parseProducts(JSONArray)} per array element.
+     *
+     * @implNote This implementation tolerates malformed scalar fields: a
+     * {@code url} or image {@code original_image_url} that does not parse as a
+     * {@link URI} leaves the corresponding field {@code null}, and a
+     * {@code price} string that is not a decimal long leaves the field at
+     * {@code 0}. The {@code is_hidden} field is encoded by WA Web as the enum
+     * literal {@code "ISHIDDEN_TRUE"} or {@code "ISHIDDEN_FALSE"}; any other
+     * value is treated as not hidden.
      *
      * @param obj the GraphQL product object, possibly {@code null}
      * @return the parsed entry, or empty when {@code obj} is {@code null}
@@ -82,8 +118,7 @@ public final class CatalogProductParser {
             }
         }
         var currency = obj.getString("currency");
-        // WAWebBizParseProductGraphql.parseProductGraphQL: price arrives as a stringified decimal
-        long price = 0L;
+        var price = 0L;
         var priceString = obj.getString("price");
         if (priceString != null && !priceString.isEmpty()) {
             try {
@@ -92,7 +127,6 @@ public final class CatalogProductParser {
                 // price stays 0L on parse failure
             }
         }
-        // WAWebBizParseProductGraphql.parseProductGraphQL: is_hidden is the "ISHIDDEN_TRUE" enum literal
         var hidden = "ISHIDDEN_TRUE".equals(obj.getString("is_hidden"));
         var availability = parseAvailability(obj.getString("product_availability"));
         BusinessReviewStatus reviewStatus = null;
@@ -141,12 +175,18 @@ public final class CatalogProductParser {
      * Maps the WA Web {@code product_availability} enum string to the Cobalt
      * {@link BusinessItemAvailability} constant.
      *
-     * <p>WA Web uses the prefixed enum literals
-     * {@code PRODUCTAVAILABILITY_IN_STOCK},
-     * {@code PRODUCTAVAILABILITY_OUT_OF_STOCK} and
-     * {@code PRODUCTAVAILABILITY_UNKNOWN}. The prefix is stripped before
-     * feeding the value into {@link BusinessItemAvailability#ofName(String)},
-     * which expects the pretty-printed form ({@code "in stock"}).
+     * @apiNote Used by {@link #parseProduct(JSONObject)} to project the GraphQL
+     * scalar onto the Cobalt domain enum.
+     *
+     * @implNote This implementation strips the WA Web {@code PRODUCTAVAILABILITY_}
+     * prefix and lower-cases the remainder with underscores rewritten as
+     * spaces, matching the pretty-printed form expected by
+     * {@link BusinessItemAvailability#ofName(String)} (for example
+     * {@code "in stock"}). The WA Web source enumerates
+     * {@code IN_STOCK}, {@code OUT_OF_STOCK},
+     * {@code AVAILABLE_FOR_ANOTHER_POSTCODE} and {@code UNKNOWN}; anything
+     * outside these collapses to {@code null} via
+     * {@link Optional#orElse(Object)}.
      *
      * @param raw the raw enum string, may be {@code null}
      * @return the matched constant, or {@code null} when the input is absent

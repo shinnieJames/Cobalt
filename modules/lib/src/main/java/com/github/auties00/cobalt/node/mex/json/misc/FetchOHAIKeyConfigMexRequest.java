@@ -12,47 +12,60 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the current OHAI (Oblivious HTTP Authentication for Initiation)
- * key configuration list issued by the WhatsApp relay.
+ * Outbound MEX query that fetches the current OHAI (Oblivious HTTP
+ * Application Initialisation) key configuration list issued by the
+ * WhatsApp relay.
  *
- * <p>OHAI is the Hybrid Public Key Encryption (HPKE) key bundle used to
- * encapsulate ACS (Account Centre Service) requests sent by the OHAI
- * client. The relay rotates the key set periodically and clients are
- * expected to refetch the configuration when their cached value expires.
+ * @apiNote Issued by WA Web's
+ * {@code WAWebOHAIKeyConfigProvider.provideOHAIKeyConfig} when the OHAI
+ * key cache stored under {@code WAWebOHAIUserPrefs.getOHAIKeyConfig} is
+ * empty or its {@code expirationDate} is within an hour of the wall
+ * clock. The result feeds {@code WAWebDebugACS} and ACS-credential
+ * redemption helpers, which use the bundle to wrap Account Centre
+ * Service (ACS) requests inside an HPKE-encrypted Oblivious HTTP envelope.
  *
- * <p>The compiled GraphQL artifact declares no variables ({@code argumentDefinitions: []})
- * and selects the {@code xwa2_ohai_configurations.ohai_configs} list, with
- * each entry carrying {@code aead_id}, {@code expiration_date},
- * {@code kdf_id}, {@code kem_id}, {@code key_id},
- * {@code last_updated_time} and {@code public_key}.
+ * @implNote This implementation emits an empty {@code variables} object
+ * because the compiled GraphQL artifact declares
+ * {@code argumentDefinitions: []}; the {@code WAWebOHAIKeyConfigProvider}
+ * call-site likewise passes the empty object literal.
  */
 @WhatsAppWebModule(moduleName = "WAWebFetchOHAIKeyConfigJob")
 public final class FetchOHAIKeyConfigMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the compiled {@code WAWebFetchOHAIKeyConfigJobQuery} artifact.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebFetchOHAIKeyConfigJobQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebFetchOHAIKeyConfigJobQuery.graphql}. The relay maps the
+     * id to a server-side persisted operation and never sees the GraphQL
+     * text on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchOHAIKeyConfigJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29366514836329275";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this query, mirroring the {@code params.name} value of
-     * the compiled {@code WAWebFetchOHAIKeyConfigJobQuery} artifact.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is
+     * dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
+     * latency and error metrics; Cobalt keeps the name on the request for
+     * embedders mirroring WA Web's telemetry surface.
      */
     public static final String OPERATION_NAME = "WAWebFetchOHAIKeyConfigJobQuery";
 
     /**
-     * Constructs a {@link FetchOHAIKeyConfigMexRequest}.
+     * Constructs a new request carrying no GraphQL variables.
+     *
+     * @apiNote The compiled GraphQL artifact takes no inputs so a single
+     * instance is sufficient for every dispatch.
      */
     public FetchOHAIKeyConfigMexRequest() {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -60,9 +73,7 @@ public final class FetchOHAIKeyConfigMexRequest implements MexOperation.Request.
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -70,10 +81,11 @@ public final class FetchOHAIKeyConfigMexRequest implements MexOperation.Request.
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp relay.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and an empty
-     *         serialised GraphQL variables payload
+     * @implNote This implementation writes an empty {@code variables}
+     * object using fastjson2's {@link JSONWriter} and wraps it via
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebFetchOHAIKeyConfigJob", exports = "mexFetchOHAIKeyConfig",
             adaptation = WhatsAppAdaptation.ADAPTED)

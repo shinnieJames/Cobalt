@@ -10,20 +10,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound notification variants. Carries a single
- * {@code Notification} permit because {@code Receive}-shape SMAX
- * RPCs have no outbound counterpart.
+ * The inbound family of relay notifications carrying a freshly-pushed
+ * CTWA biz access-token nonce.
+ *
+ * @apiNote
+ * Used by the CTWA biz-business-notification dispatcher in
+ * {@code WAWebHandleBusinessNotification}, which routes
+ * {@code <notification type="business"/>} stanzas with a
+ * {@code <wa_ad_account_nonce/>} child into
+ * {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification},
+ * unblocking the in-flight {@link SmaxRequestSilentNonceResponse.Success}
+ * promise. The family carries a single permit because
+ * {@code Receive}-shape SMAX RPCs have no outbound counterpart.
  */
 public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Response permits SmaxNonceNotificationResponse.Notification {
 
     /**
-     * Tries to parse the inbound notification.
+     * Tries to parse the supplied stanza as a {@link Notification}.
      *
-     * @param node the inbound notification stanza received from the
-     *             relay; never {@code null}
+     * @apiNote
+     * Called by the biz-notification dispatcher after detecting the
+     * {@code <wa_ad_account_nonce/>} child. Returns
+     * {@link Optional#empty()} when the stanza does not match the
+     * documented shape so the dispatcher can fall through to other
+     * branches.
+     *
+     * @param node the inbound notification stanza; never
+     *             {@code null}
      * @return an {@link Optional} carrying the parsed notification,
-     *         or empty when the stanza does not match the documented
-     *         schema
+     *         or {@link Optional#empty()} when the stanza does not
+     *         match
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizCtwaAdAccountNonceNotificationRPC",
@@ -34,21 +50,26 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Notification} variant. Carries the freshly-pushed
-     * nonce string plus the standard envelope echoes.
+     * The single permitted relay-pushed nonce notification.
+     *
+     * @apiNote
+     * Carries the freshly-issued nonce plus the standard envelope
+     * echoes; the consumer extracts {@link #nonce()} and forwards
+     * it through {@code WAWebCTWABizAccessTokenNonceManager.castToNonce}
+     * to {@code setNonceFromPushNotification}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountNonceNotificationRequest")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaAdAccountServerNotificationMixin")
     final class Notification implements SmaxNonceNotificationResponse {
         /**
-         * The optional {@code to} attribute (the local user JID); may
-         * be {@code null} when the relay broadcasts to all linked
-         * devices simultaneously.
+         * The optional {@code to} attribute (the local user JID);
+         * {@code null} when the relay broadcasts to every linked
+         * device.
          */
         private final Jid to;
 
         /**
-         * The freshly-pushed nonce. The text content of the
+         * The freshly-pushed nonce token content of the
          * {@code <wa_ad_account_nonce>} child.
          */
         private final String nonce;
@@ -56,9 +77,13 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Constructs a new notification.
          *
+         * @apiNote
+         * Called by {@link #of(Node)} after validating the stanza
+         * envelope.
+         *
          * @param to    the optional target user JID; may be
          *              {@code null}
-         * @param nonce the nonce string; never {@code null}
+         * @param nonce the nonce content; never {@code null}
          * @throws NullPointerException if {@code nonce} is
          *                              {@code null}
          */
@@ -70,6 +95,11 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         /**
          * Returns the optional target user JID.
          *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the relay
+         * broadcasts the nonce to all linked devices without a
+         * specific {@code to} target.
+         *
          * @return an {@link Optional} carrying the JID
          */
         public Optional<Jid> to() {
@@ -77,7 +107,12 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the nonce string.
+         * Returns the pushed nonce token.
+         *
+         * @apiNote
+         * Forwarded by the caller to
+         * {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification},
+         * which resolves the in-flight nonce-fetch promise.
          *
          * @return the nonce; never {@code null}
          */
@@ -86,13 +121,21 @@ public sealed interface SmaxNonceNotificationResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Tries to parse a notification from the given inbound
-         * stanza.
+         * Tries to parse a notification from the supplied stanza.
+         *
+         * @apiNote
+         * Accepts only stanzas tagged
+         * {@code <notification type="business" from="s.whatsapp.net">}
+         * carrying a {@code <wa_ad_account_nonce>} child with
+         * non-empty content; everything else returns
+         * {@link Optional#empty()}.
          *
          * @param node the inbound notification stanza
          * @return an {@link Optional} carrying the parsed
-         *         notification, or empty when the stanza does not
-         *         match the documented schema
+         *         notification, or {@link Optional#empty()} when
+         *         the stanza shape does not match
+         * @throws NullPointerException if {@code node} is
+         *                              {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaAdAccountNonceNotificationRequest",
                 exports = "parseNonceNotificationRequest",

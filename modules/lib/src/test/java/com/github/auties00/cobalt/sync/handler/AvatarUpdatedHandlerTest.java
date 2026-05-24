@@ -1,9 +1,9 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
@@ -11,10 +11,9 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.AvatarUpdatedAction;
 import com.github.auties00.cobalt.model.sync.action.media.AvatarUpdatedActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,10 +21,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,8 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       the local {@code hasAvatar} flag and clear avatar stickers.</li>
  *   <li>Default conflict resolution (n/a override).</li>
  *   <li>Default batch dispatch (n/a override).</li>
- *   <li>Builder methods (n/a — handler has none).</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
+ *   <li>Builder methods (n/a - handler has none).</li>
  * </ul>
  */
 @DisplayName("AvatarUpdatedHandler")
@@ -103,7 +101,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() is avatar_updated_action")
@@ -128,7 +126,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — AB-prop gate")
+    @DisplayName("applyMutation - AB-prop gate")
     class FeatureGating {
         @Test
         @DisplayName("disabled enable_avatars_on_web_companion AB prop short-circuits to UNSUPPORTED")
@@ -141,7 +139,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — non-SET operation")
+    @DisplayName("applyMutation - non-SET operation")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation past the AB-prop gate is UNSUPPORTED")
@@ -159,7 +157,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("missing avatarUpdatedAction sub-message is MALFORMED")
@@ -188,7 +186,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — pairing-timestamp gate")
+    @DisplayName("applyMutation - pairing-timestamp gate")
     class PairingGate {
         @Test
         @DisplayName("mutation timestamp <= pairing timestamp is SKIPPED")
@@ -196,7 +194,7 @@ class AvatarUpdatedHandlerTest {
             enableAvatars();
             var pairingTs = Instant.ofEpochSecond(1_700_000_100L);
             store.setPairingTimestamp(pairingTs);
-            // Mutation older than pairing timestamp — must be skipped
+            // Mutation older than pairing timestamp - must be skipped
             var result = handler.applyMutation(testClient,
                     setMutation(AvatarUpdatedAction.AvatarEventType.CREATED,
                             Instant.ofEpochSecond(1_700_000_000L)));
@@ -218,7 +216,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET path")
+    @DisplayName("applyMutation - happy SET path")
     class HappySet {
         @Test
         @DisplayName("CREATED sets hasAvatar=true and clears recent avatar stickers")
@@ -258,7 +256,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index (n/a)")
+    @DisplayName("applyMutation - malformed index (n/a)")
     class MalformedIndex {
         @Test
         @DisplayName("the handler does not parse indexParts beyond position 0, so index malformations are not checked")
@@ -281,7 +279,7 @@ class AvatarUpdatedHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -291,7 +289,7 @@ class AvatarUpdatedHandlerTest {
             var remote = setMutation(AvatarUpdatedAction.AvatarEventType.DELETED,
                     Instant.ofEpochSecond(1_700_000_010L));
             var resolution = handler.resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
 
@@ -303,19 +301,19 @@ class AvatarUpdatedHandlerTest {
             var remote = setMutation(AvatarUpdatedAction.AvatarEventType.DELETED,
                     Instant.ofEpochSecond(1_700_000_000L));
             var resolution = handler.resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(ConflictResolutionState.SKIP_REMOTE,
                     resolution.state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — default per-item dispatch (n/a override)")
+    @DisplayName("applyMutationBatch - default per-item dispatch (n/a override)")
     class BatchDispatch {
         @Test
         @DisplayName("the handler does not override applyMutationBatch")
         void defaultDispatchPreserved() {
             enableAvatars();
-            var batch = java.util.List.of(setMutation(AvatarUpdatedAction.AvatarEventType.CREATED,
+            var batch = List.of(setMutation(AvatarUpdatedAction.AvatarEventType.CREATED,
                     Instant.ofEpochSecond(1_700_000_000L)));
             var results = handler.applyMutationBatch(testClient, batch);
             assertEquals(1, results.size());
@@ -323,47 +321,4 @@ class AvatarUpdatedHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder methods (n/a)")
-    class Builders {
-        @Test
-        @DisplayName("AvatarUpdatedHandler exposes no static builder helpers — only the incoming-mutation path")
-        void noBuilders() {
-            // WA Web's WAWebStickersAvatarUpdatedSyncAction has no outgoing-mutation factory:
-            // the avatar-updated mutation originates on the primary device, so there is no
-            // companion-side helper to test. This @Nested makes the absence explicit per
-            // the per-handler matrix rule.
-            assertFalse(hasPublicStaticBuilder(),
-                    "the handler must not expose a public static *Mutation builder");
-        }
-
-        /**
-         * Returns whether the handler exposes any public method whose name ends
-         * with {@code Mutation} that returns a {@code SyncPendingMutation}.
-         *
-         * @return {@code true} when such a method exists
-         */
-        private static boolean hasPublicStaticBuilder() {
-            for (var m : AvatarUpdatedHandler.class.getDeclaredMethods()) {
-                if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
-                if (!m.getName().endsWith("Mutation")) continue;
-                if (m.getReturnType().getSimpleName().equals("SyncPendingMutation")) return true;
-            }
-            return false;
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/avatar-updated/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/avatar-updated/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

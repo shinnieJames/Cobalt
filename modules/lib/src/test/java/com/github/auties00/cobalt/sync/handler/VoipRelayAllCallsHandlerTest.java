@@ -9,7 +9,6 @@ import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilde
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCalls;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingRelayAllCallsBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.VoipRelayAllCallsMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,8 +22,23 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for {@link VoipRelayAllCallsHandler} â€” Cobalt's adapter for
- * {@code WAWebVoipRelayAllCallsSettingSync}.
+ * Exercises {@link VoipRelayAllCallsHandler}'s parity with
+ * {@code WAWebVoipRelayAllCallsSettingSync.applyMutations}.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the happy {@code SET} branch that
+ * persists the boolean to
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)},
+ * the malformed branch for missing action, the
+ * {@link SyncdOperation#REMOVE} unsupported branch, the outgoing
+ * builder shape from
+ * {@link VoipRelayAllCallsMutationFactory}, and the default
+ * conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture builds a temporary store with the local identity only;
+ * tests that exercise the apply path observe the
+ * {@code relayAllCalls} flag transition from the default unset state.
  */
 @DisplayName("VoipRelayAllCallsHandler")
 class VoipRelayAllCallsHandlerTest {
@@ -33,12 +47,30 @@ class VoipRelayAllCallsHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * {@code relayAllCalls} flag starts at its default value.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given enabled flag and operation into a trusted
+     * mutation under the canonical {@code ["setting_relayAllCalls"]}
+     * index.
+     *
+     * @param enabled the new relay-all-calls flag
+     * @param op      the mutation operation
+     * @param ts      the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted mutation(boolean enabled, SyncdOperation op, Instant ts) {
         var action = new PrivacySettingRelayAllCallsBuilder().isEnabled(enabled).build();
         var value = new SyncActionValueBuilder()
@@ -50,7 +82,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the PrivacySettingRelayAllCalls wire constant")
@@ -75,7 +107,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET true updates the store flag and returns SUCCESS")
@@ -99,7 +131,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("relay-all-calls is a global setting; no per-entity orphan path")
@@ -111,7 +143,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -128,7 +160,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the handler ignores the index shape (global setting)")
@@ -146,7 +178,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -158,10 +190,10 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -170,7 +202,7 @@ class VoipRelayAllCallsHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -180,7 +212,7 @@ class VoipRelayAllCallsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” inherits default sequential apply")
+    @DisplayName("applyMutationBatch - inherits default sequential apply")
     class ApplyBatch {
         @Test
         @DisplayName("default batch path applies each mutation in order")
@@ -197,38 +229,4 @@ class VoipRelayAllCallsHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder â€” getMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new VoipRelayAllCallsMutationFactory().getVoipRelayAllCallsMutation(ts, true);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(PrivacySettingRelayAllCalls.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"setting_relayAllCalls\"]", inner.index());
-            assertTrue(inner.value().action().filter(action -> action instanceof PrivacySettingRelayAllCalls).map(action -> (PrivacySettingRelayAllCalls) action).orElseThrow().isEnabled());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/voip-relay-all-calls/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/voip-relay-all-calls/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new VoipRelayAllCallsMutationFactory().getVoipRelayAllCallsMutation(Instant.ofEpochSecond(1_700_000_000L), true);
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

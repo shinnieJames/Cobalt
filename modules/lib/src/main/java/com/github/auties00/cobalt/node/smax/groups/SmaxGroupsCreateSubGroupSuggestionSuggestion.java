@@ -16,109 +16,110 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed alternation modelling the suggestion-body oneof.
+ * Sealed alternation modelling the suggestion-body oneof carried inside a
+ * {@link SmaxGroupsCreateSubGroupSuggestionRequest}.
+ *
+ * @apiNote
+ * Pick {@link NewGroup} to ask the relay to spin up a fresh sub-group with caller-chosen subject and policy
+ * markers, or {@link ExistingGroups} to ask the relay to link one or more existing groups in as sub-groups
+ * of the parent community.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSuggestionForCreateSubGroupSuggestionNewGroupOrCreateSubGroupSuggestionExistingGroupsMixinGroup")
 public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup, SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups {
     /**
-     * Merges this suggestion's children/attributes into the supplied
-     * {@code <sub_group_suggestion/>} {@link NodeBuilder}.
+     * Contributes this suggestion's children and attributes to the supplied
+     * {@code <sub_group_suggestion/>} builder.
+     *
+     * @apiNote
+     * Called by {@link SmaxGroupsCreateSubGroupSuggestionRequest#toNode()} so each variant can stamp the
+     * branch-specific shape without exposing its private state to the request envelope.
+     *
+     * @implSpec
+     * Implementations must mutate {@code builder} in place and must not call {@link NodeBuilder#build()}; the
+     * caller decides when to seal the node and wrap it in the IQ envelope.
      *
      * @param builder the target builder; never {@code null}
      */
     void contributeTo(NodeBuilder builder);
 
     /**
-     * Suggestion body for a brand-new sub-group spun up inside the
-     * parent community.
+     * Suggestion body that asks the relay to spin up a brand-new sub-group inside the parent community.
+     *
+     * @apiNote
+     * Carries the new sub-group's subject and the same policy markers exposed on
+     * {@link SmaxGroupsCreateRequest} ({@code locked}, {@code announcement}, {@code hidden_group},
+     * membership-approval and member-mode mixins); pair with a {@link SmaxGroupsCreateSubGroupSuggestionRequest}
+     * to dispatch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForNewGroupMixin")
     final class NewGroup implements SmaxGroupsCreateSubGroupSuggestionSuggestion {
         /**
-         * The subject (display name) of the proposed sub-group.
+         * The subject (display name) of the proposed sub-group, emitted as a {@code <subject/>} child.
          */
         private final String subject;
 
         /**
-         * The optional description body; {@code null} omits the
-         * {@code <description><body/></description>} child entirely.
+         * The optional description body; emitted as {@code <description><body/></description>} when present,
+         * omitted entirely when {@code null}.
          */
         private final String descriptionBody;
 
         /**
-         * Whether to attach a {@code <locked/>} marker (chat-info
-         * edits become admin-only).
+         * Whether to attach a {@code <locked/>} marker so chat-info edits become admin-only.
          */
         private final boolean locked;
 
         /**
-         * Whether to attach an {@code <announcement/>} marker (only
-         * admins may post).
+         * Whether to attach an {@code <announcement/>} marker so only admins may post.
          */
         private final boolean announcement;
 
         /**
-         * Whether to attach a {@code <hidden_group/>} marker (the
-         * sub-group is hidden from the community directory).
+         * Whether to attach a {@code <hidden_group/>} marker so the sub-group is hidden from the community
+         * directory.
          */
         private final boolean hiddenGroup;
 
         /**
-         * The optional membership-approval join-mode attribute;
-         * {@code null} omits the
-         * {@code <membership_approval_mode/>} child entirely.
+         * The optional {@code group_join_mode} attribute stamped on a {@code <membership_approval_mode/>}
+         * child; {@code null} omits the child entirely.
          */
         private final String membershipApprovalGroupJoinMode;
 
         /**
-         * The optional member-add-mode mixin attribute attached to
-         * the {@code <sub_group_suggestion/>} root.
+         * The optional {@code member_add_mode} attribute stamped on the {@code <sub_group_suggestion/>} root.
          */
         private final String memberAddMode;
 
         /**
-         * The optional member-link-mode mixin attribute attached to
-         * the {@code <sub_group_suggestion/>} root.
+         * The optional {@code member_link_mode} attribute stamped on the {@code <sub_group_suggestion/>} root.
          */
         private final String memberLinkMode;
 
         /**
-         * The optional member-share-group-history-mode mixin
-         * attribute attached to the {@code <sub_group_suggestion/>}
-         * root.
+         * The optional {@code member_share_group_history_mode} attribute stamped on the
+         * {@code <sub_group_suggestion/>} root.
          */
         private final String memberShareGroupHistoryMode;
 
         /**
          * Constructs a new-group suggestion body.
          *
-         * @param subject                          the subject; never
-         *                                         {@code null}
-         * @param descriptionBody                  the optional
-         *                                         description body;
+         * @apiNote
+         * Every parameter except {@code subject} is optional; pass {@code null} (or {@code false} for
+         * booleans) to omit the corresponding child or attribute.
+         *
+         * @param subject                          the subject; never {@code null}
+         * @param descriptionBody                  the optional description body; may be {@code null}
+         * @param locked                           see {@link #locked()}
+         * @param announcement                     see {@link #announcement()}
+         * @param hiddenGroup                      see {@link #hiddenGroup()}
+         * @param membershipApprovalGroupJoinMode  the optional membership-approval join-mode value;
          *                                         may be {@code null}
-         * @param locked                           see
-         *                                         {@link #locked()}
-         * @param announcement                     see
-         *                                         {@link #announcement()}
-         * @param hiddenGroup                      see
-         *                                         {@link #hiddenGroup()}
-         * @param membershipApprovalGroupJoinMode  the optional
-         *                                         membership-approval
-         *                                         join-mode value;
-         *                                         may be {@code null}
-         * @param memberAddMode                    the optional
-         *                                         member-add mode;
-         *                                         may be {@code null}
-         * @param memberLinkMode                   the optional
-         *                                         member-link mode;
-         *                                         may be {@code null}
-         * @param memberShareGroupHistoryMode      the optional
-         *                                         member-share-history
-         *                                         mode; may be
-         *                                         {@code null}
-         * @throws NullPointerException if {@code subject} is
-         *                              {@code null}
+         * @param memberAddMode                    the optional member-add mode; may be {@code null}
+         * @param memberLinkMode                   the optional member-link mode; may be {@code null}
+         * @param memberShareGroupHistoryMode      the optional member-share-history mode; may be {@code null}
+         * @throws NullPointerException if {@code subject} is {@code null}
          */
         public NewGroup(String subject,
                         String descriptionBody,
@@ -141,7 +142,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns the subject text.
+         * Returns the subject text emitted as the {@code <subject/>} child.
          *
          * @return the subject; never {@code null}
          */
@@ -152,8 +153,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns the optional description body.
          *
-         * @return an {@link Optional} carrying the description body,
-         *         or empty when omitted
+         * @return an {@link Optional} carrying the description body, or empty when omitted
          */
         public Optional<String> descriptionBody() {
             return Optional.ofNullable(descriptionBody);
@@ -162,6 +162,9 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns whether the {@code <locked/>} marker is attached.
          *
+         * @apiNote
+         * When {@code true} the server pins chat-info editing to admins.
+         *
          * @return {@code true} when the marker is emitted
          */
         public boolean locked() {
@@ -169,8 +172,10 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns whether the {@code <announcement/>} marker is
-         * attached.
+         * Returns whether the {@code <announcement/>} marker is attached.
+         *
+         * @apiNote
+         * When {@code true} the server restricts posting to admins.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -179,8 +184,10 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns whether the {@code <hidden_group/>} marker is
-         * attached.
+         * Returns whether the {@code <hidden_group/>} marker is attached.
+         *
+         * @apiNote
+         * When {@code true} the sub-group is hidden from the community directory.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -189,46 +196,53 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Returns the optional membership-approval join-mode value.
+         * Returns the optional {@code group_join_mode} attribute stamped on a
+         * {@code <membership_approval_mode/>} child.
          *
-         * @return an {@link Optional} carrying the join-mode value,
-         *         or empty when omitted
+         * @return an {@link Optional} carrying the join-mode value, or empty when omitted
          */
         public Optional<String> membershipApprovalGroupJoinMode() {
             return Optional.ofNullable(membershipApprovalGroupJoinMode);
         }
 
         /**
-         * Returns the optional member-add-mode mixin value.
+         * Returns the optional {@code member_add_mode} attribute stamped on the {@code <sub_group_suggestion/>}
+         * root.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the value, or empty when omitted
          */
         public Optional<String> memberAddMode() {
             return Optional.ofNullable(memberAddMode);
         }
 
         /**
-         * Returns the optional member-link-mode mixin value.
+         * Returns the optional {@code member_link_mode} attribute stamped on the {@code <sub_group_suggestion/>}
+         * root.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the value, or empty when omitted
          */
         public Optional<String> memberLinkMode() {
             return Optional.ofNullable(memberLinkMode);
         }
 
         /**
-         * Returns the optional member-share-group-history-mode mixin
-         * value.
+         * Returns the optional {@code member_share_group_history_mode} attribute stamped on the
+         * {@code <sub_group_suggestion/>} root.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the value, or empty when omitted
          */
         public Optional<String> memberShareGroupHistoryMode() {
             return Optional.ofNullable(memberShareGroupHistoryMode);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation stamps the {@code member_*_mode} attributes on the {@code <sub_group_suggestion/>}
+         * root first, then appends the {@code <subject/>}, optional {@code <description><body/></description>},
+         * and any boolean-gated marker children in their canonical order.
+         */
         @Override
         public void contributeTo(NodeBuilder builder) {
             Objects.requireNonNull(builder, "builder cannot be null");
@@ -319,26 +333,31 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
     }
 
     /**
-     * Suggestion body recommending that one or more existing groups
-     * be linked into the parent community as sub-groups.
+     * Suggestion body that asks the relay to link one or more already-existing groups into the parent
+     * community as sub-groups.
+     *
+     * @apiNote
+     * Each candidate is rendered as a {@code <group jid="..."/>} child of {@code <sub_group_suggestion/>}
+     * with an optional {@code <hidden_group/>} sub-child; per-candidate verdicts surface on the response
+     * side as {@link SmaxGroupsCreateSubGroupSuggestionResponse.ExistingGroupsSuggestionSuccess.Candidate}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForExistingGroupsMixin")
     final class ExistingGroups implements SmaxGroupsCreateSubGroupSuggestionSuggestion {
         /**
-         * The candidate groups to suggest. Must be non-empty (1..1000
-         * entries server-side).
+         * The candidate groups to propose; the server accepts between {@code 1} and {@code 1000} entries.
          */
         private final List<Candidate> groups;
 
         /**
          * Constructs an existing-groups suggestion body.
          *
-         * @param groups the list of candidate groups; never
-         *               {@code null} and must be non-empty
-         * @throws NullPointerException     if {@code groups} is
-         *                                  {@code null}
-         * @throws IllegalArgumentException when {@code groups} is
-         *                                  empty
+         * @apiNote
+         * Each entry must address a group the caller has permission to link as a sub-group; per-candidate
+         * permission failures surface as error tags on the response side.
+         *
+         * @param groups the list of candidate groups; never {@code null} and must be non-empty
+         * @throws NullPointerException     if {@code groups} is {@code null}
+         * @throws IllegalArgumentException when {@code groups} is empty
          */
         public ExistingGroups(List<Candidate> groups) {
             Objects.requireNonNull(groups, "groups cannot be null");
@@ -351,13 +370,20 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         /**
          * Returns the candidate groups.
          *
-         * @return an unmodifiable list of candidate groups; never
-         *         empty
+         * @return an unmodifiable list of candidate groups; never empty
          */
         public List<Candidate> groups() {
             return groups;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation appends one {@code <group jid="..."/>} child per candidate; the optional
+         * {@code <hidden_group/>} marker is nested under that {@code <group/>} child when
+         * {@link Candidate#hiddenGroup()} is {@code true}.
+         */
         @Override
         public void contributeTo(NodeBuilder builder) {
             Objects.requireNonNull(builder, "builder cannot be null");
@@ -400,30 +426,35 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
         }
 
         /**
-         * Single candidate sub-group entry inside an
-         * {@link ExistingGroups} suggestion.
+         * Single candidate sub-group entry inside an {@link ExistingGroups} suggestion.
+         *
+         * @apiNote
+         * Carries the candidate {@link Jid} and an optional hidden-from-directory flag; the relay surfaces
+         * per-candidate permission failures separately on the response side.
          */
         @WhatsAppWebModule(moduleName = "WASmaxOutGroupsCreateSubGroupSuggestionSuggestionForExistingGroupsMixin")
         public static final class Candidate {
             /**
-             * The candidate sub-group JID.
+             * The candidate sub-group {@link Jid} stamped on the {@code <group jid="...">} attribute.
              */
             private final Jid jid;
 
             /**
-             * Whether to attach a {@code <hidden_group/>} marker to
-             * the {@code <group/>} child.
+             * Whether to nest a {@code <hidden_group/>} marker under the {@code <group/>} child so the
+             * candidate is hidden from the community directory.
              */
             private final boolean hiddenGroup;
 
             /**
              * Constructs a candidate entry.
              *
-             * @param jid         the candidate JID; never
-             *                    {@code null}
-             * @param hiddenGroup whether to attach the hidden marker
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @apiNote
+             * Pass {@code hiddenGroup=true} to keep this sub-group out of the community directory listing
+             * after the link is accepted.
+             *
+             * @param jid         the candidate {@link Jid}; never {@code null}
+             * @param hiddenGroup whether to nest the hidden-from-directory marker
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public Candidate(Jid jid, boolean hiddenGroup) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -431,7 +462,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             }
 
             /**
-             * Returns the candidate JID.
+             * Returns the candidate {@link Jid}.
              *
              * @return the candidate JID; never {@code null}
              */
@@ -440,8 +471,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionSuggestion permits Sma
             }
 
             /**
-             * Returns whether the {@code <hidden_group/>} marker is
-             * attached.
+             * Returns whether the candidate carries the hidden-from-directory marker.
              *
              * @return {@code true} when the marker is emitted
              */

@@ -5,20 +5,22 @@ import com.github.auties00.cobalt.node.Node;
 import java.util.Objects;
 
 /**
- * Thrown when a problem is detected in the WhatsApp protocol stream
+ * Sealed root for problems detected in the WhatsApp protocol stream
  * carried over the WebSocket connection.
  *
- * <p>WhatsApp speaks an XMPP-flavored protocol where every message is a
+ * @apiNote
+ * WhatsApp speaks an XMPP-flavored protocol where every message is a
  * "node" (a stanza with a tag, attributes, and child content). Stream
  * exceptions cover the layer that frames, encodes, and correlates those
  * nodes. Two concrete failure modes exist: a node that arrives in an
  * unparseable shape ({@link MalformedNode}) and a request whose
  * response never arrives ({@link NodeTimeout}).
  *
- * <p>Stream exceptions are fatal because the node pipeline is a shared
- * resource: a single corrupted frame poisons the in-flight protocol
- * state and the connection has to be re-established before traffic can
- * resume.
+ * @implNote
+ * This implementation always reports the failure as fatal because the
+ * node pipeline is a shared resource: a single corrupted frame poisons
+ * the in-flight protocol state and the connection has to be
+ * re-established before traffic can resume.
  *
  * @see MalformedNode
  * @see NodeTimeout
@@ -62,12 +64,11 @@ public sealed class WhatsAppStreamException extends WhatsAppException
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>Any stream-level fault leaves the protocol pipeline in an
-     * unrecoverable state so the connection has to be reset.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: any stream-level
+     * fault leaves the protocol pipeline in an unrecoverable state.
      */
     @Override
     public boolean isFatal() {
@@ -78,9 +79,14 @@ public sealed class WhatsAppStreamException extends WhatsAppException
      * Thrown when a stanza received from the server is structurally
      * invalid.
      *
-     * <p>The decoder raises this exception when a stanza is truncated,
-     * has a missing required attribute, has the wrong content shape for
-     * its tag, or otherwise cannot be parsed into a {@link Node}.
+     * @apiNote
+     * Raised by the decoder when a stanza is truncated, has a missing
+     * required attribute, has the wrong content shape for its tag, or
+     * otherwise cannot be parsed into a {@link Node}. WA Web's
+     * {@code WAWebCommsHandleLoggedInStanza} sends a server NACK
+     * ({@code NackReason.UnrecognizedStanza}) for the same condition;
+     * Cobalt raises the exception locally and lets the configurable
+     * error handler decide whether to NACK or reconnect.
      */
     public static final class MalformedNode extends WhatsAppStreamException {
         /**
@@ -114,7 +120,8 @@ public sealed class WhatsAppStreamException extends WhatsAppException
      * Thrown when a request stanza never receives the matching response
      * within the expected window.
      *
-     * <p>WhatsApp uses a request-response pattern where each outgoing
+     * @apiNote
+     * WhatsApp uses a request-response pattern where each outgoing
      * stanza is tagged with an id and the server eventually returns a
      * stanza carrying the same id. When the response does not arrive
      * before the timeout fires, this exception is raised carrying the

@@ -15,25 +15,41 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="urn:xmpp:whatsapp:push">} stanza
- * variant.
+ * The outbound {@code <iq xmlns="urn:xmpp:whatsapp:push" type="set">}
+ * stanza that registers or clears a push-notification channel.
+ *
+ * @apiNote
+ * Built by Cobalt's push-registration path, the counterpart of WA Web's
+ * {@code WAWebSetPushConfigJob.setPushConfig}. The caller chooses either
+ * a {@link SmaxPushConfigSetSetVariant.Config} payload to register a
+ * platform-specific push channel (W3C Push API endpoint for web,
+ * APNs/iOS, FCM-style for Android, WNS for Windows, etc.) or a
+ * {@link SmaxPushConfigSetSetVariant.Clear} payload to de-register. WA
+ * Web emits exactly this stanza after a successful
+ * {@code PushManager.subscribe} in
+ * {@code WAWebSubscribePushManagerAction}; Cobalt embedders that wire
+ * server-side push to their own application use the same RPC.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigBaseIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutPushConfigSetSetConfigOrSetClearMixinGroup")
 public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     /**
-     * The exclusive payload variant. Exactly one of
-     * {@code config} / {@code clear} must be non-null.
+     * The exclusive payload variant: either {@code <config>} or
+     * {@code <clear>}.
      */
     private final SmaxPushConfigSetSetVariant variant;
 
     /**
-     * Constructs a new push-config request.
+     * Constructs a push-config request.
      *
-     * @param variant the payload variant. Never {@code null}
-     * @throws NullPointerException if {@code variant} is
-     *                              {@code null}
+     * @apiNote
+     * Pass a {@link SmaxPushConfigSetSetVariant.Config} to register a
+     * platform-specific push channel or a
+     * {@link SmaxPushConfigSetSetVariant.Clear} to drop the registration.
+     *
+     * @param variant the payload variant
+     * @throws NullPointerException if {@code variant} is {@code null}
      */
     public SmaxPushConfigSetRequest(SmaxPushConfigSetSetVariant variant) {
         this.variant = Objects.requireNonNull(variant, "variant cannot be null");
@@ -42,23 +58,30 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
     /**
      * Returns the payload variant.
      *
-     * @return the variant. Never {@code null}
+     * @apiNote
+     * Exposed for test and audit code; the variant is immutable.
+     *
+     * @return the {@link SmaxPushConfigSetSetVariant}
      */
     public SmaxPushConfigSetSetVariant variant() {
         return variant;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the payload variant
+     * @implNote
+     * This implementation hard-codes
+     * {@code xmlns="urn:xmpp:whatsapp:push"}, {@code type="set"}, and
+     * {@code to=s.whatsapp.net} per the
+     * {@code WASmaxOutPushConfigSetRequest.makeSetRequest} fixture, then
+     * nests {@link SmaxPushConfigSetSetVariant#toNode()} as the sole
+     * payload.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPushConfigSetRequest",
             exports = "makeSetRequest", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // <config>...</config> or <clear platform?/>.
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "urn:xmpp:whatsapp:push")
@@ -67,6 +90,12 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
                 .content(variant.toNode());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation compares the carried {@link #variant}.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -79,11 +108,25 @@ public final class SmaxPushConfigSetRequest implements SmaxOperation.Request {
         return Objects.equals(this.variant, that.variant);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation hashes the carried {@link #variant} to stay
+     * consistent with {@link #equals(Object)}.
+     */
     @Override
     public int hashCode() {
         return Objects.hash(variant);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation mirrors the record-like rendering used across
+     * the {@code Smax*} stanza family.
+     */
     @Override
     public String toString() {
         return "SmaxPushConfigSetRequest[variant=" + variant + ']';

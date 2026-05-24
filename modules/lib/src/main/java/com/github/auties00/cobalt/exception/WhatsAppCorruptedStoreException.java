@@ -4,15 +4,21 @@ package com.github.auties00.cobalt.exception;
  * Thrown when the persisted Cobalt store cannot be loaded because its
  * bytes are corrupt.
  *
- * <p>Cobalt keeps a single on-disk store containing the registration
+ * @apiNote
+ * Cobalt keeps a single on-disk store containing the registration
  * credentials, Signal protocol keys, identity material, and the cached
  * chat state. When the store is truncated, tampered with, or written by
  * an incompatible version, the deserializer raises this exception
- * instead of silently continuing with cryptographic material that
- * cannot be trusted.
+ * instead of silently continuing with cryptographic material that cannot
+ * be trusted. The configurable error handler typically logs the device
+ * out so the application can drive a fresh pairing.
  *
- * <p>The failure is fatal. The application has to log the device out
- * and pair it again before any session can resume.
+ * @implNote
+ * This implementation always reports the failure as fatal: the store
+ * holds the keys needed to resume the session, so corruption leaves the
+ * application with no usable identity. Cobalt collapses WA Web's
+ * multi-IndexedDB schema into a single store, so a single corruption
+ * affects every entity type at once.
  */
 public final class WhatsAppCorruptedStoreException extends WhatsAppException {
     /**
@@ -25,13 +31,11 @@ public final class WhatsAppCorruptedStoreException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>The store contains the keys needed to resume the session, so a
-     * corrupted store leaves the application with no usable identity.
-     * The error is always fatal.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: a corrupted store
+     * cannot yield usable keys, so the session cannot resume.
      */
     @Override
     public boolean isFatal() {

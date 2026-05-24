@@ -7,51 +7,67 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Holds the bot-related metadata parsed from an incoming message stanza's
- * {@code <bot>} child.
+ * The bot-side metadata extracted from the {@code <bot>} child of an incoming
+ * {@code <message>} stanza by {@link MessageReceiveStanzaParser}.
  *
- * <p>Bot info is populated when the message involves a Meta AI bot or a business
- * 1P/3P bot. It carries the bot sender timestamp (for out-of-order ordering), edit
- * metadata for multi-turn streaming responses, and the bot's business classification.
+ * @apiNote
+ * Populated only for messages that originate from a Meta AI bot or a
+ * WhatsApp Business 1P/3P bot. The fields drive the streaming chunk pipeline
+ * that {@link MessageReceiveStanza#botInfo()} feeds into the receive
+ * handler: {@link #senderTimestampMs()} preserves the bot's own monotonic
+ * ordering across out-of-order arrival, {@link #editTargetId()} and
+ * {@link #editType()} let the renderer thread each chunk back onto the same
+ * conversational turn ({@code first} / {@code inner} / {@code last}), and
+ * {@link #bizBotType()} disambiguates 1P from 3P business bots.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveBotInfo {
     /**
-     * Bot sender timestamp in milliseconds from the {@code sender_timestamp_ms}
-     * attribute.
+     * The {@code sender_timestamp_ms} attribute carried on the {@code <bot>}
+     * child, preserving the bot's monotonic ordering as a string.
      */
     private final String senderTimestampMs;
 
     /**
-     * Target message identifier of the bot edit, referencing the original bot message
-     * being edited.
+     * The {@code edit_target_id} attribute, which on {@code inner} and
+     * {@code last} chunks references the id of the {@code first} chunk that
+     * started the bot reply.
      */
     private final String editTargetId;
 
     /**
-     * Bot edit type (for example {@code "inner"} for a streaming token replacement,
-     * {@code "last"} for the final answer).
+     * The {@code edit} attribute carried by the {@code <bot>} child; mirrors
+     * WA Web's {@code BotMsgEditType} enum ({@code first} starts the
+     * stream, {@code inner} is a mid-stream token update, {@code last} marks
+     * completion).
      */
     private final String editType;
 
     /**
-     * Body type of the bot response payload.
+     * The {@code type} attribute on the {@code <bot>} child, identifying the
+     * shape of the inner bot payload ({@code BotMsgBodyType}).
      */
     private final String bodyType;
 
     /**
-     * Business bot classification ({@code "1"} for 1P, {@code "3"} for 3P).
+     * The {@code biz_bot} attribute identifying the business bot tier
+     * ({@code "1"} = 1P, {@code "3"} = 3P).
      */
     private final String bizBotType;
 
     /**
-     * Constructs a new bot info record.
+     * Constructs a populated record from the values extracted by
+     * {@link MessageReceiveStanzaParser}.
      *
-     * @param senderTimestampMs the bot sender timestamp, or {@code null}
-     * @param editTargetId      the target id for edits, or {@code null}
-     * @param editType          the bot edit type, or {@code null}
-     * @param bodyType          the bot message body type, or {@code null}
-     * @param bizBotType        the business bot classification, or {@code null}
+     * @apiNote
+     * Not intended for direct use outside the parser; callers consume
+     * existing instances via {@link MessageReceiveStanza#botInfo()}.
+     *
+     * @param senderTimestampMs the bot-side monotonic timestamp, or {@code null}
+     * @param editTargetId      the id of the first chunk in the stream, or {@code null}
+     * @param editType          the streaming marker, or {@code null}
+     * @param bodyType          the inner payload body type, or {@code null}
+     * @param bizBotType        the business bot tier, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -70,7 +86,13 @@ public final class MessageReceiveBotInfo {
     }
 
     /**
-     * Returns the bot sender timestamp in milliseconds, when present.
+     * Returns the {@code sender_timestamp_ms} attribute, when present.
+     *
+     * @apiNote
+     * The bot's own millisecond-precision ordering id, used by the streaming
+     * pipeline to reassemble chunks that may arrive out of order; kept as a
+     * string because the upstream attribute is sometimes outside {@code long}
+     * range.
      *
      * @return an {@link Optional} wrapping the timestamp string
      */
@@ -79,7 +101,12 @@ public final class MessageReceiveBotInfo {
     }
 
     /**
-     * Returns the target message identifier for bot edits, when present.
+     * Returns the {@code edit_target_id} attribute, when present.
+     *
+     * @apiNote
+     * On {@code inner} and {@code last} chunks this references the id of the
+     * {@code first} chunk in the same bot reply; an {@code "edit_target_id"}
+     * value of {@code ""} on the {@code first} chunk itself.
      *
      * @return an {@link Optional} wrapping the target id
      */
@@ -88,7 +115,13 @@ public final class MessageReceiveBotInfo {
     }
 
     /**
-     * Returns the bot edit type, when present.
+     * Returns the streaming-edit marker, when present.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code BotMsgEditType}: {@code first} starts a bot
+     * reply, {@code inner} is a mid-stream token replacement, {@code last}
+     * marks completion. Used by the AI-rich-response stitcher to know when
+     * the bot has finished.
      *
      * @return an {@link Optional} wrapping the edit type
      */
@@ -97,7 +130,12 @@ public final class MessageReceiveBotInfo {
     }
 
     /**
-     * Returns the bot message body type, when present.
+     * Returns the {@code type} attribute on the {@code <bot>} child, when
+     * present.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code BotMsgBodyType} and tells the protobuf parser
+     * which inner shape to decode (text, image, native flow, etc.).
      *
      * @return an {@link Optional} wrapping the body type
      */
@@ -106,9 +144,14 @@ public final class MessageReceiveBotInfo {
     }
 
     /**
-     * Returns the business bot classification, when present.
+     * Returns the {@code biz_bot} attribute, when present.
      *
-     * @return an {@link Optional} wrapping the biz bot classification
+     * @apiNote
+     * {@code "1"} identifies a WhatsApp Business 1P bot (Meta-hosted),
+     * {@code "3"} identifies a 3P bot; absence means a non-business bot such
+     * as Meta AI.
+     *
+     * @return an {@link Optional} wrapping the biz bot tier
      */
     public Optional<String> bizBotType() {
         return Optional.ofNullable(bizBotType);

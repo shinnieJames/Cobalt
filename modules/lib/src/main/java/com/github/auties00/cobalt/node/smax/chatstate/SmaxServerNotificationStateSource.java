@@ -10,43 +10,54 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the two state-source mixins documented
- * by {@code WASmaxInChatstateStateSource.parseStateSource}.
+ * Sealed disjunction over the two state-source mixins identifying the
+ * origin of an inbound {@code <chatstate>} event: a 1:1 peer
+ * ({@link FromUser}) or a group participant ({@link FromGroup}).
+ *
+ * @apiNote
+ * The Cobalt analogue of {@code WACreateHandleChatState.createHandleChatState}
+ * branches on {@link #of(Node)}: a {@link FromUser} result routes the
+ * indicator to the {@code individualMessage.handleIndividualChatState}
+ * handler, while a {@link FromGroup} result routes it to
+ * {@code groupMessage.handleGroupChatState} with the participant attached.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInChatstateStateSource")
 public sealed interface SmaxServerNotificationStateSource permits SmaxServerNotificationStateSource.FromUser, SmaxServerNotificationStateSource.FromGroup {
 
     /**
-     * Tries each {@link SmaxServerNotificationStateSource} variant in WA Web declared
-     * order and returns the first that parses cleanly.
+     * Parses an inbound stanza into the first matching variant.
+     *
+     * @implNote
+     * This implementation mirrors {@code parseStateSource}: it tries
+     * {@link FromUser} first and falls back to {@link FromGroup}, returning
+     * the first successful parse.
      *
      * @param node the inbound {@code <chatstate/>} stanza
-     * @return an {@link Optional} carrying the parsed variant
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
      */
     @WhatsAppWebExport(moduleName = "WASmaxInChatstateStateSource",
             exports = "parseStateSource", adaptation = WhatsAppAdaptation.ADAPTED)
     static Optional<? extends SmaxServerNotificationStateSource> of(Node node) {
         Objects.requireNonNull(node, "node cannot be null");
-        // WASmaxInChatstateStateSource.parseStateSource: try parseFromUserMixin first
         var fromUser = FromUser.of(node);
         if (fromUser.isPresent()) {
             return fromUser;
         }
-        // WASmaxInChatstateStateSource.parseStateSource: fall back to parseFromGroupMixin
         return FromGroup.of(node);
     }
 
     /**
-     * Reports whether the given JID's server is one accepted by
-     * {@code WAJids.validateUserJid}, i.e. a phone, interop, msgr,
-     * lid, or bot user JID.
+     * Reports whether the JID's server is one of the user-JID server
+     * domains admitted by {@code WAJids.validateUserJid}.
      *
-     * <p>This helper centralises the {@code USERJID_USERJID_USERJID}
-     * and {@code USERJID_USERJID_USERJID_USERJID} JID-enum admit set
-     * documented by {@code WASmaxInChatstateEnums}: each validator slot
-     * resolves to {@code WAJids.validateUserJid}, whose regular expressions
-     * accept the {@code @s.whatsapp.net}, {@code @interop}, {@code @msgr},
-     * {@code @lid}, and {@code @bot} server domains.
+     * @apiNote
+     * Centralises the {@code USERJID_USERJID_USERJID} and
+     * {@code USERJID_USERJID_USERJID_USERJID} enum admit set from
+     * {@code WASmaxInChatstateEnums}: each validator slot resolves to
+     * {@code WAJids.validateUserJid}, whose regular expressions accept the
+     * {@code @s.whatsapp.net}, {@code @interop}, {@code @msgr}, {@code @lid},
+     * and {@code @bot} server domains.
+     *
      * @param jid the JID to test; never {@code null}
      * @return {@code true} when {@code jid.server()} is one of the
      *         user-JID server domains, {@code false} otherwise
@@ -63,8 +74,11 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     }
 
     /**
-     * The {@code FromUser} variant. The chat-state event was
-     * raised by a 1:1 peer.
+     * The variant raised by a 1:1 peer.
+     *
+     * @apiNote
+     * Identifies the chat-state event as originating from a direct
+     * conversation; the {@link #from()} JID is the peer's user JID.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstateFromUserMixin")
     final class FromUser implements SmaxServerNotificationStateSource {
@@ -74,18 +88,17 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         private final Jid from;
 
         /**
-         * Constructs a new {@code FromUser} variant.
+         * Constructs a {@link FromUser} variant.
          *
          * @param from the user JID; never {@code null}
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public FromUser(Jid from) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
         }
 
         /**
-         * Returns the user JID.
+         * Returns the user JID raising the event.
          *
          * @return the JID; never {@code null}
          */
@@ -94,21 +107,23 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         }
 
         /**
-         * Tries to parse a {@link FromUser} variant.
+         * Parses an inbound stanza into a {@link FromUser} variant.
+         *
+         * @implNote
+         * This implementation mirrors {@code parseFromUserMixin}: it
+         * asserts the {@code <chatstate>} tag and requires the {@code from}
+         * attribute to resolve to a user-JID server domain admitted by
+         * {@link #isUserJidServer(Jid)}.
          *
          * @param node the inbound chatstate stanza
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInChatstateFromUserMixin",
                 exports = "parseFromUserMixin", adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<FromUser> of(Node node) {
-            // WASmaxInChatstateFromUserMixin.parseFromUserMixin: assertTag(e,"chatstate")
             if (!node.hasDescription("chatstate")) {
                 return Optional.empty();
             }
-            // WASmaxInChatstateFromUserMixin.parseFromUserMixin: attrJidEnum(e,"from",USERJID_USERJID_USERJID_USERJID)
-            // The USERJID_USERJID_USERJID_USERJID enum runs WAJids.validateUserJid four times,
-            // which admits phone (s.whatsapp.net), interop, msgr, lid, and bot user JIDs.
             var from = node.getAttributeAsJid("from").orElse(null);
             if (from == null) {
                 return Optional.empty();
@@ -143,8 +158,13 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
     }
 
     /**
-     * The {@code FromGroup} variant. The chat-state event was
-     * raised by a participant of a group chat.
+     * The variant raised by a participant inside a group chat.
+     *
+     * @apiNote
+     * Identifies the chat-state event as originating from a group
+     * conversation; the {@link #from()} JID is the group JID and
+     * {@link #participant()} identifies which group member raised the
+     * event.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstateFromGroupMixin")
     final class FromGroup implements SmaxServerNotificationStateSource {
@@ -160,20 +180,21 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
 
         /**
          * The optional phone-number-form participant JID.
+         *
+         * @apiNote
+         * Supplied when the relay can attach the PN-form identity for a
+         * participant whose primary identifier is a LID; absent for
+         * participants without an associated PN.
          */
         private final Jid participantPn;
 
         /**
-         * Constructs a new {@code FromGroup} variant.
+         * Constructs a {@link FromGroup} variant.
          *
          * @param from          the group JID; never {@code null}
-         * @param participant   the participant JID; never
-         *                      {@code null}
-         * @param participantPn the optional pn-form participant
-         *                      JID; may be {@code null}
-         * @throws NullPointerException if {@code from} or
-         *                              {@code participant} is
-         *                              {@code null}
+         * @param participant   the participant JID; never {@code null}
+         * @param participantPn the optional pn-form participant JID; may be {@code null}
+         * @throws NullPointerException if {@code from} or {@code participant} is {@code null}
          */
         public FromGroup(Jid from, Jid participant, Jid participantPn) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -182,7 +203,7 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         }
 
         /**
-         * Returns the group JID.
+         * Returns the group JID hosting the chat.
          *
          * @return the JID; never {@code null}
          */
@@ -191,7 +212,7 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         }
 
         /**
-         * Returns the participant JID.
+         * Returns the participant JID raising the event.
          *
          * @return the JID; never {@code null}
          */
@@ -202,32 +223,39 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
         /**
          * Returns the optional pn-form participant JID.
          *
-         * @return an {@link Optional} carrying the JID, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the JID, or empty when omitted
          */
         public Optional<Jid> participantPn() {
             return Optional.ofNullable(participantPn);
         }
 
         /**
-         * Tries to parse a {@link FromGroup} variant.
+         * Parses an inbound stanza into a {@link FromGroup} variant.
+         *
+         * @implNote
+         * This implementation mirrors {@code parseFromGroupMixin}: it
+         * asserts the {@code <chatstate>} tag, requires the {@code from}
+         * attribute to resolve to a {@code @g.us} group JID, the
+         * {@code participant} attribute to resolve to a user-JID server
+         * domain admitted by {@link #isUserJidServer(Jid)}, and applies the
+         * same admit-set to the optional {@code participant_pn} attribute
+         * when present. The WA Web {@code optional()} contract treats an
+         * absent attribute as success-with-null but rejects a present
+         * attribute that fails the inner validator.
          *
          * @param node the inbound chatstate stanza
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInChatstateFromGroupMixin",
                 exports = "parseFromGroupMixin", adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<FromGroup> of(Node node) {
-            // WASmaxInChatstateFromGroupMixin.parseFromGroupMixin: assertTag(e,"chatstate")
             if (!node.hasDescription("chatstate")) {
                 return Optional.empty();
             }
-            // WASmaxInChatstateFromGroupMixin.parseFromGroupMixin: attrGroupJid(e,"from")
             var from = node.getAttributeAsJid("from").orElse(null);
             if (from == null || !"g.us".equals(from.server().toString())) {
                 return Optional.empty();
             }
-            // WASmaxInChatstateFromGroupMixin.parseFromGroupMixin: attrJidEnum(e,"participant",USERJID_USERJID_USERJID)
             var participant = node.getAttributeAsJid("participant").orElse(null);
             if (participant == null) {
                 return Optional.empty();
@@ -235,9 +263,6 @@ public sealed interface SmaxServerNotificationStateSource permits SmaxServerNoti
             if (!isUserJidServer(participant)) {
                 return Optional.empty();
             }
-            // WASmaxInChatstateFromGroupMixin.parseFromGroupMixin: optional(attrUserJid,e,"participant_pn")
-            // optional() only fails when the attribute is present AND the inner validator rejects it;
-            // an absent attribute yields a null value with success=true.
             Jid participantPn = null;
             if (node.getAttribute("participant_pn").isPresent()) {
                 participantPn = node.getAttributeAsJid("participant_pn").orElse(null);

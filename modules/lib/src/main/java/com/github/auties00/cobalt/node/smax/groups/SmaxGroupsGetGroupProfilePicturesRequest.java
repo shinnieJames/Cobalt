@@ -17,10 +17,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps a list of
- * {@link SmaxGroupsGetGroupProfilePicturesRequest.PictureRequest} entries inside a {@code <pictures/>}
- * wrapper inside the canonical
- * {@code <iq xmlns="w:g2" type="get">} envelope.
+ * The outbound {@code <iq type="get" xmlns="w:g2">} stanza that fetches profile pictures for one or more
+ * groups (parent or sub-group) in a single round trip.
+ *
+ * @apiNote
+ * Drives the group-pictures fetch surface backed by {@code WAWebGroupGetProfilePicsJob}; pair with
+ * {@link SmaxGroupsGetGroupProfilePicturesResponse} to read the per-group results. Build one
+ * {@link PictureRequest} per group whose picture is needed; the relay batches up to {@code 1000} entries in
+ * a single envelope.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupProfilePicturesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupProfilePicturesProfilePicturesRequestMixin")
@@ -36,38 +40,35 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupHintMixin")
 public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOperation.Request {
     /**
-     * The optional addressing override — when supplied, the IQ is
-     * sent to the given group; otherwise it goes to the implicit
-     * {@code g.us} server.
+     * The optional addressing override stamped on the IQ envelope's {@code to} attribute; {@code null}
+     * routes the IQ to the implicit {@code g.us} server.
      */
     private final Jid baseGroupJid;
 
     /**
-     * The optional sub-group hint surfaced as the
-     * {@code linked_groups_membership_hint} attribute on the
-     * {@code <pictures>} wrapper.
+     * The optional {@link Jid} stamped on the {@code <pictures linked_groups_membership_hint="...">}
+     * attribute; carries the caller's linked-community hint.
      */
     private final Jid linkedGroupsMembershipHint;
 
     /**
-     * The list of per-picture requests. The relay accepts between
-     * {@code 1} and {@code 1000} entries.
+     * The per-picture sub-requests, one per group whose picture is being fetched.
      */
     private final List<PictureRequest> pictures;
 
     /**
-     * Constructs a request.
+     * Constructs a request batching one or more picture sub-requests.
      *
-     * @param baseGroupJid               optional IQ-{@code to} group
-     *                                   override; {@code null} routes
-     *                                   to {@code g.us}
-     * @param linkedGroupsMembershipHint optional sub-group hint;
-     *                                   may be {@code null}
-     * @param pictures                   the per-picture requests;
-     *                                   never {@code null}, never
-     *                                   empty
-     * @throws NullPointerException     if {@code pictures} is
-     *                                  {@code null}
+     * @apiNote
+     * Set {@code baseGroupJid} when the IQ must be routed to a specific group (most consumers route to
+     * {@code g.us} and identify the group inside each {@link PictureRequest}); set
+     * {@code linkedGroupsMembershipHint} to forward the caller's community-membership hint to the relay.
+     *
+     * @param baseGroupJid               optional IQ-{@code to} group override; {@code null} routes to
+     *                                   {@code g.us}
+     * @param linkedGroupsMembershipHint optional linked-community hint; may be {@code null}
+     * @param pictures                   the per-picture requests; never {@code null}, never empty
+     * @throws NullPointerException     if {@code pictures} is {@code null}
      * @throws IllegalArgumentException if {@code pictures} is empty
      */
     public SmaxGroupsGetGroupProfilePicturesRequest(Jid baseGroupJid, Jid linkedGroupsMembershipHint, List<PictureRequest> pictures) {
@@ -83,18 +84,17 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
     /**
      * Returns the optional IQ-{@code to} group override.
      *
-     * @return an {@link Optional} carrying the group JID, or empty
-     *         when the IQ is routed to {@code g.us}
+     * @return an {@link Optional} carrying the group {@link Jid}, or empty when the IQ is routed to
+     *         {@code g.us}
      */
     public Optional<Jid> baseGroupJid() {
         return Optional.ofNullable(baseGroupJid);
     }
 
     /**
-     * Returns the optional sub-group hint.
+     * Returns the optional linked-community membership hint.
      *
-     * @return an {@link Optional} carrying the hint group JID, or
-     *         empty when the caller did not supply one
+     * @return an {@link Optional} carrying the hint {@link Jid}, or empty when the caller did not supply one
      */
     public Optional<Jid> linkedGroupsMembershipHint() {
         return Optional.ofNullable(linkedGroupsMembershipHint);
@@ -103,18 +103,21 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
     /**
      * Returns the per-picture requests.
      *
-     * @return an unmodifiable list of picture requests; never
-     *         {@code null}
+     * @return an unmodifiable list of picture requests; never {@code null}
      */
     public List<PictureRequest> pictures() {
         return pictures;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <pictures/>} payload
+     * @implNote
+     * This implementation builds one {@code <picture/>} child per {@link PictureRequest} (each with its own
+     * addressing attribute and optional hints), wraps them in a {@code <pictures/>} container, stamps the
+     * optional {@code linked_groups_membership_hint} on that container, then wraps the result in the
+     * canonical {@code <iq xmlns="w:g2" type="get">} envelope. The IQ's {@code to} attribute is the
+     * {@link #baseGroupJid()} when supplied, otherwise the implicit {@code g.us} server.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetGroupProfilePicturesRequest",
@@ -192,60 +195,60 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
     }
 
     /**
-     * The per-picture sub-payload — carries either a
-     * {@code parent_group_jid} or {@code sub_group_jid} addressing
-     * attribute alongside optional {@code id}, {@code type} and
-     * {@code query} projection hints.
+     * Per-group picture sub-payload carried inside a {@link SmaxGroupsGetGroupProfilePicturesRequest}.
+     *
+     * @apiNote
+     * Each entry must carry exactly one of {@link #parentGroupJid()} or {@link #subGroupJid()} as the
+     * addressing attribute; the optional {@link #pictureId()} lets the relay return the
+     * {@code did_not_change} marker when the caller's cache is still current. {@link #pictureType()} selects
+     * resolution ({@code "image"} or {@code "preview"}); {@link #pictureQuery()} selects the projection mode
+     * ({@code "url"} for URL plus {@code direct_path}, {@code "blob"} for inline bytes).
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetGroupProfilePicturesProfilePicturesRequestMixin")
     public static final class PictureRequest {
         /**
-         * The parent-group JID — set when targeting the parent
-         * group's profile picture. Mutually exclusive with
-         * {@link #subGroupJid}.
+         * The parent-group {@link Jid} stamped on the {@code <picture parent_group_jid="...">} attribute;
+         * mutually exclusive with {@link #subGroupJid}.
          */
         private final Jid parentGroupJid;
 
         /**
-         * The sub-group JID — set when targeting a sub-group's
-         * profile picture. Mutually exclusive with
-         * {@link #parentGroupJid}.
+         * The sub-group {@link Jid} stamped on the {@code <picture sub_group_jid="...">} attribute; mutually
+         * exclusive with {@link #parentGroupJid}.
          */
         private final Jid subGroupJid;
 
         /**
-         * The optional dehydration-hint id of a previously-known
-         * picture; when supplied, the relay returns the
-         * {@code did_not_change} marker instead of re-shipping
-         * unchanged bytes.
+         * The optional dehydration-hint id of a previously-known picture; when supplied the relay returns
+         * the {@code did_not_change} marker instead of re-shipping unchanged bytes.
          */
         private final String pictureId;
 
         /**
-         * The optional picture type ({@code "image"} or
-         * {@code "preview"}) selecting the resolution variant.
+         * The optional picture type ({@code "image"} or {@code "preview"}) selecting the resolution variant.
          */
         private final String pictureType;
 
         /**
-         * The optional projection-mode hint ({@code "url"} for a
-         * URL+direct_path, {@code "blob"} for inline bytes).
+         * The optional projection-mode hint ({@code "url"} for a URL plus {@code direct_path}, {@code "blob"}
+         * for inline bytes).
          */
         private final String pictureQuery;
 
         /**
-         * Constructs a request.
+         * Constructs a per-group picture sub-request.
          *
-         * @param parentGroupJid optional parent-group JID
-         * @param subGroupJid    optional sub-group JID
-         * @param pictureId      optional picture id
+         * @apiNote
+         * Exactly one of {@code parentGroupJid} or {@code subGroupJid} must be supplied; the constructor
+         * validates the disjunction.
+         *
+         * @param parentGroupJid optional parent-group {@link Jid}
+         * @param subGroupJid    optional sub-group {@link Jid}
+         * @param pictureId      optional dehydration-hint picture id
          * @param pictureType    optional picture type
          * @param pictureQuery   optional projection mode
-         * @throws IllegalArgumentException if both
-         *                                  {@code parentGroupJid}
-         *                                  and {@code subGroupJid}
-         *                                  are supplied or both are
-         *                                  {@code null}
+         * @throws IllegalArgumentException if both {@code parentGroupJid} and {@code subGroupJid} are
+         *                                  supplied or both are {@code null}
          */
         public PictureRequest(Jid parentGroupJid, Jid subGroupJid,
                               String pictureId, String pictureType, String pictureQuery) {
@@ -265,20 +268,20 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
         }
 
         /**
-         * Returns the parent-group JID when this request targets a
-         * parent group.
+         * Returns the parent-group {@link Jid} when this request targets a parent group.
          *
-         * @return an {@link Optional} carrying the parent-group JID
+         * @return an {@link Optional} carrying the parent-group JID, or empty when the entry addresses a
+         *         sub-group instead
          */
         public Optional<Jid> parentGroupJid() {
             return Optional.ofNullable(parentGroupJid);
         }
 
         /**
-         * Returns the sub-group JID when this request targets a
-         * sub-group.
+         * Returns the sub-group {@link Jid} when this request targets a sub-group.
          *
-         * @return an {@link Optional} carrying the sub-group JID
+         * @return an {@link Optional} carrying the sub-group JID, or empty when the entry addresses a parent
+         *         group instead
          */
         public Optional<Jid> subGroupJid() {
             return Optional.ofNullable(subGroupJid);
@@ -286,6 +289,10 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
 
         /**
          * Returns the optional dehydration-hint id.
+         *
+         * @apiNote
+         * Empty means the relay should always ship bytes; a non-empty value lets the relay return the
+         * {@code did_not_change} marker when the cached picture is still current.
          *
          * @return an {@link Optional} carrying the picture id
          */
@@ -296,6 +303,10 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
         /**
          * Returns the optional picture type.
          *
+         * @apiNote
+         * {@code "image"} selects the full-resolution variant; {@code "preview"} selects the low-resolution
+         * variant.
+         *
          * @return an {@link Optional} carrying the picture type
          */
         public Optional<String> pictureType() {
@@ -304,6 +315,10 @@ public final class SmaxGroupsGetGroupProfilePicturesRequest implements SmaxOpera
 
         /**
          * Returns the optional projection mode.
+         *
+         * @apiNote
+         * {@code "url"} returns a CDN URL plus {@code direct_path}; {@code "blob"} returns the picture bytes
+         * inline.
          *
          * @return an {@link Optional} carrying the projection mode
          */

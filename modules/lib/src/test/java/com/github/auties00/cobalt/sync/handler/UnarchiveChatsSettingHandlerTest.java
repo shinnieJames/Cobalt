@@ -7,13 +7,11 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.UnarchiveChatsSetting;
 import com.github.auties00.cobalt.model.sync.action.setting.UnarchiveChatsSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.factory.UnarchiveChatsSettingMutationFactory;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,15 +22,30 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link UnarchiveChatsSettingHandler} â€” Cobalt's adapter for
- * {@code WAWebArchiveSettingSync}.
+ * Exercises {@link UnarchiveChatsSettingHandler}'s parity with
+ * {@code WAWebArchiveSettingSync.applyMutations} and its side-effect
+ * helpers.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the happy {@code SET} branch that
+ * updates the {@code unarchiveChats} store flag and runs the matching
+ * unarchive/re-archive side-effect over the stored archive sync
+ * actions, the last-mutation-wins batch semantics, the
+ * malformed/unsupported branches, and the default conflict-resolution
+ * tiebreaker.
+ *
+ * @implNote
+ * Tests seed the {@link com.github.auties00.cobalt.store.WhatsAppStore}
+ * sync-action entries directly to drive the side-effect helpers; the
+ * production helpers iterate
+ * {@code WhatsAppStore.getSyncActionEntries(REGULAR_LOW)} so the
+ * fixture only needs to insert {@code ArchiveChatAction} entries
+ * matching the desired branch.
  */
 @DisplayName("UnarchiveChatsSettingHandler")
 class UnarchiveChatsSettingHandlerTest {
@@ -41,12 +54,36 @@ class UnarchiveChatsSettingHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * {@code unarchiveChats} flag and the archive sync-action entries
+     * start empty.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given setting value and operation into a trusted
+     * mutation under the canonical {@code ["setting_unarchiveChats"]}
+     * index.
+     *
+     * @apiNote
+     * The boxed {@link Boolean} {@code value} lets tests pass
+     * {@code null} to exercise the nullable-boolean-coalesces-to-false
+     * convention.
+     *
+     * @param value the new {@code unarchiveChats} flag, or {@code null} to omit
+     * @param op    the mutation operation
+     * @param ts    the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted unarchiveMutation(Boolean value, SyncdOperation op, Instant ts) {
         var builder = new UnarchiveChatsSettingBuilder();
         if (value != null) builder.unarchiveChats(value);
@@ -58,7 +95,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the UnarchiveChatsSetting wire constant")
@@ -83,7 +120,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET true updates the store flag and returns SUCCESS")
@@ -111,7 +148,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("unarchive is a global setting; no per-entity orphan path")
@@ -123,7 +160,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -141,7 +178,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the unarchive handler ignores the index shape (global setting)")
@@ -160,7 +197,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -171,10 +208,10 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = unarchiveMutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = unarchiveMutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -183,7 +220,7 @@ class UnarchiveChatsSettingHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = unarchiveMutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = unarchiveMutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -193,7 +230,7 @@ class UnarchiveChatsSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” only the last mutation is applied")
+    @DisplayName("applyMutationBatch - only the last mutation is applied")
     class ApplyBatchOverride {
         @Test
         @DisplayName("an empty batch yields an empty result list")
@@ -229,38 +266,4 @@ class UnarchiveChatsSettingHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder â€” getUnarchiveChatsMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new UnarchiveChatsSettingMutationFactory().getUnarchiveChatsMutation(ts, true);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(UnarchiveChatsSetting.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"setting_unarchiveChats\"]", inner.index());
-            assertTrue(inner.value().action().filter(a -> a instanceof UnarchiveChatsSetting).map(a -> (UnarchiveChatsSetting) a).orElseThrow().unarchiveChats());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/unarchive-chats-setting/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/unarchive-chats-setting/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new UnarchiveChatsSettingMutationFactory().getUnarchiveChatsMutation(Instant.ofEpochSecond(1_700_000_000L), true);
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

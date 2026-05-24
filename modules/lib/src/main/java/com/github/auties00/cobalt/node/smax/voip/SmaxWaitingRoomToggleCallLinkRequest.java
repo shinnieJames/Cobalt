@@ -11,16 +11,25 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps a {@code <waiting_room_toggle
- * enabled link-token media/>} payload in the {@code <call to="call">}
- * envelope.
+ * The outbound {@code <call><waiting_room_toggle/></call>} request that flips
+ * the waiting-room gate on an existing call link.
+ *
+ * @apiNote
+ * Drives the call-link admin's "Require approval to join" toggle on the
+ * link details surface; only the link's creator can issue this RPC, and the
+ * relay rejects non-creator callers with a Nack carrying the offending
+ * token.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipWaitingRoomToggleCallLinkRequest")
 public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation.Request {
     /**
-     * The desired waiting-room state on the wire, {@code "0"} for
-     * disabled, {@code "1"} for enabled. Modelled as a raw string
-     * for forward-compat with relay-side enum extensions.
+     * The desired waiting-room state on the wire.
+     *
+     * @apiNote
+     * {@code "0"} disables the gate, {@code "1"} enables it.
+     * {@code WAWebVoipWaitingRoomToggleJob.toggleWaitingRoomForCallLink}
+     * derives the value from a boolean; the field is modelled as a raw
+     * string for forward-compat with relay-side enum extensions.
      */
     private final String waitingRoomToggleEnabled;
 
@@ -30,20 +39,20 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
     private final String waitingRoomToggleLinkToken;
 
     /**
-     * The media type the call link is configured for; either
-     * {@code "audio"} or {@code "video"} on the wire.
+     * The media type the link is configured for.
+     *
+     * @apiNote
+     * Either {@code "audio"} or {@code "video"} on the wire; supplied so
+     * the relay can confirm the toggle targets the correct link.
      */
     private final String waitingRoomToggleMedia;
 
     /**
      * Constructs a request.
      *
-     * @param waitingRoomToggleEnabled   the desired enabled state on
-     *                                   the wire; never {@code null}
-     * @param waitingRoomToggleLinkToken the call-link token; never
-     *                                   {@code null}
-     * @param waitingRoomToggleMedia     the media type; never
-     *                                   {@code null}
+     * @param waitingRoomToggleEnabled   the desired enabled state on the wire; never {@code null}
+     * @param waitingRoomToggleLinkToken the call-link token; never {@code null}
+     * @param waitingRoomToggleMedia     the media type; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxWaitingRoomToggleCallLinkRequest(String waitingRoomToggleEnabled,
@@ -55,7 +64,7 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
     }
 
     /**
-     * Returns the desired enabled state on the wire.
+     * Returns the desired waiting-room state on the wire.
      *
      * @return the enabled string; never {@code null}
      */
@@ -82,11 +91,15 @@ public final class SmaxWaitingRoomToggleCallLinkRequest implements SmaxOperation
     }
 
     /**
-     * Builds the outbound stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the {@code <call>}
-     *         envelope around a {@code <waiting_room_toggle/>}
-     *         payload
+     * @implNote
+     * This implementation emits a {@code <call to="call">} envelope around a
+     * {@code <waiting_room_toggle/>} child, mirroring
+     * {@code makeWaitingRoomToggleCallLinkRequest}.
+     *
+     * @return a {@link NodeBuilder} carrying the
+     *         {@code <call><waiting_room_toggle/></call>} stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutVoipWaitingRoomToggleCallLinkRequest",

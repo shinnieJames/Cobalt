@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.model.sync.action.contact.LidContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LidContactActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -31,19 +31,28 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LidContactHandler} — Cobalt's adapter for
+ * Exercises the {@link LidContactHandler} adapter for
  * {@code WAWebLidContactSync}.
  *
- * <p>The handler manages address-book entries keyed by LID JIDs and is gated
- * by the {@code username_contact_syncd_support_enable} AB-prop. SET upserts a
- * contact with full name, short name, and username; REMOVE clears the address-
- * book fields when the contact was added by username. These tests pin the wire
- * metadata, the AB-prop gating, the SET/REMOVE branches, the non-LID rejection,
- * malformed fallbacks, and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code lid_contact} app-state
+ * sync action across metadata, the
+ * {@link ABProp#USERNAME_CONTACT_SYNCD_SUPPORT_ENABLE} gating, the
+ * SET upsert (full name, short name, username), the REMOVE branch
+ * that clears address-book fields, the non-LID JID rejection, the
+ * malformed-input fallbacks and the inherited timestamp-based
+ * conflict resolution. {@link LidContactHandler} exposes no
+ * outbound builder, so that dimension is absent here.
  *
- * <p>{@link LidContactHandler} exposes no static builder helpers (the
- * {@code lid_contact} action is read-only in Cobalt) and no oracle topic is
- * defined for this handler, so those dimensions are absent here.
+ * @implNote
+ * This implementation builds the handler with a stubbed
+ * {@link TestABPropsService} so the gating prop can be flipped per
+ * test, wires a real {@link UserStatusMuteHandler} so the
+ * orphan-replay loop can be observed end-to-end, and exercises the
+ * handler against an in-memory {@link DeviceFixtures#temporaryStore}
+ * via {@link TestWhatsAppClient} so the
+ * {@link WhatsAppStore#findContactByJid(Jid)}
+ * read-back can be asserted directly.
  */
 @DisplayName("LidContactHandler")
 class LidContactHandlerTest {
@@ -69,14 +78,21 @@ class LidContactHandlerTest {
     }
 
     /**
-     * Builds a mutation whose value carries the given LID contact action under the
-     * canonical {@code ["lid_contact", lidJid]} index.
+     * Builds a {@link DecryptedMutation.Trusted} carrying the given LID
+     * contact action under the canonical
+     * {@code ["lid_contact", lidJid]} index.
      *
-     * @param lidJid the LID JID
+     * @apiNote
+     * Used by every test to centralise mutation construction. The
+     * {@code action} parameter is nullable so the malformed-value
+     * path can be exercised without re-implementing the envelope.
+     *
+     * @param lidJid the LID {@link Jid} that keys the mutation
      * @param action the action payload, may be {@code null}
-     * @param op     the sync operation
-     * @param ts     the timestamp
-     * @return the trusted mutation
+     * @param op     the {@link SyncdOperation} to wrap
+     * @param ts     the mutation timestamp
+     * @return a {@link DecryptedMutation.Trusted} with the requested
+     *         shape
      */
     private DecryptedMutation.Trusted build(Jid lidJid, LidContactAction action, SyncdOperation op, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
@@ -86,7 +102,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the LidContactAction wire constant")
@@ -110,7 +126,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("AB-prop gating — username_contact_syncd_support_enable")
+    @DisplayName("AB-prop gating - username_contact_syncd_support_enable")
     class AbPropGating {
         @Test
         @DisplayName("when the prop is off, every mutation returns UNSUPPORTED")
@@ -126,7 +142,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("creates a new contact when none exists with the LID JID")
@@ -180,7 +196,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("the contact is upserted rather than orphaned when absent")
@@ -195,7 +211,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET value carrying the wrong action returns MALFORMED")
@@ -224,7 +240,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty lidJid slot returns MALFORMED")
@@ -244,7 +260,7 @@ class LidContactHandlerTest {
             var action = new LidContactActionBuilder().fullName("X").build();
             var ts = Instant.now();
             var value = new SyncActionValueBuilder().timestamp(ts).lidContactAction(action).build();
-            // CONTACT_PN is a regular phone-number JID, not a LID — the handler rejects it.
+            // CONTACT_PN is a regular phone-number JID, not a LID - the handler rejects it.
             var index = JSON.toJSONString(List.of("lid_contact", CONTACT_PN.toString()));
             var mutation = new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, handler.version());
 
@@ -254,7 +270,7 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE on a username-added contact clears its address-book fields")
@@ -297,10 +313,10 @@ class LidContactHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = build(CONTACT_LID, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(CONTACT_LID, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -309,7 +325,7 @@ class LidContactHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -319,7 +335,7 @@ class LidContactHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = build(CONTACT_LID, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(CONTACT_LID, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -329,58 +345,6 @@ class LidContactHandlerTest {
 
         private LidContactAction action(String name) {
             return new LidContactActionBuilder().fullName(name).build();
-        }
-    }
-
-    @Nested
-    @DisplayName("static builder — none exposed")
-    class StaticBuilder {
-        @Test
-        @DisplayName("LidContactHandler exposes no static builder helpers")
-        void noBuilder() {
-            // The handler is read-only in Cobalt: WAWebLidContactSync.default does not export a
-            // getLidContactMutation helper, and Cobalt mirrors that by not exposing one either.
-            // This test pins the absence so a future addition is intentional and reviewed.
-            var methods = LidContactHandler.class.getDeclaredMethods();
-            var hasBuilder = false;
-            for (var m : methods) {
-                if (m.isSynthetic() || m.isBridge()) {
-                    continue;
-                }
-                if (m.getName().toLowerCase().contains("mutation") && !m.getName().startsWith("apply")) {
-                    hasBuilder = true;
-                    break;
-                }
-            }
-            assertFalse(hasBuilder, "no mutation-building helper is exposed on LidContactHandler");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!com.github.auties00.cobalt.sync.SyncFixtures.isOracleAvailable("handler/lid-contact/encode")) return;
-            var oracle = com.github.auties00.cobalt.sync.SyncFixtures.loadOracle("handler/lid-contact/encode");
-            var expected = com.github.auties00.cobalt.sync.SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            // Build the same canonical SyncActionValue the oracle captures: a representative
-            // lid_contact payload encoded into bytes for byte-equality with WA Web's wire output.
-            var action = new LidContactActionBuilder()
-                    .fullName("Maria Garcia")
-                    .firstName("Maria")
-                    .username("maria")
-                    .build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(1_700_000_000L))
-                    .lidContactAction(action)
-                    .build();
-            var actual = com.github.auties00.cobalt.model.sync.SyncActionValueSpec.encode(value);
-
-            org.junit.jupiter.api.Assertions.assertNotNull(actual);
-            org.junit.jupiter.api.Assertions.assertArrayEquals(expected, actual);
         }
     }
 

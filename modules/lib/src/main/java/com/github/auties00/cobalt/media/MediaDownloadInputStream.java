@@ -29,44 +29,60 @@ import java.util.zip.Inflater;
  * and the trailing 10 bytes are the truncated HMAC-SHA256 over
  * {@code IV || ciphertext}. The IV itself is not present on the wire;
  * it is reproduced from the media key on the recipient side via HKDF.
+ * Reads drive a four-state machine through {@link State#READ_DATA},
+ * {@link State#READ_MAC}, {@link State#VALIDATE_ALL}, and
+ * {@link State#DONE}. For inflatable media types (app-state blobs and
+ * history-sync payloads) the decrypted bytes are additionally decompressed
+ * with zlib before they reach the caller.
  *
- * <p>Reads drive an internal state machine through four stages:
- * <ol>
- *   <li>{@link State#READ_DATA}: read ciphertext, update the HMAC and
- *       digests, decrypt with AES-CBC.</li>
- *   <li>{@link State#READ_MAC}: pull the trailing 10-byte HMAC from
- *       the wire.</li>
- *   <li>{@link State#VALIDATE_ALL}: verify the encrypted-payload hash,
- *       the HMAC, and the plaintext hash.</li>
- *   <li>{@link State#DONE}: all data consumed and validated.</li>
- * </ol>
+ * @apiNote
+ * Constructed by {@link MediaConnectionService#tryDownload(MediaProvider, String)}
+ * after a {@code 200 OK} from the CDN and surfaced to callers as the
+ * return value of {@link MediaConnectionService#download(MediaProvider, com.github.auties00.cobalt.props.ABPropsService)}.
+ * Cobalt embedders read it like any {@link InputStream}; the cryptographic
+ * verification is implicit and surfaces as
+ * {@link WhatsAppMediaException.Download} on any failure.
  *
- * <p>For inflatable media types (app-state blobs and history sync
- * payloads) the decrypted bytes are additionally decompressed with zlib
- * before they reach the caller.
+ * @implNote
+ * This implementation is a streaming adapter over WA Web's batch
+ * {@code hmacAndDecrypt}/{@code decryptMedia} pair: WA Web buffers the
+ * full ciphertext in memory and decrypts it in one shot, whereas Cobalt
+ * decrypts and verifies incrementally so large attachments can be piped
+ * to the consumer without an in-memory copy. The wire-level outputs
+ * (verification semantics, error classes) are identical.
  */
 @WhatsAppWebModule(moduleName = "WAMediaCrypto")
 @WhatsAppWebModule(moduleName = "WAWebCryptoDecryptMedia")
 final class MediaDownloadInputStream extends MediaInputStream {
     /**
-     * The HTTP client backing the download connection. Owned by this
-     * stream and closed when the caller closes the stream so that the
-     * underlying socket is released.
+     * The HTTP client backing the download connection.
+     *
+     * @apiNote
+     * Owned by this stream and closed via {@link #close()} when the caller
+     * releases the stream so that the underlying socket is released.
      */
     private final HttpClient client;
 
     /**
-     * The zlib inflater for inflatable media types (app-state blobs and
-     * history sync payloads), or {@code null} when no decompression is
-     * needed.
+     * The zlib inflater for inflatable media types, or {@code null} when
+     * no decompression is needed.
+     *
+     * @apiNote
+     * Only the {@code md-app-state} and {@code md-msg-hist} media types
+     * carry zlib-compressed plaintext.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsMediaTypes", exports = "MEDIA_TYPES",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private final Inflater inflater;
 
     /**
-     * The primary working buffer used for reading ciphertext from the
-     * raw stream and producing the in-place decrypted plaintext.
+     * The primary working buffer used for reading ciphertext from the raw
+     * stream and producing the in-place decrypted plaintext.
+     *
+     * @implNote
+     * This implementation reuses the same buffer for both ciphertext input
+     * and plaintext output because AES-CBC decryption supports in-place
+     * substitution.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -84,8 +100,8 @@ final class MediaDownloadInputStream extends MediaInputStream {
     private int bufferLimit;
 
     /**
-     * The buffer holding decompressed output for inflatable media
-     * types, or {@code null} when no decompression is needed.
+     * The buffer holding decompressed output for inflatable media types,
+     * or {@code null} when no decompression is needed.
      */
     private final byte[] inflatedBuffer;
 
@@ -101,23 +117,25 @@ final class MediaDownloadInputStream extends MediaInputStream {
     private int inflatedLimit;
 
     /**
-     * The buffer accumulating the trailing HMAC bytes pulled from the
-     * raw stream, or {@code null} for unencrypted media.
+     * The buffer accumulating the trailing HMAC bytes pulled from the raw
+     * stream, or {@code null} for unencrypted media.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final byte[] macBuffer;
 
     /**
-     * The number of HMAC bytes accumulated into {@link #macBuffer} so
-     * far. Reaches {@link #MAC_LENGTH} once the trailer has been fully
-     * read.
+     * The number of HMAC bytes accumulated into {@link #macBuffer} so far.
+     *
+     * @apiNote
+     * Reaches {@link #MAC_LENGTH} once the trailer has been fully read and
+     * the state machine can advance to {@link State#VALIDATE_ALL}.
      */
     private int macBufferOffset;
 
     /**
      * The SHA-256 digest accumulating the decrypted plaintext, or
-     * {@code null} when no expected plaintext hash is provided.
+     * {@code null} when no expected plaintext hash was supplied.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -125,7 +143,7 @@ final class MediaDownloadInputStream extends MediaInputStream {
 
     /**
      * The expected SHA-256 of the plaintext used for integrity
-     * verification, or {@code null} when no expected value is provided.
+     * verification, or {@code null} when no expected value was supplied.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -133,8 +151,8 @@ final class MediaDownloadInputStream extends MediaInputStream {
 
     /**
      * The SHA-256 digest accumulating the encrypted payload
-     * ({@code ciphertext || HMAC[0:10]}), or {@code null} when no
-     * expected ciphertext hash is provided.
+     * ({@code ciphertext || HMAC[0:10]}), or {@code null} when no expected
+     * ciphertext hash was supplied.
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoDecryptMedia", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -142,15 +160,15 @@ final class MediaDownloadInputStream extends MediaInputStream {
 
     /**
      * The expected SHA-256 of the encrypted payload used for integrity
-     * verification, or {@code null} when no expected value is provided.
+     * verification, or {@code null} when no expected value was supplied.
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoDecryptMedia", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final byte[] expectedCiphertextSha256;
 
     /**
-     * The AES-CBC cipher in decrypt mode, or {@code null} when the
-     * media type does not use end-to-end encryption.
+     * The AES-CBC cipher in decrypt mode, or {@code null} when the media
+     * type does not use end-to-end encryption.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -166,15 +184,20 @@ final class MediaDownloadInputStream extends MediaInputStream {
 
     /**
      * The number of ciphertext bytes remaining before the HMAC trailer
-     * begins. Decremented as the raw stream is consumed.
+     * begins.
+     *
+     * @apiNote
+     * Initialised to {@code payloadLength - MAC_LENGTH} on encrypted media
+     * and to {@code payloadLength} on unencrypted media; decremented as
+     * the raw stream is consumed and used by {@link #isDone()} to detect
+     * the trailer boundary.
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoDecryptMedia", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
     private long remainingText;
 
     /**
-     * The current state of the decryption and verification state
-     * machine.
+     * The current state of the decryption and verification state machine.
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -184,24 +207,29 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * Constructs a new download stream that transparently decrypts and
      * verifies the payload from the given raw stream.
      *
-     * <p>When the provider carries a media key and key name, HKDF
-     * derives the IV, cipher key, and HMAC key and primes the HMAC
-     * with the IV bytes so that the tag covers
-     * {@code IV || ciphertext}. The payload is expected to carry
-     * {@code payloadLength - MAC_LENGTH} ciphertext bytes followed by
-     * the 10-byte HMAC trailer.
+     * @apiNote
+     * Invoked from {@link MediaConnectionService#tryDownload(MediaProvider, String)}
+     * once the CDN has produced a {@code 200 OK} and the {@code Content-Length}
+     * header has been read.
      *
-     * <p>When the provider has no media key the stream passes through
-     * the raw bytes without decryption, still optionally verifying the
-     * plaintext SHA-256 hash when one is supplied.
+     * @implNote
+     * This implementation derives the IV, cipher key, and HMAC key via
+     * HKDF when the provider advertises a media key, primes the HMAC with
+     * the IV bytes so the tag covers {@code IV || ciphertext}, and
+     * partitions the payload as
+     * {@code payloadLength - MAC_LENGTH} ciphertext bytes followed by the
+     * 10-byte HMAC trailer. When the provider has no media key the stream
+     * passes through the raw bytes without decryption, still optionally
+     * verifying the plaintext SHA-256 hash when one is supplied.
      *
      * @param client         the HTTP client managing the download
      * @param rawInputStream the raw input stream from the CDN
-     * @param payloadLength  the total payload length in bytes
-     *                       (ciphertext plus HMAC trailer)
+     * @param payloadLength  the total payload length in bytes (ciphertext
+     *                       plus HMAC trailer)
      * @param provider       the media provider with decryption metadata
      * @throws WhatsAppMediaException if key derivation or cipher
-     *         initialisation fails
+     *         initialisation fails, or if exactly one of media key and key
+     *         name is present
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -245,7 +273,6 @@ final class MediaDownloadInputStream extends MediaInputStream {
             this.cipher = newCipher(Cipher.DECRYPT_MODE, cipherKey, iv);
             this.mac = newMac(macKey);
 
-            // Prime the HMAC with the IV so the tag covers iv || ciphertext.
             this.mac.update(expanded, 0, IV_LENGTH);
 
             this.remainingText = payloadLength - MAC_LENGTH;
@@ -265,10 +292,15 @@ final class MediaDownloadInputStream extends MediaInputStream {
     /**
      * Reads a single decrypted (and optionally decompressed) byte.
      *
-     * @return the next byte of decrypted data, or {@code -1} if the
-     *         stream is exhausted and validated
-     * @throws WhatsAppMediaException.Download if decryption,
-     *         decompression, or validation fails
+     * @apiNote
+     * Drives the state machine through {@link #isDone()} on each invocation
+     * until either a byte is available or the stream is fully consumed and
+     * validated.
+     *
+     * @return the next byte of decrypted data, or {@code -1} if the stream
+     *         is exhausted and validated
+     * @throws WhatsAppMediaException.Download if decryption, decompression,
+     *         or validation fails
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -287,13 +319,18 @@ final class MediaDownloadInputStream extends MediaInputStream {
      * Reads up to {@code len} decrypted (and optionally decompressed)
      * bytes into the supplied array.
      *
+     * @apiNote
+     * Drives the state machine through {@link #isDone()} on each
+     * invocation; returns as soon as the next decrypted chunk is staged,
+     * up to {@code len} bytes.
+     *
      * @param b   the destination buffer
      * @param off the start offset in the destination buffer
      * @param len the maximum number of bytes to read
      * @return the number of bytes read, or {@code -1} if the stream is
      *         exhausted and validated
-     * @throws WhatsAppMediaException.Download if decryption,
-     *         decompression, or validation fails
+     * @throws WhatsAppMediaException.Download if decryption, decompression,
+     *         or validation fails
      */
     @WhatsAppWebExport(moduleName = "WAMediaCrypto", exports = "hmacAndDecrypt",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -315,13 +352,26 @@ final class MediaDownloadInputStream extends MediaInputStream {
     }
 
     /**
-     * Drives the decryption and verification state machine forward
-     * until output data becomes available or the stream is fully
-     * consumed and validated.
+     * Drives the decryption and verification state machine forward until
+     * output data becomes available or the stream is fully consumed and
+     * validated.
      *
-     * @return {@code true} if the stream is fully consumed and
-     *         validated, {@code false} if output data is available for
-     *         reading
+     * @apiNote
+     * Internal pump for {@link #read()} and
+     * {@link #read(byte[], int, int)}; reads keep blocking on
+     * {@link #rawInputStream} until either a chunk of decrypted (or
+     * inflated) bytes is staged or the validation tail completes.
+     *
+     * @implNote
+     * This implementation collapses WA Web's four functions
+     * ({@code mms4Download}, {@code hmacAndDecrypt}, {@code decryptMedia},
+     * and the inflation pass on app-state/history-sync payloads) into a
+     * single state machine driven by {@link State}, so the whole pipeline
+     * runs incrementally on one virtual thread without buffering the
+     * payload in memory.
+     *
+     * @return {@code true} if the stream is fully consumed and validated,
+     *         {@code false} if output data is available for reading
      * @throws WhatsAppMediaException.Download if any decryption or
      *         validation step fails
      */
@@ -373,7 +423,6 @@ final class MediaDownloadInputStream extends MediaInputStream {
                                 }
                             } else {
                                 if (isEncrypted()) {
-                                    // Drain the cipher's final padded block.
                                     bufferOffset = 0;
                                     bufferLimit = cipher.doFinal(buffer, 0);
 
@@ -409,7 +458,7 @@ final class MediaDownloadInputStream extends MediaInputStream {
 
                             if (macBufferOffset == MAC_LENGTH) {
                                 if (ciphertextDigest != null) {
-                                    // encFilehash covers ciphertext and the 10-byte HMAC trailer.
+                                    // encFilehash covers ciphertext concatenated with the 10-byte HMAC trailer
                                     ciphertextDigest.update(macBuffer);
                                 }
 
@@ -428,7 +477,6 @@ final class MediaDownloadInputStream extends MediaInputStream {
                                     }
                                 }
 
-                                // Constant-time comparison of the truncated HMAC trailer.
                                 var actualCiphertextMac = mac.doFinal();
                                 if (!MessageDigest.isEqual(
                                         Arrays.copyOf(macBuffer, MAC_LENGTH),
@@ -461,31 +509,41 @@ final class MediaDownloadInputStream extends MediaInputStream {
     }
 
     /**
-     * Returns whether this stream is processing encrypted media.
+     * Tests whether this stream is processing encrypted media.
      *
-     * @return {@code true} if the cipher is initialised, {@code false}
-     *         for unencrypted media
+     * @apiNote
+     * Toggles between the ciphertext-and-HMAC fast path and the raw
+     * pass-through path inside {@link #isDone()}.
+     *
+     * @return {@code true} if the cipher is initialised, {@code false} for
+     *         unencrypted media
      */
     private boolean isEncrypted() {
         return cipher != null;
     }
 
     /**
-     * Returns whether this stream applies zlib decompression after
+     * Tests whether this stream applies zlib decompression after
      * decryption.
      *
-     * @return {@code true} if the inflater is initialised,
-     *         {@code false} otherwise
+     * @apiNote
+     * Toggles the inflate branch of the state machine for the
+     * {@code md-app-state} and {@code md-msg-hist} media types.
+     *
+     * @return {@code true} if the inflater is initialised, {@code false}
+     *         otherwise
      */
     private boolean isInflatable() {
         return inflater != null;
     }
 
     /**
-     * Closes the underlying raw stream, the owned HTTP client, and the
-     * zlib inflater if one was allocated.
+     * {@inheritDoc}
      *
-     * @throws IOException if an I/O error occurs while closing
+     * @implNote
+     * This implementation closes the underlying raw stream via
+     * {@code super.close()}, releases the owned {@link HttpClient}, and
+     * frees the zlib inflater when one was allocated.
      */
     @Override
     public void close() throws IOException {
@@ -513,8 +571,8 @@ final class MediaDownloadInputStream extends MediaInputStream {
         READ_MAC,
 
         /**
-         * Verifies the encrypted-payload hash, the HMAC, and the
-         * plaintext hash.
+         * Verifies the encrypted-payload hash, the HMAC, and the plaintext
+         * hash.
          */
         VALIDATE_ALL,
 

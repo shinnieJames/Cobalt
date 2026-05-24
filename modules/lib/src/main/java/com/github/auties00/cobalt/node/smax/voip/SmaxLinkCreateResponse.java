@@ -13,23 +13,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxLinkCreateRequest}.
+ * The inbound reply to a {@link SmaxLinkCreateRequest}, projecting the
+ * relay's {@code <ack class="call">} stanza into one of two documented
+ * variants: {@link Success} (token minted) and {@link ClientError}
+ * (request refused).
+ *
+ * @apiNote
+ * Consumed by the Cobalt counterpart of {@code WAWebVoipCreateCallLinkJob}
+ * to turn the relay reply into the public-facing
+ * {@code https://call.whatsapp.com/{voice|video}/<token>} URL or to surface
+ * the {@code 503}/{@code 400} error to the UI.
  */
 public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         permits SmaxLinkCreateResponse.Success, SmaxLinkCreateResponse.ClientError {
 
     /**
-     * Tries each {@link SmaxLinkCreateResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses an inbound stanza into the first matching reply variant.
      *
-     * @param node    the inbound stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
-     *                the echoed identifier; never {@code null}
+     * @apiNote
+     * Backs the Cobalt analogue of
+     * {@code WASmaxVoipLinkCreateRPC.sendLinkCreateRPC}: the JS dispatcher
+     * tries the Ack parser, then the Nack parser, then throws an
+     * {@code SmaxParsingFailure}; Cobalt instead returns
+     * {@link Optional#empty()} so the caller can map the parse miss to the
+     * configured error policy.
+     *
+     * @param node    the inbound stanza received from the relay; never {@code null}
+     * @param request the original outbound stanza; used to verify the echoed {@code id}; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     *         {@link Optional#empty()} when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxVoipLinkCreateRPC",
@@ -45,17 +57,17 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * Validates the {@code <ack class="call">} envelope shared by
-     * both the {@code Ack} and {@code Nack} reply variants.
+     * Validates the {@code <ack class="call">} envelope common to both reply
+     * variants.
      *
-     * <p>Checks the {@code <ack>} tag, the echoed {@code id}, the
-     * {@code class="call"} marker, and the literal
-     * {@code from="call"} server.
+     * @implNote
+     * This implementation mirrors {@code WASmaxInVoipCallAckBaseMixin.parseCallAckBaseMixin}:
+     * it requires the {@code <ack>} description, the {@code class="call"} marker,
+     * the echoed request {@code id}, and the literal {@code from="call"} server.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return {@code true} when the envelope matches; {@code false}
-     *         otherwise
+     * @return {@code true} when the envelope matches; {@code false} otherwise
      */
     private static boolean validateAckEnvelope(Node node, Node request) {
         if (!node.hasDescription("ack")) {
@@ -79,24 +91,32 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant. The relay accepted the
-     * request and returned the freshly minted call-link token.
+     * The successful reply carrying the freshly minted call-link token.
+     *
+     * @apiNote
+     * The {@link #linkCreateToken()} value is the short suffix appended to
+     * {@code https://call.whatsapp.com/voice/} or {@code .../video/} to
+     * produce the shareable URL.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateAck")
     final class Success implements SmaxLinkCreateResponse {
         /**
-         * The freshly minted call-link token. The short string that
-         * forms the suffix of the shareable call-link URL.
+         * The minted call-link token.
+         *
+         * @apiNote
+         * The token is opaque, server-issued, and forms the path suffix of
+         * the shareable {@code https://call.whatsapp.com/{voice|video}/<token>}
+         * URL.
          */
         private final String linkCreateToken;
 
         /**
-         * The optional echoed media type.
+         * The optional echoed media type carried by the {@code media} attribute.
          */
         private final String linkCreateMedia;
 
         /**
-         * The optional echoed call-creator device JID.
+         * The optional echoed creator-device JID.
          */
         private final Jid linkCreateCallCreator;
 
@@ -106,17 +126,18 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         private final String linkCreateCallId;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply.
          *
-         * @param linkCreateToken       the freshly minted token;
-         *                              never {@code null}
-         * @param linkCreateMedia       the optional media type; may
-         *                              be {@code null}
-         * @param linkCreateCallCreator the optional call-creator
-         *                              device JID; may be
-         *                              {@code null}
-         * @param linkCreateCallId      the optional call id; may be
-         *                              {@code null}
+         * @apiNote
+         * The {@code linkCreateMedia}, {@code linkCreateCallCreator}, and
+         * {@code linkCreateCallId} echoes appear only when the original
+         * request set them; the relay does not synthesise defaults.
+         *
+         * @param linkCreateToken       the minted token; never {@code null}
+         * @param linkCreateMedia       the optional echoed media type; may be {@code null}
+         * @param linkCreateCallCreator the optional echoed creator-device JID; may be {@code null}
+         * @param linkCreateCallId      the optional echoed call id; may be {@code null}
+         * @throws NullPointerException if {@code linkCreateToken} is {@code null}
          */
         public Success(String linkCreateToken,
                        String linkCreateMedia,
@@ -129,7 +150,7 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the freshly minted call-link token.
+         * Returns the minted call-link token.
          *
          * @return the token; never {@code null}
          */
@@ -140,18 +161,16 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         /**
          * Returns the optional echoed media type.
          *
-         * @return an {@link Optional} carrying the media type, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the media type, or empty when omitted
          */
         public Optional<String> linkCreateMedia() {
             return Optional.ofNullable(linkCreateMedia);
         }
 
         /**
-         * Returns the optional echoed call-creator device JID.
+         * Returns the optional echoed creator-device JID.
          *
-         * @return an {@link Optional} carrying the device JID, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the device JID, or empty when omitted
          */
         public Optional<Jid> linkCreateCallCreator() {
             return Optional.ofNullable(linkCreateCallCreator);
@@ -160,22 +179,28 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         /**
          * Returns the optional echoed call identifier.
          *
-         * @return an {@link Optional} carrying the call id, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the call id, or empty when omitted
          */
         public Optional<String> linkCreateCallId() {
             return Optional.ofNullable(linkCreateCallId);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link Success} variant.
+         *
+         * @apiNote
+         * Returns an empty {@link Optional} on schema mismatch so callers can
+         * fall through to {@link ClientError#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation requires the shared ack envelope, the
+         * {@code type="link_create"} marker, an inner {@code <link_create>}
+         * child, and a non-null {@code token} attribute; the other attributes
+         * are optional echoes of the request.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateAck",
                 exports = "parseLinkCreateResponseLinkCreateAck",
@@ -233,37 +258,31 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request, typically because the user is not authorised to
-     * create call links or because the supplied call id is invalid.
+     * The client-error reply produced when the relay rejects the request.
      *
-     * <p>Modelled as a {@code (errorCode, errorText)} pair to fit the
-     * universal SMAX error contract; in practice {@code errorCode}
-     * carries the {@code @error} string of the {@code <ack>} envelope
-     * encoded as a numeric code (mapped via {@code parseInt} when
-     * possible) and {@code errorText} carries the raw string for
-     * human inspection.
+     * @apiNote
+     * {@code WAWebVoipCreateCallLinkJob} surfaces {@code 503} as
+     * "Service Unavailable" and {@code 400} as "Bad Request"; any other
+     * numeric code falls through to "Unknown Error". The non-numeric case
+     * is folded onto {@code errorCode == -1}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateNack")
     final class ClientError implements SmaxLinkCreateResponse {
         /**
-         * The numeric error code, parsed from the {@code @error}
-         * attribute when it is a decimal integer; {@code -1} when the
-         * attribute is non-numeric.
+         * The numeric error code parsed from the {@code error} attribute,
+         * or {@code -1} when the raw value is non-numeric.
          */
         private final int errorCode;
 
         /**
-         * The raw {@code @error} attribute string, surfaced for
-         * human inspection.
+         * The raw {@code error} attribute value.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply.
          *
-         * @param errorCode the numeric error code; {@code -1} when
-         *                  the attribute is non-numeric
+         * @param errorCode the numeric error code; {@code -1} when the raw attribute is non-numeric
          * @param errorText the raw error string; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
@@ -274,7 +293,8 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code, or {@code -1} when the raw {@code error}
+         *         attribute was non-numeric
          */
         public int errorCode() {
             return errorCode;
@@ -283,22 +303,24 @@ public sealed interface SmaxLinkCreateResponse extends SmaxOperation.Response
         /**
          * Returns the optional raw error string.
          *
-         * @return an {@link Optional} carrying the error string, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error string, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link ClientError} variant.
+         *
+         * @implNote
+         * This implementation requires the shared ack envelope, the
+         * {@code type="link_create"} marker, and a non-null {@code error}
+         * attribute; the attribute value is parsed as a decimal integer and
+         * falls back to {@code -1} when non-numeric.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipLinkCreateResponseLinkCreateNack",
                 exports = "parseLinkCreateResponseLinkCreateNack",

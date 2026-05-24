@@ -15,24 +15,57 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Response variant for {@link FetchNewsletterAdminInfoMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the fetch-newsletter-admin-info query built by
+ * {@link FetchNewsletterAdminInfoMexRequest}.
+ *
+ * @apiNote
+ * Exposes the admin headcount scalar echoed under
+ * {@code xwa2_newsletter_admin.admin_count} together with the newsletter
+ * id; WA Web's response also carries {@code admin_profile} and
+ * {@code admin_settings} sub-objects, but Cobalt only surfaces the count
+ * and id scalars here.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterAdminInfoJob")
 public final class FetchNewsletterAdminInfoMexResponse implements MexOperation.Response.Json {
+    /**
+     * The admin headcount echoed under
+     * {@code xwa2_newsletter_admin.admin_count}.
+     */
     private final Long adminCount;
+
+    /**
+     * The newsletter Jid string echoed under
+     * {@code xwa2_newsletter_admin.id}.
+     */
     private final String id;
 
+    /**
+     * Constructs a response wrapping the parsed scalar fields.
+     *
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param adminCount the admin headcount
+     * @param id         the newsletter Jid echoed by the relay
+     */
     private FetchNewsletterAdminInfoMexResponse(Long adminCount, String id) {
         this.adminCount = adminCount;
         this.id = id;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletter_admin} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<FetchNewsletterAdminInfoMexResponse> of(Node node) {
         return node.getChild("result")
@@ -41,30 +74,45 @@ public final class FetchNewsletterAdminInfoMexResponse implements MexOperation.R
     }
 
     /**
-     * Returns the {@code admin_count} field.
+     * Returns the admin headcount.
      *
-     * @return an {@link OptionalLong} containing the value, or empty if absent
+     * @apiNote
+     * WA Web falls back to
+     * {@code WAWebNewsletterModelUtils.DEFAULT_ADMIN_COUNT} when this
+     * scalar is omitted; Cobalt callers must apply their own fallback if
+     * they need a numeric value.
+     *
+     * @return the admin headcount, or empty when the relay omitted the
+     *         field
      */
     public OptionalLong adminCount() {
         return adminCount != null ? OptionalLong.of(adminCount) : OptionalLong.empty();
     }
 
     /**
-     * Returns the {@code id} field.
+     * Returns the newsletter Jid string echoed by the relay.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @return the echoed newsletter id, or empty when the relay omitted it
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
     }
 
     /**
-     * Parses a {@link FetchNewsletterAdminInfoMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletter_admin} root
      */
     private static Optional<FetchNewsletterAdminInfoMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

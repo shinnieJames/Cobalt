@@ -23,6 +23,9 @@ public interface EditMessageSendEvent extends WamEventSpec {
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<EditType> editType();
 
+    @WamProperty(index = 10, type = WamType.STRING)
+    Optional<String> editedMessageId();
+
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<MediaType> mediaType();
 

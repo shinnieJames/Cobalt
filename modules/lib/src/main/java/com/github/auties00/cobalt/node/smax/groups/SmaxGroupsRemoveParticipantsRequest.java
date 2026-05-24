@@ -15,46 +15,46 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps a {@code <remove>} payload
- * carrying one {@code <participant jid="..."/>} entry per target.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that removes participants from an existing group.
+ *
+ * @apiNote Drives the "Remove from group" affordance on the participant context menu. The relay accepts up to
+ * 1024 entries per request and returns a per-participant outcome list in the matching
+ * {@link SmaxGroupsRemoveParticipantsResponse.Success#participants()}. When the optional
+ * {@link #removeLinkedGroups()} flag is set, the relay additionally drops the listed participants from every
+ * sub-group of a community parent group; the flag has no effect on a non-community group.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsRemoveParticipantsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.Request {
     /**
-     * The group JID from which participants are being removed.
+     * The group {@link Jid} from which participants are being removed.
      */
     private final Jid groupJid;
 
     /**
-     * The list of target participant JIDs. Mandatory and non-empty;
-     * the relay enforces a 1..1024 cardinality on the
-     * {@code <participant>} children.
+     * The candidate participant {@link Jid}s to remove.
      */
     private final List<Jid> participants;
 
     /**
-     * When {@code true}, the relay also drops the listed participants
-     * from every linked sub-group of a community parent group.
+     * Whether the relay should cascade the removal across every linked sub-group of a community parent group.
      */
     private final boolean removeLinkedGroups;
 
     /**
-     * Constructs a request for the given group and participants.
+     * Constructs a remove-participants request.
      *
-     * @param groupJid           the group JID; never {@code null}
-     * @param participants       the participant JIDs to remove;
-     *                           never {@code null} and must contain
-     *                           at least one entry
-     * @param removeLinkedGroups whether to cascade the removal across
-     *                           every linked sub-group (community
-     *                           parent groups only)
-     * @throws NullPointerException     if {@code groupJid} or
-     *                                  {@code participants} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code participants} is
-     *                                  empty
+     * @apiNote The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should
+     * pre-batch larger contact lists. The participant list is defensively copied so post-construction mutation
+     * of the caller's list has no effect on the request.
+     *
+     * @param groupJid           the group {@link Jid}
+     * @param participants       the candidate participant {@link Jid}s to remove
+     * @param removeLinkedGroups whether to cascade the removal across every linked sub-group (community parent
+     *                           groups only)
+     * @throws NullPointerException     if {@code groupJid} or {@code participants} is {@code null}
+     * @throws IllegalArgumentException if {@code participants} is empty
      */
     public SmaxGroupsRemoveParticipantsRequest(Jid groupJid, List<Jid> participants, boolean removeLinkedGroups) {
         this.groupJid = Objects.requireNonNull(groupJid, "groupJid cannot be null");
@@ -67,19 +67,20 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     }
 
     /**
-     * Returns the target group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the participant JIDs to remove.
+     * Returns the participant {@link Jid}s to remove.
      *
-     * @return an unmodifiable list; never {@code null} and never
-     *         empty
+     * @return an unmodifiable list of {@link Jid}s; never {@code null} and never empty
      */
     public List<Jid> participants() {
         return participants;
@@ -88,18 +89,32 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
     /**
      * Returns whether the linked-groups cascade is enabled.
      *
-     * @return {@code true} when the {@code linked_groups="true"}
-     *         attribute is emitted; {@code false} otherwise
+     * @apiNote Only honoured by the relay when {@link #groupJid()} is a community parent group; ignored on
+     * regular groups.
+     *
+     * @return {@code true} when the {@code linked_groups="true"} attribute is emitted on the {@code <remove>}
+     *         child
      */
     public boolean removeLinkedGroups() {
         return removeLinkedGroups;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <remove>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <remove linked_groups="true">
+     *             <participant jid="<jid0>"/>
+     *             <participant jid="<jid1>"/>
+     *             ...
+     *         </remove>
+     *     </iq>
+     * }
+     * the {@code linked_groups} attribute is omitted when {@link #removeLinkedGroups()} is {@code false}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <remove>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsRemoveParticipantsRequest",
@@ -127,6 +142,13 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
                 .content(removeBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsRemoveParticipantsRequest} with identical
+     *         fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -141,11 +163,21 @@ public final class SmaxGroupsRemoveParticipantsRequest implements SmaxOperation.
                 && Objects.equals(this.participants, that.participants);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, participants, removeLinkedGroups);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsRemoveParticipantsRequest[groupJid=" + groupJid

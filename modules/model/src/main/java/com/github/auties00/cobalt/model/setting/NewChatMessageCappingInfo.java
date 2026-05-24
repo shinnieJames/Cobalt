@@ -119,27 +119,6 @@ public final class NewChatMessageCappingInfo {
     }
 
     /**
-     * Constructs a new {@code NewChatMessageCappingInfo}.
-     *
-     * @param totalQuota          the total cycle quota
-     * @param usedQuota           the consumed cycle quota
-     * @param cycleStartTimestamp the cycle start timestamp
-     * @param cycleEndTimestamp   the cycle end timestamp
-     * @param serverSentTimestamp the relay-side send timestamp
-     * @param oteStatus           the over-the-edge enforcement tag
-     * @param mvStatus            the metered-volume tag
-     * @param cappingStatus       the capping enforcement tag
-     * @return a new {@code NewChatMessageCappingInfo}
-     */
-    public static NewChatMessageCappingInfo of(String totalQuota, String usedQuota,
-                                                String cycleStartTimestamp, String cycleEndTimestamp,
-                                                String serverSentTimestamp, String oteStatus,
-                                                String mvStatus, String cappingStatus) {
-        return new NewChatMessageCappingInfo(totalQuota, usedQuota, cycleStartTimestamp,
-                cycleEndTimestamp, serverSentTimestamp, oteStatus, mvStatus, cappingStatus);
-    }
-
-    /**
      * Returns the total new-chat quota for the current cycle.
      *
      * @return an {@link Optional} carrying the decimal-string quota,

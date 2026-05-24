@@ -13,20 +13,25 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Parses incoming {@code <message>} stanzas into structured {@link MessageReceiveStanza}
- * records.
+ * Parses every incoming {@code <message>} stanza into the structured
+ * {@link MessageReceiveStanza} the rest of the receive pipeline consumes.
  *
- * <p>This stateless utility class extracts every metadata field from the raw XML node
- * before any decryption is attempted: addressing information (including the LID/PN
- * migration attributes), the encryption payloads, bot and business metadata, reporting
- * tokens, broadcast participant lists, payment information, and every {@code <meta>}
- * attribute.
+ * @apiNote
+ * The single entry point ({@link #parse}) is a stateless adapter for WA
+ * Web's {@code WAWebHandleMsgParser.incomingMsgParser}. The caller is the
+ * inbound message-dispatch loop: it hands every {@code <message>} node to
+ * this class before attempting decryption, so the dedup layer, the receipt
+ * emitter, and the per-payload decryptor all operate on the same structured
+ * snapshot rather than re-scanning the raw node.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveStanzaParser {
 
     /**
      * Prevents instantiation of this utility class.
+     *
+     * @apiNote
+     * All entry points are {@code static}; instances would carry no state.
      *
      * @throws UnsupportedOperationException always
      */
@@ -35,22 +40,29 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses a raw {@code <message>} node into a structured {@link MessageReceiveStanza}.
+     * Parses a raw {@code <message>} node into a structured
+     * {@link MessageReceiveStanza}.
      *
-     * <p>The {@code selfPnJid} and {@code selfLidJid} arguments are required for the
-     * {@code isMeAccount} checks that distinguish peer-broadcast from other-broadcast
-     * and direct-peer-status from other-status. When both are {@code null}, the parser
-     * falls back to conservative defaults (treating ambiguous cases as non-self).
+     * @apiNote
+     * Pass the local account's PN and LID so the message-type classifier can
+     * recognize self-originated broadcasts and status posts; either argument
+     * may be {@code null}, in which case the matching {@code isMeAccount}
+     * branch is skipped and ambiguous broadcasts are treated as non-self.
      *
-     * @param node       the incoming {@code <message>} node
-     * @param selfPnJid  the current user's PN JID (nullable), used for message type
-     *                   classification
-     * @param selfLidJid the current user's LID (nullable), used for the LID branch of
-     *                   {@code isMeAccount} so messages broadcast via LID addressing
-     *                   are correctly classified as self-originated
-     * @return the parsed stanza with all extracted metadata
+     * @implNote
+     * This implementation aggregates every field the WA Web parser produces
+     * into a single allocation. Where WA Web throws on missing required
+     * attributes via its {@code WADeprecatedWapParser}, this implementation
+     * delegates to {@link Node#getRequiredAttributeAsString} and
+     * {@link Node#getRequiredAttributeAsLong}, which throw the same shape of
+     * {@code NoSuchElementException}.
+     *
+     * @param node       the inbound {@code <message>} node
+     * @param selfPnJid  the local account's PN JID, or {@code null}
+     * @param selfLidJid the local account's LID, or {@code null}
+     * @return the parsed stanza
      * @throws NullPointerException     if {@code node} is {@code null}
-     * @throws IllegalArgumentException if required attributes are missing
+     * @throws IllegalArgumentException if required attributes are missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -235,17 +247,18 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Resolves the actual sender JID from the stanza's addressing.
+     * Returns the actual sender's device JID derived from the stanza's
+     * addressing.
      *
-     * <p>For group, broadcast, and status messages the sender is the
-     * {@code participant} attribute. For 1:1 chat messages the sender is the
-     * {@code from} attribute.
+     * @apiNote
+     * For 1:1 messages the sender equals the {@code from} JID; for group,
+     * broadcast, and status messages it is the {@code participant} JID.
      *
      * @param fromJid     the {@code from} attribute JID
      * @param participant the {@code participant} attribute JID, or {@code null}
      * @return the resolved sender JID
-     * @throws IllegalArgumentException if a group/broadcast message is missing its
-     *                                  participant
+     * @throws IllegalArgumentException when a group, broadcast, or status
+     *                                  stanza arrives without a participant
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -262,20 +275,27 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Classifies the message type based on the stanza's addressing and the current
-     * user's JID.
+     * Classifies the addressing shape of an incoming stanza into a
+     * {@link MessageType}.
      *
-     * <p>The classification mirrors WA Web's {@code WAWebHandleMsgParser function C()}
-     * and produces the value used by the downstream pipeline to choose DSM-unwrapping
-     * rules, receipt types, and placeholder generation.
+     * @apiNote
+     * Output drives every later branching decision: which Signal cipher to
+     * use, which receipt to emit, whether to attach the broadcast contact
+     * list. See {@link MessageType} for the meaning of each value.
+     *
+     * @implNote
+     * This implementation collapses WA Web's two-axis check ({@code MESSAGE_TYPE.CHAT}
+     * combined with {@code MSG_CATEGORY.peer}) into the single
+     * {@link MessageType#PEER_CHAT} value, and collapses the {@code isDirect}
+     * sub-classification of {@code OTHER_STATUS} (which WA Web tags inline)
+     * into the boolean {@link MessageReceiveStanza#isDirect()} accessor.
      *
      * @param fromJid     the {@code from} attribute JID
      * @param participant the {@code participant} attribute JID, or {@code null}
-     * @param selfPnJid   the current user's PN JID, or {@code null}
-     * @param selfLidJid  the current user's LID, or {@code null}
-     * @param encs        the parsed encrypted payloads, used for the isDirect check
-     *                    on status messages
-     * @param category    the stanza message category
+     * @param selfPnJid   the local account's PN JID, or {@code null}
+     * @param selfLidJid  the local account's LID, or {@code null}
+     * @param encs        the parsed encrypted payloads
+     * @param category    the {@code category} attribute, or {@code null}
      * @return the classified message type
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
@@ -306,7 +326,6 @@ public final class MessageReceiveStanzaParser {
                 return isSelf ? MessageType.PEER_BROADCAST : MessageType.OTHER_BROADCAST;
             }
 
-            // Direct-peer status requires a self-originated broadcast with all enc payloads non-SKMSG.
             var isDirect = encs.stream().noneMatch(enc ->
                     enc.e2eType().isSenderKeyMessage());
             if (isSelf && isDirect) {
@@ -319,18 +338,19 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Returns whether the given participant JID represents the logged-in user's
-     * account, matching either the PN or the LID identity.
+     * Returns whether the given participant identifies the locally logged-in
+     * account at user level.
      *
-     * <p>Comparison is performed on user-level JIDs so companion-device addressing is
-     * treated as the same account as the primary. The LID branch lets a self-originated
-     * status broadcast be recognised when the addressing is via LID rather than PN.
+     * @apiNote
+     * The user-level comparison strips the device suffix so any companion
+     * device is treated as the same account as the primary; both the PN and
+     * LID branches are checked so a LID-addressed status broadcast from the
+     * local account is still recognised as self.
      *
      * @param participant the participant JID, or {@code null}
-     * @param selfPnJid   the current user's PN JID, or {@code null}
-     * @param selfLidJid  the current user's LID, or {@code null}
-     * @return {@code true} when {@code participant} matches either the PN or the LID
-     *         identity at user level
+     * @param selfPnJid   the local account's PN JID, or {@code null}
+     * @param selfLidJid  the local account's LID, or {@code null}
+     * @return {@code true} when {@code participant} matches either identity
      */
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsMeUser", exports = "isMeAccount",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -346,15 +366,20 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses every {@code <enc>} child of the message node into an encrypted payload
-     * record.
+     * Parses every {@code <enc>} child of the message node into a typed
+     * payload list.
      *
-     * <p>Each enc carries a Signal encryption type, an optional media type, the raw
-     * ciphertext bytes, a retry count, and an optional {@code decrypt-fail="hide"}
-     * attribute.
+     * @apiNote
+     * The list iteration order matches the wire order; downstream code
+     * relies on this when picking the first payload's retry count or when
+     * preferring an {@code skmsg} envelope over the per-device retry one.
+     *
+     * @implNote
+     * This implementation drops {@code <enc>} nodes whose content is empty
+     * to avoid producing payloads that no Signal cipher can act on.
      *
      * @param node the parent {@code <message>} node
-     * @return the list of parsed encrypted payloads
+     * @return the parsed encrypted payloads
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -367,7 +392,6 @@ public final class MessageReceiveStanzaParser {
             var encMediaType = encNode.getAttributeAsString("mediatype", null);
             var ciphertext = encNode.toContentBytes().orElse(null);
 
-            // Skip enc nodes with no content bytes to avoid producing empty payloads.
             if (ciphertext == null || ciphertext.length == 0) {
                 continue;
             }
@@ -381,10 +405,16 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the {@code <bot>} child into a {@link MessageReceiveBotInfo}, when present.
+     * Parses the {@code <bot>} child into a {@link MessageReceiveBotInfo},
+     * or returns {@code null} when no bot child is present.
+     *
+     * @apiNote
+     * Populated for Meta AI and 1P/3P business bot replies; the downstream
+     * AI-rich-response stitcher consumes the result to thread streaming
+     * chunks back together.
      *
      * @param node the parent {@code <message>} node
-     * @return the parsed bot info, or {@code null} if no bot child exists
+     * @return the parsed bot info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -409,18 +439,25 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the business information from the message node into a
-     * {@link MessageReceiveBizInfo}, when present.
+     * Parses the business metadata into a {@link MessageReceiveBizInfo},
+     * combining stanza attributes with the {@code <biz>} child, or returns
+     * {@code null} when no business attribute or child is present.
      *
-     * <p>Merges stanza-level attributes ({@code verified_name},
-     * {@code verified_level}, and the {@code <verified_name>} child bytes) with the
-     * {@code <biz>} node's attributes ({@code actual_actors}, {@code host_storage},
-     * {@code privacy_mode_ts}, {@code native_flow_name}, {@code campaign_id}) and
-     * envelope presence checks for buttons, list, and hsm wrappers.
+     * @apiNote
+     * The stanza-level {@code verified_name} attribute, the
+     * {@code verified_level} attribute, the {@code <verified_name>} child
+     * (cert bytes), and the {@code <biz>} child all flow into one record so
+     * the rendering pipeline has a single object to consult.
+     *
+     * @implNote
+     * This implementation reads the verified-buttons and verified-list
+     * envelopes from the {@code <biz>} child directly, but reads the
+     * verified-HSM envelope from the parent {@code <message>} node because
+     * WA Web's {@code <hsm>} child sits at the message level rather than
+     * inside {@code <biz>}.
      *
      * @param node the parent {@code <message>} node
-     * @return the parsed biz info, or {@code null} if neither a {@code verified_name}
-     *         attribute nor a {@code <biz>} child is present
+     * @return the parsed biz info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -455,7 +492,6 @@ public final class MessageReceiveStanzaParser {
             verifiedButtonsEnvelope = bizNode.getChild("buttons").isPresent();
             verifiedListEnvelope = bizNode.getChild("list").isPresent();
 
-            // The hsm envelope is detected on the message node itself, not on the biz node.
             verifiedHsmEnvelope = node.getChild("hsm").isPresent();
         }
 
@@ -475,14 +511,16 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Resolves the native flow name from the {@code <biz>} node.
+     * Returns the native-flow name from the {@code <biz>} node.
      *
-     * <p>Prefers the nested {@code <interactive><native_flow name="..."/></interactive>}
-     * structure and falls back to a direct {@code native_flow_name} attribute on the
-     * biz node.
+     * @apiNote
+     * Prefers the nested
+     * {@code <interactive><native_flow name="..."/></interactive>} shape and
+     * falls back to a direct {@code native_flow_name} attribute on the
+     * {@code <biz>} node when the nested structure is absent.
      *
      * @param bizNode the {@code <biz>} child node
-     * @return the native flow name, or {@code null} if not present
+     * @return the native-flow name, or {@code null} when neither path resolves it
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -502,15 +540,25 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the {@code <reporting>} child into a {@link MessageReceiveReportingInfo},
-     * when present.
+     * Parses the {@code <reporting>} child into a
+     * {@link MessageReceiveReportingInfo}, or returns {@code null} when no
+     * reporting child is present.
      *
-     * <p>Extracts the reporting token bytes and version from the
-     * {@code <reporting_token>} child, and the reporting tag bytes from the
-     * {@code <reporting_tag>} child.
+     * @apiNote
+     * Extracts the reporting-token bytes and version from the
+     * {@code <reporting_token>} child and the reporting-tag bytes from the
+     * {@code <reporting_tag>} child; the stanza's own {@code t} attribute is
+     * captured so a later abuse report can prove the token was bound to this
+     * delivery.
+     *
+     * @implNote
+     * This implementation does not check the reporting-token-receive feature
+     * gate (WA Web's {@code isReportingTokenReceivingEnabled}) before
+     * parsing; absent gating, the absence of a {@code <reporting>} child is
+     * the only short-circuit.
      *
      * @param node the parent {@code <message>} node
-     * @return the parsed reporting info, or {@code null} if no reporting child exists
+     * @return the parsed reporting info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -543,15 +591,25 @@ public final class MessageReceiveStanzaParser {
     }
 
     /**
-     * Parses the payment information from the {@code <pay>} and {@code <transaction>}
-     * children of the message stanza.
+     * Parses the {@code <pay>} and {@code <transaction>} sibling children
+     * into a {@link MessageReceivePaymentInfo}, or returns {@code null} when
+     * neither child is present.
      *
-     * <p>Both children appear as direct siblings of the message node. When both are
-     * absent the function returns {@code null}; when the transaction child is present
-     * it takes precedence over pay.
+     * @apiNote
+     * When both children are present the {@code <transaction>} fields take
+     * precedence because {@code <transaction>} is the newer Novi/WhatsApp Pay
+     * envelope.
+     *
+     * @implNote
+     * This implementation handles the legacy {@code <pay type="send">} shape
+     * by falling back to the message's own {@code recipient} attribute when
+     * the {@code <pay>} child lacks a {@code receiver} attribute, mirroring
+     * WA Web's {@code WAWebHandleMsgParser.E}. The {@code request} and
+     * {@code invite} pay types carry no usable payment data and yield
+     * {@code null}.
      *
      * @param node the parent {@code <message>} node
-     * @return the parsed payment info, or {@code null} if neither child exists
+     * @return the parsed payment info, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -598,20 +656,19 @@ public final class MessageReceiveStanzaParser {
             );
         }
 
-        // Request and invite pay types have no usable payment data.
         return null;
     }
 
     /**
-     * Parses the {@code <participants>} child into a list of
-     * {@link MessageReceiveBroadcastParticipant} entries.
+     * Parses the {@code <participants>} child into the broadcast contact
+     * list.
      *
-     * <p>Each {@code <to>} child within the participants node represents one
-     * recipient of the broadcast.
+     * @apiNote
+     * Returns an empty list (not {@code null}) when no participants child is
+     * present so the caller can iterate unconditionally.
      *
      * @param node the parent {@code <message>} node
-     * @return the list of broadcast participants, empty if the participants child is
-     *         absent
+     * @return the broadcast contact list
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)

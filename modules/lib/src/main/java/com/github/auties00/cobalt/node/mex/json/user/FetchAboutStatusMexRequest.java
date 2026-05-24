@@ -18,46 +18,74 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the "about" status line of one or more WhatsApp users together with the associated update history entries.
+ * Builds the MEX IQ stanza that queries a user's about-status text.
  *
- * <p>The about status is the short biographical line (for example "At the movies", "Busy") that a user sets in their
- * profile. It is distinct from the ephemeral text status shown on the status tab. The query returns the current text
- * and, when available, the update log used to derive the "last updated" timestamp shown in the profile view.
+ * @apiNote Powers the "About" line shown on contact profile screens and the
+ * "Read more" overlay; WA Web's {@code WAWebGetAboutQueryJob} fans this out
+ * to LID-addressed and PN-addressed users (it dispatches this request only
+ * for non-LID JIDs). Pair the dispatched stanza with
+ * {@link FetchAboutStatusMexResponse} to consume the relay's reply.
+ *
+ * @implNote This implementation exposes only the {@code user} variable;
+ * WA Web additionally attaches a {@code privacy_token.tctoken} when the
+ * profile-scraping-protection gate is on, derived from
+ * {@code WAWebPrivacyGatingUtils.isProfileScrappingProtectionInMexFetchEnabled()}.
+ * Cobalt callers that need that gate must supply the token at a higher
+ * layer; the present request does not embed it.
+ *
+ * @see FetchAboutStatusMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAboutStatusJob")
 public final class FetchAboutStatusMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexFetchAboutStatusJobQuery.graphql} for the snapshot this
+     * file was generated against; the constant must be rotated together with
+     * the WA Web JS bundle.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAboutStatusJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "24535500086059408";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexFetchAboutStatusJobQuery.graphql}. WA Web feeds the
+     * value to {@code MexPerfTracker.setOperationName} so latency metrics
+     * are bucketed per operation; Cobalt embedders mirroring that telemetry
+     * surface should tag their spans with this constant.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAboutStatusJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexGetAbout";
 
     /**
-     * The target user JID whose about status is being requested.
+     * The {@code user} GraphQL variable carrying the target user identifier.
      */
     private final String user;
 
     /**
-     * Constructs a new request for the given target user JID.
+     * Constructs a request that asks for the about-status of a single user.
      *
-     * @param user the target user JID, or {@code null} to omit the variable
+     * @apiNote {@code user} is forwarded verbatim as the {@code user}
+     * GraphQL variable; WA Web populates it from {@code wid.user} (the bare
+     * user portion of the JID, without the server suffix). A {@code null}
+     * value omits the variable entirely; passing it deliberately yields the
+     * caller's own about-status when the relay defaults the missing field.
+     *
+     * @param user the bare user identifier of the target account, or
+     *             {@code null} to omit the variable
      */
     public FetchAboutStatusMexRequest(String user) {
         this.user = user;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -65,9 +93,7 @@ public final class FetchAboutStatusMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -75,9 +101,12 @@ public final class FetchAboutStatusMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation serialises {@code {"variables": {"user": <user>}}}
+     * (or {@code {"variables": {}}} when {@code user} is {@code null}) and
+     * delegates to {@link MexOperation.Request.Json#createMexNode(String, String)}
+     * to wrap the JSON in the {@code <iq xmlns="w:mex">} envelope.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAboutStatusJob", exports = "mexGetAbout",
             adaptation = WhatsAppAdaptation.ADAPTED)

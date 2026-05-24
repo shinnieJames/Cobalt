@@ -14,26 +14,35 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="encrypt" type="get">} stanza variant
- * — wraps the {@code <identity/>} payload with one {@code <user/>}
- * grandchild per requested device.
+ * Builds the bulk {@code <iq xmlns="encrypt" type="get"/>} that asks the relay for the long-term
+ * identity public key of one or more peer devices.
+ *
+ * @apiNote
+ * Used to materialise Signal-protocol identity records for newly discovered devices before any
+ * Signal session can be initiated. WA Web drives this from the contact-sync path
+ * ({@code WAWebContactSyncApi}, {@code WAWebAdvSyncDeviceListApi}) after a fresh
+ * {@code <list>...</list>} of devices is received, and from {@code WAWebGalaxyFlowsIdentityFetcher}
+ * for the Galaxy-flows lazy fetch. The request body is a single {@code <identity/>} child carrying
+ * one {@code <user jid="..."/>} grandchild per device.
  */
 @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
 public final class IqGetIdentityKeysRequest implements IqOperation.Request {
     /**
-     * The list of device JIDs whose identity keys are being
-     * requested. Each entry is routed verbatim into the {@code jid}
+     * The non-empty list of device JIDs being queried; each entry becomes the {@code jid}
      * attribute of one {@code <user/>} grandchild.
      */
     private final List<Jid> deviceJids;
 
     /**
-     * Constructs a new get-identity-keys request.
+     * Constructs a bulk identity-key request for the supplied device JIDs.
      *
-     * @param deviceJids the list of device JIDs to query; never
-     *                   {@code null} and never empty
-     * @throws NullPointerException     if {@code deviceJids} is
-     *                                  {@code null}
+     * @apiNote
+     * The list is defensively copied; subsequent mutation of the passed-in list does not affect
+     * this instance. WA Web batches as many device JIDs as the relay accepts in one {@code <iq>};
+     * the caller is expected to slice oversized lists before constructing this request.
+     *
+     * @param deviceJids the device JIDs to query, non-empty
+     * @throws NullPointerException     if {@code deviceJids} is {@code null}
      * @throws IllegalArgumentException if {@code deviceJids} is empty
      */
     public IqGetIdentityKeysRequest(List<Jid> deviceJids) {
@@ -47,17 +56,21 @@ public final class IqGetIdentityKeysRequest implements IqOperation.Request {
     /**
      * Returns the unmodifiable list of device JIDs being queried.
      *
-     * @return the device JIDs; never {@code null} or empty
+     * @return the device JIDs
      */
     public List<Jid> deviceJids() {
         return deviceJids;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <identity/>} payload
+     * @implNote
+     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
+     * {@code xmlns="encrypt"} and {@code type="get"}, wrapping the {@link #deviceJids()} as one
+     * {@code <user jid="..."/>} per entry under a single {@code <identity/>} parent. Each
+     * {@link Jid} is rendered through {@link NodeBuilder#attribute(String, Object)} as-is, in the
+     * same canonical form WA Web's {@code DEVICE_JID(...)} helper emits.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
@@ -84,6 +97,13 @@ public final class IqGetIdentityKeysRequest implements IqOperation.Request {
                 .content(identityNode);
     }
 
+    /**
+     * Compares this request to another instance for equality.
+     *
+     * @param obj the candidate instance
+     * @return {@code true} when {@code obj} is an {@code IqGetIdentityKeysRequest} carrying the
+     *         same device JID list in the same order
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -96,11 +116,21 @@ public final class IqGetIdentityKeysRequest implements IqOperation.Request {
         return Objects.equals(this.deviceJids, that.deviceJids);
     }
 
+    /**
+     * Returns a hash code derived from the device JID list.
+     *
+     * @return the combined hash
+     */
     @Override
     public int hashCode() {
         return Objects.hash(deviceJids);
     }
 
+    /**
+     * Returns the record-style rendering for this request.
+     *
+     * @return the rendered string
+     */
     @Override
     public String toString() {
         return "IqGetIdentityKeysRequest[deviceJids=" + deviceJids + ']';

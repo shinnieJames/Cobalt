@@ -10,47 +10,57 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Per-protocol error returned for a single {@code <user>} entry.
+ * Per-protocol error returned for a single {@code <user>} entry inside a USync
+ * response.
  *
- * <p>Every {@code WAWebUsync*Protocol.parser} starts by asserting the
- * protocol's tag and then probing for an {@code <error/>} child. When found,
- * the parser returns {@code {errorCode, errorText}} instead of the
- * protocol-specific shape. Cobalt collapses both cases into the
- * {@link UsyncProtocolResult} sealed family so every protocol's success
- * variant and {@code UsyncProtocolError} share the same supertype, allowing
- * the caller to pattern-match without lossy casts.
+ * @apiNote
+ * Surfaced by every {@code WAWebUsync*Protocol.parser} when the relay returns
+ * an {@code <error/>} child in place of the protocol-specific payload. Use
+ * with {@link UsyncProtocolResult} pattern matching to discriminate this case
+ * from the success {@link UsyncProtocolResponse} branch. The optional
+ * {@link #errorBackoff()} carries the {@code error_backoff} attribute used by
+ * {@link UsyncQuery} to feed {@link UsyncBackoff#setProtocolBackoffMs(String, long)}.
  *
- * <p>The optional {@link #errorBackoff()} carries the {@code error_backoff}
- * attribute expressed as a {@link Duration}. When present, {@link UsyncQuery}
- * forwards it to {@link UsyncBackoff#setProtocolBackoffMs} so subsequent
- * queries for the same protocol observe the timeout.
+ * @implNote
+ * This implementation collapses the JS object literal
+ * {@code {errorCode, errorText, errorBackoff}} produced inside
+ * {@code WAWebUsync.usyncParser} into a typed record-like class with the
+ * backoff field exposed as a {@link Duration}; the wire attribute is an
+ * integer in seconds and the conversion to seconds is performed by the
+ * top-level parser before construction.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class UsyncProtocolError implements UsyncProtocolResult {
     /**
-     * Holds the {@code code} attribute on the {@code <error/>} child.
+     * The {@code code} attribute on the {@code <error/>} child.
      */
     private final int errorCode;
 
     /**
-     * Holds the {@code text} attribute on the {@code <error/>} child. Never
-     * {@code null} because it defaults to the empty string when absent.
+     * The {@code text} attribute on the {@code <error/>} child, normalised to
+     * the empty string when the relay omits the attribute.
      */
     private final String errorText;
 
     /**
-     * Holds the {@code error_backoff} attribute, decoded as a
-     * {@link Duration} of seconds, or {@code null} if absent.
+     * The {@code error_backoff} attribute decoded as a {@link Duration}, or
+     * {@code null} when the relay did not specify a backoff window for this
+     * protocol error.
      */
     private final Duration errorBackoff;
 
     /**
-     * Creates a new error variant.
+     * Creates a new per-protocol error.
      *
-     * @param errorCode    the error code
-     * @param errorText    the error text
-     * @param errorBackoff the requested backoff window, or {@code null} if
-     *                     the relay did not specify one
+     * @apiNote
+     * Instantiated by the top-level USync parser; callers do not build these
+     * by hand.
+     *
+     * @param errorCode    the {@code code} attribute value
+     * @param errorText    the {@code text} attribute value, or {@code null} to
+     *                     normalise to the empty string
+     * @param errorBackoff the {@code error_backoff} window, or {@code null}
+     *                     when absent
      */
     public UsyncProtocolError(int errorCode, String errorText, Duration errorBackoff) {
         this.errorCode = errorCode;
@@ -59,7 +69,11 @@ public final class UsyncProtocolError implements UsyncProtocolResult {
     }
 
     /**
-     * Returns the error code.
+     * Returns the {@code code} attribute value.
+     *
+     * @apiNote
+     * The relay uses small integer codes per protocol; the meaning is defined
+     * by the WA server, not Cobalt.
      *
      * @return the {@code code} attribute value
      */
@@ -68,7 +82,11 @@ public final class UsyncProtocolError implements UsyncProtocolResult {
     }
 
     /**
-     * Returns the error text.
+     * Returns the {@code text} attribute value.
+     *
+     * @apiNote
+     * Free-form diagnostic text from the relay; safe to log but not intended
+     * for routing decisions.
      *
      * @return the {@code text} attribute value, never {@code null}
      */
@@ -79,7 +97,12 @@ public final class UsyncProtocolError implements UsyncProtocolResult {
     /**
      * Returns the requested backoff window, when present.
      *
-     * @return the backoff duration
+     * @apiNote
+     * When present, {@link UsyncQuery} forwards this value to
+     * {@link UsyncBackoff#setProtocolBackoffMs(String, long)} so subsequent
+     * queries for the same protocol observe the timeout.
+     *
+     * @return the backoff window, or empty when the relay did not specify one
      */
     public Optional<Duration> errorBackoff() {
         return Optional.ofNullable(errorBackoff);

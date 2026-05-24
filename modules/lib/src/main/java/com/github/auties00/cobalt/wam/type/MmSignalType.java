@@ -38,5 +38,6 @@ public enum MmSignalType {
     @WamEnumConstant(27) MESSAGE,
     @WamEnumConstant(28) USER_ARCHIVE,
     @WamEnumConstant(29) BODY_URL_LONG_PRESS,
-    @WamEnumConstant(30) USER_BLOCK_REASON_DONT_RECOGNIZE
+    @WamEnumConstant(30) USER_BLOCK_REASON_DONT_RECOGNIZE,
+    @WamEnumConstant(31) IAB_LPV
 }

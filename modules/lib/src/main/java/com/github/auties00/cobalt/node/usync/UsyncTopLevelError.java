@@ -5,36 +5,45 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import java.util.Objects;
 
 /**
- * Top-level error returned when the IQ failed entirely (network error, server
- * NACK, or any other failure where the response's {@code type} attribute is
- * not {@code "result"}).
+ * Error envelope returned when the USync IQ failed wholesale.
+ *
+ * @apiNote
+ * Surfaced through {@link UsyncResult#topLevelError()} when the relay's IQ
+ * response carries a {@code type} attribute other than {@code "result"};
+ * mirrors the {@code error.all} entry the JS module stores on its result
+ * object in that path. Per-protocol errors that apply to every user are
+ * exposed separately via {@link UsyncResult#getProtocolError(UsyncProtocol)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class UsyncTopLevelError {
     /**
-     * Holds the {@code code} attribute on the {@code <error>} child of the IQ.
+     * The numeric {@code code} attribute on the IQ's {@code <error>} child.
      */
     private final int errorCode;
 
     /**
-     * Holds the {@code text} attribute on the {@code <error>} child. Never
-     * {@code null} because it defaults to the empty string when absent.
+     * The {@code text} attribute on the IQ's {@code <error>} child, coerced
+     * to the empty string when absent.
      */
     private final String errorText;
 
     /**
-     * Holds the {@code type} attribute on the {@code <error>} child. Never
-     * {@code null} because it defaults to the empty string when absent.
+     * The {@code type} attribute on the IQ's {@code <error>} child, coerced
+     * to the empty string when absent.
      */
     private final String errorType;
 
     /**
-     * Creates a new top-level error.
+     * Builds a new envelope from the parsed attributes.
      *
-     * @param errorCode the error code
-     * @param errorText the error text, coerced to the empty string when
-     *                  {@code null}
-     * @param errorType the error type, coerced to the empty string when
+     * @apiNote
+     * Constructed exclusively by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)};
+     * not part of the public surface.
+     *
+     * @param errorCode the numeric error code
+     * @param errorText the human-readable text, coerced to the empty string
+     *                  when {@code null}
+     * @param errorType the error category, coerced to the empty string when
      *                  {@code null}
      */
     public UsyncTopLevelError(int errorCode, String errorText, String errorType) {
@@ -44,7 +53,7 @@ public final class UsyncTopLevelError {
     }
 
     /**
-     * Returns the error code.
+     * Returns the numeric error code.
      *
      * @return the {@code code} attribute value
      */
@@ -53,7 +62,7 @@ public final class UsyncTopLevelError {
     }
 
     /**
-     * Returns the error text.
+     * Returns the human-readable error text.
      *
      * @return the {@code text} attribute value, never {@code null}
      */
@@ -62,7 +71,7 @@ public final class UsyncTopLevelError {
     }
 
     /**
-     * Returns the error type.
+     * Returns the error category.
      *
      * @return the {@code type} attribute value, never {@code null}
      */

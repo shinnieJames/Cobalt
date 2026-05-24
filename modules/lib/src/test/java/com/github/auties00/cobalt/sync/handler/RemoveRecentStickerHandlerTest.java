@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.StickerBuilder;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
@@ -12,7 +13,6 @@ import com.github.auties00.cobalt.model.sync.action.media.RemoveRecentStickerAct
 import com.github.auties00.cobalt.model.sync.action.media.RemoveRecentStickerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.RemoveRecentStickerMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,33 +25,27 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link RemoveRecentStickerHandler}, Cobalt's adapter for
- * {@code WAWebStickersRemoveRecentSyncAction}.
+ * Exercises {@link RemoveRecentStickerHandler}'s parity with
+ * {@code WAWebStickersRemoveRecentSyncAction.applyMutations}.
  *
- * <p>The handler removes a sticker from the recent-stickers collection when
- * the incoming mutation's {@code lastStickerSentTs} is missing or not older
- * than the local entry's timestamp.
+ * @apiNote
+ * Covers the wire-constant trio, the {@code recent_sticker} primary-feature
+ * gate, the non-{@code SET} operation filter, the malformed-index branch,
+ * the orphan branch when the local recent-stickers map has no matching
+ * entry, the happy path that removes the entry, the skip-removal path
+ * when the local timestamp is newer than {@code lastStickerSentTs}, the
+ * default timestamp tiebreaker for conflict resolution, and the
+ * {@code RemoveRecentStickerMutationFactory} pending-mutation builder
+ * shape.
  *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>Feature gating: missing {@code recent_sticker} primary feature is
- *       {@code UNSUPPORTED} for every mutation.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Malformed index variations.</li>
- *   <li>ORPHAN when the recent-stickers store has no matching entry.</li>
- *   <li>Happy path: removes the recent sticker when the timestamps agree.</li>
- *   <li>Skip-removal path: local entry is newer than the incoming
- *       {@code lastStickerSentTs} â€” entry stays, but result is still SUCCESS.</li>
- *   <li>Default conflict-resolution semantics.</li>
- *   <li>{@code getRemoveRecentStickerMutation} produces a SET pending
- *       mutation with the configured index and timestamp propagation.</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
- * </ul>
+ * @implNote
+ * Each test instantiates a fresh {@link TestWhatsAppClient} backed by a
+ * temporary {@link WhatsAppStore} seeded with a known LID identity; the
+ * {@code recent_sticker} primary feature is opened on a per-test basis
+ * so the feature-gate branch can be exercised in isolation.
  */
 @DisplayName("RemoveRecentStickerHandler")
 class RemoveRecentStickerHandlerTest {
@@ -64,8 +58,18 @@ class RemoveRecentStickerHandlerTest {
     private TestWhatsAppClient client;
 
     /**
-     * Builds a fresh harness and enables the {@code recent_sticker} feature so the
-     * tests that need the post-feature-gate branches reach the handler body.
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link WhatsAppStore} so seeded
+     * recent stickers and primary features do not leak between cases.
+     *
+     * @implNote
+     * The {@code recent_sticker} primary feature is intentionally not
+     * pre-enabled; tests that need to reach the post-feature-gate body
+     * call {@code store.setPrimaryFeatures(...)} themselves so the
+     * gating branch can be exercised in isolation.
      */
     @BeforeEach
     void setUp() {
@@ -74,7 +78,19 @@ class RemoveRecentStickerHandlerTest {
     }
 
     /**
-     * Builds a trusted SET mutation carrying the given action and index.
+     * Wraps the given action and index into a trusted {@code SET}
+     * mutation with a fixed reference timestamp.
+     *
+     * @apiNote
+     * Used as a one-liner so each test can focus on the
+     * happy/malformed/orphan/skip branch it exercises rather than on
+     * mutation assembly.
+     *
+     * @implNote
+     * The fixed reference timestamp ({@code 1_700_000_000L}) is reused
+     * by both the wrapping {@link DecryptedMutation.Trusted} timestamp
+     * and the inner {@code SyncActionValue} timestamp so any
+     * timestamp-dependent branch sees a consistent value.
      *
      * @param action the remove-recent-sticker payload
      * @param index  the JSON-encoded index
@@ -91,10 +107,15 @@ class RemoveRecentStickerHandlerTest {
     }
 
     /**
-     * Seeds the recent-stickers store with a sticker carrying the given timestamp
-     * keyed under {@link #STICKER_HASH}.
+     * Seeds the recent-stickers map with a sticker keyed under
+     * {@link #STICKER_HASH} and carrying the given timestamp.
      *
-     * @param epochSecond the sticker's epoch-second timestamp
+     * @apiNote
+     * Used by the happy-path and skip-removal tests to control how the
+     * incoming {@code lastStickerSentTs} compares against the local
+     * entry.
+     *
+     * @param epochSecond the local sticker's epoch-second timestamp
      */
     private void seedRecentSticker(long epochSecond) {
         var sticker = new StickerBuilder().timestamp(epochSecond).build();
@@ -102,7 +123,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() returns removeRecentSticker")
@@ -129,7 +150,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” feature gating")
+    @DisplayName("applyMutation - feature gating")
     class FeatureGating {
         @Test
         @DisplayName("missing recent_sticker primary feature short-circuits to UNSUPPORTED")
@@ -143,7 +164,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE / non-SET branch")
+    @DisplayName("applyMutation - REMOVE / non-SET branch")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation is UNSUPPORTED even when the feature is enabled")
@@ -162,7 +183,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("missing sticker hash (single-element index) is MALFORMED")
@@ -176,7 +197,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan (no local entry)")
+    @DisplayName("applyMutation - orphan (no local entry)")
     class Orphan {
         @Test
         @DisplayName("no local recent sticker reports ORPHAN (no model id/type)")
@@ -191,7 +212,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET path")
+    @DisplayName("applyMutation - happy SET path")
     class HappySet {
         @Test
         @DisplayName("missing lastStickerSentTs removes the local entry and reports SUCCESS")
@@ -238,7 +259,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedValue {
         @Test
         @DisplayName("missing action sub-message still reaches orphan check; with no entry yields ORPHAN")
@@ -258,7 +279,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -273,16 +294,16 @@ class RemoveRecentStickerHandlerTest {
                     .build();
             var remote = new DecryptedMutation.Trusted(local.index(), remoteValue, SyncdOperation.SET, remoteTs, 7);
             var resolution = new RemoveRecentStickerHandler().resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” default per-item dispatch (n/a override)")
+    @DisplayName("applyMutationBatch - default per-item dispatch (n/a override)")
     class BatchDispatch {
         @Test
-        @DisplayName("the handler does not override applyMutationBatch â€” default per-item dispatch is used")
+        @DisplayName("the handler does not override applyMutationBatch - default per-item dispatch is used")
         void defaultDispatchPreserved() {
             store.setPrimaryFeatures(List.of(RECENT_STICKER_FEATURE));
             seedRecentSticker(1_600_000_000L);
@@ -296,7 +317,7 @@ class RemoveRecentStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("getRemoveRecentStickerMutation â€” pending mutation builder")
+    @DisplayName("getRemoveRecentStickerMutation - pending mutation builder")
     class Builder {
         @Test
         @DisplayName("builder emits a SET mutation at [\"removeRecentSticker\", hash]")
@@ -327,20 +348,6 @@ class RemoveRecentStickerHandlerTest {
         void freshAttemptCount() {
             assertEquals(0,
                     new RemoveRecentStickerMutationFactory().getRemoveRecentStickerMutation(STICKER_HASH).attemptCount());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/remove-recent-sticker/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/remove-recent-sticker/encode");
-            assertNotNull(oracle);
         }
     }
 

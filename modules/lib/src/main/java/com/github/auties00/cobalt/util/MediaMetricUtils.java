@@ -19,15 +19,34 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Static helpers that adapt {@code WAWebWamMediaMetricUtils} for the Cobalt
- * stack.
+ * Static helpers that classify media-pipeline state into the WAM
+ * enums consumed by the {@code MediaUpload2Event} and
+ * {@code MediaDownload2Event} WAM beacons.
+ *
+ * @apiNote
+ * Consume this from the media-upload and media-download sites so
+ * the WAM events they emit carry the same overall-mode,
+ * overall-result, media-type, backend-store, and event-id values
+ * that WhatsApp Web's own beacons carry. The classifiers absorb the
+ * {@code instanceof} cascades in
+ * {@code WAWebWamMediaMetricUtils.getMetricUploadErrorResultType} /
+ * {@code getMetricDownloadErrorResultType} against the Cobalt
+ * exception hierarchy.
  */
 @WhatsAppWebModule(moduleName = "WAWebWamMediaMetricUtils")
 public final class MediaMetricUtils {
     /**
-     * Detail-message prefix produced by Cobalt's {@code MediaDownloadInputStream}
-     * when the downloaded ciphertext SHA-256 disagrees with the expected
+     * Message prefix produced by Cobalt's
+     * {@code MediaDownloadInputStream} when the downloaded
+     * ciphertext SHA-256 disagrees with the expected
      * {@code encFilehash}.
+     *
+     * @apiNote
+     * Used by {@link #getMetricDownloadErrorResultType(Throwable)}
+     * to recognise Cobalt's equivalent of WA Web's
+     * {@code MmsDownloadFilehashMismatchError} and route the
+     * {@link MediaDownloadResultType#ERROR_ENC_HASH_MISMATCH}
+     * bucket.
      */
     @WhatsAppWebExport(moduleName = "WAWebHttpErrors", exports = "MmsDownloadFilehashMismatchError",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -35,9 +54,17 @@ public final class MediaMetricUtils {
             "Ciphertext SHA256 hash doesn't match the expected value";
 
     /**
-     * Detail-message prefix produced by Cobalt's {@code MediaDownloadInputStream}
-     * when the decrypted plaintext SHA-256 disagrees with the expected
+     * Message prefix produced by Cobalt's
+     * {@code MediaDownloadInputStream} when the decrypted
+     * plaintext SHA-256 disagrees with the expected
      * {@code fileSha256}.
+     *
+     * @apiNote
+     * Used by {@link #getMetricDownloadErrorResultType(Throwable)}
+     * to recognise Cobalt's equivalent of WA Web's
+     * {@code MediaDecryptionError} carrying
+     * {@code PLAINTEXT_HASH_MISMATCH_ERROR} and route the
+     * {@link MediaDownloadResultType#ERROR_HASH_MISMATCH} bucket.
      */
     @WhatsAppWebExport(moduleName = "WAWebMiscErrors", exports = "MediaDecryptionError",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -48,6 +75,10 @@ public final class MediaMetricUtils {
 
     /**
      * Prevents instantiation of this utility class.
+     *
+     * @apiNote
+     * The class is a pure helpers holder; instances carry no
+     * state.
      */
     private MediaMetricUtils() {
         throw new AssertionError("MediaMetricUtils is a static-only utility");
@@ -57,14 +88,16 @@ public final class MediaMetricUtils {
      * Returns whether the given web-media-type string represents a
      * thumbnail variant.
      *
-     * <p>WA Web's local helper {@code u} is not exported but is referenced
-     * by both {@link #getMetricOverallDownloadModeType(String, String, boolean)}
-     * and {@link #getMetricOverallUploadModeType(String)} to short-circuit
-     * to the thumbnail mode-type bucket.
+     * @apiNote
+     * Short-circuits both {@link #getMetricOverallDownloadModeType(String, String, boolean)}
+     * and {@link #getMetricOverallUploadModeType(String)} to the
+     * thumbnail mode-type bucket. Not exported by WA Web; the JS
+     * source uses a local helper of the same shape.
      *
-     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES} string
-     *                     identifying the media variant
-     * @return {@code true} if the value is one of the five thumbnail variants
+     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES}
+     *                     string identifying the media variant
+     * @return {@code true} if the value is one of the five
+     *         thumbnail variants
      */
     private static boolean isThumbnailMediaType(String webMediaType) {
         return "thumbnail-document".equals(webMediaType)
@@ -75,21 +108,27 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Maps the triple {@code (webMediaType, downloadReason, isPrefetched)}
-     * to a {@link MediaDownloadModeType}.
+     * Maps the triple
+     * {@code (webMediaType, downloadReason, isPrefetched)} to a
+     * {@link MediaDownloadModeType}.
      *
-     * <p>Thumbnail variants always collapse to
-     * {@link MediaDownloadModeType#THUMBNAIL}. Otherwise an explicit
-     * {@code "manual"} download reason wins, then a truthy
-     * {@code isPrefetched} flag, with {@link MediaDownloadModeType#FULL}
-     * as the fallback.
+     * @apiNote
+     * Use this when emitting a media-download WAM beacon so the
+     * {@code overallDownloadMode} field matches WA Web's
+     * classification: thumbnails always collapse to
+     * {@link MediaDownloadModeType#THUMBNAIL}; an explicit
+     * {@code "manual"} download reason wins next; then a truthy
+     * {@code isPrefetched} flag; otherwise the call falls back to
+     * {@link MediaDownloadModeType#FULL}.
      *
      * @param webMediaType   the {@code WAWebMmsMediaTypes.MEDIA_TYPES}
-     *                       string describing the media being downloaded
-     * @param downloadReason the {@code "manual"} or non-{@code "manual"}
-     *                       reason passed by the caller
-     * @param isPrefetched   {@code true} when the download is part of an
-     *                       autodownload prefetch cycle
+     *                       string describing the media being
+     *                       downloaded
+     * @param downloadReason the {@code "manual"} or
+     *                       non-{@code "manual"} reason passed by
+     *                       the caller
+     * @param isPrefetched   {@code true} when the download is part
+     *                       of an autodownload prefetch cycle
      * @return the matching {@link MediaDownloadModeType}
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
@@ -113,18 +152,22 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Maps a web-media-type string to a {@link MediaUploadModeType}.
+     * Maps a web-media-type string to a
+     * {@link MediaUploadModeType}.
      *
-     * <p>Thumbnail variants collapse to {@link MediaUploadModeType#THUMBNAIL}
-     * and everything else maps to {@link MediaUploadModeType#REGULAR}. This
-     * is the coarsest of the upload-mode classifiers, with finer-grained
-     * values like {@code FAST_FORWARD_EXIST_CHECK} or {@code WEB_REUPLOAD}
-     * decided at the call site.
+     * @apiNote
+     * Use this when emitting a media-upload WAM beacon so the
+     * coarse {@code overallUploadMode} field matches WA Web's
+     * classification. The finer-grained
+     * {@code FAST_FORWARD_EXIST_CHECK} / {@code WEB_REUPLOAD}
+     * values are decided at the call site, not here.
      *
-     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES} string
-     *                     describing the media being uploaded
-     * @return {@link MediaUploadModeType#THUMBNAIL} for thumbnail variants,
-     *         {@link MediaUploadModeType#REGULAR} otherwise
+     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES}
+     *                     string describing the media being
+     *                     uploaded
+     * @return {@link MediaUploadModeType#THUMBNAIL} for thumbnail
+     *         variants, {@link MediaUploadModeType#REGULAR}
+     *         otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "getMetricOverallUploadModeType",
@@ -137,26 +180,33 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Maps a {@code WAWebMmsMediaTypes.MEDIA_TYPES} string to the matching
-     * {@link MediaType} reported on WAM media events.
+     * Maps a {@code WAWebMmsMediaTypes.MEDIA_TYPES} string to the
+     * matching {@link MediaType} reported on WAM media events.
      *
-     * <p>The mapping is exhaustive over WA Web's MMS media-type enum and
-     * mirrors the JavaScript {@code switch} cascade verbatim, including the
-     * cases where multiple input strings collapse to the same WAM enum
-     * (for example {@code "image"}, {@code "waffle-image"},
-     * {@code "thumbnail-image"} and {@code "newsletter-image"} all map to
+     * @apiNote
+     * Use this when projecting a media-pipeline media-type slug
+     * into the {@code mediaType} field of a media WAM beacon. The
+     * mapping is exhaustive over WA Web's MMS media-type enum and
+     * mirrors the JS {@code switch} cascade verbatim, including
+     * the cases where several input strings collapse to the same
+     * WAM enum (for example {@code "image"},
+     * {@code "waffle-image"}, {@code "thumbnail-image"} and
+     * {@code "newsletter-image"} all fold to
      * {@link MediaType#PHOTO}).
      *
-     * <p>Unrecognised values raise {@link IllegalArgumentException} with
-     * the same {@code "webMediaType is invalid: <value>"} message format
-     * used by WA Web's {@code err()} helper.
+     * @implNote
+     * This implementation throws
+     * {@link IllegalArgumentException} with the same
+     * {@code "webMediaType is invalid: <value>"} message format
+     * the JS {@code err()} helper uses.
      *
-     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES} string
-     *                     to translate, must not be {@code null}
+     * @param webMediaType the {@code WAWebMmsMediaTypes.MEDIA_TYPES}
+     *                     string to translate, must not be
+     *                     {@code null}
      * @return the matching {@link MediaType} value
-     * @throws IllegalArgumentException when {@code webMediaType} does not
-     *     correspond to any known {@code WAWebMmsMediaTypes.MEDIA_TYPES}
-     *     value
+     * @throws IllegalArgumentException when {@code webMediaType}
+     *     does not correspond to any known
+     *     {@code WAWebMmsMediaTypes.MEDIA_TYPES} value
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "getMetricMediaType",
@@ -186,23 +236,39 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Classifies a thrown upload error into a {@link MediaUploadResultType}.
+     * Classifies a thrown upload error into a
+     * {@link MediaUploadResultType}.
      *
-     * <p>The lookup mirrors WA Web's {@code instanceof} cascade. Order is
-     * load-bearing because WA Web's error classes are not disjoint: for
-     * example {@code MMSThrottleError} extends {@code HttpStatusCodeError(507)}
-     * and {@code MediaTooLargeError} extends {@code HttpStatusCodeError(413)},
-     * so the throttle and too-large branches must be examined before the
-     * generic {@code status >= 500} branch. Cobalt collapses the six
-     * {@code WAWebMmsClientErrors} subclasses into
-     * {@link WhatsAppMediaException.Upload} carrying an optional HTTP
-     * status code, so this classifier reads the status code first and
-     * dispatches in the same priority order. {@code AbortError} is mapped
-     * from {@link InterruptedException} and {@code NoMediaHostsError} from
-     * {@link WhatsAppMediaException.Connection}.
+     * @apiNote
+     * Use this when emitting a media-upload WAM beacon so the
+     * {@code overallUploadResult} field carries the same bucket
+     * WA Web would have picked. The lookup mirrors WA Web's
+     * {@code instanceof} cascade against the Cobalt exception
+     * hierarchy: {@link InterruptedException} folds to
+     * {@link MediaUploadResultType#ERROR_CANCEL},
+     * {@link WhatsAppMediaException.Connection} folds to
+     * {@link MediaUploadResultType#ERROR_MEDIA_CONN}, and an
+     * {@link WhatsAppMediaException.Upload} with a status code
+     * fans out by code: 401 -> {@link MediaUploadResultType#ERROR_NO_PERMISSIONS},
+     * 413 -> {@link MediaUploadResultType#ERROR_BAD_MEDIA},
+     * 507 -> {@link MediaUploadResultType#ERROR_THROTTLE}, then
+     * 5xx -> {@link MediaUploadResultType#ERROR_SERVER}.
      *
-     * @param throwable the error that aborted the upload, or {@code null}
-     * @return the matching {@link MediaUploadResultType}, never {@code null}
+     * @implNote
+     * This implementation reads the status code first because WA
+     * Web's error classes are not disjoint
+     * ({@code MMSThrottleError} extends
+     * {@code HttpStatusCodeError(507)} and {@code MediaTooLargeError}
+     * extends {@code HttpStatusCodeError(413)}). Cobalt collapses
+     * the six {@code WAWebMmsClientErrors} subclasses into a
+     * single {@link WhatsAppMediaException.Upload} carrying an
+     * optional status code so the same priority ordering is
+     * preserved by switching on the code first.
+     *
+     * @param throwable the error that aborted the upload, or
+     *                  {@code null}
+     * @return the matching {@link MediaUploadResultType}, never
+     *         {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "getMetricUploadErrorResultType",
@@ -238,25 +304,33 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Classifies a thrown download error into a {@link MediaDownloadResultType}.
+     * Classifies a thrown download error into a
+     * {@link MediaDownloadResultType}.
      *
-     * <p>The cascade matches WA Web verbatim: throttle detection wins over
-     * generic status-code handling because {@code MMSThrottleError} extends
-     * {@code HttpStatusCodeError(507)}, media-host failures map to
-     * {@link MediaDownloadResultType#ERROR_MEDIA_CONN}, generic network
-     * failures (no status) to {@link MediaDownloadResultType#ERROR_NETWORK},
-     * then the explicit status-code switch (404, 410, 416, 401, 429, 507),
-     * and finally the cancel and hash-mismatch tail branches.
+     * @apiNote
+     * Use this when emitting a media-download WAM beacon so the
+     * {@code overallDownloadResult} field carries the same bucket
+     * WA Web would have picked. Throttle detection wins over
+     * generic status-code handling because
+     * {@code MMSThrottleError} extends
+     * {@code HttpStatusCodeError(507)}; media-host failures map
+     * to {@link MediaDownloadResultType#ERROR_MEDIA_CONN};
+     * generic network failures (no status) fold to
+     * {@link MediaDownloadResultType#ERROR_NETWORK}; then the
+     * explicit status switch covers 404, 410, 416, 401, 429, 507;
+     * and the cancel + hash-mismatch tail branches handle the
+     * Cobalt-side stream variants.
      *
-     * <p>The hash-mismatch branches detect Cobalt's
-     * {@link WhatsAppMediaException.Download} variants raised by
-     * {@code MediaDownloadInputStream}. A ciphertext SHA-256 mismatch (the
-     * Cobalt analogue of {@code MmsDownloadFilehashMismatchError}) maps to
-     * {@link MediaDownloadResultType#ERROR_ENC_HASH_MISMATCH}, and a
-     * plaintext SHA-256 mismatch (the Cobalt analogue of
-     * {@code MediaDecryptionError} carrying
-     * {@code PLAINTEXT_HASH_MISMATCH_ERROR}) maps to
-     * {@link MediaDownloadResultType#ERROR_HASH_MISMATCH}.
+     * @implNote
+     * This implementation recognises the hash-mismatch flavours
+     * by message-prefix match against
+     * {@link #CIPHERTEXT_HASH_MISMATCH_MESSAGE} and
+     * {@link #PLAINTEXT_HASH_MISMATCH_MESSAGE}, both of which
+     * Cobalt's {@code MediaDownloadInputStream} attaches to
+     * {@link WhatsAppMediaException.Download}; a plaintext
+     * mismatch raised outside the streaming download path
+     * surfaces as {@link WhatsAppMediaException.Processing} and
+     * is matched in the same way.
      *
      * @param throwable the error raised by the download path, or
      *                  {@code null}
@@ -268,7 +342,6 @@ public final class MediaMetricUtils {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public static MediaDownloadResultType getMetricDownloadErrorResultType(Throwable throwable) {
         for (var current = throwable; current != null; current = nextCause(current)) {
-            // Checked first because InterruptedException may be wrapped under any media exception.
             if (current instanceof InterruptedException) {
                 return MediaDownloadResultType.ERROR_CANCEL;
             }
@@ -287,7 +360,6 @@ public final class MediaMetricUtils {
                         default -> MediaDownloadResultType.ERROR_UNKNOWN;
                     };
                 }
-                // Hash-mismatch variants surface as Download with a known message prefix.
                 var message = download.getMessage();
                 if (message != null) {
                     if (message.startsWith(CIPHERTEXT_HASH_MISMATCH_MESSAGE)) {
@@ -299,7 +371,6 @@ public final class MediaMetricUtils {
                 }
                 return MediaDownloadResultType.ERROR_NETWORK;
             }
-            // Plaintext mismatch can also surface as Processing when raised outside the streaming download path.
             if (current instanceof WhatsAppMediaException.Processing processing) {
                 var message = processing.getMessage();
                 if (message != null && message.startsWith(PLAINTEXT_HASH_MISMATCH_MESSAGE)) {
@@ -311,12 +382,19 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Returns the HTTP status code carried by the given throwable, walking
-     * the cause chain to find the first {@link WhatsAppMediaException} that
-     * has a status code attached.
+     * Returns the HTTP status code carried by the first
+     * {@link WhatsAppMediaException} in the cause chain of
+     * {@code throwable} that has one attached.
+     *
+     * @apiNote
+     * Use this to fill the {@code httpCode} field of a media WAM
+     * beacon when the upload or download leg fails. Returns
+     * {@code null} when no exception in the chain has a status
+     * (the connection never made it that far).
+     *
      * @param throwable the error to inspect, or {@code null}
-     * @return the HTTP status code, or {@code null} if none of the
-     *         exceptions in the chain carries one
+     * @return the HTTP status code, or {@code null} if none of
+     *         the exceptions in the chain carries one
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "getStatusCode",
@@ -334,14 +412,23 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Generates a random media-event identifier in {@code [1, 2^53 - 1]}.
+     * Returns a random media-event identifier in the closed range
+     * {@code [1, 2^53 - 1]}.
      *
-     * <p>The value is used as a correlation identifier on
+     * @apiNote
+     * Use this for the correlation identifier on
      * {@code MediaUpload2Event}, {@code MediaDownload2Event} and
      * {@code WebcMediaErrorUnknownDetailsEvent} so the server can
      * deduplicate retried attempts. The range matches JavaScript's
-     * {@code Number.MAX_SAFE_INTEGER} (2<sup>53</sup>&minus;1 =
-     * {@code 9007199254740991}) exactly.
+     * {@code Number.MAX_SAFE_INTEGER}
+     * ({@code 2^53 - 1 = 9007199254740991}) exactly.
+     *
+     * @implNote
+     * This implementation draws via
+     * {@link ThreadLocalRandom#nextLong(long)} rather than
+     * {@link DataUtils#randomLong(long)} because the value is
+     * non-cryptographic and is generated on hot paths.
+     *
      * @return a random {@code long} in the closed range
      *         {@code [1, 9007199254740991]}
      */
@@ -354,18 +441,30 @@ public final class MediaMetricUtils {
 
     /**
      * Maps a media direct-path string to the matching
-     * {@link BackendStoreType} by inspecting the first two characters of
-     * the path.
+     * {@link BackendStoreType} by inspecting the first two
+     * characters of the path.
      *
-     * <p>WA Web treats the leading {@code /v}, {@code /o} and {@code /m}
-     * markers as the canonical signals for Everstore, OIL and Manifold
-     * blob stores respectively. Any other prefix is unrecognised. A
-     * {@code null} or empty path means the asset is not using a
-     * direct-path scheme and maps to {@link BackendStoreType#NON_DIRECT_PATH}.
-     * @param directPath the {@code direct_path} string handed back by the
-     *                   media-upload server, or {@code null}
-     * @return the matching {@link BackendStoreType}, or {@code null} when
-     *         the prefix is unrecognised
+     * @apiNote
+     * Use this when filling the {@code backendStore} field of a
+     * media WAM beacon. {@code /v}, {@code /o} and {@code /m}
+     * mark Everstore, OIL and Manifold blob stores respectively;
+     * an empty or {@code null} path signals that the asset is not
+     * using a direct-path scheme and folds to
+     * {@link BackendStoreType#NON_DIRECT_PATH}; unknown prefixes
+     * return {@code null}.
+     *
+     * @implNote
+     * This implementation caps the slice length at
+     * {@code path.length()} before lowercasing because Java's
+     * {@code substring} throws on out-of-range slices, whereas
+     * the WA Web {@code t.slice(0,2)} silently accepts shorter
+     * inputs.
+     *
+     * @param directPath the {@code direct_path} string handed
+     *                   back by the media-upload server, or
+     *                   {@code null}
+     * @return the matching {@link BackendStoreType}, or
+     *         {@code null} when the prefix is unrecognised
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "getMetricBackendStore",
@@ -374,7 +473,6 @@ public final class MediaMetricUtils {
         if (directPath == null || directPath.isEmpty()) {
             return BackendStoreType.NON_DIRECT_PATH;
         }
-        // WA Web's t.slice(0,2) accepts strings shorter than two characters; Java's substring would throw, so cap at len.
         var prefix = directPath.substring(0, Math.min(2, directPath.length()))
                 .toLowerCase(Locale.ROOT);
         return switch (prefix) {
@@ -386,31 +484,39 @@ public final class MediaMetricUtils {
     }
 
     /**
-     * Emits a one-shot {@code WebcMediaErrorUnknownDetailsWamEvent} when
+     * Commits a {@code WebcMediaErrorUnknownDetailsWamEvent} when
      * the outer {@link MediaUploadResultType} or
-     * {@link MediaDownloadResultType} is {@code ERROR_UNKNOWN}, so the
-     * server can correlate the unclassified error with its underlying
-     * class name and message.
+     * {@link MediaDownloadResultType} is {@code ERROR_UNKNOWN}.
      *
-     * <p>The event is committed only when an unknown overall result is
-     * present and {@code throwable} is non-{@code null}. The download
-     * result takes priority over the upload result, matching WA Web's
-     * conditional that sets the operation to {@code DOWNLOAD} first and
-     * only overrides to {@code UPLOAD} when the download branch did not
-     * match.
+     * @apiNote
+     * Call this from the same site that emits the outer
+     * media-upload or media-download WAM beacon. The follow-up
+     * event lets the server correlate the unclassified error
+     * bucket back to the throwable's class name and message so
+     * the WA backend can build a dictionary of unknown failures.
      *
-     * @param wamService     the WAM service used to commit the event when
-     *                       triggered, must not be {@code null}
-     * @param mediaId        the media-event identifier, propagated as
-     *                       {@code mediaId}, or {@code null} to omit the
-     *                       field
-     * @param downloadResult the overall download result, or {@code null}
-     *                       when this call site is upload-only
-     * @param uploadResult   the overall upload result, or {@code null}
-     *                       when this call site is download-only
-     * @param throwable      the original error that caused the unknown
-     *                       classification, or {@code null} to skip
-     *                       emission
+     * @implNote
+     * This implementation prioritises {@code DOWNLOAD} over
+     * {@code UPLOAD} when both result fields are unknown,
+     * matching the JS conditional that sets the operation to
+     * {@code DOWNLOAD} first and only overrides to
+     * {@code UPLOAD} when the download branch did not match.
+     *
+     * @param wamService     the WAM service used to commit the
+     *                       event when triggered, must not be
+     *                       {@code null}
+     * @param mediaId        the media-event identifier, propagated
+     *                       as {@code mediaId}, or {@code null} to
+     *                       omit the field
+     * @param downloadResult the overall download result, or
+     *                       {@code null} when this call site is
+     *                       upload-only
+     * @param uploadResult   the overall upload result, or
+     *                       {@code null} when this call site is
+     *                       download-only
+     * @param throwable      the original error that caused the
+     *                       unknown classification, or
+     *                       {@code null} to skip emission
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMediaMetricUtils",
             exports = "logErrorUnknownDetails",
@@ -440,17 +546,25 @@ public final class MediaMetricUtils {
                 .webcMediaErrorName(throwable.getClass().getSimpleName())
                 .webcMediaErrorMessage(throwable.getMessage());
         if (mediaId != null) {
-            // mediaId is a JS double in [1, MAX_SAFE_INTEGER] but the WAM property is INTEGER, so callers overflowing Integer must narrow.
+            // FIXME: mediaId is a JS double in [1, MAX_SAFE_INTEGER] but the WAM property is INTEGER; values above Integer.MAX_VALUE silently truncate.
             builder.mediaId((int) (long) mediaId);
         }
         wamService.commit(builder.build());
     }
 
     /**
-     * Returns the next exception in the cause chain, breaking self-cycles.
+     * Returns the next exception in the cause chain of
+     * {@code throwable}, breaking self-cycles.
      *
-     * @param throwable the current throwable, must not be {@code null}
-     * @return the cause, or {@code null} when the chain ends or self-references
+     * @apiNote
+     * Used by every classifier in this class that walks the cause
+     * chain to keep them robust against an exception that lists
+     * itself as its own cause.
+     *
+     * @param throwable the current throwable, must not be
+     *                  {@code null}
+     * @return the cause, or {@code null} when the chain ends or
+     *         self-references
      */
     private static Throwable nextCause(Throwable throwable) {
         var cause = throwable.getCause();

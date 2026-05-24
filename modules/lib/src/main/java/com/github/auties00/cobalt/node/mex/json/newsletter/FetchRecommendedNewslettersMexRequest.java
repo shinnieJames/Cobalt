@@ -20,44 +20,77 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Fetches a list of newsletters recommended to the authenticated user.
+ * Builds the MEX request that fetches the relay's recommended-newsletters
+ * list for the local user.
  *
- * <p>The recommendation engine returns channels that the WhatsApp backend estimates are relevant to the user based on follow history, directory browsing and regional signals.
+ * @apiNote
+ * Drives the newsletter directory "recommended" carousel invoked by
+ * {@code WAWebNewsletterDirectorySearchQueryJob}: WA Web feeds the result
+ * straight into the directory search UI alongside category and similar
+ * carousels. Build via the constructor with an optional page limit and
+ * country-code scope, then submit through the MEX IQ dispatcher and pair
+ * the result with {@link FetchRecommendedNewslettersMexResponse#of(Node)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchRecommendedNewslettersJob")
 public final class FetchRecommendedNewslettersMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchRecommendedNewsletters} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchRecommendedNewslettersJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child;
+     * the WhatsApp relay refuses requests whose persisted-query id is unknown.
      */
     public static final String QUERY_ID = "25806748772361516";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchRecommendedNewsletters
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
+     *
+     * @apiNote
+     * Reported to observability sinks that key telemetry on the operation
+     * name; mirrors the export name exposed by
+     * {@code WAWebMexFetchRecommendedNewslettersJob}.
      */
     public static final String OPERATION_NAME = "mexFetchRecommendedNewsletters";
+
+    /**
+     * The page-size limit sent under {@code variables.input.limit}, or
+     * {@code null} to defer to the relay's default page size.
+     */
     private final Long limit;
+
+    /**
+     * The ISO country-code scope sent under
+     * {@code variables.input.country_codes}, or {@code null} to omit the
+     * key entirely.
+     */
     private final List<String> countryCodes;
+
+    /**
+     * The flag sent under {@code variables.fetch_status_metadata}, gating
+     * the optional {@code status_metadata} sub-selection on each result.
+     */
     private final boolean fetchStatusMetadata;
 
     /**
-     * Constructs a new request with the given variables.
+     * Constructs a request with the given variables.
+     *
+     * @apiNote
+     * The {@code fetchStatusMetadata} flag mirrors WA Web's
+     * {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
+     * gate, which toggles the {@code status_metadata} sub-selection
+     * carrying per-newsletter status counters; Cobalt callers pass the
+     * boolean explicitly because the gating heuristic is JS-only.
      *
      * @param limit               the maximum number of recommended
-     *                            newsletters to return, or {@code null}
-     *                            to omit the field (the relay then
-     *                            applies its default page size)
-     * @param countryCodes        the list of ISO country codes used to
-     *                            scope the recommendation, or
+     *                            newsletters to return, or {@code null} to
+     *                            defer to the relay's default page size
+     * @param countryCodes        the ISO country-code scope, or
      *                            {@code null} to omit the field
      * @param fetchStatusMetadata {@code true} to request the optional
-     *                            {@code status_metadata} sub-selection,
-     *                            mirroring
-     *                            {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()}
-     *                            in the JS source
+     *                            {@code status_metadata} sub-selection
      */
     public FetchRecommendedNewslettersMexRequest(Long limit, List<String> countryCodes, boolean fetchStatusMetadata) {
         this.limit = limit;
@@ -66,10 +99,10 @@ public final class FetchRecommendedNewslettersMexRequest implements MexOperation
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}, the persisted-query identifier of the query.
      */
     @Override
     public String id() {
@@ -77,10 +110,11 @@ public final class FetchRecommendedNewslettersMexRequest implements MexOperation
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}, the value WA Web's
+     * {@code MexPerfTracker} reports for this query.
      */
     @Override
     public String name() {
@@ -88,11 +122,28 @@ public final class FetchRecommendedNewslettersMexRequest implements MexOperation
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be
+     * dispatched through the WhatsApp relay.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {limit?, country_codes?}, fetch_status_metadata}}}
+     * payload consumed by the persisted-query identified by
+     * {@link #QUERY_ID}; {@code limit} and {@code country_codes} are
+     * omitted when {@code null} so the GraphQL schema never receives
+     * explicit {@code null} variables, while {@code fetch_status_metadata}
+     * is always emitted as a boolean.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and delegates IQ envelope construction to
+     * {@link Json#createMexNode(String, String)}; any {@link IOException}
+     * raised by the in-memory writer is wrapped in an
+     * {@link UncheckedIOException} since neither sink can fail in practice.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchRecommendedNewslettersJob", exports = "mexFetchRecommendedNewsletters",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -104,7 +155,6 @@ public final class FetchRecommendedNewslettersMexRequest implements MexOperation
             writer.writeColon();
             writer.startObject();
 
-            // to mirror the JS object literal shape.
             writer.writeName("input");
             writer.writeColon();
             writer.startObject();

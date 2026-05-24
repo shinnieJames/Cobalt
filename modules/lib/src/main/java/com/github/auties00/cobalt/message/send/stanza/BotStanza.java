@@ -20,36 +20,50 @@ import java.security.GeneralSecurityException;
 import java.util.Objects;
 
 /**
- * Builds the {@code <bot>} stanza child node for bot messages.
+ * Builds the optional {@code <bot>} child of an outgoing {@code <message>}
+ * stanza, both in its encrypted-fanout form and its metadata-only form.
  *
- * <p>Bot messages are encrypted separately to the bot's device and included in the
- * stanza as a {@code <bot>} node alongside the regular {@code <enc>} or
- * {@code <participants>} nodes. The metadata-only variant ({@link #buildMetadata}) carries
- * stanza-level routing attributes without an encrypted payload.
+ * @apiNote
+ * Two surfaces share the {@code <bot>} node: (a) the encrypted-fanout form
+ * {@code <bot><to jid="...@bot"><enc .../></to></bot>} delivers a
+ * separately encrypted copy of the body to a Meta AI bot device or to the
+ * original bot for a feedback message; (b) the metadata-only form
+ * {@code <bot type="..." local_automated_type="..." client_thread_id="..." />}
+ * carries routing attributes for AI thread bookkeeping, business-bot
+ * classification, and the user's AI-mode selection. {@link ChatFanoutStanza}
+ * composes the two forms as siblings; this class produces the one or two
+ * nodes.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 @WhatsAppWebModule(moduleName = "WAWebSendGroupSkmsgJob")
 public final class BotStanza {
     /**
-     * Logger for bot encryption failure diagnostics.
+     * The {@link System.Logger} used for bot encryption diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(BotStanza.class.getName());
 
     /**
-     * Encryption service used to encrypt the bot body to the bot device.
+     * The {@link MessageEncryption} used to encrypt the bot body for the bot
+     * device.
      */
     private final MessageEncryption encryption;
 
     /**
-     * Bot protobuf transform service applied before encryption.
+     * The {@link BotProtobufTransform} applied to the message body before
+     * bot-targeted encryption.
      */
     private final BotProtobufTransform protobufTransform;
 
     /**
-     * Creates a new bot stanza builder.
+     * Constructs a builder backed by the given encryption and bot transform
+     * services.
      *
-     * @param encryption        the encryption service
-     * @param protobufTransform the bot protobuf transform service
+     * @apiNote
+     * Constructed once per client and reused; the bot body is recomputed per
+     * send.
+     *
+     * @param encryption        the {@link MessageEncryption} service
+     * @param protobufTransform the {@link BotProtobufTransform} service
      * @throws NullPointerException if any argument is {@code null}
      */
     public BotStanza(MessageEncryption encryption, BotProtobufTransform protobufTransform) {
@@ -58,16 +72,26 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the {@code <bot>} node for the given message, or returns {@code null} if no
-     * bot is involved.
+     * Builds the encrypted {@code <bot>} node for a 1:1 fanout send.
      *
-     * <p>Derives the bot JID, feedback flag and message secret from the message info and
-     * chat JID, applies bot protobuf transforms, and encrypts the result to the bot
-     * device.
+     * @apiNote
+     * Emitted whenever the chat targets a bot directly (chat JID ends in
+     * {@code @bot}) or the message is a bot-feedback {@link ProtocolMessage}
+     * whose original key identifies a bot sender. Returns {@code null} when
+     * no bot is involved or when encryption fails.
      *
-     * @param messageInfo the outgoing message
-     * @param chatJid     the target chat JID
-     * @return the bot node, or {@code null}
+     * @implNote
+     * This implementation derives a bot-scoped message secret via
+     * {@link BotMessageSecret#derive(byte[])}, applies the CAPI / FBID / bot
+     * protobuf transforms in order, encrypts the result for the resolved bot
+     * device with {@link MessageEncryption#encryptForDevice(Jid, byte[])},
+     * and wraps the ciphertext in {@code <bot><to jid="..."><enc .../></to></bot>}.
+     * The {@code type="feedback"} outer attribute is set only for bot
+     * feedback messages.
+     *
+     * @param messageInfo the outgoing {@link ChatMessageInfo}
+     * @param chatJid     the recipient chat {@link Jid}
+     * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -128,24 +152,33 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node that carries bot invocation type,
-     * business bot classification, AI thread ID, and AI mode selection attributes.
+     * Builds the metadata-only {@code <bot>} node carrying the bot-routing
+     * attributes that the server uses for AI thread bookkeeping and
+     * analytics.
      *
-     * <p>This node is separate from the encrypted bot body built by
-     * {@link #build(ChatMessageInfo, Jid)}. It carries stanza-level metadata that the
-     * server uses for routing and analytics. Returns {@code null} when no attribute is
-     * set.
+     * @apiNote
+     * Mirrors the {@code ve} composition inside
+     * {@code WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza}.
+     * Attributes are: {@code type} (one of {@code "prompt"},
+     * {@code "command"}, {@code "request_welcome"}, or {@code "feedback"}),
+     * {@code local_automated_type} (the business-bot class:
+     * {@code "1p_partial"} for first-party partial integrations,
+     * {@code "3p_full"} for third-party full integrations),
+     * {@code client_thread_id} (the AI conversation thread id),
+     * {@code mode_selection} (the user-selected AI mode label, e.g.
+     * {@code "default"} or {@code "think_hard"}), {@code mode_selected} (a
+     * dynamic-mode override string). Returns {@code null} when no attribute
+     * applies so {@link ChatFanoutStanza} can suppress the empty node.
      *
-     * @param botMsgBodyType the bot message body type
-     *                       ({@code "prompt"}, {@code "command"}, {@code "request_welcome"}),
-     *                       or {@code null}
-     * @param bizBotType     the business bot type
-     *                       ({@code "1p_partial"}, {@code "3p_full"}), or {@code null}
-     * @param clientThreadId the AI thread ID, or {@code null}
-     * @param modeSelection  the user's AI mode selection
-     *                       ({@code "default"}, {@code "think_hard"}), or {@code null}
-     * @param modeSelected   the dynamic mode override string, or {@code null}
-     * @return the bot metadata node, or {@code null}
+     * @param botMsgBodyType the bot message body type, or {@code null}
+     * @param bizBotType     the business-bot classification, or
+     *                       {@code null}
+     * @param clientThreadId the AI conversation thread id, or {@code null}
+     * @param modeSelection  the user-selected AI mode label, or
+     *                       {@code null}
+     * @param modeSelected   the dynamic mode override string, or
+     *                       {@code null}
+     * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -172,16 +205,20 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the metadata-only {@code <bot>} node without AI mode selection attributes.
+     * Builds the metadata-only {@code <bot>} node without the AI mode
+     * selection attributes.
      *
-     * <p>Convenience overload that delegates to
-     * {@link #buildMetadata(String, String, String, String, String)} with {@code null}
-     * for {@code modeSelection} and {@code modeSelected}.
+     * @apiNote
+     * Convenience overload for senders that do not run the AI mode selector
+     * surface; delegates to
+     * {@link #buildMetadata(String, String, String, String, String)} with
+     * the last two arguments {@code null}.
      *
      * @param botMsgBodyType the bot message body type, or {@code null}
-     * @param bizBotType     the business bot type, or {@code null}
-     * @param clientThreadId the AI thread ID, or {@code null}
-     * @return the bot metadata node, or {@code null}
+     * @param bizBotType     the business-bot classification, or
+     *                       {@code null}
+     * @param clientThreadId the AI conversation thread id, or {@code null}
+     * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -194,11 +231,28 @@ public final class BotStanza {
     }
 
     /**
-     * Builds the encrypted bot node for group messages that target the open Meta AI bot.
+     * Builds the encrypted {@code <bot>} node for a group SKMSG send into
+     * an open-bot group.
      *
-     * @param messageInfo    the outgoing message
-     * @param isOpenBotGroup whether the group has the open bot enabled
-     * @return the bot node, or {@code null}
+     * @apiNote
+     * Mirrors the {@code L(e, t, n)} bot fanout helper in
+     * {@code WAWebSendGroupSkmsgJob}: when the group has the open Meta AI
+     * bot enabled, a separately encrypted copy of the body is sent to the
+     * Meta AI FBID bot account in addition to the SKMSG-encrypted group
+     * payload. Returns {@code null} when {@code isOpenBotGroup} is
+     * {@code false} or when bot encryption fails.
+     *
+     * @implNote
+     * This implementation always targets {@link Jid#metaAiBotAccount()};
+     * the WA Web counterpart resolves the same FBID via
+     * {@code WAWebBotUtils.META_BOT_FBID_WID}. The CAPI transform is run
+     * before the generic bot transform because the open-bot path delivers
+     * the message into a multi-user thread.
+     *
+     * @param messageInfo    the outgoing {@link ChatMessageInfo}
+     * @param isOpenBotGroup whether the group has the open Meta AI bot
+     *                       enabled
+     * @return the {@code <bot>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -254,14 +308,20 @@ public final class BotStanza {
     }
 
     /**
-     * Resolves the bot device JID from the message and chat context.
+     * Resolves the bot device {@link Jid} that should receive the encrypted
+     * bot body for this send.
      *
-     * <p>For 1:1 bot chats the chat JID itself is the bot. For bot feedback messages
-     * the bot is the sender of the original protocol message.
+     * @apiNote
+     * Two cases are recognised: the chat itself is a bot account (chat JID
+     * server is {@code "bot"}) or the message is a bot-feedback protocol
+     * message whose original {@link MessageKey#senderJid()} identifies a
+     * bot. Anything else returns {@code null}, suppressing the
+     * {@code <bot>} child.
      *
-     * @param messageInfo the outgoing message
-     * @param chatJid     the chat JID
-     * @return the bot device JID, or {@code null} if no bot is involved
+     * @param messageInfo the outgoing {@link ChatMessageInfo}
+     * @param chatJid     the recipient chat {@link Jid}
+     * @return the bot device {@link Jid}, or {@code null} when no bot is
+     *         involved
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -282,10 +342,17 @@ public final class BotStanza {
     }
 
     /**
-     * Returns whether the message is a bot feedback protocol message.
+     * Returns whether the outgoing message is a bot-feedback
+     * {@link ProtocolMessage}.
      *
-     * @param messageInfo the message to check
-     * @return {@code true} if the message is a bot feedback protocol message
+     * @apiNote
+     * Bot feedback rewires the {@code <bot>} child to address the original
+     * bot rather than the chat target, and forces {@code type="feedback"}
+     * on the wrapping node.
+     *
+     * @param messageInfo the outgoing {@link ChatMessageInfo}
+     * @return {@code true} when the wrapped content is a
+     *         {@link ProtocolMessage.Type#BOT_FEEDBACK_MESSAGE}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgGetters", exports = "getIsBotFeedbackMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -295,19 +362,24 @@ public final class BotStanza {
     }
 
     /**
-     * Returns whether the JID is an FBID bot.
+     * Returns whether the given {@link Jid} identifies an FBID bot account.
      *
-     * <p>Per WhatsApp Web {@code WAWebWid.prototype.isFbidBot}: a JID is an FBID
-     * bot when its server is {@code bot} and its device identifier is either
-     * {@code null} or {@code 0} (the primary device). The user component is not
-     * inspected.
+     * @apiNote
+     * The FBID bot family lives under the dedicated {@code @bot} JID server
+     * (as opposed to Meta AI's legacy PN-form bot under {@code @c.us}).
      *
-     * @param jid the JID to check
-     * @return {@code true} if the JID is an FBID bot
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code Wid.prototype.isFbidBot}: a JID qualifies when its server is
+     * {@code "bot"} and the device id is either absent or zero (the primary
+     * device). The user component is not inspected.
+     *
+     * @param jid the {@link Jid} to test
+     * @return {@code true} when the JID is an FBID bot
      */
     @WhatsAppWebExport(moduleName = "WAWebWid", exports = "isFbidBot",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static boolean isFbidBot(Jid jid) {
-        return jid.hasBotServer() && jid.isPrimaryDevice(); // WAWebWid.Wid.prototype.isFbidBot
+        return jid.hasBotServer() && jid.isPrimaryDevice();
     }
 }

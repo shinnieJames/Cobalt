@@ -1,6 +1,6 @@
 package com.github.auties00.cobalt.call.session;
 
-import com.github.auties00.cobalt.call.audio.AudioPipelineOptions;
+import com.github.auties00.cobalt.call.internal.audio.AudioPipelineOptions;
 
 import java.security.SecureRandom;
 import java.util.Objects;
@@ -71,8 +71,8 @@ public record VoiceCallOptions(
      */
     public static VoiceCallOptions randomDefaults() {
         var rng = new SecureRandom();
-        int local = rng.nextInt();
-        int remote = local ^ 0x55555555;  // ensure non-equal
+        var local = rng.nextInt();
+        var remote = local ^ 0x55555555;  // ensure non-equal
         return defaults(local, remote);
     }
 }

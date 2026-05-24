@@ -1,274 +1,492 @@
 package com.github.auties00.cobalt.stream.message;
 
 /**
- * Enumerates all fine-grained payment message status values used internally by the
- * payment notification and transaction handling pipeline.
+ * Enumerates the fine-grained internal payment-message status values used by
+ * the inbound payment notification pipeline.
  *
- * <p>Each constant corresponds to a specific combination of transaction type and
- * server-reported status string, as defined in the WhatsApp Web payment status
- * utilities. The mapping from raw server status strings to these constants is
- * performed by the {@code paymentMessageStatus} helper methods in the notification
- * and message stream handlers.
+ * @apiNote
+ * Surfaces the {@code NotificationTransactionStatus} enum exposed by
+ * {@code WAWebPaymentStatusUtils} as a typed Cobalt counterpart. Each
+ * constant corresponds to a specific
+ * ({@link PaymentMessageTransactionType}, server-reported status string)
+ * pair. The message stream and notification handlers resolve a value of
+ * this enum from an inbound {@code <transaction>} stanza via
+ * {@code WAWebPaymentStatusUtils.getNotificationTransactionStatus} and
+ * then map it to {@code PaymentInfo.Status} and
+ * {@code PaymentInfo.TxnStatus} via
+ * {@code WAWebPaymentStatusUtils.getPaymentWebStatus} and
+ * {@code WAWebPaymentStatusUtils.getPaymentTxnWebStatus}.
  */
 public enum PaymentMessageStatus {
     /**
-     * No status has been set or the status could not be determined from
-     * the server-reported values.
+     * Indicates that no status has been resolved.
+     *
+     * @apiNote
+     * Mirrors the {@code STATUS_UNSET = 0} member of
+     * {@code WAWebPaymentStatusUtils.NotificationTransactionStatus}.
+     * Produced whenever the server-reported {@code status} attribute
+     * fails to match any case of
+     * {@code getNotificationTransactionStatus}.
      */
     STATUS_UNSET,
 
     /**
-     * A payment request has been initialized.
+     * Indicates that a payment request has just been initialised.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_INIT = 11}.
      */
     REQUEST_PAY_INIT,
 
     /**
-     * A payment request has been successfully collected.
+     * Indicates that a payment request has been successfully collected.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_SUCCESS = 12}. Produced when the server
+     * reports {@code "COLLECT_SUCCESS"} for a request-type transaction.
      */
     REQUEST_PAY_SUCCESS,
 
     /**
-     * A payment request has failed.
+     * Indicates that a payment request has failed.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_FAILED = 13}. Produced when the server
+     * reports {@code "COLLECT_FAILED"} for a request-type transaction.
      */
     REQUEST_PAY_FAILED,
 
     /**
-     * A payment request has failed due to risk assessment.
+     * Indicates that a payment request was blocked by the payment
+     * provider's risk system.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_FAILED_RISK = 14}. Produced when the
+     * server reports {@code "COLLECT_FAILED_RISK"} for a request-type
+     * transaction.
      */
     REQUEST_PAY_FAILED_RISK,
 
     /**
-     * A payment request has been rejected by the payer.
+     * Indicates that a payment request has been rejected by the payer.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_REJECTED = 15}. Produced when the server
+     * reports {@code "COLLECT_REJECTED"} for a request-type transaction.
      */
     REQUEST_PAY_REJECTED,
 
     /**
-     * A payment request has expired before being fulfilled.
+     * Indicates that a payment request has expired before being
+     * fulfilled.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_EXPIRED = 16}. Produced when the server
+     * reports {@code "COLLECT_EXPIRED"} for a request-type transaction.
      */
     REQUEST_PAY_EXPIRED,
 
     /**
-     * A payment request has been fulfilled by the payer.
+     * Indicates that a payment request has been fulfilled by the payer.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_FULFILLED = 17}.
      */
     REQUEST_PAY_FULFILLED,
 
     /**
-     * A payment request has been cancelled by the requester.
+     * Indicates that a payment request has been cancelled.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_CANCELLED = 18}. Produced when the
+     * server reports {@code "COLLECT_CANCELED"} for a request-type
+     * transaction.
      */
     REQUEST_PAY_CANCELLED,
 
     /**
-     * A payment request is in the process of being cancelled.
+     * Indicates that a payment request is in the process of being
+     * cancelled.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_CANCELLING = 19}.
      */
     REQUEST_PAY_CANCELLING,
 
     /**
-     * A scheduled payment request has been successfully collected.
+     * Indicates that a scheduled payment for a received peer-to-peer
+     * request has been collected.
+     *
+     * @apiNote
+     * Mirrors {@code REQUEST_PAY_SCHEDULED_PAYMENT_SUCCESS = 20}. Only
+     * resolved under the
+     * {@link PaymentMessageTransactionType#TYPE_P2P_REQ_SCHEDULED_PAYMENT_RCVD}
+     * branch.
      */
     REQUEST_PAY_SCHEDULED_PAYMENT_SUCCESS,
 
     /**
-     * A received payment has been initialized.
+     * Indicates that an incoming payment has been initialised.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_INIT = 101}.
      */
     RECV_PAY_INIT,
 
     /**
-     * A received payment is pending setup by the receiver.
+     * Indicates that an incoming payment is pending until the receiver
+     * finishes setup.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_PENDING_SETUP = 102}. Produced when the
+     * server reports {@code "PENDING_SETUP"} on a P2P/P2M-received
+     * transaction.
      */
     RECV_PAY_PENDING_SETUP,
 
     /**
-     * A received payment is pending due to a direct account settlement issue.
+     * Indicates that an incoming payment is pending because of a direct
+     * account settlement failure.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_PENDING = 103}. Produced when the server
+     * reports {@code "FAILED_DA"} on a P2P/P2M-received transaction.
      */
     RECV_PAY_PENDING,
 
     /**
-     * A received payment failed but a retry is being attempted.
+     * Indicates that an incoming payment failed but the server is going
+     * to retry.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_RETRY_ON_FAILURE = 104}. Produced when the
+     * server reports {@code "FAILED_PROCESSING"} on a P2P/P2M-received
+     * transaction.
      */
     RECV_PAY_RETRY_ON_FAILURE,
 
     /**
-     * A received payment has failed.
+     * Indicates that an incoming payment failed terminally.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_FAILURE = 105}.
      */
     RECV_PAY_FAILURE,
 
     /**
-     * A received payment has been successfully processed.
+     * Indicates that an incoming payment was successfully credited.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_SUCCESS = 106}.
      */
     RECV_PAY_SUCCESS,
 
     /**
-     * A received payment has expired.
+     * Indicates that an incoming payment expired before completion.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_EXPIRED = 107}.
      */
     RECV_PAY_EXPIRED,
 
     /**
-     * A received payment has failed due to risk assessment.
+     * Indicates that an incoming payment was blocked by the payment
+     * provider's risk system.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_FAILURE_RISK = 108}.
      */
     RECV_PAY_FAILURE_RISK,
 
     /**
-     * A received payment withdrawal is being processed.
+     * Indicates that the receiver-side withdrawal of an incoming payment
+     * is in progress.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_WITHDRAWAL_PROCESSING = 109}.
      */
     RECV_PAY_WITHDRAWAL_PROCESSING,
 
     /**
-     * A received payment withdrawal has failed.
+     * Indicates that the receiver-side withdrawal of an incoming payment
+     * failed transiently.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_WITHDRAWAL_FAILURE = 110}.
      */
     RECV_PAY_WITHDRAWAL_FAILURE,
 
     /**
-     * A received payment withdrawal has permanently failed.
+     * Indicates that the receiver-side withdrawal of an incoming payment
+     * has failed permanently.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_WITHDRAWAL_PERMANENT_FAILED = 111}.
      */
     RECV_PAY_WITHDRAWAL_PERMANENT_FAILED,
 
     /**
-     * A received payment has been cancelled by the sender.
+     * Indicates that an incoming payment was cancelled by the sender.
+     *
+     * @apiNote
+     * Mirrors {@code RECV_PAY_SENDER_CANCELED = 112}.
      */
     RECV_PAY_SENDER_CANCELED,
 
     /**
-     * A sent payment has been initialized.
+     * Indicates that an outgoing payment has been initialised.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_INIT = 401}. Produced when the server
+     * reports {@code "INITIAL"} on a P2P/P2M-sent or deposit
+     * transaction.
      */
     SEND_PAY_INIT,
 
     /**
-     * A sent payment is pending receiver setup.
+     * Indicates that an outgoing payment is pending until the receiver
+     * completes setup.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_PENDING_RECEIVER = 402}.
      */
     SEND_PAY_PENDING_RECEIVER,
 
     /**
-     * A sent payment is pending due to a direct account settlement issue.
+     * Indicates that an outgoing payment is pending because of a direct
+     * account settlement failure.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_PENDING = 403}. Produced when the server
+     * reports {@code "FAILED_DA"} on a P2P/P2M-sent or deposit
+     * transaction.
      */
     SEND_PAY_PENDING,
 
     /**
-     * A sent payment refund is pending due to a direct account settlement issue.
+     * Indicates that the refund of an outgoing payment is pending
+     * because of a direct account settlement failure.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_REFUND_PENDING = 404}.
      */
     SEND_PAY_REFUND_PENDING,
 
     /**
-     * A sent payment has been successfully processed.
+     * Indicates that an outgoing payment has been completed
+     * successfully.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_SUCCESS = 405}.
      */
     SEND_PAY_SUCCESS,
 
     /**
-     * A sent payment has failed.
+     * Indicates that an outgoing payment has failed.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_FAILURE = 406}.
      */
     SEND_PAY_FAILURE,
 
     /**
-     * A sent payment has failed due to risk assessment.
+     * Indicates that an outgoing payment was blocked by the payment
+     * provider's risk system.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_FAILURE_RISK = 407}.
      */
     SEND_PAY_FAILURE_RISK,
 
     /**
-     * A sent payment has been refunded.
+     * Indicates that an outgoing payment has been refunded.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_REFUNDED = 408}.
      */
     SEND_PAY_REFUNDED,
 
     /**
-     * A refund for a sent payment has failed.
+     * Indicates that the refund of an outgoing payment has failed.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_REFUND_FAILED = 409}.
      */
     SEND_PAY_REFUND_FAILED,
 
     /**
-     * A sent payment has failed during receiver-side processing.
+     * Indicates that an outgoing payment failed during receiver-side
+     * processing.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_FAILURE_RECEIVER = 410}.
      */
     SEND_PAY_FAILURE_RECEIVER,
 
     /**
-     * A refund for a sent payment has failed during processing.
+     * Indicates that the refund of an outgoing payment is being
+     * processed but cannot complete cleanly.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_REFUND_FAILED_PROCESSING = 411}.
      */
     SEND_PAY_REFUND_FAILED_PROCESSING,
 
     /**
-     * A sent payment is pending refund after a final direct account settlement failure.
+     * Indicates that an outgoing payment is pending refund after a final
+     * direct-account settlement failure.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_PENDING_REFUND = 412}. Produced when the
+     * server reports {@code "FAILED_DA_FINAL"} on a P2P/P2M-sent or
+     * deposit transaction.
      */
     SEND_PAY_PENDING_REFUND,
 
     /**
-     * A sent payment authorization cancellation has failed during processing.
+     * Indicates that an outgoing payment authorisation cancellation is
+     * being processed but cannot complete cleanly.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING = 413}.
      */
     SEND_PAY_AUTH_CANCEL_FAILED_PROCESSING,
 
     /**
-     * A sent payment authorization cancellation has failed.
+     * Indicates that an outgoing payment authorisation cancellation has
+     * failed.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_AUTH_CANCEL_FAILED = 414}.
      */
     SEND_PAY_AUTH_CANCEL_FAILED,
 
     /**
-     * A sent payment authorization has been cancelled.
+     * Indicates that an outgoing payment authorisation has been
+     * cancelled.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_AUTH_CANCELED = 415}.
      */
     SEND_PAY_AUTH_CANCELED,
 
     /**
-     * A sent payment has expired.
+     * Indicates that an outgoing payment has expired.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_EXPIRED = 416}.
      */
     SEND_PAY_EXPIRED,
 
     /**
-     * A sent payment authorization has succeeded.
+     * Indicates that an outgoing payment authorisation has succeeded.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_AUTH_SUCCESS = 417}. Resolved under the
+     * {@link PaymentMessageTransactionType#TYPE_P2P_REQ_SCHEDULED_PAYMENT_RCVD}
+     * branch when the server reports {@code "AUTH_SUCCESS"}.
      */
     SEND_PAY_AUTH_SUCCESS,
 
     /**
-     * A sent payment authorization success is being cancelled.
+     * Indicates that an outgoing payment authorisation success is in the
+     * process of being cancelled.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_AUTH_SUCCESS_CANCELING = 418}.
      */
     SEND_PAY_AUTH_SUCCESS_CANCELING,
 
     /**
-     * A sent payment is under review by the payment provider.
+     * Indicates that an outgoing payment is being reviewed by the
+     * payment provider.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_IN_REVIEW = 419}.
      */
     SEND_PAY_IN_REVIEW,
 
     /**
-     * A sent payment is pending processing.
+     * Indicates that an outgoing payment is pending processing.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_PENDING_PROCESSING = 420}. Produced when
+     * the server reports {@code "PENDING"} on a P2P/P2M-sent or deposit
+     * transaction.
      */
     SEND_PAY_PENDING_PROCESSING,
 
     /**
-     * A sent payment has been cancelled by the user.
+     * Indicates that an outgoing payment was cancelled by the user.
+     *
+     * @apiNote
+     * Mirrors {@code SEND_PAY_USER_CANCELED = 421}.
      */
     SEND_PAY_USER_CANCELED,
 
     /**
-     * A withdrawal has been initialized.
+     * Indicates that a withdrawal has been initialised.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_INIT = 601}.
      */
     WITHDRAWAL_INIT,
 
     /**
-     * A withdrawal is pending processing.
+     * Indicates that a withdrawal is pending processing.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_PENDING = 602}.
      */
     WITHDRAWAL_PENDING,
 
     /**
-     * A withdrawal is under review.
+     * Indicates that a withdrawal is being reviewed.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_IN_REVIEW = 603}.
      */
     WITHDRAWAL_IN_REVIEW,
 
     /**
-     * A withdrawal has been successfully processed.
+     * Indicates that a withdrawal completed successfully.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_SUCCESS = 604}.
      */
     WITHDRAWAL_SUCCESS,
 
     /**
-     * A withdrawal has failed.
+     * Indicates that a withdrawal failed.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_FAILED = 605}. Produced when the server
+     * reports {@code "FAILED"} or {@code "DECLINED"} on a withdrawal
+     * transaction.
      */
     WITHDRAWAL_FAILED,
 
     /**
-     * A withdrawal has been cancelled by the user.
+     * Indicates that a withdrawal was cancelled by the user.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_USER_CANCELED = 606}.
      */
     WITHDRAWAL_USER_CANCELED,
 
     /**
-     * A withdrawal has expired.
+     * Indicates that a withdrawal has expired.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_EXPIRED = 607}.
      */
     WITHDRAWAL_EXPIRED,
 
     /**
-     * A withdrawal is currently active.
+     * Indicates that a withdrawal is currently active.
+     *
+     * @apiNote
+     * Mirrors {@code WITHDRAWAL_ACTIVE = 608}.
      */
     WITHDRAWAL_ACTIVE
 }

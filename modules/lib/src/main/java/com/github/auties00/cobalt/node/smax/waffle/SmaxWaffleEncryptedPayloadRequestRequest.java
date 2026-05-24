@@ -14,9 +14,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Outbound Waffle {@code encrypted_payload_request} IQ. Carries the encrypted action that
- * the relay forwards to the Facebook side together with the RSA encryption metadata, the
- * client wall clock and the linked Facebook account id.
+ * The outbound {@code <iq xmlns="waffle" smax_id="47" type="get"/>}
+ * Waffle encrypted-payload-request stanza.
+ *
+ * @apiNote
+ * Powers the generic encrypted-action channel that
+ * {@code WAWebAccountLinkingAPI.sendLinkingMutation} (action
+ * {@code "waffle_100"}) and {@code WAWebCrosspostingAPI} (action
+ * {@code "waffle_1"}) use to dispatch arbitrary linked-account CRUD
+ * payloads to the Waffle backend; the relay forwards the encrypted
+ * action verbatim to the Facebook side. The embedder encrypts the
+ * action with {@code WAWebAccountLinkingCryptoUtils.wrapPayloadWithRSAAESEncryption}
+ * before constructing the request; the reply is parsed by
+ * {@link SmaxWaffleEncryptedPayloadRequestResponse} and carries the
+ * encrypted Facebook-side response.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleEncryptedPayloadRequestRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
@@ -27,32 +38,41 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
     private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
     /**
-     * The client wall clock at request time, in seconds since the UNIX epoch.
+     * The client wall-clock at request time.
      */
     private final long timestamp;
 
     /**
-     * The linked Facebook account id, as opaque bytes.
+     * The linked Facebook account id as opaque bytes.
      */
     private final byte[] fbid;
 
     /**
-     * The opaque encrypted action bytes representing the CRUD operation that the relay
-     * should run on the Facebook side.
+     * The opaque action selector bytes (the WA Web call sites pass
+     * literal strings such as {@code "waffle_100"} or
+     * {@code "waffle_1"}).
      */
     private final byte[] action;
 
     /**
-     * Constructs a request.
+     * Constructs an encrypted-payload-request stanza.
+     *
+     * @apiNote
+     * The {@code action} bytes are the action selector that the relay
+     * forwards to the Facebook side; the encrypted payload itself
+     * lives inside {@code encryptionMetadata}. WA Web's two known
+     * selectors are {@code "waffle_100"} (Account-Linking debug /
+     * mutation) and {@code "waffle_1"} (Crossposting).
      *
      * @param encryptionMetadata the RSA encryption metadata; never
      *                           {@code null}
-     * @param timestamp          the UNIX epoch seconds at request time
-     * @param fbid               the linked FB id bytes; never
+     * @param timestamp          the request timestamp
+     * @param fbid               the linked Facebook account id; never
      *                           {@code null}
-     * @param action             the opaque encrypted action bytes;
+     * @param action             the opaque action selector bytes;
      *                           never {@code null}
-     * @throws NullPointerException if any object argument is
+     * @throws NullPointerException if {@code encryptionMetadata},
+     *                              {@code fbid}, or {@code action} is
      *                              {@code null}
      */
     public SmaxWaffleEncryptedPayloadRequestRequest(SmaxWaffleRsaEncryptionMetadata encryptionMetadata, long timestamp,
@@ -66,7 +86,8 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
     /**
      * Returns the RSA encryption metadata.
      *
-     * @return the metadata; never {@code null}
+     * @return the metadata as supplied at construction time; never
+     *         {@code null}
      */
     public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
         return encryptionMetadata;
@@ -75,35 +96,45 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
     /**
      * Returns the request timestamp.
      *
-     * @return the UNIX epoch seconds
+     * @return the timestamp as supplied at construction time
      */
     public long timestamp() {
         return timestamp;
     }
 
     /**
-     * Returns the linked FB id bytes.
+     * Returns the linked Facebook account id.
      *
-     * @return the fbid bytes; never {@code null}
+     * @return the id bytes as supplied at construction time; never
+     *         {@code null}
      */
     public byte[] fbid() {
         return fbid;
     }
 
     /**
-     * Returns the opaque encrypted action bytes.
+     * Returns the opaque action selector bytes.
      *
-     * @return the action bytes; never {@code null}
+     * @return the action bytes as supplied at construction time;
+     *         never {@code null}
      */
     public byte[] action() {
         return action;
     }
 
     /**
-     * Builds the outbound {@code <iq xmlns="waffle" smax_id="47" type="get">} envelope wrapping
-     * the encryption metadata, timestamp, fbid and encrypted action children.
+     * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @apiNote
+     * Produces
+     * {@code <iq xmlns="waffle" smax_id="47" type="get" to="s.whatsapp.net">
+     * <encryption_metadata.../> <timestamp.../> <fbid.../> <action.../></iq>};
+     * the dispatch path stamps a fresh {@code id} attribute on every
+     * outbound stanza so the reply parser can match it back to this
+     * request.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the
+     *         four payload children; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleEncryptedPayloadRequestRequest",
@@ -131,6 +162,15 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
                 .content(encryptionMetadataNode, timestampNode, fbidNode, actionNode);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxWaffleEncryptedPayloadRequestRequest} with equal
+     * payload fields.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when metadata, timestamp, fbid, and action
+     *         all match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -146,6 +186,12 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
                 && Arrays.equals(this.action, that.action);
     }
 
+    /**
+     * Returns a hash code derived from the four payload fields.
+     *
+     * @return a content-based hash consistent with
+     *         {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(encryptionMetadata, timestamp);
@@ -154,6 +200,12 @@ public final class SmaxWaffleEncryptedPayloadRequestRequest implements SmaxOpera
         return result;
     }
 
+    /**
+     * Returns a debug rendering that summarises the fbid and action
+     * arrays as lengths rather than as raw bytes.
+     *
+     * @return a human-readable summary; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxWaffleEncryptedPayloadRequestRequest[encryptionMetadata=" + encryptionMetadata

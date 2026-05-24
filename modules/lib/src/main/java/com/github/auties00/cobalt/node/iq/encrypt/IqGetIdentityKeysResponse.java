@@ -15,24 +15,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqGetIdentityKeysRequest}.
+ * Closed family of reply variants observable on the bulk identity-key
+ * {@link IqGetIdentityKeysRequest} roundtrip.
+ *
+ * @apiNote
+ * {@link Success} carries one {@link Success.IdentityEntry} per requested device JID, interleaving
+ * {@link Success.IdentityEntry.Resolved} entries with per-device {@link Success.IdentityEntry.Failure}
+ * envelopes when the relay could not resolve a particular device. {@link ClientError} and
+ * {@link ServerError} are envelope-level failures that affect the whole batch.
+ *
+ * @implNote
+ * WA Web's {@code identityKeysParser} {@code throw}s on the first per-user {@code <error/>} it
+ * encounters and discards the whole batch. Cobalt deliberately keeps a per-device
+ * {@link Success.IdentityEntry.Failure} record so the caller can still resolve identities for the
+ * devices that succeeded and re-query just the failed ones.
  */
 @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
 public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         permits IqGetIdentityKeysResponse.Success, IqGetIdentityKeysResponse.ClientError, IqGetIdentityKeysResponse.ServerError {
 
     /**
-     * Tries each {@link IqGetIdentityKeysResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Parses the inbound stanza into the first matching {@link IqGetIdentityKeysResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}.
+     *
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound stanza
+     * @return the parsed variant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+     *         the stanza shape matched none of the three documented schemas
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
@@ -52,26 +64,31 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay returned a
-     * mixed list of resolved identity entries and per-device
-     * client-error envelopes.
+     * Successful bulk reply carrying one {@link IdentityEntry} per requested device.
+     *
+     * @apiNote
+     * Iterate {@link #entries()} and pattern-match each variant: {@link IdentityEntry.Resolved}
+     * exposes the device's identity key for installation into the local
+     * {@code waSignalStore}/{@code SignalProtocolStore}; {@link IdentityEntry.Failure} carries the
+     * per-device error envelope the relay attached.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class Success implements IqGetIdentityKeysResponse {
         /**
-         * The list of per-device identity entries returned by the
-         * relay — interleaved {@link IdentityEntry.Resolved} and
-         * {@link IdentityEntry.Failure} variants.
+         * The list of per-device identity entries, interleaving {@link IdentityEntry.Resolved} and
+         * {@link IdentityEntry.Failure} in {@code <list/>} order.
          */
         private final List<IdentityEntry> entries;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a populated success envelope.
          *
-         * @param entries the per-device identity entries; never
-         *                {@code null}
-         * @throws NullPointerException if {@code entries} is
-         *                              {@code null}
+         * @apiNote
+         * The {@code entries} list is defensively copied; mutating the passed-in list after
+         * construction does not affect this instance.
+         *
+         * @param entries the per-device identity entries
+         * @throws NullPointerException if {@code entries} is {@code null}
          */
         public Success(List<IdentityEntry> entries) {
             Objects.requireNonNull(entries, "entries cannot be null");
@@ -79,23 +96,32 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the unmodifiable list of identity entries.
+         * Returns the unmodifiable list of per-device identity entries.
          *
-         * @return the entries; never {@code null}
+         * @return the entries
          */
         public List<IdentityEntry> entries() {
             return entries;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses a {@link Success} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check, when
+         * the top-level {@code <list/>} is missing, or when any {@code <user/>} grandchild lacks a
+         * {@code jid} attribute or has malformed {@code <type/>}/{@code <identity/>} content.
+         *
+         * @implNote
+         * This implementation walks the {@code <list/>} grandchildren and records per-device
+         * outcomes without throwing. A {@code <user/>} carrying an {@code <error/>} grandchild
+         * yields an {@link IdentityEntry.Failure}; otherwise the parser pulls the single-byte
+         * {@link IdentityEntry.Resolved#keyBundleType()} and the thirty-two-byte
+         * {@link IdentityEntry.Resolved#identityPublicKey()}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return the parsed {@link Success}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
                 exports = "identityKeysParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -135,6 +161,12 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             return Optional.of(new Success(entries));
         }
 
+        /**
+         * Compares this success envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code Success} carrying an equal entries list
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -147,11 +179,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             return Objects.equals(this.entries, that.entries);
         }
 
+        /**
+         * Returns a hash code derived from the entries list.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(entries);
         }
 
+        /**
+         * Returns the record-style rendering for this success envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqGetIdentityKeysResponse.Success[entries=" + entries + ']';
@@ -159,10 +201,12 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     }
 
     /**
-     * Per-device identity entry — sealed sub-family carrying either
-     * a successfully-resolved {@link Resolved} payload or a
-     * relay-rejected {@link Failure} envelope for one of the
-     * requested device JIDs.
+     * Closed per-device entry variant carrying either a successfully fetched identity key or the
+     * relay's per-device error envelope.
+     *
+     * @apiNote
+     * Pattern-match on {@link Resolved} versus {@link Failure} to dispatch identity-key
+     * installation vs error logging on a per-device basis.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     sealed interface IdentityEntry permits IdentityEntry.Resolved, IdentityEntry.Failure {
@@ -170,14 +214,17 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Returns the device JID this entry corresponds to.
          *
-         * @return the JID; never {@code null}
+         * @return the device JID
          */
         Jid deviceJid();
 
         /**
-         * Successfully-resolved identity entry — carries the
-         * per-device long-term identity public key and the
-         * single-byte type marker.
+         * Per-device resolved entry; the relay returned the device's long-term identity public key.
+         *
+         * @apiNote
+         * The {@link #identityPublicKey()} bytes can be fed through
+         * {@code WAWebCryptoCurve25519.toSignalCurvePubKey} (or its Cobalt equivalent) before being
+         * recorded against the Signal address derived from {@link #deviceJid()}.
          */
         @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
         final class Resolved implements IdentityEntry {
@@ -187,28 +234,25 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             private final Jid deviceJid;
 
             /**
-             * The single-byte Signal key-bundle type marker carried
-             * by the {@code <type/>} grandchild.
+             * The single-byte Signal key-bundle type marker, read from the {@code <type/>}
+             * grandchild.
              */
             private final byte keyBundleType;
 
             /**
-             * The device's long-term identity public key bytes
-             * carried by the {@code <identity/>} grandchild —
-             * thirty-two bytes.
+             * The thirty-two-byte identity public key, taken verbatim from the
+             * {@code <identity/>} grandchild.
              */
             private final byte[] identityPublicKey;
 
             /**
-             * Constructs a new resolved entry.
+             * Constructs a populated resolved entry.
              *
-             * @param deviceJid         the device JID; never
-             *                          {@code null}
+             * @param deviceJid         the device JID
              * @param keyBundleType     the type marker
-             * @param identityPublicKey the identity public key
-             *                          bytes; never {@code null}
-             * @throws NullPointerException if any reference argument
-             *                              is {@code null}
+             * @param identityPublicKey the identity public key bytes
+             * @throws NullPointerException if {@code deviceJid} or {@code identityPublicKey} is
+             *                              {@code null}
              */
             public Resolved(Jid deviceJid, byte keyBundleType, byte[] identityPublicKey) {
                 this.deviceJid = Objects.requireNonNull(deviceJid, "deviceJid cannot be null");
@@ -216,13 +260,16 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                 this.identityPublicKey = Objects.requireNonNull(identityPublicKey, "identityPublicKey cannot be null");
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public Jid deviceJid() {
                 return deviceJid;
             }
 
             /**
-             * Returns the type marker.
+             * Returns the key-bundle type marker.
              *
              * @return the type marker
              */
@@ -233,12 +280,18 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             /**
              * Returns the identity public key bytes.
              *
-             * @return the bytes; never {@code null}
+             * @return the thirty-two-byte identity public key
              */
             public byte[] identityPublicKey() {
                 return identityPublicKey;
             }
 
+            /**
+             * Compares this resolved entry to another instance for equality.
+             *
+             * @param obj the candidate instance
+             * @return {@code true} when {@code obj} is a {@code Resolved} carrying identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -253,6 +306,11 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                         && Arrays.equals(this.identityPublicKey, that.identityPublicKey);
             }
 
+            /**
+             * Returns a hash code derived from every carried field.
+             *
+             * @return the combined hash
+             */
             @Override
             public int hashCode() {
                 var result = Objects.hash(deviceJid, keyBundleType);
@@ -260,6 +318,11 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                 return result;
             }
 
+            /**
+             * Returns the record-style rendering for this resolved entry.
+             *
+             * @return the rendered string
+             */
             @Override
             public String toString() {
                 return "IqGetIdentityKeysResponse.IdentityEntry.Resolved[deviceJid=" + deviceJid
@@ -269,8 +332,13 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         }
 
         /**
-         * Per-device failure entry — the relay could not resolve
-         * the identity for this particular device JID.
+         * Per-device failure entry; the relay returned an {@code <error/>} grandchild instead of a
+         * resolved identity key for this device JID.
+         *
+         * @apiNote
+         * WA Web's {@code identityKeysParser} would have thrown and abandoned the whole batch;
+         * Cobalt records the failure per-device so the caller can still process the resolved
+         * entries from the same response.
          */
         @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
         final class Failure implements IdentityEntry {
@@ -280,25 +348,23 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             private final Jid deviceJid;
 
             /**
-             * The numeric per-device error code.
+             * The numeric per-device error code carried by {@code <error code="..."/>}.
              */
             private final int errorCode;
 
             /**
-             * The human-readable per-device error text, when the
-             * relay supplied one.
+             * The optional human-readable per-device error text carried by
+             * {@code <error text="..."/>}.
              */
             private final String errorText;
 
             /**
-             * Constructs a new failure entry.
+             * Constructs a populated failure entry.
              *
-             * @param deviceJid the device JID; never {@code null}
+             * @param deviceJid the device JID
              * @param errorCode the numeric error code
-             * @param errorText the optional human-readable text;
-             *                  may be {@code null}
-             * @throws NullPointerException if {@code deviceJid} is
-             *                              {@code null}
+             * @param errorText the optional human-readable text, possibly {@code null}
+             * @throws NullPointerException if {@code deviceJid} is {@code null}
              */
             public Failure(Jid deviceJid, int errorCode, String errorText) {
                 this.deviceJid = Objects.requireNonNull(deviceJid, "deviceJid cannot be null");
@@ -306,6 +372,9 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                 this.errorText = errorText;
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public Jid deviceJid() {
                 return deviceJid;
@@ -323,13 +392,19 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             /**
              * Returns the optional human-readable error text.
              *
-             * @return an {@link Optional} carrying the error text,
-             *         or empty when the relay omitted it
+             * @return an {@link Optional} carrying the error text, or empty when the relay omitted
+             *         it
              */
             public Optional<String> errorText() {
                 return Optional.ofNullable(errorText);
             }
 
+            /**
+             * Compares this failure entry to another instance for equality.
+             *
+             * @param obj the candidate instance
+             * @return {@code true} when {@code obj} is a {@code Failure} carrying identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -344,11 +419,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                         && Objects.equals(this.errorText, that.errorText);
             }
 
+            /**
+             * Returns a hash code derived from every carried field.
+             *
+             * @return the combined hash
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(deviceJid, errorCode, errorText);
             }
 
+            /**
+             * Returns the record-style rendering for this failure entry.
+             *
+             * @return the rendered string
+             */
             @Override
             public String toString() {
                 return "IqGetIdentityKeysResponse.IdentityEntry.Failure[deviceJid=" + deviceJid
@@ -359,27 +444,29 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * whole bulk-fetch as malformed or unauthorised.
+     * Client-error variant; the relay rejected the whole bulk fetch with a {@code 4xx} envelope.
+     *
+     * @apiNote
+     * Distinct from {@link Success.IdentityEntry.Failure}, which is a per-device failure inside an
+     * otherwise successful batch.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class ClientError implements IqGetIdentityKeysResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 4xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a populated client-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -398,22 +485,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ClientError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return the parsed {@link ClientError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
                 exports = "getAndStoreIdentityKeys", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -425,6 +511,12 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this client-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -438,11 +530,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this client-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqGetIdentityKeysResponse.ClientError[errorCode=" + errorCode
@@ -451,27 +553,30 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure while processing the bulk-fetch.
+     * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope
+     * while processing the bulk fetch.
+     *
+     * @apiNote
+     * Affects the whole batch; the caller typically retries after the surrounding contact-sync or
+     * device-sync flow re-runs.
      */
     @WhatsAppWebModule(moduleName = "WAWebGetIdentityKeysJob")
     final class ServerError implements IqGetIdentityKeysResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 5xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a populated server-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -490,22 +595,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ServerError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return the parsed {@link ServerError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebGetIdentityKeysJob",
                 exports = "getAndStoreIdentityKeys", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -517,6 +621,12 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this server-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -530,11 +640,21 @@ public sealed interface IqGetIdentityKeysResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this server-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqGetIdentityKeysResponse.ServerError[errorCode=" + errorCode

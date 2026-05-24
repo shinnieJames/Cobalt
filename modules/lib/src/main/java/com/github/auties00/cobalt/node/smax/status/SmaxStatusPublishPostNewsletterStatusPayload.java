@@ -11,48 +11,68 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the publish-payload addressing modes.
- * either a "client + server id" reference (publishing a
- * status-newsletter-reaction or status-newsletter-reaction-revoke
- * tied to a previously-published status identified by its
- * server-id) or a "client id only" reference (publishing a
- * brand-new status carrying an inner client-id content payload).
+ * The addressing mode of a
+ * {@link SmaxStatusPublishPostNewsletterStatusRequest}: either a
+ * status-reaction keyed by the target status's server-id
+ * ({@link WithServerId}), or a brand-new status keyed by stanza-id
+ * only ({@link WithClientIdOnly}).
+ *
+ * @apiNote
+ * Pick {@link WithServerId} when publishing a
+ * status-newsletter-reaction or status-newsletter-reaction-revoke;
+ * pick {@link WithClientIdOnly} when publishing a brand-new status
+ * (which today is the status-revoke flow driven by
+ * {@code WAWebNewsletterRevokeStatusQueryJob} or the
+ * status-send flow driven by
+ * {@code WAWebNewsletterSendStatusQueryJob}).
+ *
+ * @implNote
+ * This implementation models the WA Web
+ * {@code clientPostNewsletterStatusAndServerOrPostNewsletterStatusIDMixinGroup}
+ * disjunction as a sealed interface with two final implementations;
+ * callers pre-build the inner content as a {@link Node}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishClientPostNewsletterStatusAndServerOrPostNewsletterStatusIDMixinGroup")
 public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits SmaxStatusPublishPostNewsletterStatusPayload.WithServerId, SmaxStatusPublishPostNewsletterStatusPayload.WithClientIdOnly {
 
     /**
-     * The "client id + server id" payload. Used for publishing a
-     * status-newsletter-reaction or status-newsletter-reaction-revoke
-     * that references a previously-published status.
+     * The addressing variant for a publish that references a
+     * previously published status by its server-id.
+     *
+     * @apiNote
+     * Pick this variant for status-reaction and
+     * status-reaction-revoke publishes.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusClientAndServerIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishStatusNewsletterReactionStatusNewsletterReactionOrStatusNewsletterReactionRevokeMixinGroup")
     final class WithServerId implements SmaxStatusPublishPostNewsletterStatusPayload {
         /**
-         * The locally-generated stanza id assigned to the publish.
+         * The locally-generated publish stanza id.
          */
         private final String stanzaId;
 
         /**
-         * The server-id of the status the publish targets.
+         * The targeted status's server-id.
          */
         private final long statusServerId;
 
         /**
-         * The inner reaction / reaction-revoke content payload as a
-         * fully-built {@link Node}.
+         * The pre-built reaction or reaction-revoke content payload.
          */
         private final Node innerContent;
 
         /**
-         * Constructs a new "client + server id" payload.
+         * Constructs a server-id-addressed payload.
+         *
+         * @apiNote
+         * Use this when assembling a
+         * {@link SmaxStatusPublishPostNewsletterStatusRequest} that
+         * targets a previously published status.
          *
          * @param stanzaId       the publish stanza id; never
          *                       {@code null}
-         * @param statusServerId the server-id of the targeted
-         *                       status
-         * @param innerContent   the variant-shaped child payload;
+         * @param statusServerId the targeted status's server-id
+         * @param innerContent   the variant-shaped inner payload;
          *                       never {@code null}
          * @throws NullPointerException if {@code stanzaId} or
          *                              {@code innerContent} is
@@ -74,16 +94,21 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         }
 
         /**
-         * Returns the targeted status server-id.
+         * Returns the targeted status's server-id.
          *
-         * @return the server id
+         * @return the server-id
          */
         public long statusServerId() {
             return statusServerId;
         }
 
         /**
-         * Returns the inner content node.
+         * Returns the pre-built inner content node.
+         *
+         * @apiNote
+         * Read by
+         * {@link SmaxStatusPublishPostNewsletterStatusRequest#toNode()}
+         * when fanning out the publish.
          *
          * @return the node; never {@code null}
          */
@@ -91,6 +116,13 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
             return innerContent;
         }
 
+        /**
+         * Compares this payload to another for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link WithServerId} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -105,11 +137,25 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
                     && Objects.equals(this.innerContent, that.innerContent);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(stanzaId, statusServerId, innerContent);
         }
 
+        /**
+         * Returns a debug-friendly representation of this payload.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxStatusPublishPostNewsletterStatusPayload.WithServerId[stanzaId=" + stanzaId
@@ -119,25 +165,35 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
     }
 
     /**
-     * The "client id only" payload. Used for publishing a brand-new
-     * status carrying an inner client-id content payload.
+     * The addressing variant for a brand-new status post.
+     *
+     * @apiNote
+     * Pick this variant for status posts that do not reference a
+     * prior status (i.e. send-new and revoke-existing flows the
+     * caller drives through
+     * {@code WAWebNewsletterSendStatusQueryJob} /
+     * {@code WAWebNewsletterRevokeStatusQueryJob}).
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusClientIDMixin")
     @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishNewsletterClientIdContent")
     final class WithClientIdOnly implements SmaxStatusPublishPostNewsletterStatusPayload {
         /**
-         * The locally-generated stanza id assigned to the publish.
+         * The locally-generated publish stanza id.
          */
         private final String stanzaId;
 
         /**
-         * The inner client-id content payload as a fully-built
-         * node.
+         * The pre-built inner client-id content payload.
          */
         private final Node clientIdContent;
 
         /**
-         * Constructs a new "client id only" payload.
+         * Constructs a brand-new-post payload.
+         *
+         * @apiNote
+         * Use this when assembling a
+         * {@link SmaxStatusPublishPostNewsletterStatusRequest} for a
+         * new status.
          *
          * @param stanzaId        the publish stanza id; never
          *                        {@code null}
@@ -161,7 +217,7 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
         }
 
         /**
-         * Returns the inner client-id content node.
+         * Returns the pre-built inner client-id content node.
          *
          * @return the node; never {@code null}
          */
@@ -169,6 +225,13 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
             return clientIdContent;
         }
 
+        /**
+         * Compares this payload to another for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link WithClientIdOnly} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -182,11 +245,25 @@ public sealed interface SmaxStatusPublishPostNewsletterStatusPayload permits Sma
                     && Objects.equals(this.clientIdContent, that.clientIdContent);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(stanzaId, clientIdContent);
         }
 
+        /**
+         * Returns a debug-friendly representation of this payload.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxStatusPublishPostNewsletterStatusPayload.WithClientIdOnly[stanzaId=" + stanzaId

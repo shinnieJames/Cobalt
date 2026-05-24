@@ -15,36 +15,53 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing bot-welcome-request sync mutations.
+ * Builds outgoing app-state mutations that record whether a bot welcome message has been requested for a chat.
  *
- * <p>Mirrors the {@code getBotWelcomeRequestSetMutation} export of WhatsApp
- * Web's {@code WAWebBotWelcomeRequestSync} module. The factory is the
+ * @apiNote
+ * Drives the per-bot-chat {@code hasRequestedWelcomeMsg} flag used by
+ * WhatsApp Web's bot-welcome flow ({@code WAWebSendBotRequestWelcomeAction}
+ * sets it to {@code true} when the user opens a bot chat for the first
+ * time; {@code WAWebHandleBizBotWelcomeMsgProtocolModeAction} clears it back
+ * to {@code false} after the bot replies). The factory is the
  * outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.BotWelcomeRequestHandler}.
  */
 public final class BotWelcomeRequestMutationFactory {
     /**
-     * Constructs a bot-welcome-request mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public BotWelcomeRequestMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for setting the bot welcome request state on a chat.
+     * Returns a {@link SyncPendingMutation} that sets the welcome-requested flag for the given bot chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebBotWelcomeRequestSync.getBotWelcomeRequestSetMutation}:
-     * <ol>
-     *   <li>Constructs the value with {@code {botWelcomeRequestAction: {isSent: t}}}</li>
-     *   <li>Resolves the chat JID for mutation index via
-     *       {@code WAWebSyncdGetChat.getChatJidMutationIndexForChat(e, Actions.BotWelcomeRequest)}</li>
-     *   <li>Builds the pending mutation via {@code WAWebSyncdActionUtils.buildPendingMutation}
-     *       with collection, index, value, version, operation SET, and current unix time</li>
-     * </ol>
+     * @apiNote
+     * Emit this mutation right after sending the bot a welcome request (with
+     * {@code isSent = true}) so other linked devices stop showing the welcome
+     * affordance, and again after the bot replies (with
+     * {@code isSent = false}) so the affordance can be reused later. The
+     * mutation index follows
+     * {@snippet :
+     *     ["botWelcomeRequest", chatJid.toString()]
+     * }
+     * and the {@link BotWelcomeRequestAction} sub-message carries the
+     * {@code isSent} flag.
      *
-     * @param chatJid the JID of the bot chat
-     * @param isSent  whether the welcome message has been sent
-     * @return the pending mutation for the bot welcome request action
+     * @implNote
+     * This implementation captures the timestamp via {@link Instant#now()};
+     * WA Web's {@code WAWebBotWelcomeRequestSync.getBotWelcomeRequestSetMutation}
+     * uses {@code WATimeUtils.unixTime()} for the same purpose. The pinned
+     * version is {@link BotWelcomeRequestAction#ACTION_VERSION}.
+     *
+     * @param chatJid the bot chat {@link Jid}
+     * @param isSent  {@code true} once the welcome has been requested, {@code false} after the bot replies
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBotWelcomeRequestSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getBotWelcomeRequestSetMutation(Jid chatJid, boolean isSent) {

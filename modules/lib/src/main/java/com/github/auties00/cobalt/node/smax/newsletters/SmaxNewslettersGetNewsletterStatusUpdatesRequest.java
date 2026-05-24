@@ -15,23 +15,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the
- * {@code <status_updates count since? before|after>} payload in the
- * canonical
- * {@code <iq xmlns="newsletter" type="get" to=NEWSLETTER_JID>}
- * envelope.
+ * The outbound stanza that polls the relay for a delta of newsletter
+ * status updates (view counts and emoji reactions per status post).
+ *
+ * @apiNote
+ * Drives WA Web's periodic per-JID status-updates poll
+ * ({@code WAWebNewsletterGetStatusUpdatesJob.fetchNewsletterStatusUpdates}),
+ * which is deduplicated by JID via an in-flight {@code Map}. The
+ * resulting IQ has shape:
+ * {@snippet :
+ *     <iq xmlns="newsletter" type="get" to="<newsletterJid>">
+ *         <status_updates count="100" since="1700000000" after="99"/>
+ *     </iq>
+ * }
+ * The relay echoes the matching
+ * {@link SmaxNewslettersGetNewsletterStatusUpdatesResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterStatusUpdatesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQGetRequestMixin")
 public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID being polled.
+     * The newsletter {@link Jid} being polled.
      */
     private final Jid newsletterJid;
 
     /**
-     * The maximum number of {@code <status>} entries the relay should
-     * return.
+     * The cap on returned {@code <status>} entries per round-trip.
      */
     private final int count;
 
@@ -41,14 +50,22 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     private final Long since;
 
     /**
-     * The pagination cursor; never {@code null}.
+     * The required pagination cursor.
      */
     private final SmaxNewslettersGetNewsletterStatusUpdatesDirection direction;
 
     /**
      * Constructs a new request.
      *
-     * @param newsletterJid the newsletter JID; never {@code null}
+     * @apiNote
+     * WA Web's job invariably passes
+     * {@link SmaxNewslettersGetNewsletterStatusUpdatesDirection.After}
+     * at pivot {@code 99} (the minimum allowed server-id) and a
+     * {@code count} of {@code 100} to pull the full known-status
+     * history; {@code since} is left {@code null}.
+     *
+     * @param newsletterJid the newsletter {@link Jid}; never
+     *                      {@code null}
      * @param count         the per-call cap; must be non-negative
      * @param since         the optional unix-second floor; may be
      *                      {@code null}
@@ -64,18 +81,18 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     }
 
     /**
-     * Returns the newsletter JID being polled.
+     * Returns the newsletter {@link Jid} being polled.
      *
-     * @return the JID; never {@code null}
+     * @return the {@link Jid}; never {@code null}
      */
     public Jid newsletterJid() {
         return newsletterJid;
     }
 
     /**
-     * Returns the per-call cap.
+     * Returns the per-call cap on returned entries.
      *
-     * @return the count
+     * @return the cap
      */
     public int count() {
         return count;
@@ -85,14 +102,14 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
      * Returns the optional unix-second floor.
      *
      * @return an {@link Optional} carrying the floor, or empty when
-     *         omitted
+     *         the request asks for the full delta
      */
     public Optional<Long> since() {
         return Optional.ofNullable(since);
     }
 
     /**
-     * Returns the cursor direction.
+     * Returns the required pagination cursor.
      *
      * @return the cursor; never {@code null}
      */
@@ -101,7 +118,8 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza carrying the
+     * {@code <status_updates>} payload.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <status_updates>} payload
@@ -129,6 +147,13 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
                 .content(updatesBuilder.build());
     }
 
+    /**
+     * Compares two requests for value equality on every field.
+     *
+     * @param obj the reference object to compare against
+     * @return {@code true} when {@code obj} is a request with equal
+     *         field values
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -144,11 +169,21 @@ public final class SmaxNewslettersGetNewsletterStatusUpdatesRequest implements S
                 && Objects.equals(this.direction, that.direction);
     }
 
+    /**
+     * Returns the hash code derived from every field.
+     *
+     * @return the combined hash of every field
+     */
     @Override
     public int hashCode() {
         return Objects.hash(newsletterJid, count, since, direction);
     }
 
+    /**
+     * Returns a debug representation including every field.
+     *
+     * @return a record-like rendering of this request
+     */
     @Override
     public String toString() {
         return "SmaxNewslettersGetNewsletterStatusUpdatesRequest[newsletterJid="

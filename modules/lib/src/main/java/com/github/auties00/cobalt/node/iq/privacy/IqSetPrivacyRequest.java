@@ -13,7 +13,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * Outbound legacy {@code <iq xmlns="privacy" type="set"><privacy><category/></privacy></iq>} stanza
+ * that mutates exactly one row of the user's privacy settings.
+ *
+ * @apiNote
+ * Cobalt embedders dispatch this when the user changes a single privacy row in the Settings UI
+ * (last seen, online presence, profile picture, about, group-add audience, call-add audience,
+ * messages, defense mode); the matching read-receipts toggle has its own
+ * {@link IqSetReadReceiptRequest}. To extend or retract a per-category exclusion list (the
+ * {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST} value), populate
+ * {@link #users()} with one {@link IqSetPrivacyUserEntry} per peer plus the previous-state
+ * {@link #dhash()} digest matching WA Web's {@code privacyDisallowedList} table.
+ *
+ * @implNote
+ * This implementation maps directly to WA Web's {@code WAWebSetPrivacyJob.setPrivacy}; the
+ * higher-level batching/snapshot reconciliation that {@code WAWebSetPrivacyForOneCategoryAction}
+ * layers on top (per-category disallowed-list sync on {@code 409}, local user-prefs write,
+ * disallowed-list table merge) is the caller's responsibility in Cobalt.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetPrivacyJob")
 public final class IqSetPrivacyRequest implements IqOperation.Request {
@@ -28,39 +44,47 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
     private final IqQueryPrivacySettingsVisibility value;
 
     /**
-     * The optional user-list mutation list. When empty the request
-     * omits user children entirely (bare-category shape). When
-     * non-empty the wire shape depends on {@link #addressingMode}.
+     * The optional user-list mutation list; when empty the request omits {@code <user>} children
+     * entirely (bare-category shape). When non-empty the wire shape depends on
+     * {@link #addressingMode}.
      */
     private final List<IqSetPrivacyUserEntry> users;
 
     /**
-     * The wire addressing mode. Selects between PN and LID
-     * envelopes when {@link #users} is non-empty.
+     * The wire addressing mode; selects between PN and LID envelopes when {@link #users} is
+     * non-empty.
      */
     private final IqSetPrivacyAddressingMode addressingMode;
 
     /**
-     * The optional category-list digest. Emitted as
-     * {@code dhash="…"} on the {@code <category/>} element when
-     * {@link #users} is non-empty. {@code null} maps to the literal
-     * {@code "none"} per WA Web's fallback.
+     * The optional previous-state digest of the per-category exclusion list; emitted as
+     * {@code dhash="..."} on the {@code <category>} element when {@link #users} is non-empty.
+     * A {@code null} value serialises to the literal {@code "none"} sentinel matching WA Web's
+     * fallback.
      */
     private final String dhash;
 
     /**
      * Constructs a request.
      *
-     * @param name           the category. Never {@code null}
-     * @param value          the new value. Never {@code null}
-     * @param users          the user-list mutation. Never
-     *                       {@code null} (use {@link List#of()} for
-     *                       the bare-category shape)
-     * @param addressingMode the addressing mode. Never {@code null}
-     * @param dhash          the optional category-list digest. May be
-     *                       {@code null}
-     * @throws NullPointerException if any non-{@code null}-allowed
-     *                              argument is {@code null}
+     * @apiNote
+     * Pass {@link List#of()} for {@code users} to emit the bare {@code <category name=... value=.../>}
+     * shape (the only shape required for non-blacklist values). Pass a non-empty list together
+     * with a matching {@code dhash} to mutate the per-category exclusion list under either
+     * {@link IqSetPrivacyAddressingMode#PN} or {@link IqSetPrivacyAddressingMode#LID}.
+     *
+     * @implNote
+     * This implementation defensively copies {@code users} via {@link List#copyOf(java.util.Collection)};
+     * the resulting instance is immutable.
+     *
+     * @param name           the category; never {@code null}
+     * @param value          the new value; never {@code null}
+     * @param users          the user-list mutation list; never {@code null} (use
+     *                       {@link List#of()} for the bare-category shape)
+     * @param addressingMode the addressing mode; never {@code null}
+     * @param dhash          the optional previous-state digest; may be {@code null}
+     * @throws NullPointerException if {@code name}, {@code value}, {@code users}, or
+     *                              {@code addressingMode} is {@code null}
      */
     public IqSetPrivacyRequest(IqQueryPrivacySettingsCategoryName name,
                    IqQueryPrivacySettingsVisibility value,
@@ -78,7 +102,7 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
     /**
      * Returns the category being set.
      *
-     * @return the category. Never {@code null}
+     * @return the category; never {@code null}
      */
     public IqQueryPrivacySettingsCategoryName name() {
         return name;
@@ -87,7 +111,7 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
     /**
      * Returns the new value for the category.
      *
-     * @return the value. Never {@code null}
+     * @return the value; never {@code null}
      */
     public IqQueryPrivacySettingsVisibility value() {
         return value;
@@ -96,8 +120,12 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
     /**
      * Returns the user-list mutation list.
      *
-     * @return an unmodifiable list. Never {@code null}. Empty for
-     *         the bare-category shape
+     * @apiNote
+     * Empty for the bare-category shape (every value other than
+     * {@link IqQueryPrivacySettingsVisibility#CONTACT_BLACKLIST}); non-empty when extending or
+     * retracting an exclusion list.
+     *
+     * @return an unmodifiable list; never {@code null}
      */
     public List<IqSetPrivacyUserEntry> users() {
         return users;
@@ -106,26 +134,46 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
     /**
      * Returns the wire addressing mode.
      *
-     * @return the addressing mode. Never {@code null}
+     * @return the addressing mode; never {@code null}
      */
     public IqSetPrivacyAddressingMode addressingMode() {
         return addressingMode;
     }
 
     /**
-     * Returns the optional category-list digest.
+     * Returns the optional previous-state digest.
      *
-     * @return an {@link Optional} carrying the digest, or empty when
-     *         the caller did not supply one
+     * @apiNote
+     * Mirrors the digest field WA Web stores on
+     * {@code WAWebSchemaPrivacyDisallowedList.PrivacyDisallowedListType} rows; the relay uses it
+     * to detect concurrent edits (returning a {@code 409} client-error when the caller's view is
+     * stale).
+     *
+     * @return the digest, or {@link Optional#empty()} when the caller did not supply one
      */
     public Optional<String> dhash() {
         return Optional.ofNullable(dhash);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation serialises the typed fields into the canonical
+     * {@code <iq xmlns="privacy" type="set">} envelope. The shape is selected as follows:
+     * <ul>
+     *   <li>empty {@link #users} emits the bare {@code <privacy><category name=... value=.../></privacy>}
+     *   payload (WA Web's {@code _(name, value)} branch);
+     *   <li>non-empty {@link #users} under {@link IqSetPrivacyAddressingMode#PN} emits
+     *   {@code <privacy><category dhash=...><user action=... jid=PN/>...</category></privacy>}
+     *   (WA Web's {@code g(name, value, users, dhash)} branch);
+     *   <li>non-empty {@link #users} under {@link IqSetPrivacyAddressingMode#LID} adds
+     *   {@code addressing_mode="lid"} on the {@code <privacy>} element and emits each
+     *   {@code <user>} with the LID JID and either a {@code username} or {@code pn_jid}
+     *   discriminator (WA Web's {@code f(name, value, users, dhash)} branch).
+     * </ul>
+     * A {@code null} {@link #dhash} serialises as the literal {@code "none"} sentinel, matching
+     * WA Web's {@code r!=null?r:"none"} fallback.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetPrivacyJob",
@@ -170,6 +218,12 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
                 .content(privacyNode);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation compares every typed field by value.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -186,11 +240,24 @@ public final class IqSetPrivacyRequest implements IqOperation.Request {
                 && Objects.equals(this.dhash, that.dhash);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation hashes every typed field consistently with {@link #equals(Object)}.
+     */
     @Override
     public int hashCode() {
         return Objects.hash(name, value, users, addressingMode, dhash);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation emits a debug-only representation of every typed field; the format is
+     * not stable and must not be parsed.
+     */
     @Override
     public String toString() {
         return "IqSetPrivacyRequest[name=" + name + ", value=" + value

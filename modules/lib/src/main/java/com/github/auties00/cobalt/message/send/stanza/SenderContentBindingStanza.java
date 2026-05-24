@@ -15,35 +15,58 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds the {@code <sender_content_binding>} stanza child node carrying the sender's
- * own RCAT content-binding tag.
+ * Builds the optional {@code <sender_content_binding>} child of an
+ * outgoing {@code <message>} stanza carrying the sender's own RCAT
+ * content-binding tag.
+ *
+ * @apiNote
+ * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza}.
+ * The sender content binding pins the sender's URL message content to a
+ * cryptographic tag so the recipient can verify the linked URL was the
+ * one the sender intended (defending against URL-rewriting attacks). The
+ * 1:1 entrypoint ({@link #buildForUser}) computes the binding for the
+ * sender alone; the group entrypoint ({@link #build}) selects the
+ * sender's pre-computed binding out of a per-recipient map.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 @WhatsAppWebModule(moduleName = "WAWebSendGroupSkmsgJob")
 @WhatsAppWebModule(moduleName = "WAWebMsgRcatUtils")
 public final class SenderContentBindingStanza {
     /**
-     * Logger for RCAT generation failures.
+     * The {@link System.Logger} for RCAT generation failures.
      */
     private static final System.Logger LOGGER = System.getLogger(SenderContentBindingStanza.class.getName());
 
     /**
-     * Prevents instantiation of this utility class.
+     * Prevents instantiation; this is a static composer.
      */
     private SenderContentBindingStanza() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     /**
-     * Builds the {@code <sender_content_binding>} node for a 1:1 chat message,
-     * generating the RCAT content binding for the sender.
+     * Builds the {@code <sender_content_binding>} child for a 1:1 URL
+     * message by deriving the sender's RCAT tag on the fly.
      *
-     * <p>Returns {@code null} when the message has no {@code messageSecret}, is not a
-     * URL message, or RCAT generation fails.
+     * @apiNote
+     * Returns {@code null} when any prerequisite fails: the message
+     * carries no {@link ChatMessageInfo#messageSecret()}, the body is not
+     * an {@link ExtendedTextMessage} with a non-empty matched URL, or
+     * RCAT derivation fails. The returned node carries the raw RCAT bytes
+     * as its content; the surrounding stanza is rejected as malformed if
+     * the RCAT does not match the URL after URL-rewriting.
      *
-     * @param messageInfo the outgoing message
-     * @param selfJid     the sender's user JID
-     * @return the sender content binding node, or {@code null}
+     * @implNote
+     * This implementation hashes on
+     * {@link ContentBindingToken#resolveContentId(String)} so URLs that
+     * differ only in tracking parameters share the same tag, mirroring WA
+     * Web's content-id projection inside
+     * {@code WAWebMsgRcatUtils.getContentIdString}.
+     *
+     * @param messageInfo the outgoing {@link ChatMessageInfo}
+     * @param selfJid     the sender's {@link Jid}
+     * @return the {@code <sender_content_binding>} {@link Node}, or
+     *         {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -76,14 +99,26 @@ public final class SenderContentBindingStanza {
     }
 
     /**
-     * Builds the {@code <sender_content_binding>} node from a pre-computed content
-     * binding map (used for group messages where the bindings are computed externally
-     * for all participants).
+     * Builds the {@code <sender_content_binding>} child by selecting the
+     * sender's RCAT tag from a pre-computed per-recipient map.
      *
-     * @param senderJid       the sender's device JID
-     * @param contentBindings per-recipient RCAT tags keyed by user JID, or {@code null}
-     * @return the sender content binding node, or {@code null} if no binding exists for
-     *         the sender
+     * @apiNote
+     * Used for group sends, where the bindings have already been derived
+     * for every participant by
+     * {@code WAWebMsgRcatUtils.genContentBindingForMsg}. Returns
+     * {@code null} when the map is {@code null} or contains no entry for
+     * the sender's user JID.
+     *
+     * @implNote
+     * This implementation looks up on {@link Jid#toUserJid()} so the
+     * device identifier in {@code senderJid} is irrelevant; matches WA
+     * Web's {@code widToUserJid} lookup.
+     *
+     * @param senderJid       the sender's device {@link Jid}
+     * @param contentBindings per-recipient RCAT tags keyed by user
+     *                        {@link Jid}, or {@code null}
+     * @return the {@code <sender_content_binding>} {@link Node}, or
+     *         {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)

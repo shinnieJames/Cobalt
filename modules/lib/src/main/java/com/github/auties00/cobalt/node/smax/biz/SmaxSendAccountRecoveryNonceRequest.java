@@ -11,24 +11,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the empty
- * send-account-recovery-nonce request payload in the canonical
- * {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that asks the relay to email an account
+ * recovery code to the active CTWA biz user.
+ *
+ * @apiNote
+ * Used by the CTWA recovery flow in
+ * {@code WAWebRequestAdAccountRecoveryCode.requestAdAccountRecoveryCode},
+ * which is triggered when
+ * {@link SmaxRequestSilentNonceResponse.RecoveryRequired} forces the
+ * user to confirm account ownership before a silent nonce can be
+ * issued. The request carries no payload; the optional {@code from}
+ * attribute is the only knob and is normally left {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountSendAccountRecoveryNonceRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountHackBaseIQGetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaAdAccountBaseIQGetRequestMixin")
 public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.Request {
     /**
-     * The optional {@code from} attribute echoed onto the outbound
-     * IQ via the {@code HackBaseIQGetRequestMixin}; may be
-     * {@code null}.
+     * The optional user JID echoed onto the outbound IQ's
+     * {@code from} attribute; {@code null} omits the attribute.
      */
     private final Jid fromUserJid;
 
     /**
      * Constructs a request with no {@code from} echo.
+     *
+     * @apiNote
+     * The default form expected by
+     * {@code requestAdAccountRecoveryCode}, which calls
+     * {@code sendSendAccountRecoveryNonceRPC({})} with no arguments.
      */
     public SmaxSendAccountRecoveryNonceRequest() {
         this(null);
@@ -38,8 +49,12 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
      * Constructs a request optionally echoing the supplied user JID
      * onto the {@code from} attribute.
      *
-     * @param fromUserJid the optional user JID to echo onto the
-     *                    {@code from} attribute; may be {@code null}
+     * @apiNote
+     * Reserved for multi-device callers that need the outbound IQ
+     * to look like it originated from a specific linked user JID;
+     * standard CTWA callers pass {@code null}.
+     *
+     * @param fromUserJid the optional user JID; may be {@code null}
      */
     public SmaxSendAccountRecoveryNonceRequest(Jid fromUserJid) {
         this.fromUserJid = fromUserJid;
@@ -48,17 +63,24 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
     /**
      * Returns the optional {@code from} echo.
      *
-     * @return an {@link Optional} carrying the user JID, or empty
-     *         when no echo was supplied
+     * @apiNote
+     * Returns {@link Optional#empty()} when the request was built
+     * without a {@code from} echo (the standard
+     * {@code requestAdAccountRecoveryCode} case).
+     *
+     * @return an {@link Optional} carrying the user JID
      */
     public Optional<Jid> fromUserJid() {
         return Optional.ofNullable(fromUserJid);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @apiNote
+     * Stamps {@code xmlns="fb:thrift_iq"}, {@code type="get"},
+     * {@code to="s.whatsapp.net"} and the optional {@code from}
+     * echo. The IQ {@code id} is assigned by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizCtwaAdAccountSendAccountRecoveryNonceRequest",
@@ -70,11 +92,11 @@ public final class SmaxSendAccountRecoveryNonceRequest implements SmaxOperation.
     public NodeBuilder toNode() {
         var builder = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "fb:thrift_iq") // WASmaxOutBizCtwaAdAccountSendAccountRecoveryNonceRequest.makeSendAccountRecoveryNonceRequest: smax("iq", {xmlns: "fb:thrift_iq", smax_id: INT(112)})
-                .attribute("to", JidServer.user()) // WASmaxOutBizCtwaAdAccountHackBaseIQGetRequestMixin.mergeHackBaseIQGetRequestMixin: to: WAWap.S_WHATSAPP_NET
-                .attribute("type", "get"); // WASmaxOutBizCtwaAdAccountBaseIQGetRequestMixin.mergeBaseIQGetRequestMixin: type: "get" (id=generateId() delegated to WhatsAppClient.sendNode)
+                .attribute("xmlns", "fb:thrift_iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get");
         if (fromUserJid != null) {
-            builder.attribute("from", fromUserJid); // WASmaxOutBizCtwaAdAccountHackBaseIQGetRequestMixin.mergeHackBaseIQGetRequestMixin: from: OPTIONAL(USER_JID, t)
+            builder.attribute("from", fromUserJid);
         }
         return builder;
     }

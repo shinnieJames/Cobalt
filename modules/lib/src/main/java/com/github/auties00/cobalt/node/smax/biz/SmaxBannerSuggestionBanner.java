@@ -9,24 +9,41 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <banner/>} grandchild projection. Bundles
- * {@link SmaxBannerSuggestionConfig}, {@link SmaxBannerSuggestionContent}, {@link SmaxBannerSuggestionAction} and
- * {@link SmaxBannerSuggestionNativeAction} sub-trees.
+ * The {@code <banner/>} grandchild of the CTWA banner-suggestion notification,
+ * bundling the {@link SmaxBannerSuggestionConfig}, {@link SmaxBannerSuggestionContent},
+ * optional {@link SmaxBannerSuggestionAction}, and the
+ * {@link SmaxBannerSuggestionNativeAction native-action} list.
+ *
+ * @apiNote
+ * Carries the full rich-content payload that drives the WhatsApp Business
+ * "suggested banner" panel rendered by
+ * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion}: expiry, visual
+ * style, headline/body/highlight copy, deep-link target, and per-platform
+ * deep-link overrides.
+ *
+ * @implNote
+ * This implementation delegates the {@code <native_action/>} cardinality
+ * check (0..50) to {@link SmaxBannerSuggestionNativeActionsMixin#of(Node)}
+ * so the mixin's bound fires before any individual entry is parsed,
+ * matching WA Web's
+ * {@code WASmaxInBizCtwaActionNativeActionsMixinMixin.parseNativeActionsMixinMixin}
+ * sequence.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionBanner {
     /**
-     * The mandatory {@code <config/>} projection.
+     * The mandatory {@code <config/>} projection holding the banner
+     * lifecycle attributes.
      */
     private final SmaxBannerSuggestionConfig config;
 
     /**
-     * The mandatory {@code <content/>} projection.
+     * The mandatory {@code <content/>} projection holding the banner copy.
      */
     private final SmaxBannerSuggestionContent content;
 
     /**
-     * The optional {@code <action/>} projection.
+     * The optional {@code <action/>} projection holding the deep-link triple.
      */
     private final SmaxBannerSuggestionAction action;
 
@@ -36,18 +53,18 @@ public final class SmaxBannerSuggestionBanner {
     private final List<SmaxBannerSuggestionNativeAction> nativeActions;
 
     /**
-     * Constructs a new banner projection.
+     * Constructs a banner from already-validated sub-projections.
      *
-     * @param config        the config projection; never
-     *                      {@code null}
-     * @param content       the content projection; never
-     *                      {@code null}
-     * @param action        the optional action projection; may be
-     *                      {@code null}
-     * @param nativeActions the native actions list; may be
-     *                      {@code null} (treated as empty)
-     * @throws NullPointerException if {@code config} or
-     *                              {@code content} is {@code null}
+     * @apiNote
+     * Cobalt callers normally obtain a banner by parsing a stanza via
+     * {@link #of(Node)}; this constructor is exposed for tests and for
+     * hand-built fixtures.
+     *
+     * @param config        the {@link SmaxBannerSuggestionConfig} projection; never {@code null}
+     * @param content       the {@link SmaxBannerSuggestionContent} projection; never {@code null}
+     * @param action        the optional {@link SmaxBannerSuggestionAction} projection; may be {@code null}
+     * @param nativeActions the native actions list (0..50 entries); may be {@code null} (treated as empty)
+     * @throws NullPointerException if {@code config} or {@code content} is {@code null}
      */
     public SmaxBannerSuggestionBanner(SmaxBannerSuggestionConfig config, SmaxBannerSuggestionContent content, SmaxBannerSuggestionAction action, List<SmaxBannerSuggestionNativeAction> nativeActions) {
         this.config = Objects.requireNonNull(config, "config cannot be null");
@@ -57,59 +74,93 @@ public final class SmaxBannerSuggestionBanner {
     }
 
     /**
-     * Returns the config projection.
+     * Returns the {@link SmaxBannerSuggestionConfig} projection.
      *
-     * @return the config; never {@code null}
+     * @apiNote
+     * Carries the {@code expires_at}, {@code display}, and {@code revoked}
+     * attributes; consumers check {@link SmaxBannerSuggestionConfig#revoked()}
+     * first to short-circuit rendering when the banner has been pulled.
+     *
+     * @return the config projection; never {@code null}
      */
     public SmaxBannerSuggestionConfig config() {
         return config;
     }
 
     /**
-     * Returns the content projection.
+     * Returns the {@link SmaxBannerSuggestionContent} projection.
      *
-     * @return the content; never {@code null}
+     * @apiNote
+     * Carries the {@code locale} attribute, the {@code <heading>},
+     * {@code <body>}, and {@code <highlight>} mandatory copy, and the
+     * three optional localised parallels.
+     *
+     * @return the content projection; never {@code null}
      */
     public SmaxBannerSuggestionContent content() {
         return content;
     }
 
     /**
-     * Returns the optional action projection.
+     * Returns the optional {@link SmaxBannerSuggestionAction} projection.
      *
-     * @return an {@link Optional} carrying the projection, or empty
+     * @apiNote
+     * Empty when the banner ships no {@code <action/>} element; consumers
+     * fall back to the matching
+     * {@link SmaxBannerSuggestionNativeAction native action} entry for the
+     * client platform.
+     *
+     * @return an {@link Optional} carrying the action projection, or empty
+     *         when the {@code <action/>} element is absent
      */
     public Optional<SmaxBannerSuggestionAction> action() {
         return Optional.ofNullable(action);
     }
 
     /**
-     * Returns the native-actions list.
+     * Returns the {@link SmaxBannerSuggestionNativeAction native-action}
+     * entries.
      *
-     * @return an unmodifiable list of 0..50 entries; never
-     *         {@code null}
+     * @apiNote
+     * Each entry pairs a {@code platform} string with a deep link plus a
+     * minimum app version; consumers pick the entry matching the local
+     * platform.
+     *
+     * @return an unmodifiable list of 0..50 entries; never {@code null}
      */
     public List<SmaxBannerSuggestionNativeAction> nativeActions() {
         return nativeActions;
     }
 
     /**
-     * Tries to parse the projection from the given node.
+     * Parses the projection from a {@code <banner/>} node.
      *
-     * @param node the {@code <banner/>} node
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the node does not match the documented schema
+     * @apiNote
+     * Returns empty whenever the node tag is wrong, either mandatory child
+     * is missing, the optional {@code <action/>} child fails to parse, or
+     * the {@code <native_action/>} cardinality bound (0..50) is breached.
+     *
+     * @implNote
+     * This implementation walks the children in WA Web's documented order:
+     * {@code config}, {@code content}, optional {@code action}, then the
+     * {@link SmaxBannerSuggestionNativeActionsMixin} bound check. The
+     * cardinality is enforced by the mixin so it short-circuits before
+     * any {@code <native_action/>} child is parsed, matching the WA Web
+     * {@code mapChildrenWithTag(..., 0, 50, ...)} semantics.
+     *
+     * @param node the candidate {@code <banner/>} node; never {@code null}
+     * @return an {@link Optional} carrying the projection, or empty when
+     *         parsing fails at any step
+     * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest",
             exports = "parseBannerSuggestionRequestCtwaSuggestionBanner",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public static Optional<SmaxBannerSuggestionBanner> of(Node node) {
         Objects.requireNonNull(node, "node cannot be null");
-        // WASmaxParseUtils.assertTag(t, "banner")
         if (!node.hasDescription("banner")) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.flattenedChildWithTag(t, "config")
         var configNode = node.getChild("config").orElse(null);
         if (configNode == null) {
             return Optional.empty();
@@ -118,7 +169,6 @@ public final class SmaxBannerSuggestionBanner {
         if (config == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.flattenedChildWithTag(t, "content")
         var contentNode = node.getChild("content").orElse(null);
         if (contentNode == null) {
             return Optional.empty();
@@ -127,7 +177,6 @@ public final class SmaxBannerSuggestionBanner {
         if (content == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.optionalChildWithTag(t, "action", e)
         SmaxBannerSuggestionAction action = null;
         var actionNode = node.getChild("action").orElse(null);
         if (actionNode != null) {
@@ -137,9 +186,6 @@ public final class SmaxBannerSuggestionBanner {
             }
             action = parsed.get();
         }
-        // WASmaxInBizCtwaActionNativeActionsMixinMixin.parseNativeActionsMixinMixin(t):
-        // delegate to the mixin so the 0..50 cardinality check fires
-        // before any native-action child is parsed.
         var nativeActionsMixin = SmaxBannerSuggestionNativeActionsMixin.of(node).orElse(null);
         if (nativeActionsMixin == null) {
             return Optional.empty();
@@ -148,6 +194,15 @@ public final class SmaxBannerSuggestionBanner {
                 nativeActionsMixin.nativeAction()));
     }
 
+    /**
+     * Compares this banner to {@code obj} for structural equality on all
+     * four sub-projections.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionBanner}
+     *         with matching {@link #config()}, {@link #content()},
+     *         {@link #action()}, and {@link #nativeActions()}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -163,11 +218,21 @@ public final class SmaxBannerSuggestionBanner {
                 && Objects.equals(this.nativeActions, that.nativeActions);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash of all four sub-projections
+     */
     @Override
     public int hashCode() {
         return Objects.hash(config, content, action, nativeActions);
     }
 
+    /**
+     * Returns a debug-friendly rendering naming all four sub-projections.
+     *
+     * @return a record-style string with the four sub-projection values
+     */
     @Override
     public String toString() {
         return "SmaxBannerSuggestionBanner[config=" + config

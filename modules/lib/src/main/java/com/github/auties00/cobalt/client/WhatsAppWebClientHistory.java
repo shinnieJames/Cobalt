@@ -10,82 +10,101 @@ import it.auties.protobuf.model.ProtobufType;
 import java.util.Objects;
 
 /**
- * Declares how much chat history a WhatsApp Web companion client should
- * pull from the primary device after linking.
+ * The chat-history-sync policy a web companion advertises to the
+ * primary device after linking.
  *
- * <p>When a web companion first pairs with a mobile device, WhatsApp runs
- * a one-shot history synchronisation that replays past conversations into
- * the companion's local store. This class lets the integrator pick the
- * volume of that replay ({@link #discard(boolean)},
- * {@link #standard(boolean)}, {@link #extended(boolean)}, or a
- * {@link #custom(int, boolean)} cap) and whether newsletters should be
- * included. The choice directly impacts memory, bandwidth, and pairing
- * time budget.
+ * @apiNote
+ * Embedded into the {@code DeviceProps.historySyncConfig} block of the
+ * companion's first handshake so the primary knows how much past
+ * history to ship. Pick the volume via {@link #discard(boolean)},
+ * {@link #standard(boolean)}, {@link #extended(boolean)}, or a custom
+ * {@link #custom(int, boolean)} cap, plus a flag for whether the
+ * newsletter surface is included. Bigger caps cost memory, bandwidth,
+ * and pairing time.
  *
- * <p>Instances are immutable value objects. The factory methods return
- * cached constants for the common presets to avoid allocations in hot
- * builder paths.
+ * @implNote
+ * This implementation is the wire-level counterpart of WA Web's
+ * {@code DeviceProps$HistorySyncConfig} message in
+ * {@code WAWebProtobufsCompanionReg.pb}. The full WA Web message
+ * carries 24 fields (storage quota, recent-sync window, on-demand
+ * readiness, support flags); Cobalt collapses them into the two
+ * fields most embedders need to set explicitly. The 59206 cap on the
+ * standard preset is Cobalt-specific; WA Web computes its quota
+ * dynamically from {@code MdSyncFieldStatsMeta.getStorageEstimation}.
  *
  * @see WhatsAppClient
- * @see WhatsAppClientBuilder.Options.Web#historySetting(WhatsAppWebClientHistory)
  */
 @ProtobufMessage
 @WhatsAppWebModule(moduleName = "WAWebProtobufsCompanionReg.pb")
 public final class WhatsAppWebClientHistory {
     /**
-     * Cached constant for the zero-history variant with newsletters
-     * disabled.
+     * The cached zero-history policy with newsletters disabled.
      */
     private static final WhatsAppWebClientHistory ZERO = new WhatsAppWebClientHistory(0, false);
+
     /**
-     * Cached constant for the zero-history variant with newsletters
-     * enabled.
+     * The cached zero-history policy with newsletters enabled.
      */
     private static final WhatsAppWebClientHistory ZERO_WITH_NEWSLETTERS = new WhatsAppWebClientHistory(0, true);
+
     /**
-     * Cached constant for WhatsApp Web's default history size (59206
-     * items), newsletters disabled.
+     * The cached standard-volume policy with newsletters disabled.
+     *
+     * @apiNote
+     * The 59206 cap is Cobalt's chosen mid-range value; WA Web
+     * computes its own per-session quota from local storage
+     * estimation.
      */
     private static final WhatsAppWebClientHistory STANDARD = new WhatsAppWebClientHistory(59206, false);
+
     /**
-     * Cached constant for WhatsApp Web's default history size (59206
-     * items), newsletters enabled.
+     * The cached standard-volume policy with newsletters enabled.
      */
     private static final WhatsAppWebClientHistory STANDARD_WITH_NEWSLETTERS = new WhatsAppWebClientHistory(59206, true);
+
     /**
-     * Cached constant for the extended-history variant (request as much
-     * as the server will deliver), newsletters disabled.
+     * The cached extended-volume policy (request as much as the server
+     * will deliver) with newsletters disabled.
      */
     private static final WhatsAppWebClientHistory EXTENDED = new WhatsAppWebClientHistory(Integer.MAX_VALUE, false);
+
     /**
-     * Cached constant for the extended-history variant, newsletters
-     * enabled.
+     * The cached extended-volume policy with newsletters enabled.
      */
     private static final WhatsAppWebClientHistory EXTENDED_WITH_NEWSLETTERS = new WhatsAppWebClientHistory(Integer.MAX_VALUE, true);
 
     /**
-     * The maximum number of history items to request during the initial
-     * sync; {@link Integer#MAX_VALUE} means unlimited.
+     * The maximum number of history items to request during the
+     * initial sync.
+     *
+     * @apiNote
+     * Maps to {@code DeviceProps$HistorySyncConfig.fullSyncDaysLimit}
+     * conceptually, though Cobalt expresses the cap as item count
+     * rather than day count. {@link Integer#MAX_VALUE} means
+     * unlimited.
      */
     @WhatsAppWebExport(moduleName = "WAWebProtobufsCompanionReg.pb",
-            exports = "DeviceProps$HistorySyncConfigSpec", adaptation = WhatsAppAdaptation.DIRECT)
+            exports = "DeviceProps$HistorySyncConfigSpec", adaptation = WhatsAppAdaptation.ADAPTED)
     @ProtobufProperty(index = 1, type = ProtobufType.INT32)
     final int size;
 
     /**
-     * Whether newsletters should be included in the initial history sync.
+     * Whether the newsletter surface is included in the initial
+     * history sync.
      */
     @WhatsAppWebExport(moduleName = "WAWebProtobufsCompanionReg.pb",
-            exports = "DeviceProps$HistorySyncConfigSpec", adaptation = WhatsAppAdaptation.DIRECT)
+            exports = "DeviceProps$HistorySyncConfigSpec", adaptation = WhatsAppAdaptation.ADAPTED)
     @ProtobufProperty(index = 2, type = ProtobufType.BOOL)
     final boolean newsletters;
 
     /**
-     * Constructs a new policy with the given size and newsletter flag.
+     * Constructs a new policy from raw size and newsletter components.
      *
-     * <p>Reserved for use by the protobuf deserialiser and the static
-     * factory methods; callers should instead use the public factories
-     * such as {@link #custom(int, boolean)}.
+     * @apiNote
+     * Package-private; instances reach embedders through the protobuf
+     * deserialiser and the static factories. Application code should
+     * use {@link #discard(boolean)}, {@link #standard(boolean)},
+     * {@link #extended(boolean)}, or {@link #custom(int, boolean)}.
      *
      * @param size        the history size cap
      * @param newsletters whether newsletters are included
@@ -99,8 +118,9 @@ public final class WhatsAppWebClientHistory {
      * Returns a policy that discards all chat history, keeping only
      * messages received after the session is established.
      *
-     * <p>This is the most resource-efficient option and is suited to
-     * applications that only need real-time messaging capabilities.
+     * @apiNote
+     * Use this for real-time-only embedders; pairing and resource
+     * usage are minimised.
      *
      * @param newsletters whether newsletters should be synchronised
      *                    during the initial connection
@@ -111,13 +131,13 @@ public final class WhatsAppWebClientHistory {
     }
 
     /**
-     * Returns a policy that mirrors WhatsApp Web's default history-sync
-     * volume.
+     * Returns a policy that mirrors a typical WhatsApp Web
+     * history-sync volume.
      *
-     * <p>The setting balances resource usage against message availability
-     * by syncing approximately the last few weeks of chat history. This
-     * is the recommended option for most applications as it matches the
-     * official WhatsApp Web behaviour.
+     * @apiNote
+     * The recommended option for most embedders; balances availability
+     * of recent history with resource cost. The 59206-item cap is
+     * Cobalt-specific (WA Web computes its quota dynamically).
      *
      * @param newsletters whether newsletters should be synchronised
      *                    during the initial connection
@@ -128,12 +148,14 @@ public final class WhatsAppWebClientHistory {
     }
 
     /**
-     * Returns a policy that requests as much chat history as the server
-     * is willing to deliver.
+     * Returns a policy that requests as much chat history as the
+     * server is willing to deliver.
      *
-     * <p>The replay may include several months or years of messages
-     * depending on account age. The option can consume significant
-     * memory and bandwidth.
+     * @apiNote
+     * The replay may include several months or years of messages
+     * depending on account age. Memory and bandwidth use can be
+     * substantial; prefer this only for embedders that need the full
+     * archive.
      *
      * @param newsletters whether newsletters should be synchronised
      *                    during the initial connection
@@ -146,12 +168,13 @@ public final class WhatsAppWebClientHistory {
     /**
      * Returns a policy with a caller-supplied history-size cap.
      *
-     * <p>The actual amount of history delivered may be smaller than
-     * requested if the account does not have enough historical data or
-     * if WhatsApp's servers impose a lower cap.
+     * @apiNote
+     * The actual amount delivered may be smaller than requested if
+     * the account does not have enough historical data or if the
+     * WhatsApp servers impose a lower per-account cap.
      *
      * @param size        the maximum number of historical items to
-     *                    synchronise, which must be non-negative
+     *                    synchronise; must be non-negative
      * @param newsletters whether newsletters should be synchronised
      *                    during the initial connection
      * @return the configured policy
@@ -172,11 +195,11 @@ public final class WhatsAppWebClientHistory {
     }
 
     /**
-     * Returns whether this policy requests more chat history than the
+     * Returns whether this policy requests more history than the
      * standard preset.
      *
-     * @return {@code true} if the size cap exceeds the standard preset,
-     *         {@code false} otherwise
+     * @return {@code true} if the size cap exceeds the standard
+     *         preset, {@code false} otherwise
      */
     public boolean isExtended() {
         return size > STANDARD.size();
@@ -186,11 +209,12 @@ public final class WhatsAppWebClientHistory {
      * Returns the upper bound on the number of historical items this
      * policy requests.
      *
-     * <p>The actual amount synchronised may be smaller due to server
-     * limitations or account history.
+     * @apiNote
+     * The actual amount synchronised may be smaller due to server
+     * limits or account history.
      *
-     * @return the history-size cap, or {@link Integer#MAX_VALUE} for an
-     *         unbounded request
+     * @return the history-size cap, or {@link Integer#MAX_VALUE} for
+     *         an unbounded request
      */
     public int size() {
         return size;
@@ -223,7 +247,7 @@ public final class WhatsAppWebClientHistory {
     }
 
     /**
-     * Returns a hash code derived from the size and newsletter flag.
+     * Returns a hash code consistent with {@link #equals(Object)}.
      *
      * @return the hash code
      */
@@ -233,8 +257,7 @@ public final class WhatsAppWebClientHistory {
     }
 
     /**
-     * Returns a human-readable description of this policy suitable for
-     * logs.
+     * Returns a human-readable description suitable for logs.
      *
      * @return the string representation
      */

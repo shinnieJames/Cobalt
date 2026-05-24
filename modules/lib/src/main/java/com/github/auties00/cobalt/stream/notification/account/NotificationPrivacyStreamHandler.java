@@ -1,55 +1,80 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 import java.time.Instant;
 import java.util.Arrays;
 
 /**
- * Handles incoming privacy token notifications from the WhatsApp server.
+ * Handles {@code type="privacy_token"} notifications carrying server-issued
+ * trusted-contact tokens (TC tokens) for peers the user has interacted with.
  *
- * <p>When a privacy token notification is received, this handler parses the
- * token data, updates the relevant chat's trusted-contact token in the store,
- * re-subscribes to presence for the sender, and sends an acknowledgement
- * stanza back to the server.
+ * @apiNote
+ * Dispatched by {@link NotificationAccountDispatcher}. A TC token is a
+ * server-rolled blob whose presence on a chat is the trust signal WA Web
+ * uses to gate the "verified identity" UI affordance for that contact.
+ * Receiving a fresh token triggers a presence re-subscription so the
+ * UI updates immediately.
  *
+ * @implNote
+ * This implementation persists the raw token content and its timestamp
+ * on the chat record (preferring a LID-keyed chat over a PN-keyed one).
+ * WA Web routes through {@code WAWebSetTcTokenChatAction.handleIncomingTcToken}
+ * which records the same fields plus a server-issued sequence number;
+ * Cobalt does not maintain that sequence number because the timestamp
+ * guard inside {@link #updateChatTcToken} already serialises updates.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandlePrivacyTokensNotification")
 final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger for diagnostic output from this handler.
+     * Logger used for warnings about malformed stanzas and debug messages
+     * about unknown token types.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationPrivacyStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client used for store access and node sending.
+     * The {@link WhatsAppClient} used for store reads and presence
+     * re-subscription.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new privacy stream handler.
-     *
-     * @param whatsapp the WhatsApp client instance
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification" type="privacy_token"/>} stanza.
      */
-    NotificationPrivacyStreamHandler(WhatsAppClient whatsapp) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with the shared client and ack sender.
+     *
+     * @apiNote
+     * Called once by {@link NotificationAccountDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp  the {@link WhatsAppClient}
+     * @param ackSender the {@link AckSender}
+     */
+    NotificationPrivacyStreamHandler(WhatsAppClient whatsapp, AckSender ackSender) {
         this.whatsapp = whatsapp;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles a privacy token notification node.
+     * Validates the stanza shape, processes each token child, and always
+     * sends the protocol-level ACK.
      *
-     * <p>Parses the notification, processes each trusted-contact token by
-     * updating the chat store and re-subscribing to presence, then sends
-     * an acknowledgement stanza.
+     * @apiNote
+     * Invoked by {@link NotificationAccountDispatcher}.
      *
-     * @param node the incoming notification node
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -70,13 +95,23 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses the notification and processes each privacy token.
+     * Reads the sender PN and optional sender LID, waits for the offline
+     * delivery window to end, then iterates each {@code <token>} child by
+     * type.
      *
-     * <p>Extracts the sender's phone number JID and optional LID from the
-     * notification attributes, waits for offline delivery to end, then
-     * iterates over the token children dispatching each by type.
+     * @apiNote
+     * Mirrors WA Web's {@code incomingPrivacyTokensParser} which yields
+     * a record with {@code from}, {@code senderLid}, and a list of
+     * token entries. The
+     * {@code waitForOfflineDeliveryEnd} barrier ensures the per-chat
+     * record exists before the TC token is applied to it.
      *
-     * @param node the notification node
+     * @implNote
+     * This implementation only knows the {@code trusted_contact} token
+     * type; any other type is debug-logged and dropped, matching WA Web
+     * which logs and ignores unknown types.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handleNotification(Node node) {
         var senderPn = getUserJid(node, "from");
@@ -105,20 +140,26 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a single trusted-contact token by updating the chat store
-     * and re-subscribing to the sender's presence.
+     * Applies a single {@code trusted_contact} token to the corresponding
+     * chat and re-subscribes to the sender's presence.
      *
-     * <p>The token content and timestamp are extracted from the token node.
-     * The chat is located by JID (phone number first, then LID if available),
-     * and its trusted-contact token fields are updated. Finally, presence is
-     * re-subscribed for the sender's phone number JID.
+     * @apiNote
+     * The presence re-subscription is what produces the visible "back
+     * online" update in the chat thread once the TC token lands.
+     * Non-user senders (PSAs, bots, server jids) are filtered out
+     * because they cannot have a verified-identity affordance.
      *
-     * @param senderPn  the sender's phone number JID
-     * @param senderLid the sender's LID JID, or {@code null} if absent
-     * @param tokenNode the token node containing content and timestamp
+     * @implNote
+     * This implementation ignores presence-subscription failures by
+     * debug-logging them; WA Web's
+     * {@code PresenceCollection.reSubscribeWhenActive} retries
+     * internally via the presence-queue worker.
+     *
+     * @param senderPn  the sender's phone-number JID
+     * @param senderLid the sender's LID JID, or {@code null} when absent
+     * @param tokenNode the {@code <token type="trusted_contact"/>} child carrying the token bytes and timestamp
      */
     private void handleTrustedContactToken(Jid senderPn, Jid senderLid, Node tokenNode) {
-        // Tokens for PSAs, bots, and non-user servers are silently dropped.
         if (!LidMigrationService.isRegularUser(senderPn)) {
             return;
         }
@@ -143,18 +184,23 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Updates the trusted-contact token on the chat corresponding to the
-     * sender.
+     * Writes the new TC token bytes and timestamp to the chat record,
+     * preferring a LID-keyed chat when one exists and creating a
+     * PN-keyed chat record on demand otherwise.
      *
-     * <p>Looks up the chat first by the sender's LID JID (when provided),
-     * then by the sender's phone number JID. If no chat is found, a new
-     * chat entry is created on the phone number JID. Skips the update if
-     * the existing token equals the new content or if the existing
-     * timestamp is strictly newer than the incoming one.
+     * @apiNote
+     * The chat preference order mirrors WA Web's
+     * {@code handleIncomingTcToken} fallback chain: LID first, then PN
+     * (with auto-creation).
      *
-     * @param senderPn       the sender's phone number JID
+     * @implNote
+     * This implementation short-circuits when the stored token equals
+     * the incoming bytes (idempotent replay) or when the stored
+     * timestamp is strictly fresher than the incoming one.
+     *
+     * @param senderPn       the sender's phone-number JID
      * @param senderLid      the sender's LID JID, or {@code null}
-     * @param tokenTimestamp the timestamp from the token, or {@code null}
+     * @param tokenTimestamp the server-reported token timestamp, or {@code null}
      * @param tcTokenContent the raw trusted-contact token bytes
      */
     private void updateChatTcToken(Jid senderPn, Jid senderLid, Instant tokenTimestamp, byte[] tcTokenContent) {
@@ -178,11 +224,15 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts a user JID from a node attribute.
+     * Reads a JID-valued attribute and reduces it to user form.
      *
-     * @param node the node to extract from
-     * @param key  the attribute key
-     * @return the user JID, or {@code null} if not present
+     * @apiNote
+     * Internal helper used by {@link #handleNotification} to extract
+     * the sender's PN from the stanza's {@code from} attribute.
+     *
+     * @param node the node to read from
+     * @param key  the attribute name
+     * @return the parsed user JID, or {@code null} if absent
      */
     private Jid getUserJid(Node node, String key) {
         return node.getAttributeAsJid(key)
@@ -191,11 +241,16 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts an {@link Instant} from a node attribute representing epoch seconds.
+     * Reads an epoch-seconds long attribute and converts it to an
+     * {@link Instant}, returning {@code null} for absent or non-positive
+     * values.
      *
-     * @param node the node to extract from
-     * @param key  the attribute key
-     * @return the parsed instant, or {@code null} if absent or non-positive
+     * @apiNote
+     * Internal helper used by the {@code trusted_contact} branch only.
+     *
+     * @param node the node to read from
+     * @param key  the attribute name
+     * @return the parsed instant, or {@code null}
      */
     private Instant getInstantAttribute(Node node, String key) {
         var seconds = node.getAttributeAsLong(key, (Long) null);
@@ -203,25 +258,16 @@ final class NotificationPrivacyStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends an acknowledgement stanza for the processed notification.
+     * Sends the {@code <ack class="notification" type="privacy_token"/>}
+     * stanza for the processed notification.
      *
-     * <p>The ACK uses the notification's ID and sender JID, with {@code class="notification"} and {@code type="privacy_token"}.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's ack-builder
+     * inside {@code incomingPrivacyTokensParser}.
      *
-     * @param node the original notification node
+     * @param node the original {@code <notification>} stanza
      */
     private void sendNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", stanzaFrom)
-                .attribute("type", "privacy_token")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("privacy_token").send();
     }
 }

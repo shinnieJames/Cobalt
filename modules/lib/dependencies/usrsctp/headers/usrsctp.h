@@ -895,14 +895,6 @@ struct sctp_prstatus {
 
 struct socket;
 
-/*
- * COBALT PATCH: the variadic ellipsis on the third (debug-logger)
- * parameter of usrsctp_init / usrsctp_init_nothreads has been removed
- * so jextract can emit method handles for these functions. Cobalt
- * always passes NULL as the logger, so the C-level signature change
- * has no runtime effect — when re-importing this header from upstream,
- * re-apply the same patch.
- */
 void
 usrsctp_init(uint16_t,
              int (*)(void *addr, void *buffer, size_t length, uint8_t tos, uint8_t set_df),

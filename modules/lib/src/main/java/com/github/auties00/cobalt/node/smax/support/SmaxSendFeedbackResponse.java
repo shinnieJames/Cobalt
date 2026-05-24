@@ -13,21 +13,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * Sealed family of inbound replies to {@link SmaxSendFeedbackRequest}, modelling the three
+ * outcomes WA Web's {@code WASmaxSupportMessageFeedbackSendFeedbackRPC.sendSendFeedbackRPC}
+ * switches between: accepted feedback, malformed/rate-limited rejection, and transient internal
+ * failure.
+ *
+ * @apiNote
+ * Drives the support-bot message-rating submit-result UI consumed by WA Web's
+ * {@code WAWebSendSupportBotFeedbackActions}; a {@link Success} clears the rating dialog,
+ * while {@link ClientError} re-renders the form and {@link ServerError} schedules a retry.
+ *
+ * @implNote
+ * This implementation splits WA Web's single
+ * {@code WASmaxInSupportMessageFeedbackSendFeedbackResponseError} parser into Cobalt's
+ * {@link ClientError} (4xx) and {@link ServerError} (5xx) so callers can dispatch on the
+ * outcome without re-inspecting the code; parser order is success first, then client error,
+ * then server error.
  */
 public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
         permits SmaxSendFeedbackResponse.Success, SmaxSendFeedbackResponse.ClientError, SmaxSendFeedbackResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxSendFeedbackResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses the inbound feedback reply against each {@link SmaxSendFeedbackResponse} variant
+     * and returns the first that matches.
+     *
+     * @apiNote
+     * Use after the relay's IQ arrives in response to a {@link SmaxSendFeedbackRequest}; an
+     * empty {@link Optional} means the inbound stanza did not fit any of the three documented
+     * shapes.
+     *
+     * @implNote
+     * This implementation collapses WA Web's two sequential parser calls into a three-step
+     * short-circuit chain (success, client error, server error); no parse exception is raised
+     * on total miss.
      *
      * @param node    the inbound IQ stanza; never {@code null}
-     * @param request the original outbound stanza; never
-     *                {@code null}
-     * @return an {@link Optional} carrying the parsed variant
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @param request the originating outbound stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxSupportMessageFeedbackSendFeedbackRPC",
             exports = "sendSendFeedbackRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -46,24 +69,37 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant. The relay accepted the
-     * feedback and emitted the {@code <result status="Success"/>}
-     * acknowledgement.
+     * Accepted-feedback variant carrying the literal {@code "Success"} status echoed by the
+     * relay.
+     *
+     * @apiNote
+     * Surfaces the relay's "feedback recorded" acknowledgement; the caller clears the rating
+     * dialog and applies any local UI confirmation.
+     *
+     * @implNote
+     * This implementation validates the {@code <result status="Success"/>} child shape; the
+     * carried {@link #resultStatus()} is constant for parity with WA Web's parser output.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseSuccess")
     final class Success implements SmaxSendFeedbackResponse {
         /**
-         * The acknowledgement {@code status} string, always the
-         * literal {@code "Success"}.
+         * The {@code status} attribute of the {@code <result/>} child, always the literal
+         * {@code "Success"}.
+         *
+         * @apiNote
+         * Carried as a constant for parity with WA Web's payload shape.
          */
         private final String resultStatus;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs an accepted-feedback reply from the parsed fields.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code <result status="Success"/>}
+         * envelope validated.
          *
          * @param resultStatus the status; never {@code null}
-         * @throws NullPointerException if {@code resultStatus} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code resultStatus} is {@code null}
          */
         public Success(String resultStatus) {
             this.resultStatus = Objects.requireNonNull(resultStatus, "resultStatus cannot be null");
@@ -72,6 +108,9 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
         /**
          * Returns the result status.
          *
+         * @apiNote
+         * Always {@code "Success"} for this variant; surfaced verbatim for parity with WA Web.
+         *
          * @return the status; never {@code null}
          */
         public String resultStatus() {
@@ -79,11 +118,20 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse an inbound stanza as a {@link Success}.
+         *
+         * @apiNote
+         * Returns empty when the IQ envelope does not match a result for {@code request} or
+         * the {@code <result/>} child is missing or carries a non-{@code "Success"} status.
+         *
+         * @implNote
+         * This implementation validates the IQ envelope (description, type, matching id), then
+         * descends into {@code <result/>} and asserts {@code status="Success"} before
+         * surfacing the variant.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @param request the originating outbound request
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseSuccess",
                 exports = "parseSendFeedbackResponseSuccess",
@@ -134,29 +182,46 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected
-     * the feedback as malformed ({@code 400}) or rate-limited
-     * ({@code 429}).
+     * Client-error variant carrying a 4xx code/text pair (typically {@code 400 bad-request} or
+     * {@code 429 rate-overlimit}).
+     *
+     * @apiNote
+     * Surfaces a non-retryable rejection that the UI is expected to render as an error banner
+     * and re-open the rating form; the {@code 429} case can be retried after back-off.
+     *
+     * @implNote
+     * This implementation delegates 4xx envelope extraction to
+     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}; the documented codes are
+     * {@code 400} and {@code 429} but the parser does not enforce the disjunction.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseError")
     final class ClientError implements SmaxSendFeedbackResponse {
         /**
-         * The numeric error code ({@code 400} or {@code 429}).
+         * The numeric error code from the {@code <error/>} envelope ({@code 400} or
+         * {@code 429}).
+         *
+         * @apiNote
+         * Surfaces the relay's classification of the rejection.
          */
         private final int errorCode;
 
         /**
-         * The optional error text ({@code "bad-request"} /
-         * {@code "rate-overlimit"}).
+         * The optional error text ({@code "bad-request"} or {@code "rate-overlimit"}).
+         *
+         * @apiNote
+         * Surfaces the paired text from {@code <error text="..."/>}; {@code null} when the
+         * envelope omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply from the parsed fields.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the 4xx envelope validated.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -165,6 +230,9 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Surfaces the relay's 4xx classification.
          *
          * @return the error code
          */
@@ -175,19 +243,28 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @apiNote
+         * Empty when the {@code <error/>} envelope omitted the {@code text} attribute.
+         *
+         * @return an {@link Optional} carrying the error text, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse an inbound stanza as a {@link ClientError}.
+         *
+         * @apiNote
+         * Returns empty when the inbound stanza is not a 4xx error reply to {@code request}.
+         *
+         * @implNote
+         * This implementation delegates IQ-envelope and {@code <error/>} extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @param request the originating outbound request
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseError",
                 exports = "parseSendFeedbackResponseError",
@@ -226,27 +303,44 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay
-     * encountered a transient internal failure ({@code 500}).
+     * Server-error variant carrying a 5xx code/text pair (typically
+     * {@code 500 internal-server-error}).
+     *
+     * @apiNote
+     * Surfaces a transient internal failure; the caller is expected to schedule a retry with
+     * back-off rather than re-open the form.
+     *
+     * @implNote
+     * This implementation delegates 5xx envelope extraction to
+     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseError")
     final class ServerError implements SmaxSendFeedbackResponse {
         /**
-         * The numeric error code (typically {@code 500}).
+         * The numeric error code from the {@code <error/>} envelope (typically {@code 500}).
+         *
+         * @apiNote
+         * Surfaces the relay's 5xx classification.
          */
         private final int errorCode;
 
         /**
-         * The optional error text ({@code "internal-server-error"}).
+         * The optional error text (typically {@code "internal-server-error"}).
+         *
+         * @apiNote
+         * Surfaces the paired text from {@code <error text="..."/>}; {@code null} when the
+         * envelope omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error reply from the parsed fields.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the 5xx envelope validated.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -255,6 +349,9 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Surfaces the relay's 5xx classification.
          *
          * @return the error code
          */
@@ -265,19 +362,28 @@ public sealed interface SmaxSendFeedbackResponse extends SmaxOperation.Response
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @apiNote
+         * Empty when the {@code <error/>} envelope omitted the {@code text} attribute.
+         *
+         * @return an {@link Optional} carrying the error text, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse an inbound stanza as a {@link ServerError}.
+         *
+         * @apiNote
+         * Returns empty when the inbound stanza is not a 5xx error reply to {@code request}.
+         *
+         * @implNote
+         * This implementation delegates IQ-envelope and {@code <error/>} extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @param request the originating outbound request
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInSupportMessageFeedbackSendFeedbackResponseError",
                 exports = "parseSendFeedbackResponseError",

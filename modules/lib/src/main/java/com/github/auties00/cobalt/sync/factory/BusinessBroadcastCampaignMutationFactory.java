@@ -13,37 +13,61 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing business-broadcast-campaign sync mutations.
+ * Builds outgoing app-state mutations that create, update, or delete a Business Broadcast campaign.
  *
- * <p>Mirrors the {@code getCampaignMutation} and
- * {@code getDeleteCampaignMutation} exports of WhatsApp Web's
- * {@code WAWebBroadcastCampaignSync} module. The factory is the
- * outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the WhatsApp Business broadcast-campaign feature: SMB users
+ * schedule a campaign through the Web UI, and the resulting mutations are
+ * pushed via {@link com.github.auties00.cobalt.sync.WebAppStateService} so
+ * the primary device and other linked devices populate
+ * {@code WAWebSchemaBusinessBroadcastCampaign} consistently. The factory is
+ * the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.BusinessBroadcastCampaignHandler}.
+ *
+ * @implNote
+ * This implementation does not gate on
+ * {@code WAWebBizGatingUtils.isBizBroadcastSendWebEnabledNoExposure()}; WA
+ * Web only consults that flag on the receive side
+ * ({@code applyMutations}), so the outgoing factory remains callable from
+ * any embedder regardless of the SMB feature gate.
  */
 public final class BusinessBroadcastCampaignMutationFactory {
     /**
-     * Constructs a business-broadcast-campaign mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public BusinessBroadcastCampaignMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation for creating or updating a business broadcast campaign.
+     * Returns a SET mutation that creates or updates a Business Broadcast campaign.
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.getCampaignMutation}),
-     * this method wraps the supplied {@link BusinessBroadcastCampaignAction} into a
-     * {@code SyncActionValue} whose payload field is
-     * {@code businessBroadcastCampaignAction}, then delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with {@code action =
-     * getAction()}, {@code indexArgs = [campaignId]}, {@code collection =
-     * Regular}, {@code version = 1}, and {@code operation = SET}.
+     * @apiNote
+     * Call this when the user schedules a new campaign or edits an existing
+     * one; the mutation index follows
+     * {@snippet :
+     *     ["businessBroadcastCampaign", campaignId]
+     * }
+     * and the {@link BusinessBroadcastCampaignAction} sub-message carries
+     * the campaign descriptor (broadcast JID, device id, status, timestamps,
+     * reserved quota).
      *
-     * @param campaignId the business broadcast campaign identifier (index arg)
-     * @param action     the campaign action payload
+     * @implNote
+     * This implementation mirrors
+     * {@code WAWebBroadcastCampaignSync.getCampaignMutation}; the action
+     * payload is passed in already-built, so callers control all required
+     * fields ({@code broadcastJid}, {@code deviceId}, {@code status}) that
+     * the receive-side handler validates before calling
+     * {@code WAWebBizBroadcastCampaignStorageUtils.upsertCampaignStorage}.
+     *
+     * @param campaignId the campaign identifier used as the mutation index
+     * @param action     the pre-built campaign descriptor payload
      * @param timestamp  the mutation timestamp
-     * @return a pending mutation ready for outbound sync
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getCampaignMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getCampaignMutation(
@@ -67,16 +91,30 @@ public final class BusinessBroadcastCampaignMutationFactory {
     }
 
     /**
-     * Builds a pending REMOVE mutation for deleting a business broadcast campaign.
+     * Returns a REMOVE mutation that deletes a Business Broadcast campaign.
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.getDeleteCampaignMutation}),
-     * this method delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     * with an empty value, {@code indexArgs = [campaignId]}, and
-     * {@code operation = REMOVE}.
+     * @apiNote
+     * Call this when the user cancels a scheduled campaign or deletes an
+     * already-completed one; the mutation index follows
+     * {@snippet :
+     *     ["businessBroadcastCampaign", campaignId]
+     * }
+     * with an empty value, which the receive-side handler uses to look up
+     * the existing campaign row (so it can capture the
+     * {@code broadcastJid} for the post-removal
+     * {@code refreshBroadcastCampaignState} fan-out) before calling
+     * {@code WAWebBizBroadcastCampaignStorageUtils.removeCampaignStorage}.
      *
-     * @param campaignId the business broadcast campaign identifier to remove
+     * @implNote
+     * This implementation mirrors
+     * {@code WAWebBroadcastCampaignSync.getDeleteCampaignMutation} and emits
+     * a {@link SyncdOperation#REMOVE} with an empty
+     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}; only
+     * the timestamp and index travel on the wire.
+     *
+     * @param campaignId the campaign identifier to delete
      * @param timestamp  the mutation timestamp
-     * @return a pending mutation ready for outbound sync
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getDeleteCampaignMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getDeleteCampaignMutation(String campaignId, Instant timestamp) {

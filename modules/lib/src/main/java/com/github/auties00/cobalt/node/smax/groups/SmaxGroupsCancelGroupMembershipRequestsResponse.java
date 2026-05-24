@@ -15,17 +15,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The sealed reply family for a {@link SmaxGroupsCancelGroupMembershipRequestsRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's
+ * {@code Success}/{@code ClientError}/{@code ServerError} cases. {@link Success} ships a per-participant outcome
+ * list mirroring the WA Web mixin family
+ * {@code WASmaxInGroupsMembershipRequestsCancellationParticipantMixins}; callers must walk
+ * {@link Success#participants()} and inspect {@link Success.CancelParticipantResult#rejectionReason()} to
+ * surface per-row failures.
  */
 public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends SmaxOperation.Response
         permits SmaxGroupsCancelGroupMembershipRequestsResponse.Success, SmaxGroupsCancelGroupMembershipRequestsResponse.ClientError, SmaxGroupsCancelGroupMembershipRequestsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsCancelGroupMembershipRequestsResponse} variant in priority order.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsCancelGroupMembershipRequestsResponse} variant in
+     * priority order and returns the first that parses cleanly.
+     *
+     * @apiNote The priority order matches the WA Web RPC dispatcher in
+     * {@code WASmaxGroupsCancelGroupMembershipRequestsRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
-     * @param request the original outbound request
-     * @return an {@link Optional} carrying the parsed variant
+     * @param request the original outbound {@link SmaxGroupsCancelGroupMembershipRequestsRequest} stanza, used
+     *                to validate echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsCancelGroupMembershipRequestsRPC",
@@ -46,28 +62,31 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The {@code Success} reply variant — the relay processed the
-     * cancellation list and returned the per-participant outcomes.
+     * The reply variant carrying the per-participant outcome list when the relay processed the cancellation
+     * envelope.
+     *
+     * @apiNote The IQ envelope succeeds even when individual rows are rejected with
+     * {@code request_not_found} or {@code not_authorized}; callers must walk {@link #participants()} to detect
+     * partial rejection.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The optional addressing-mode echo on the IQ envelope.
+         * The optional {@code addressing_mode} attribute echoed on the IQ envelope.
          */
         private final String addressingMode;
 
         /**
-         * The per-participant outcomes.
+         * The per-participant outcome rows.
          */
         private final List<CancelParticipantResult> participants;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success}.
          *
-         * @param addressingMode the optional addressing-mode echo
-         * @param participants   the per-participant outcomes; never
-         *                       {@code null}
+         * @param addressingMode the optional addressing-mode echo; may be {@code null}
+         * @param participants   the per-participant outcomes; defensively copied, {@code null} treated as empty
          */
         public Success(String addressingMode, List<CancelParticipantResult> participants) {
             this.addressingMode = addressingMode;
@@ -75,29 +94,34 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * Returns the optional addressing-mode echo.
+         * Returns the optional {@code addressing_mode} echo.
          *
-         * @return an {@link Optional} carrying the addressing mode
+         * @return an {@link Optional} carrying the addressing mode, or empty when the relay omitted it
          */
         public Optional<String> addressingMode() {
             return Optional.ofNullable(addressingMode);
         }
 
         /**
-         * Returns the per-participant outcomes.
+         * Returns the per-participant outcome rows.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable list of outcome rows; never {@code null}
          */
         public List<CancelParticipantResult> participants() {
             return participants;
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseCancelGroupMembershipRequestsResponseSuccess}: the IQ
+         * must be a valid {@code type="result"} echo of the request and must carry a
+         * {@code <cancel_membership_requests>} child whose {@code <participant>} grand-children satisfy
+         * {@link CancelParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseSuccess",
                 exports = "parseCancelGroupMembershipRequestsResponseSuccess",
@@ -122,6 +146,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             return Optional.of(new Success(addressingMode, participants));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -135,11 +165,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                     && Objects.equals(this.participants, that.participants);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(addressingMode, participants);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCancelGroupMembershipRequestsResponse.Success[addressingMode="
@@ -147,41 +187,36 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * The per-participant outcome entry for a single
-         * cancellation target.
+         * The per-participant outcome row for a single cancellation target.
          *
-         * <p>Surfaces the cancelled JID, the optional phone-number
-         * echo, and an optional {@link RejectionReason} payload
-         * documenting which arm of the WA Web cancellation
-         * disjunction was taken when the relay refused the entry.
+         * @apiNote The row surfaces the cancelled {@link Jid}, the optional phone-number echo, and an optional
+         * {@link RejectionReason} payload identifying which arm of the WA Web cancellation disjunction the relay
+         * took when the row was refused.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsCancellationParticipantMixins")
         public static final class CancelParticipantResult {
             /**
-             * The participant JID.
+             * The participant {@link Jid}.
              */
             private final Jid jid;
 
             /**
-             * The optional phone-number echo.
+             * The optional {@code phone_number} echo.
              */
             private final String phoneNumber;
 
             /**
-             * The optional rejection-reason payload — present only
-             * when the relay refused the entry.
+             * The optional rejection-reason payload, populated only when the relay refused the row.
              */
             private final RejectionReason rejectionReason;
 
             /**
-             * Constructs a new outcome entry.
+             * Constructs a {@link CancelParticipantResult} row.
              *
-             * @param jid             the participant JID; never
-             *                        {@code null}
-             * @param phoneNumber     the optional phone-number echo
-             * @param rejectionReason the optional rejection reason
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid             the participant {@link Jid}
+             * @param phoneNumber     the optional {@code phone_number} echo; may be {@code null}
+             * @param rejectionReason the optional rejection reason; may be {@code null}
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public CancelParticipantResult(Jid jid, String phoneNumber,
                                            RejectionReason rejectionReason) {
@@ -191,18 +226,18 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             }
 
             /**
-             * Returns the participant JID.
+             * Returns the participant {@link Jid}.
              *
-             * @return the JID; never {@code null}
+             * @return the {@link Jid}; never {@code null}
              */
             public Jid jid() {
                 return jid;
             }
 
             /**
-             * Returns the optional phone-number echo.
+             * Returns the optional {@code phone_number} echo.
              *
-             * @return an {@link Optional} carrying the phone number
+             * @return an {@link Optional} carrying the phone number, or empty when the relay omitted it
              */
             public Optional<String> phoneNumber() {
                 return Optional.ofNullable(phoneNumber);
@@ -211,18 +246,22 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             /**
              * Returns the optional rejection-reason payload.
              *
-             * @return an {@link Optional} carrying the reason, or
-             *         empty when the cancellation succeeded
+             * @return an {@link Optional} carrying the reason, or empty when the cancellation succeeded
              */
             public Optional<RejectionReason> rejectionReason() {
                 return Optional.ofNullable(rejectionReason);
             }
 
             /**
-             * Tries to parse an outcome entry.
+             * Tries to parse a {@link CancelParticipantResult} row from a single {@code <participant>} child.
+             *
+             * @apiNote Matches the WA Web parser
+             * {@code parseCancelGroupMembershipRequestsResponseSuccessCancelMembershipRequestsParticipant}: the
+             * node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * {@code <request_not_found/>} or {@code <not_authorized/>} child triggering the rejection arm.
              *
              * @param node the {@code <participant>} child
-             * @return an {@link Optional} carrying the parsed entry
+             * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseSuccess",
                     exports = "parseCancelGroupMembershipRequestsResponseSuccessCancelMembershipRequestsParticipant",
@@ -241,6 +280,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 return Optional.of(new CancelParticipantResult(jid, phoneNumber, rejectionReason));
             }
 
+            /**
+             * Compares this row to {@code obj} for value equality across every field.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is a {@link CancelParticipantResult} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -255,11 +300,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                         && Objects.equals(this.rejectionReason, that.rejectionReason);
             }
 
+            /**
+             * Returns a hash composed of every field.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, phoneNumber, rejectionReason);
             }
 
+            /**
+             * Returns a debug string carrying every field.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsCancelGroupMembershipRequestsResponse.Success.CancelParticipantResult[jid="
@@ -269,16 +324,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             }
 
             /**
-             * The rejection-reason payload for a participant the
-             * relay refused to cancel.
+             * The rejection-reason payload for a participant the relay refused to cancel.
              *
-             * <p>Identifies which arm of the WA Web disjunction the
-             * relay took:
-             * {@link Kind#REQUEST_NOT_FOUND} (the participant has no
-             * pending request on this group) vs.
-             * {@link Kind#NOT_AUTHORIZED} (the caller does not own
-             * the targeted request and lacks admin rights to cancel
-             * on behalf of others).
+             * @apiNote Identifies which arm of the WA Web disjunction the relay took:
+             * {@link Kind#REQUEST_NOT_FOUND} (the participant has no pending request on this group) or
+             * {@link Kind#NOT_AUTHORIZED} (the caller does not own the targeted request and lacks admin rights
+             * to cancel on behalf of others).
              */
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsParticipantRequestNotFoundMixin")
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsParticipantNotAuthorizedMixin")
@@ -289,11 +340,10 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 private final Kind kind;
 
                 /**
-                 * Constructs a new rejection-reason payload.
+                 * Constructs a {@link RejectionReason}.
                  *
-                 * @param kind the rejection arm; never {@code null}
-                 * @throws NullPointerException if {@code kind} is
-                 *                              {@code null}
+                 * @param kind the rejection-arm marker
+                 * @throws NullPointerException if {@code kind} is {@code null}
                  */
                 public RejectionReason(Kind kind) {
                     this.kind = Objects.requireNonNull(kind, "kind cannot be null");
@@ -309,12 +359,13 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 }
 
                 /**
-                 * Tries to parse a rejection-reason payload from a
-                 * {@code <participant>} child.
+                 * Tries to parse a {@link RejectionReason} payload from a {@code <participant>} child.
+                 *
+                 * @apiNote The presence of a {@code <request_not_found/>} or {@code <not_authorized/>}
+                 * grand-child discriminates the rejected arms; absence signals the accepted arm.
                  *
                  * @param node the {@code <participant>} child
-                 * @return an {@link Optional} carrying the parsed
-                 *         payload, or empty when the entry succeeded
+                 * @return an {@link Optional} carrying the parsed payload, or empty when the row succeeded
                  */
                 @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsCancellationParticipantMixins",
                         exports = "parseMembershipRequestsCancellationParticipantMixins",
@@ -330,6 +381,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                     return Optional.empty();
                 }
 
+                /**
+                 * Compares this payload to {@code obj} for value equality on {@link #kind()}.
+                 *
+                 * @param obj the other object
+                 * @return {@code true} when {@code obj} is a {@link RejectionReason} with the same kind
+                 */
                 @Override
                 public boolean equals(Object obj) {
                     if (obj == this) {
@@ -342,11 +399,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                     return this.kind == that.kind;
                 }
 
+                /**
+                 * Returns a hash derived from {@link #kind()}.
+                 *
+                 * @return the hash code
+                 */
                 @Override
                 public int hashCode() {
                     return Objects.hash(kind);
                 }
 
+                /**
+                 * Returns a debug string carrying {@link #kind()}.
+                 *
+                 * @return the debug representation
+                 */
                 @Override
                 public String toString() {
                     return "SmaxGroupsCancelGroupMembershipRequestsResponse.Success.CancelParticipantResult.RejectionReason[kind="
@@ -354,23 +421,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
                 }
 
                 /**
-                 * The rejection-arm enum — identifies which arm of
-                 * the WA Web cancellation disjunction the relay
-                 * took.
+                 * Discriminator for the WA Web cancellation-rejection arms.
+                 *
+                 * @apiNote One constant per documented mixin arm; future WA Web additions would require an
+                 * enum extension here plus a new branch in {@link RejectionReason#of(Node)}.
                  */
                 public enum Kind {
                     /**
-                     * The relay could not find a pending membership
-                     * request matching the supplied participant on
-                     * this group.
+                     * The relay could not find a pending membership request matching the supplied participant
+                     * on this group.
                      */
                     REQUEST_NOT_FOUND,
 
                     /**
-                     * The caller is not authorised to cancel the
-                     * targeted request — typically because they
-                     * neither own it nor hold admin rights on the
-                     * group.
+                     * The caller is not authorised to cancel the targeted request; typically because they
+                     * neither own it nor hold admin rights on the group.
                      */
                     NOT_AUTHORIZED
                 }
@@ -379,25 +444,25 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The reply variant emitted when the relay rejected the request envelope as malformed or unauthorised.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseClientError")
     final class ClientError implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
-         * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorCode the numeric error code
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -405,7 +470,7 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -414,20 +479,23 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseClientError",
                 exports = "parseCancelGroupMembershipRequestsResponseClientError",
@@ -440,6 +508,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -452,11 +526,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCancelGroupMembershipRequestsResponse.ClientError[errorCode="
@@ -465,25 +549,25 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseServerError")
     final class ServerError implements SmaxGroupsCancelGroupMembershipRequestsResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
-         * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorCode the numeric error code
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -491,7 +575,7 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -500,20 +584,23 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCancelGroupMembershipRequestsResponseServerError",
                 exports = "parseCancelGroupMembershipRequestsResponseServerError",
@@ -526,6 +613,12 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -538,11 +631,21 @@ public sealed interface SmaxGroupsCancelGroupMembershipRequestsResponse extends 
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsCancelGroupMembershipRequestsResponse.ServerError[errorCode="

@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotificationBuilder;
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncType;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncFixtures;
@@ -58,7 +59,7 @@ class HistorySyncCycleIntegrationTest {
                 .withAbPropsService(props);
         var wam = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wam);
-        service = new WebHistorySyncService(client, lidMigration, props, wam);
+        service = new WebHistorySyncService(client, lidMigration, props, wam, TestMediaConnectionService.create());
     }
 
     @Nested

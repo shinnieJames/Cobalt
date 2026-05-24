@@ -16,33 +16,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps a per-group {@code <group jid/>}
- * list in the canonical {@code <iq xmlns="w:g2" type="get" to="g.us">}
- * envelope.
+ * The outbound {@code <iq type="get" xmlns="w:g2" to="g.us">} stanza that fetches metadata for several groups in
+ * one round-trip.
+ *
+ * @apiNote Drives {@code WAWebGroupQueryJob.queryGroupsById_DO_NOT_USE_DIRECTLY}, the bulk-fetch path used to
+ * hydrate community/sub-group panels and search results. The relay accepts up to 10000 entries per request;
+ * callers should pre-batch larger working sets.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBatchGetGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQGetRequestMixin")
 public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The list of group JIDs to fetch metadata for. The relay
-     * accepts between {@code 1} and {@code 10000} entries.
+     * The list of group {@link Jid}s to fetch metadata for.
      */
     private final List<Jid> groupJids;
 
     /**
-     * The optional caller-supplied correlation token surfaced as the
-     * {@code <query context="…">} attribute.
+     * The optional caller-supplied correlation token surfaced as the {@code <query context="...">} attribute.
      */
     private final String queryContext;
 
     /**
-     * Constructs a request for the given list of groups.
+     * Constructs a request without a correlation token.
      *
-     * @param groupJids the group JIDs to fetch; never {@code null}
-     *                  and never empty
-     * @throws NullPointerException     if {@code groupJids} is
-     *                                  {@code null}
+     * @param groupJids the group {@link Jid}s to fetch
+     * @throws NullPointerException     if {@code groupJids} is {@code null}
      * @throws IllegalArgumentException if {@code groupJids} is empty
      */
     public SmaxGroupsBatchGetGroupInfoRequest(List<Jid> groupJids) {
@@ -50,15 +49,15 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
     }
 
     /**
-     * Constructs a request for the given list of groups with the
-     * given correlation token.
+     * Constructs a request with the given correlation token.
      *
-     * @param groupJids    the group JIDs to fetch; never
-     *                     {@code null} and never empty
-     * @param queryContext the optional correlation token; may be
-     *                     {@code null}
-     * @throws NullPointerException     if {@code groupJids} is
-     *                                  {@code null}
+     * @apiNote The correlation token round-trips back on the relay's reply and lets the caller correlate the
+     * response with the upstream UI request that triggered it; {@code WAWebGroupQueryJob} threads its
+     * {@code requesterUiOriginId} through this slot.
+     *
+     * @param groupJids    the group {@link Jid}s to fetch
+     * @param queryContext the optional correlation token; may be {@code null}
+     * @throws NullPointerException     if {@code groupJids} is {@code null}
      * @throws IllegalArgumentException if {@code groupJids} is empty
      */
     public SmaxGroupsBatchGetGroupInfoRequest(List<Jid> groupJids, String queryContext) {
@@ -71,9 +70,9 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
     }
 
     /**
-     * Returns the list of groups carried by this request.
+     * Returns the list of group {@link Jid}s carried by this request.
      *
-     * @return an unmodifiable list of group JIDs; never {@code null}
+     * @return an unmodifiable list of group {@link Jid}s; never {@code null} and never empty
      */
     public List<Jid> groupJids() {
         return groupJids;
@@ -82,18 +81,27 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
     /**
      * Returns the optional correlation token.
      *
-     * @return an {@link Optional} carrying the correlation token, or
-     *         empty when the caller did not supply one
+     * @return an {@link Optional} carrying the correlation token, or empty when the caller did not supply one
      */
     public Optional<String> queryContext() {
         return Optional.ofNullable(queryContext);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         per-group {@code <query/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="g.us" type="get">
+     *         <query context="<queryContext>">
+     *             <group jid="<jid0>"/>
+     *             <group jid="<jid1>"/>
+     *             ...
+     *         </query>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the per-group {@code <query/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsBatchGetGroupInfoRequest",
@@ -121,6 +129,12 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
                 .content(queryBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across both fields.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsBatchGetGroupInfoRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -134,11 +148,21 @@ public final class SmaxGroupsBatchGetGroupInfoRequest implements SmaxOperation.R
                 && Objects.equals(this.queryContext, that.queryContext);
     }
 
+    /**
+     * Returns a hash composed of both fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJids, queryContext);
     }
 
+    /**
+     * Returns a debug string carrying both fields.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsBatchGetGroupInfoRequest[groupJids=" + groupJids

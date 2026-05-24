@@ -1,15 +1,22 @@
 {
-  "name": "whatsapp-web-protobuf-extractor",
+  "name": "whatsapp-proto-extractor",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "description": "Extracts protobuf message and enum definitions from WhatsApp Web and emits a .proto file",
   "scripts": {
-    "start": "node index.js"
+    "build": "tsc",
+    "start": "tsc && node dist/index.js"
   },
   "dependencies": {
-    "acorn": "^6.4.1",
-    "acorn-walk": "^6.1.1",
-    "request": "^2.88.0",
-    "request-promise-core": "^1.1.2",
-    "request-promise-native": "^1.0.7"
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4",
+    "playwright": "^1.57.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

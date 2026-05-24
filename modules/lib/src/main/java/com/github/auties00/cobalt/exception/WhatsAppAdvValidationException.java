@@ -5,20 +5,24 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import java.util.Objects;
 
 /**
- * Thrown when the cryptographic identity of a companion device cannot be
- * verified through Advanced Device Verification (ADV).
+ * Sealed root for failures verifying the cryptographic identity of a
+ * companion device through Advanced Device Verification (ADV).
  *
- * <p>Every device linked to a WhatsApp account carries a triple of
+ * @apiNote
+ * Every device linked to a WhatsApp account carries a triple of
  * signatures the primary device produces when the companion is paired.
- * Before Cobalt accepts a prekey bundle or message from a remote device,
- * it re-checks those signatures and an HMAC over the serialized device
- * identity. Any failure in that check raises one of the nested
- * subtypes, each describing a specific step of the verification that
- * went wrong, and carries the JID of the device that failed.
+ * Before Cobalt accepts a prekey bundle or a message from a remote
+ * device, it re-checks those signatures and an HMAC over the serialized
+ * device identity (the {@code device-identity} child of the prekey
+ * stanza or the {@code pkmsg}). Any failure raises one of the nested
+ * subtypes carrying the JID of the device that failed. Catch this base
+ * type to react to every ADV failure mode at once; switch on the sealed
+ * permits list when distinct recovery is needed per subtype.
  *
- * <p>All ADV validation failures are fatal because accepting an
- * unverified device would allow a third party to inject themselves into
- * the end-to-end-encrypted exchange.
+ * @implNote
+ * This implementation always reports the failure as fatal: accepting an
+ * unverified device would allow a third party to inject itself into the
+ * end-to-end-encrypted exchange.
  *
  * @see MissingDeviceIdentity
  * @see EmptyDeviceIdentity
@@ -75,13 +79,12 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>All ADV validation failures are fatal because the device on the
-     * other end cannot be trusted as a peer in the end-to-end-encrypted
-     * exchange.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: every ADV
+     * validation failure leaves the peer on the other end untrusted as a
+     * party in the end-to-end-encrypted exchange.
      */
     @Override
     public boolean isFatal() {
@@ -89,12 +92,15 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
     }
 
     /**
-     * Thrown when a prekey response is missing the {@code device-identity}
-     * node Cobalt needs in order to start ADV validation.
+     * Thrown when a prekey response or {@code pkmsg} omits the
+     * {@code device-identity} child Cobalt needs to start ADV validation.
      *
-     * <p>WhatsApp guarantees this node accompanies every prekey bundle
-     * served by an ADV-capable device, so its absence indicates either a
-     * malformed response from the server or a peer that does not speak
+     * @apiNote
+     * WhatsApp guarantees this child accompanies every prekey bundle
+     * served by an ADV-capable device (the canonical site downstream of
+     * WA Web's {@code processKeyBundlesInWorker} bails out with the same
+     * "missing device-identity" condition). Its absence indicates either
+     * a malformed response from the server or a peer that does not speak
      * ADV.
      */
     public static final class MissingDeviceIdentity extends WhatsAppAdvValidationException {
@@ -109,8 +115,14 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
     }
 
     /**
-     * Thrown when the {@code device-identity} node is present in a prekey
-     * response but its payload is empty or syntactically broken.
+     * Thrown when the {@code device-identity} child is present but its
+     * payload is empty or syntactically broken.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebSendRetryReceiptJob} can emit an empty
+     * {@code device-identity} when forging a retry response under certain
+     * recovery paths; Cobalt rejects such payloads at validation time
+     * rather than silently accepting them.
      */
     public static final class EmptyDeviceIdentity extends WhatsAppAdvValidationException {
         /**
@@ -127,9 +139,10 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
      * Thrown when the account signature in the device identity does not
      * verify against the account's identity key.
      *
-     * <p>The account signature is produced by the primary device when a
-     * companion is linked. A mismatch means the companion was not
-     * authorized by the account owner and must not be trusted.
+     * @apiNote
+     * The account signature is produced by the primary device when a
+     * companion is paired. A mismatch means the companion was not
+     * authorized by the account owner and must not be trusted as a peer.
      */
     public static final class AccountSignatureFailed extends WhatsAppAdvValidationException {
         /**
@@ -146,8 +159,9 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
      * Thrown when the device signature in the device identity does not
      * verify against the device's own public key.
      *
-     * <p>The device signature is produced by the companion device itself
-     * to prove it possesses the private key matching the public key it
+     * @apiNote
+     * The device signature is produced by the companion device itself to
+     * prove it possesses the private key matching the public key it
      * announces. A mismatch means the device cannot prove that ownership.
      */
     public static final class DeviceSignatureFailed extends WhatsAppAdvValidationException {
@@ -165,9 +179,10 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
      * Thrown when the HMAC stamped over the serialized device identity
      * does not match the value Cobalt computes from the shared secret.
      *
-     * <p>The HMAC protects the identity payload from in-flight tampering;
-     * a mismatch means the bytes were modified or the verification key is
-     * out of sync.
+     * @apiNote
+     * The HMAC protects the identity payload from in-flight tampering. A
+     * mismatch means the bytes were modified or the verification key is
+     * out of sync with the primary device's view.
      */
     public static final class HmacValidationFailed extends WhatsAppAdvValidationException {
         /**
@@ -184,10 +199,11 @@ public sealed abstract class WhatsAppAdvValidationException extends WhatsAppExce
      * Thrown when a low-level cryptographic operation fails while
      * validating ADV signatures.
      *
-     * <p>This wraps unexpected JCE failures such as malformed key
-     * encodings, missing algorithms, or provider misconfiguration so the
-     * caller can distinguish a genuine signature mismatch from an
-     * environment problem.
+     * @apiNote
+     * Wraps unexpected JCE failures such as malformed key encodings,
+     * missing algorithms, or provider misconfiguration, so the caller can
+     * distinguish a genuine signature mismatch from an environment
+     * problem on the local machine.
      */
     public static final class CryptoError extends WhatsAppAdvValidationException {
         /**

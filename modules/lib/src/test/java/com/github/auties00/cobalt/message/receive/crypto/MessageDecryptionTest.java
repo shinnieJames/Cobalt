@@ -17,27 +17,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MessageDecryption}, mirroring
+ * Parity tests for {@link MessageDecryption} against WhatsApp Web's
  * {@code WAWebMsgProcessingDecryptEnc.decryptEnc}.
  *
- * <p>Coverage:
- * <ul>
- *   <li>{@code PKMSG} → {@code MSG} round-trip with the sender side
- *       driven by {@link MessageEncryption} on a real libsignal session
- *       (via {@link TestSignalSession}). The decrypted plaintext must
- *       byte-equal the input — padding is stripped by the decryptor.</li>
- *   <li>{@link MessageDecryption#hasSessionWith} reflects session
- *       installation state.</li>
- *   <li>Invalid ciphertext bytes raise
- *       {@link WhatsAppMessageException.Receive.InvalidMessage}.</li>
- *   <li>Constructor and per-method null-arg coverage.</li>
- * </ul>
+ * @apiNote
+ * Exercises the PKMSG and MSG branches of
+ * {@link MessageDecryption#decryptFromDevice(byte[], Jid, MessageEncryptionType)}
+ * together with the {@link MessageDecryption#hasSessionWith(Jid)} probe; the SKMSG
+ * branch needs a full sender-key distribution exchange covered by the group-message
+ * integration path and the MSMSG branch is exercised by {@code BotMessageSecretTest}
+ * because it is HKDF then AES-GCM with no Signal-session state.
  *
- * <p>The {@code SKMSG} branch needs a sender-key distribution exchange
- * which lives in the {@code GroupMessageSender} integration path; the
- * {@code MSMSG} branch (bot-message secret) is covered by
- * {@code BotMessageSecretTest} since it is HKDF→AES-GCM with no Signal
- * session state.
+ * @implNote
+ * Drives the sender side via {@link MessageEncryption} on a real libsignal session
+ * (installed by {@link TestSignalSession#establishSession}); plaintext arguments are
+ * raw bytes so the assertion does not depend on protobuf encoding.
  */
 @DisplayName("MessageDecryption")
 class MessageDecryptionTest {
@@ -45,6 +39,10 @@ class MessageDecryptionTest {
     private static final Jid SENDER_JID = Jid.of("12025550100:0@s.whatsapp.net");
     private static final Jid RECIPIENT_JID = Jid.of("19254863482:0@s.whatsapp.net");
 
+    /**
+     * Verifies that the recipient recovers the exact plaintext bytes from a
+     * PKMSG sent by the established sender session.
+     */
     @Test
     @DisplayName("decryptFromDevice(PKMSG): recipient recovers the exact plaintext after the sender's first send")
     void roundTripPkmsg() {
@@ -58,9 +56,13 @@ class MessageDecryptionTest {
         var decryption = decryption(recipient);
         var recovered = decryption.decryptFromDevice(payload.ciphertext(), SENDER_JID, MessageEncryptionType.PKMSG);
         assertArrayEquals(plaintext, recovered,
-                "decryptFromDevice strips Signal-protocol padding — output equals input byte-for-byte");
+                "decryptFromDevice strips Signal-protocol padding then output equals input byte-for-byte");
     }
 
+    /**
+     * Verifies that decrypting a PKMSG installs the inbound Signal session on the
+     * recipient side.
+     */
     @Test
     @DisplayName("decryptFromDevice(PKMSG): installs the session on the recipient side (subsequent hasSessionWith returns true)")
     void pkmsgInstallsSession() {
@@ -76,9 +78,13 @@ class MessageDecryptionTest {
         decryption.decryptFromDevice(payload.ciphertext(), SENDER_JID, MessageEncryptionType.PKMSG);
 
         assertTrue(decryption.hasSessionWith(SENDER_JID),
-                "PKMSG decryption installs the inbound session — hasSessionWith must now be true");
+                "PKMSG decryption installs the inbound session then hasSessionWith must now be true");
     }
 
+    /**
+     * Verifies that malformed ciphertext surfaces as
+     * {@link WhatsAppMessageException.Receive.InvalidMessage}.
+     */
     @Test
     @DisplayName("decryptFromDevice: malformed ciphertext throws WhatsAppMessageException.Receive.InvalidMessage")
     void malformedCiphertextThrows() {
@@ -89,6 +95,11 @@ class MessageDecryptionTest {
                 () -> decryption.decryptFromDevice(bogus, SENDER_JID, MessageEncryptionType.PKMSG));
     }
 
+    /**
+     * Verifies that each argument of
+     * {@link MessageDecryption#decryptFromDevice(byte[], Jid, MessageEncryptionType)}
+     * is null-checked.
+     */
     @Test
     @DisplayName("decryptFromDevice: null arguments throw NullPointerException")
     void decryptFromDeviceNullArgs() {
@@ -102,6 +113,9 @@ class MessageDecryptionTest {
                 () -> decryption.decryptFromDevice(new byte[]{0}, SENDER_JID, null));
     }
 
+    /**
+     * Verifies that each constructor argument is null-checked.
+     */
     @Test
     @DisplayName("constructor: null collaborators throw NullPointerException")
     void constructorNullArgs() {
@@ -113,32 +127,52 @@ class MessageDecryptionTest {
         assertThrows(NullPointerException.class, () -> new MessageDecryption(store, session, null));
     }
 
+    /**
+     * Verifies that {@link MessageDecryption#hasSessionWith(Jid)} returns
+     * {@code false} on a fresh store without throwing.
+     */
     @Test
     @DisplayName("hasSessionWith(null): returns false (no NPE on null device JID)")
     void hasSessionWithNullDoesNotThrow() {
         var recipient = MessageFixtures.temporaryStore(RECIPIENT_JID, null);
         var decryption = decryption(recipient);
-        // hasSessionWith is a defensive lookup — fresh stores have no
-        // sessions at all, so the result must be false.
         assertTrue(!decryption.hasSessionWith(SENDER_JID),
                 "fresh store has no sessions");
     }
 
     /**
-     * Builds a {@link MessageEncryption} for the supplied store.
+     * Builds a {@link MessageEncryption} bound to the supplied store for the
+     * sender side of the round-trip.
+     *
+     * @apiNote
+     * Used by every test that needs to produce an encrypted payload before handing
+     * it to a {@link MessageDecryption}.
+     *
+     * @implNote
+     * Constructs the libsignal session and group ciphers from the same store so
+     * both sides share the same protocol state.
      *
      * @param store the sender's protocol store
-     * @return the encryption service
+     * @return the encryption service for the sender
      */
     private static MessageEncryption encryption(WhatsAppStore store) {
         return new MessageEncryption(store, new SignalSessionCipher(store), new SignalGroupCipher(store));
     }
 
     /**
-     * Builds a {@link MessageDecryption} for the supplied store.
+     * Builds a {@link MessageDecryption} bound to the supplied store for the
+     * recipient side of the round-trip.
+     *
+     * @apiNote
+     * Used by every test that needs to decrypt a payload produced by
+     * {@link #encryption(WhatsAppStore)}.
+     *
+     * @implNote
+     * Constructs the libsignal session and group ciphers from the same store so
+     * both sides share the same protocol state.
      *
      * @param store the recipient's protocol store
-     * @return the decryption service
+     * @return the decryption service for the recipient
      */
     private static MessageDecryption decryption(WhatsAppStore store) {
         return new MessageDecryption(store, new SignalSessionCipher(store), new SignalGroupCipher(store));

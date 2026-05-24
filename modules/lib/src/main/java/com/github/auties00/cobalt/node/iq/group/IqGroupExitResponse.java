@@ -14,27 +14,52 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
+ * The sealed family of inbound reply variants the relay produces in
  * response to an {@link IqGroupExitRequest}.
+ *
+ * @apiNote
+ * After dispatching the leave request, pattern-match the returned
+ * variant: {@link Success} carries one {@link Success.LeaveResult}
+ * per requested target (with a per-target outcome code so partial
+ * failures inside a batch are visible), while {@link ClientError}
+ * and {@link ServerError} surface envelope-level rejections that
+ * abort the entire batch.
+ *
+ * @implNote
+ * This implementation collapses WA Web's
+ * {@code leaveGroupsResultParser} and
+ * {@code leaveCommunitiesResultParser} (two
+ * {@link WhatsAppWebModule WAWebGroupExitJob}-internal
+ * parsers fed into {@code deprecatedSendIq}) into a single sealed
+ * sum; the grandchild-shape (whether to read {@code id} on
+ * {@code <group>} or {@code parent_group_jid} on
+ * {@code <linked_groups>}) is recovered from the outbound request.
  */
 @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
 public sealed interface IqGroupExitResponse extends IqOperation.Response
         permits IqGroupExitResponse.Success, IqGroupExitResponse.ClientError, IqGroupExitResponse.ServerError {
 
     /**
-     * Tries each {@link IqGroupExitResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Tries each {@link IqGroupExitResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to
-     *                validate echoed identifiers and to discover
-     *                the grandchild-shape mode; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote
+     * Use this when dispatching through the typed {@link IqOperation}
+     * pipeline; the dispatcher hands the inbound {@link Node} together
+     * with the original outbound request so that the parser can
+     * recover the grandchild shape from the request rather than from
+     * the reply (the relay echoes whichever shape the caller used).
+     *
+     * @implNote
+     * This implementation tries {@link Success} first, then
+     * {@link ClientError}, then {@link ServerError}; the order matches
+     * WA Web's promise resolution where the result branch is asserted
+     * before any error envelope is inspected.
+     *
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound stanza used to validate echoed identifiers and to discover the grandchild-shape mode; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented variant matched the stanza shape
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
             exports = "leaveGroup", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -57,19 +82,36 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — carries one
-     * {@link LeaveResult} per requested target.
+     * The {@code Success} reply variant.
      *
-     * <p>Each {@link LeaveResult} contains the echoed target JID
-     * and a {@code code} integer mirroring the {@code error}
-     * grandchild attribute (defaulting to {@code 200} when the
-     * relay omits it, signalling a per-target success).
+     * @apiNote
+     * Carries one {@link LeaveResult} per requested target. Each
+     * carries an {@code error} code mirroring the relay's per-target
+     * status (defaulting to {@code 200} when the relay omits it,
+     * which signals a per-target success); a batch that nominally
+     * succeeded at the envelope level can still hold individual
+     * non-{@code 200} entries when one or more targets failed.
+     * Callers iterating {@link #results()} should treat any code
+     * other than {@code 200} as a per-target leave failure.
+     *
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code leaveGroupsResultParser} / {@code leaveCommunitiesResultParser}
+     * output shape ({@code [{id, code}, ...]}) where the parser maps
+     * each {@code <group>} or {@code <linked_groups>} grandchild of
+     * the {@code <leave>} child to a {@code (jid, code)} pair.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class Success implements IqGroupExitResponse {
         /**
-         * Per-target reply projection — pairs the echoed target
-         * JID with its (possibly partial) leave outcome code.
+         * The per-target reply projection that pairs the echoed
+         * target JID with its (possibly partial) leave outcome code.
+         *
+         * @apiNote
+         * The {@link #code()} accessor returns {@code 200} on a clean
+         * leave; any other value is the relay's per-target error code
+         * (for example {@code 403} when the caller is not actually a
+         * member of the target group).
          */
         public static final class LeaveResult {
             /**
@@ -78,20 +120,16 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             private final Jid jid;
 
             /**
-             * The per-target outcome code; {@code 200} on
-             * success, otherwise the relay's per-target error
-             * code.
+             * The per-target outcome code.
              */
             private final int code;
 
             /**
              * Constructs a per-target leave result.
              *
-             * @param jid  the echoed target JID; never
-             *             {@code null}
-             * @param code the per-target outcome code
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid  the echoed target {@link Jid}; never {@code null}
+             * @param code the per-target outcome code; {@code 200} signals a clean per-target leave
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public LeaveResult(Jid jid, int code) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -101,7 +139,7 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             /**
              * Returns the echoed target JID.
              *
-             * @return the target JID; never {@code null}
+             * @return the target {@link Jid}; never {@code null}
              */
             public Jid jid() {
                 return jid;
@@ -110,7 +148,7 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
             /**
              * Returns the per-target outcome code.
              *
-             * @return the outcome code
+             * @return the outcome code; {@code 200} on success
              */
             public int code() {
                 return code;
@@ -147,12 +185,10 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         private final List<LeaveResult> results;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success} reply.
          *
-         * @param results the per-target outcome list; never
-         *                {@code null}
-         * @throws NullPointerException if {@code results} is
-         *                              {@code null}
+         * @param results the per-target outcome list; never {@code null}
+         * @throws NullPointerException if {@code results} is {@code null}
          */
         public Success(List<LeaveResult> results) {
             Objects.requireNonNull(results, "results cannot be null");
@@ -162,8 +198,7 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         /**
          * Returns the list of per-target outcome projections.
          *
-         * @return an unmodifiable list of {@link LeaveResult}
-         *         entries; never {@code null}
+         * @return an unmodifiable {@link List} of {@link LeaveResult} entries; never {@code null}
          */
         public List<LeaveResult> results() {
             return results;
@@ -173,23 +208,37 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
          *
-         * <p>The grandchild-shape mode is recovered from the
-         * outbound {@code request} by inspecting whether its
-         * {@code <leave>} child holds {@code <group>} or
-         * {@code <linked_groups>} grandchildren; this is the same
-         * cue WA Web uses to dispatch between the two parsers.
+         * @apiNote
+         * The caller normally goes through
+         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
+         * exposed so callers can short-circuit when they already know
+         * the wire shape is a success.
+         *
+         * @implNote
+         * This implementation recovers the grandchild shape from the
+         * outbound request: if the outbound {@code <leave>} carries
+         * any {@code <linked_groups>} child the parser reads
+         * {@code parent_group_jid} on each grandchild, otherwise it
+         * reads {@code id} on {@code <group>} children. This mirrors
+         * WA Web's separate {@code leaveGroupsResultParser} and
+         * {@code leaveCommunitiesResultParser} pair: WA Web picks the
+         * parser at dispatch time, Cobalt picks the attribute name at
+         * parse time. The {@code error} attribute defaults to
+         * {@code 200} when absent, matching the parser's
+         * {@code maybeAttrInt("error") != null ? ... : 200} contract.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveGroupsResultParser",
+                exports = "leaveGroup",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveCommunitiesResultParser",
+                exports = "leaveCommunity",
+                adaptation = WhatsAppAdaptation.ADAPTED)
+        @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
+                exports = "leaveCommunities",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Success> of(Node node, Node request) {
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
@@ -249,8 +298,23 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected
-     * the leave as malformed or unauthorised.
+     * The {@code ClientError} reply variant.
+     *
+     * @apiNote
+     * Surfaces caller-side rejections of the whole leave batch:
+     * typically {@code 400} on a malformed stanza or {@code 401}
+     * when the caller's session no longer authorises group operations.
+     * Per-target failures are surfaced as non-{@code 200} entries
+     * inside a {@link Success} instead; this variant only fires when
+     * the relay rejects the envelope itself.
+     *
+     * @implNote
+     * This implementation corresponds to the {@code 4xx} branch of
+     * WA Web's {@code ServerStatusCodeError} promise rejection inside
+     * {@code leaveGroup} / {@code leaveCommunity} /
+     * {@code leaveCommunities}; the {@code <error>} envelope's
+     * {@code code} and {@code text} attributes feed
+     * {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class ClientError implements IqGroupExitResponse {
@@ -260,17 +324,16 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text when the relay supplied one,
+         * otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -278,7 +341,7 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -289,28 +352,41 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given
+         * inbound stanza.
+         *
+         * @apiNote
+         * The caller normally goes through
+         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
+         * exposed so callers can short-circuit when they already know
+         * the wire shape is a client error.
+         *
+         * @implNote
+         * This implementation delegates to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * to validate the {@code type="error"} envelope and the
+         * {@code <error>} child's {@code 4xx} {@code code} before
+         * extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveGroupsResultParser",
+                exports = "leaveGroup",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveCommunitiesResultParser",
+                exports = "leaveCommunity",
+                adaptation = WhatsAppAdaptation.ADAPTED)
+        @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
+                exports = "leaveCommunities",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -346,9 +422,17 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay
-     * encountered a transient internal failure while processing
-     * the leave.
+     * The {@code ServerError} reply variant.
+     *
+     * @apiNote
+     * Surfaces transient {@code 5xx} relay failures while processing
+     * the leave batch; the request may be retried after a backoff.
+     *
+     * @implNote
+     * This implementation corresponds to the {@code 5xx} branch of
+     * WA Web's {@code ServerStatusCodeError} promise rejection inside
+     * {@code leaveGroup} / {@code leaveCommunity} /
+     * {@code leaveCommunities}.
      */
     @WhatsAppWebModule(moduleName = "WAWebGroupExitJob")
     final class ServerError implements IqGroupExitResponse {
@@ -358,17 +442,16 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text when the relay supplied one,
+         * otherwise {@code null}.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -376,7 +459,7 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -387,28 +470,41 @@ public sealed interface IqGroupExitResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given
+         * inbound stanza.
+         *
+         * @apiNote
+         * The caller normally goes through
+         * {@link IqGroupExitResponse#of(Node, Node)}; this factory is
+         * exposed so callers can short-circuit when they already know
+         * the wire shape is a server error.
+         *
+         * @implNote
+         * This implementation delegates to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
+         * to validate the {@code type="error"} envelope and the
+         * {@code <error>} child's {@code 5xx} {@code code} before
+         * extracting code/text.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveGroupsResultParser",
+                exports = "leaveGroup",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
-                exports = "leaveCommunitiesResultParser",
+                exports = "leaveCommunity",
+                adaptation = WhatsAppAdaptation.ADAPTED)
+        @WhatsAppWebExport(moduleName = "WAWebGroupExitJob",
+                exports = "leaveCommunities",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);

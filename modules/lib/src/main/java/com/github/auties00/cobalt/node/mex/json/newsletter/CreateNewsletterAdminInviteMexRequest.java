@@ -11,44 +11,61 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Creates a newsletter admin invitation for the target user.
+ * Builds the MEX request that creates a newsletter admin invite token.
  *
- * <p>The owner of a newsletter issues this mutation to invite another user to
- * become a newsletter administrator. The mutation records the invite on the
- * server so the target user can later accept it via
+ * @apiNote
+ * Drives the "invite as admin" flow consumed by
+ * {@code WAWebNewsletterSendMsgAction}: the newsletter owner picks a target
+ * user, this mutation records the pending invite server-side, and the
+ * response timestamp is then included in the invite chat message sent to the
+ * invitee. The invitee later accepts via
  * {@link AcceptNewsletterAdminInviteMexRequest}.
+ *
+ * @implNote
+ * This implementation expects the caller to have already converted the
+ * target user's Jid to its LID string; WA Web performs the conversion via
+ * {@code WAWebLidMigrationUtils.toUserLidOrThrow}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateNewsletterAdminInviteJob")
 public final class CreateNewsletterAdminInviteMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the {@code CreateNewsletterAdminInvite} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexCreateNewsletterAdminInviteJobMutation.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9387141988078609";
 
     /**
      * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this mutation.
+     * for this mutation.
      */
     public static final String OPERATION_NAME = "createNewsletterAdminInvite";
 
     /**
-     * The identifier of the newsletter on which the admin invite is being
-     * created.
+     * The Jid string of the newsletter on which the admin invite is created.
      */
     private final String newsletterId;
 
     /**
-     * The identifier of the user being invited as an admin.
+     * The user LID string of the recipient that will receive the admin
+     * invite.
      */
     private final String userId;
 
     /**
-     * Creates a request that issues an admin invite for the given newsletter
-     * and user.
+     * Constructs a request that creates an admin invite for the given
+     * newsletter and target user.
      *
-     * @param newsletterId the identifier of the newsletter
-     * @param userId       the identifier of the invited user
+     * @apiNote
+     * The {@code userId} parameter must be the user LID string; WA Web's
+     * {@code WAWebLidMigrationUtils.toUserLidOrThrow} performs the
+     * conversion before invoking the underlying mutation.
+     *
+     * @param newsletterId the newsletter Jid string the invite targets
+     * @param userId       the user LID of the invitee
      */
     public CreateNewsletterAdminInviteMexRequest(String newsletterId, String userId) {
         this.newsletterId = newsletterId;
@@ -56,10 +73,10 @@ public final class CreateNewsletterAdminInviteMexRequest implements MexOperation
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -67,10 +84,10 @@ public final class CreateNewsletterAdminInviteMexRequest implements MexOperation
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -78,11 +95,21 @@ public final class CreateNewsletterAdminInviteMexRequest implements MexOperation
     }
 
     /**
-     * Builds the IQ stanza that dispatches this mutation to the WhatsApp
-     * relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id, user_id}}} payload;
+     * either field is omitted when its backing string is {@code null} so the
+     * server-side schema never receives an explicit {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateNewsletterAdminInviteJob", exports = "createNewsletterAdminInvite",
             adaptation = WhatsAppAdaptation.ADAPTED)

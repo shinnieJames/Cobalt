@@ -20,16 +20,28 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Parses a USync IQ response and classifies each user entry as a full device list, an
- * omitted result, or an error.
+ * Parses USync IQ responses produced by the device-list synchronisation flow.
  *
- * <p>WhatsApp's USync protocol answers a batch of user queries in a single IQ, and for the
- * device protocol each user can return either the full device list (with a signed key index
- * list), an "omitted" marker confirming the cached dhash is still valid, or a per-user
- * error. This parser walks the response tree, verifies the signed key index list via
- * {@link DeviceADVValidator}, filters devices whose keyIndex is not in the cryptographically
- * signed {@code validIndexes} set, and produces a list of typed {@link DeviceListResult}
- * instances that {@link com.github.auties00.cobalt.device.DeviceService} consumes.
+ * @apiNote
+ * Used by {@link com.github.auties00.cobalt.device.DeviceService} as the
+ * sink for IQs sent through {@link DeviceUSyncQueryBuilder}; it returns one
+ * {@link DeviceListResult} per user entry in the response, mapping each one
+ * of the three wire shapes WhatsApp emits ({@link DeviceListResult.Full},
+ * {@link DeviceListResult.Omitted}, {@link DeviceListResult.Error}) to a
+ * Cobalt-side record. The collected results feed
+ * {@code WAWebHandleAdvForUsyncApi.handleADVSyncResultSync} so that the
+ * caller can update its ADV cache or surface the failure.
+ *
+ * @implNote
+ * This implementation merges WA Web's {@code usyncParser}, the
+ * {@code WAWebUsyncDevice.deviceParser}, and the
+ * {@code WAWebHandleAdvForUsyncApi} / {@code WAWebHandleAdvKeyIndexResultApi}
+ * dispatch into a single class because Cobalt only consumes the device and
+ * username sub-protocols; the JS dispatch table for the other USync
+ * protocols (contact, picture, status, business, ...) is not modelled.
+ * Signature verification of the {@code <key-index-list>} payload is
+ * delegated to {@link DeviceADVValidator} so the crypto stays out of the
+ * parser.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
@@ -37,19 +49,31 @@ import java.util.stream.Stream;
 @WhatsAppWebModule(moduleName = "WAWebUsyncUsername")
 public final class DeviceUSyncResponseParser {
     /**
-     * Logger for diagnostic messages during USync response parsing.
+     * Logger used to trace per-user and protocol-level parse warnings.
      */
     private static final System.Logger LOGGER = System.getLogger(DeviceUSyncResponseParser.class.getName());
 
     /**
-     * ADV validator service for key index validation and hosted device gating.
+     * ADV validator used to verify {@code <key-index-list>} signatures and to
+     * read the hosted-devices gating flag.
      */
     private final DeviceADVValidator advValidatorService;
 
     /**
-     * Creates a new USync response parser.
-     * @param advValidatorService the ADV validator service for key index validation and
-     *                            hosted device gating
+     * Creates a new parser bound to a {@link DeviceADVValidator}.
+     *
+     * @apiNote
+     * Constructed once per session and shared across all USync IQ responses
+     * the device service handles; the validator carries the per-account
+     * identity key material that the {@code <key-index-list>} signature
+     * verification needs.
+     *
+     * @param advValidatorService the ADV validator backing
+     *                            {@link #parseFullResult(Jid, String, Node, Node, byte[])}
+     *                            and the hosted-devices gating used inside
+     *                            {@link #parseDeviceEntry(Node, Map, SequencedSet)}
+     * @throws NullPointerException if {@code advValidatorService} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
             exports = "handleADVSyncResultSync",
@@ -59,15 +83,25 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses a USync response into device list results.
+     * Walks the response IQ and emits one {@link DeviceListResult} per user
+     * entry.
      *
-     * <p>The USync response has two main sections under the {@code <usync>} node:
-     * <ul>
-     *   <li>{@code <result>} - protocol-level status with error/refresh per protocol</li>
-     *   <li>{@code <list>} - per-user data with protocol-specific children</li>
-     * </ul>
-     * @param responseNode the IQ response node
-     * @return list of device list results (full, omitted, or error)
+     * @apiNote
+     * Top-level entry point of the parser. Returns an empty list when the
+     * response has no {@code <usync>} envelope, a single-element list
+     * carrying a fatal {@link DeviceListResult.Error} when a global
+     * {@code <error>} is present, or a per-user breakdown otherwise. Protocol
+     * level errors carried under {@code <usync><result><devices><error/>} are
+     * surfaced as non-fatal {@link DeviceListResult.Error} entries with a
+     * {@code null} JID, mirroring WA Web's {@code n.error.devices} branch.
+     *
+     * @implNote
+     * This implementation walks the tree using {@link Node}'s convenience
+     * stream accessors instead of WA Web's {@code WADeprecatedWapParser}
+     * builder, but produces the same result classification.
+     *
+     * @param responseNode the {@code <iq>} response received from the socket
+     * @return the per-user and per-protocol classification of the response
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "usyncParser",
@@ -80,7 +114,6 @@ public final class DeviceUSyncResponseParser {
 
         var usync = usyncNode.get();
 
-        // A global error is fatal and aborts the entire batch.
         var globalErrorNode = usync.getChild("error");
         if (globalErrorNode.isPresent()) {
             var error = globalErrorNode.get();
@@ -94,7 +127,6 @@ public final class DeviceUSyncResponseParser {
 
         var usernameMap = parseUsernameMap(usync);
 
-        // A protocol-level devices error is non-fatal and only affects matching users.
         var protocolErrorStream = usync.streamChild("result")
                 .flatMap(result -> result.streamChild("devices"))
                 .flatMap(devices -> devices.streamChild("error"))
@@ -117,9 +149,24 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses the username map from the USync list.
-     * @param usync the usync node
-     * @return map of user JID to username
+     * Collects the per-user username mappings from the response.
+     *
+     * @apiNote
+     * Internal worker for {@link #parse(Node)}; the resulting map is later
+     * passed into {@link #parseUserDevices(Node, Map)} so a parsed username
+     * can be folded into the {@link DeviceListResult.Full} record without
+     * a second walk of the list.
+     *
+     * @implNote
+     * This implementation skips username entries that carry an
+     * {@code <error/>} child or whose content string is empty, matching
+     * WA Web's {@code WAWebUsyncUsername.usernameParser} which returns the
+     * error object or {@code null} respectively (and Cobalt has no
+     * downstream consumer for those values).
+     *
+     * @param usync the {@code <usync>} envelope
+     * @return the user-JID to username map, or an empty map when no usernames
+     *         are present
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
@@ -132,14 +179,27 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses device results for a single user from the USync list.
+     * Classifies a single {@code <user>} entry into Full, Omitted, or Error.
      *
-     * <p>The user node may contain a {@code <devices>} child (from the device protocol)
-     * which itself contains {@code <device-list>}, {@code <key-index-list>}, and optionally
-     * an {@code <error>} element.
-     * @param userNode    the user node from {@code usync > list > user}
-     * @param usernameMap the username map for correlating usernames
-     * @return stream of device list results for this user
+     * @apiNote
+     * Internal worker for {@link #parse(Node)}; returns an empty stream when
+     * the entry has no {@code jid} attribute or no {@code <devices>} child,
+     * a single {@link DeviceListResult.Error} when {@code <devices>} carries
+     * an {@code <error/>}, and otherwise delegates to either
+     * {@link #parseOmittedResult(Jid, Node, Node)} or
+     * {@link #parseFullResult(Jid, String, Node, Node, byte[])} depending on
+     * whether the {@code <key-index-list>} payload is present.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebHandleAdvForUsyncApi.handleADVSyncResultSync} dispatch,
+     * including the rule that an absent {@code signedKeyIndexBytes} routes
+     * to the Omitted path even when a {@code <device-list>} is present.
+     *
+     * @param userNode    the {@code <user>} entry node
+     * @param usernameMap the username map produced by
+     *                    {@link #parseUsernameMap(Node)}
+     * @return the per-user classification
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "deviceParser",
@@ -189,20 +249,34 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses an omitted device list result when no signed key index bytes are present.
+     * Builds an {@link DeviceListResult.Omitted} record for a cached-list
+     * confirmation.
      *
-     * <p>If the device-list contains companion devices (non-primary), the result is dropped
-     * because a companion device list without a signed key index is invalid.
+     * @apiNote
+     * Reached when the server skipped resending the device list because the
+     * cached {@code device_hash} still matches. Downstream consumers treat
+     * the Omitted record as a no-op for the cache and use the timestamps to
+     * refresh the expected-timestamp tracking fields.
+     *
+     * @implNote
+     * This implementation guards against a malformed wire shape where a
+     * {@code <device-list>} carrying companion devices arrives without a
+     * signed key index; that combination is dropped because the companions
+     * would otherwise be accepted without a verified key. The check matches
+     * the {@code drop: has companion, no keyIndexBytes} branch in
+     * {@code WAWebHandleAdvForUsyncApi.handleADVSyncResultSync}.
+     *
      * @param userJid          the user JID
-     * @param deviceListNode   the device-list node, or {@code null}
-     * @param keyIndexListNode the key-index-list node, or {@code null}
-     * @return stream containing the omitted result, or empty if invalid
+     * @param deviceListNode   the {@code <device-list>} node, or {@code null}
+     * @param keyIndexListNode the {@code <key-index-list>} node, or
+     *                         {@code null}
+     * @return a stream carrying the Omitted record, or empty if the wire
+     *         shape was invalid
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
             exports = "handleADVSyncResultSync",
             adaptation = WhatsAppAdaptation.DIRECT)
     private Stream<DeviceListResult> parseOmittedResult(Jid userJid, Node deviceListNode, Node keyIndexListNode) {
-        // A device-list carrying companion devices without a signed key index is invalid.
         if (deviceListNode != null && hasCompanionDevices(deviceListNode)) {
             return Stream.empty();
         }
@@ -221,9 +295,17 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Checks if the device-list contains companion (non-primary) devices.
-     * @param deviceListNode the device-list node
-     * @return {@code true} if any device has a non-primary device ID
+     * Tests whether a {@code <device-list>} mentions at least one companion
+     * device.
+     *
+     * @apiNote
+     * Internal predicate used by {@link #parseOmittedResult(Jid, Node, Node)}
+     * to reject the {@code companion without signed key index} wire shape.
+     *
+     * @param deviceListNode the {@code <device-list>} node
+     * @return {@code true} when any {@code <device>} child carries an
+     *         {@code id} attribute different from
+     *         {@link DeviceConstants#PRIMARY_DEVICE_ID}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvForUsyncApi",
             exports = "handleADVSyncResultSync",
@@ -234,20 +316,34 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses a full device list result with signed key index validation.
+     * Builds the {@link DeviceListResult.Full} record after verifying the
+     * signed key index list.
      *
-     * <p>Validates the signed key index list, builds a key index map, parses device entries,
-     * and constructs a full device list result. The verification path mirrors WA Web's
-     * {@code handleKeyIndexResultSync}: when hosted-business gating is on and the
-     * device-list advertises at least one hosted device the embedded
-     * {@code accountSignatureKey} is used; otherwise the user's locally-stored primary
-     * identity is used and any embedded key is ignored.
-     * @param userJid            the user JID
-     * @param username           the username from username protocol, or {@code null}
-     * @param deviceListNode     the device-list node
-     * @param keyIndexListNode   the key-index-list node
-     * @param signedKeyIndexBytes the raw signed key index list bytes
-     * @return stream containing the full result, or empty if validation fails
+     * @apiNote
+     * Reached when the server resent the full device list. Returns an empty
+     * stream when the {@code <key-index-list>} signature does not verify
+     * (so the caller drops the user instead of poisoning its ADV cache).
+     * The hosted-business gating selects between
+     * {@link DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])} (when
+     * the list advertises at least one hosted device and the AB prop is on)
+     * and {@link DeviceADVValidator#decodeSignedKeyIndexBytes(Jid, byte[])}
+     * (the standard path keyed by the user's stored primary identity).
+     *
+     * @implNote
+     * This implementation follows the verification path of WA Web's
+     * {@code WAWebHandleAdvKeyIndexResultApi.handleKeyIndexResultSync}; it
+     * skips the JS function's downstream "clear-record" computation because
+     * that step belongs to the consumer
+     * ({@code WAWebIdentityUpdateDeviceTableApi}, mirrored in
+     * {@link com.github.auties00.cobalt.device.DeviceService}).
+     *
+     * @param userJid             the user JID
+     * @param username            the parsed username, or {@code null}
+     * @param deviceListNode      the {@code <device-list>} node
+     * @param keyIndexListNode    the {@code <key-index-list>} node
+     * @param signedKeyIndexBytes the raw signed-key-index payload to verify
+     * @return a stream carrying the Full record, or empty if signature
+     *         verification failed
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
@@ -298,9 +394,18 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Checks if the device-list contains a device with {@code is_hosted="true"}.
-     * @param deviceListNode the device-list node
-     * @return {@code true} if any device advertises the hosted attribute
+     * Tests whether a {@code <device-list>} advertises at least one device
+     * with {@code is_hosted="true"}.
+     *
+     * @apiNote
+     * Internal gating predicate used by
+     * {@link #parseFullResult(Jid, String, Node, Node, byte[])} to choose
+     * between the hosted-business signature path and the standard primary
+     * identity path.
+     *
+     * @param deviceListNode the {@code <device-list>} node
+     * @return {@code true} if any {@code <device>} child carries the
+     *         {@code is_hosted="true"} attribute
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
@@ -311,9 +416,24 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses a key index entry from a device node in the key-index-list.
-     * @param deviceNode the device node from key-index-list
-     * @return stream containing the key index entry, or empty if required attributes are missing
+     * Extracts a {@code (deviceId, keyIndex)} pair from a single
+     * {@code <key-index-list><device/>} entry.
+     *
+     * @apiNote
+     * Internal worker for
+     * {@link #parseFullResult(Jid, String, Node, Node, byte[])}; the
+     * resulting map is consulted by
+     * {@link #parseDeviceEntry(Node, Map, SequencedSet)} to attach the
+     * correct key index to each device in the device-list.
+     *
+     * @implNote
+     * This implementation drops entries missing either {@code jid} or
+     * {@code key-index}, matching the JS code which silently ignores
+     * malformed nodes.
+     *
+     * @param deviceNode the {@code <device>} child from the key-index-list
+     * @return a stream carrying the parsed entry, or empty if attributes
+     *         are missing
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvKeyIndexResultApi",
             exports = "handleKeyIndexResultSync",
@@ -328,15 +448,31 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses a single device entry from the device-list.
+     * Converts a single {@code <device-list><device/>} entry to a typed
+     * {@link DeviceInfo}.
      *
-     * <p>Extracts the device ID, resolves the key index from the key-index-list map, validates
-     * against valid indexes, and conditionally sets the hosted flag based on the
-     * {@code is_hosted} attribute.
-     * @param deviceNode   the device node from device-list
-     * @param keyIndexMap  map of device ID to key index (from key-index-list)
-     * @param validIndexes the set of valid key indexes, or {@code null} if not available
-     * @return stream containing the parsed device info, or empty if invalid
+     * @apiNote
+     * Internal worker for
+     * {@link #parseFullResult(Jid, String, Node, Node, byte[])}; produces
+     * either a regular E2EE device or a hosted device when the AB prop is
+     * on and the entry advertises {@code is_hosted="true"} with id
+     * {@link DeviceConstants#HOSTED_DEVICE_ID}.
+     *
+     * @implNote
+     * This implementation skips devices whose key index is non-zero and not
+     * present in the cryptographically signed {@code validIndexes} set, so
+     * the parser only emits devices the signed key index list authorises.
+     * The primary device (key index 0) is always accepted, and an empty
+     * {@code validIndexes} set disables the check entirely; both rules
+     * match WA Web's {@code handleKeyIndexResultSync}.
+     *
+     * @param deviceNode   the {@code <device>} node from the device-list
+     * @param keyIndexMap  the {@code (deviceId, keyIndex)} map produced by
+     *                     {@link #parseKeyIndexEntry(Node)}
+     * @param validIndexes the cryptographically signed set of valid key
+     *                     indexes, or {@code null} when unavailable
+     * @return a stream carrying the parsed {@link DeviceInfo}, or empty when
+     *         the device fails validation
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "deviceParser",
@@ -354,8 +490,6 @@ public final class DeviceUSyncResponseParser {
         var deviceId = id.getAsInt();
         var keyIndex = keyIndexMap.getOrDefault(deviceId, 0);
 
-        // The primary device (keyIndex 0) is always accepted. An empty validIndexes set
-        // skips validation and allows every device.
         if (validIndexes != null && !validIndexes.isEmpty() && keyIndex != 0 && !validIndexes.contains(keyIndex)) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Device {0} has keyIndex {1} not in validIndexes {2}, excluding",
@@ -363,7 +497,6 @@ public final class DeviceUSyncResponseParser {
             return Stream.empty();
         }
 
-        // The is_hosted attribute is read with strict string equality, matching WA Web.
         var bizHostedDevicesEnabled = advValidatorService.isBizHostedDevicesEnabled();
         var isHosted = bizHostedDevicesEnabled
                 && "true".equals(deviceNode.getAttributeAsString("is_hosted").orElse(null));
@@ -376,12 +509,17 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Parses a username entry from a user node.
+     * Extracts a {@code (userJid, username)} pair from a single
+     * {@code <user><username/></user>} entry.
      *
-     * <p>Extracts the username from the {@code <username>} child of a user node,
-     * skipping entries with errors or empty content.
-     * @param userNode the user node from {@code usync > list > user}
-     * @return stream containing the username entry, or empty if not available
+     * @apiNote
+     * Internal worker for {@link #parseUsernameMap(Node)}; emits nothing for
+     * entries whose username carries an error child or whose content is
+     * empty.
+     *
+     * @param userNode the {@code <user>} entry
+     * @return a stream carrying the parsed entry, or empty when the
+     *         {@code <username>} child is absent, errored, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUsername",
             exports = "usernameParser",
@@ -399,8 +537,6 @@ public final class DeviceUSyncResponseParser {
 
         var node = usernameNode.get();
 
-        // Per-user username errors are dropped because Cobalt has no downstream consumer
-        // that observes them.
         if (node.getChild("error").isPresent()) {
             return Stream.empty();
         }
@@ -414,14 +550,26 @@ public final class DeviceUSyncResponseParser {
     }
 
     /**
-     * Internal record for holding parsed key index entries.
-     * @param deviceId the device ID
-     * @param keyIndex the key index value
+     * Internal tuple carrying a parsed {@code (deviceId, keyIndex)} pair.
+     *
+     * @apiNote
+     * Used as the value type of the {@link Stream} produced by
+     * {@link #parseKeyIndexEntry(Node)} before being collected into the
+     * {@code deviceId} to {@code keyIndex} map.
+     *
+     * @param deviceId the wire-level device id
+     * @param keyIndex the wire-level key index
      */
     private record KeyIndexEntry(int deviceId, int keyIndex) {}
 
     /**
-     * Internal record for holding parsed username entries.
+     * Internal tuple carrying a parsed {@code (userJid, username)} pair.
+     *
+     * @apiNote
+     * Used as the value type of the {@link Stream} produced by
+     * {@link #parseUsernameEntry(Node)} before being collected into the
+     * username map.
+     *
      * @param userJid  the user JID
      * @param username the username string
      */

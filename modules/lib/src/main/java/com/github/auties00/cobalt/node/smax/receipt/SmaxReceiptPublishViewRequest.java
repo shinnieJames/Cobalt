@@ -13,7 +13,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <receipt type="view">} stanza variant.
+ * The outbound {@code <receipt type="view">} stanza publishing a batch
+ * of newsletter or status view-receipts to the relay.
+ *
+ * @apiNote
+ * Backs the newsletter and status view-counters: WA Web sends this
+ * request from {@code WAWebNewsletterSendViewReceiptJob} (regular
+ * newsletter views) and {@code WAWebNewsletterStatusViewReceiptUtils}
+ * (status broadcasts), batching up to 255 message server-ids per
+ * stanza so the relay can increment the per-message view counter
+ * server-side. The reply is parsed by
+ * {@link SmaxReceiptPublishViewResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutReceiptPublishViewRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutReceiptSenderAggregatedViewPublishMixin")
@@ -23,26 +33,31 @@ import java.util.Optional;
 public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Request {
     /**
      * The opaque stanza id used as the receipt's {@code id} attribute.
-     * Usually the id of the original incoming {@code <message>}
-     * being acknowledged.
+     *
+     * @implNote
+     * This implementation accepts an opaque {@link String} rather than
+     * deriving the id from {@code WAWap.generateId}; WA Web's
+     * {@code WAWebNewsletterSendViewReceiptJob} stamps a fresh stanza
+     * id at the job-call site so the typed request can stay
+     * caller-supplied.
      */
     private final String receiptId;
 
     /**
-     * The recipient JID of the acknowledgement. Typically a
-     * newsletter / status JID.
+     * The recipient JID of the acknowledgement; typically a newsletter
+     * or status JID.
      */
     private final Jid receiptTo;
 
     /**
-     * When {@code true} the receipt carries
-     * {@code class="status"}, marking the ack as a status-broadcast
-     * view receipt rather than a regular newsletter view receipt.
+     * Whether the receipt carries {@code class="status"}, marking the
+     * ack as a status-broadcast view receipt rather than a regular
+     * newsletter view receipt.
      */
     private final boolean hasStatusClass;
 
     /**
-     * The list of {@code <item server_id=INT/>} entries. Between
+     * The list of {@code <item server_id=INT/>} entries; between
      * {@code 0} and {@code 255} entries.
      */
     private final List<Integer> itemServerIds;
@@ -50,17 +65,21 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Constructs a new view-receipt request.
      *
-     * @param receiptId      the stanza id. Never {@code null}
-     * @param receiptTo      the recipient JID. Never {@code null}
+     * @apiNote
+     * Pass {@code hasStatusClass=true} when sending a status-broadcast
+     * view receipt and {@code false} for a regular newsletter view
+     * receipt; the 255-entry batch ceiling matches the limit the relay
+     * enforces server-side.
+     *
+     * @param receiptId the stanza id; never {@code null}
+     * @param receiptTo the recipient JID; never {@code null}
      * @param hasStatusClass whether to emit {@code class="status"}
-     * @param itemServerIds  the list of server ids. Never
-     *                       {@code null}, between {@code 0} and
-     *                       {@code 255} entries
-     * @throws NullPointerException     if any required argument is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code itemServerIds}
-     *                                  carries more than {@code 255}
-     *                                  entries
+     * @param itemServerIds the list of server ids; never {@code null};
+     *                      at most 255 entries
+     * @throws NullPointerException if any required argument is
+     *                              {@code null}
+     * @throws IllegalArgumentException if {@code itemServerIds} carries
+     *                                  more than 255 entries
      */
     public SmaxReceiptPublishViewRequest(String receiptId, Jid receiptTo, boolean hasStatusClass,
                    List<Integer> itemServerIds) {
@@ -78,7 +97,7 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Returns the stanza id used as the receipt's {@code id}.
      *
-     * @return the id. Never {@code null}
+     * @return the id; never {@code null}
      */
     public String receiptId() {
         return receiptId;
@@ -87,7 +106,7 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Returns the recipient JID.
      *
-     * @return the JID. Never {@code null}
+     * @return the JID; never {@code null}
      */
     public Jid receiptTo() {
         return receiptTo;
@@ -106,18 +125,24 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
     /**
      * Returns the list of {@code <item server_id/>} ids.
      *
-     * @return an unmodifiable list. Never {@code null}
+     * @return an unmodifiable list; never {@code null}
      */
     public List<Integer> itemServerIds() {
         return itemServerIds;
     }
 
     /**
-     * Builds the outbound {@code <receipt>} stanza ready for
-     * dispatch.
+     * Builds the outbound {@code <receipt>} stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the receipt envelope
-     *         and the {@code <list>} payload
+     * @apiNote
+     * Produces
+     * {@code <receipt id to type="view" class?="status">
+     *   <list><item server_id="N"/>...</list></receipt>};
+     * the {@code class="status"} attribute is emitted only when
+     * {@link #hasStatusClass()} returns {@code true}.
+     *
+     * @return a {@link NodeBuilder} carrying the receipt envelope and
+     *         the {@code <list>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutReceiptPublishViewRequest",
@@ -145,6 +170,14 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
         return receiptBuilder;
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxReceiptPublishViewRequest} with equal echoed
+     * attributes and item list.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when every field matches
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -160,11 +193,21 @@ public final class SmaxReceiptPublishViewRequest implements SmaxOperation.Reques
                 && Objects.equals(this.itemServerIds, that.itemServerIds);
     }
 
+    /**
+     * Returns a hash code derived from every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(receiptId, receiptTo, hasStatusClass, itemServerIds);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this request.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxReceiptPublishViewRequest[receiptId=" + receiptId

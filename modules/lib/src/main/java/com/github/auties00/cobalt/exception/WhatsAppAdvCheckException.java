@@ -6,18 +6,19 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
  * Thrown when the periodic Advanced Device Verification (ADV) maintenance
  * job fails.
  *
- * <p>WhatsApp tracks the freshness of every device list (the set of
- * companion devices linked to an account) and runs a daily check that
- * marks expired entries, schedules proactive resyncs for entries about
- * to expire, and clears the Signal sessions that belonged to evicted
- * devices. When that job cannot complete because the local store is
- * unreachable, an AB prop is missing, or a triggered resync fails, this
- * exception is raised so the configurable error handler can decide
- * whether to log the failure, retry early, or escalate.
+ * @apiNote
+ * WA Web's {@code WAWebAdvDeviceInfoCheckJob} runs once per day to walk
+ * every device list cached locally, evict companions whose stored
+ * timestamp has crossed {@code num_days_key_index_list_expiration},
+ * trigger a USync refresh for companions about to expire, and clear the
+ * Signal sessions of evicted devices. This exception is raised when that
+ * job cannot complete because the local store is unreachable, an AB prop
+ * is missing, or a triggered resync fails. The configurable error handler
+ * decides whether to log the failure, retry early, or escalate.
  *
- * <p>The failure does not break the session. {@link #isFatal()} always
- * returns {@code false}: the next scheduled run can recover and message
- * traffic in the meantime is unaffected.
+ * @implNote
+ * This implementation is non-fatal: the next scheduled run can recover
+ * and message traffic in the meantime is unaffected.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvDeviceInfoCheckJob")
 public final class WhatsAppAdvCheckException extends WhatsAppException {
@@ -58,12 +59,12 @@ public final class WhatsAppAdvCheckException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>The periodic ADV check runs in the background and a single
-     * failure does not affect message sending or receiving.
-     *
-     * @return {@code false}
+     * @implNote
+     * This implementation always returns {@code false}: the periodic ADV
+     * check runs in the background and a single failure does not affect
+     * message sending or receiving.
      */
     @Override
     public boolean isFatal() {

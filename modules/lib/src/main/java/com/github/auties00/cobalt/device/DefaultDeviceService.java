@@ -31,12 +31,11 @@ import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentity;
 import com.github.auties00.cobalt.model.device.info.*;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -60,15 +59,23 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Orchestrates all device list operations for WhatsApp Multi-Device. Synchronises companion
- * device lists over USync, processes real-time device add/remove notifications, computes
- * message fanout for 1:1 and group sends, attaches ICDC metadata to outgoing messages, and
- * verifies business coexistence (hosted) transitions.
+ * Default implementation of {@link DeviceService} that orchestrates every Multi-Device flow.
  *
- * <p>Every outgoing message and every decrypted PKMSG routes through this service so the
- * client keeps a consistent view of each peer's companion devices and identity keys. A daily
- * ADV expiration check runs via {@link DeviceADVChecker} to invalidate stale records and
- * trigger proactive syncs.
+ * <p>This implementation collapses WA Web's family of ADV modules ({@code WAWebAdvSyncDeviceListApi},
+ * {@code WAWebAdvHandlerApi}, {@code WAWebHandleAdvOmittedResultApi},
+ * {@code WAWebHandleAdvDeviceNotificationApi}, {@code WAWebIcdcHandlerApi},
+ * {@code WAWebApiDeviceList}) into a single service. It owns the per-user device-list cache via
+ * {@link WhatsAppStore}, deduplicates concurrent USync IQs, runs the daily ADV expiration check
+ * via {@link DeviceADVChecker}, computes per-message fanout via {@link DeviceFanoutCalculator},
+ * attaches ICDC metadata via {@link IcdcComputer}, validates ADV signatures via
+ * {@link DeviceADVValidator}, and inserts the business-coexistence system messages that mark
+ * {@code E2EE <-> HOSTED} transitions.
+ *
+ * <p>Outgoing message paths call {@link #getDeviceLists(Collection, String, String, boolean)}
+ * (optionally short-circuited by a phash pre-check), notification handlers feed back into the
+ * cache via the {@code handleADV...} helpers later in the file, and the {@link WamService}
+ * collaborator receives {@code ContactSyncEvent} and {@code CoexPrivacySysMsg} telemetry on
+ * every device-sync cycle and every account-type transition.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvSyncDeviceListApi")
 @WhatsAppWebModule(moduleName = "WAWebAdvHandlerApi")
@@ -78,16 +85,28 @@ import java.util.stream.Stream;
 @WhatsAppWebModule(moduleName = "WAWebApiDeviceList")
 public final class DefaultDeviceService implements DeviceService {
     /**
-     * Logger for device service operations.
+     * The {@link System.Logger} used for every device-service diagnostic.
+     *
+     * @apiNote
+     * Channels the {@code WALogger} calls that WA Web emits from the ADV modules into a
+     * single Java logger so embedders can route them via {@code java.util.logging}.
      */
     private static final System.Logger LOGGER = System.getLogger(DefaultDeviceService.class.getName());
 
     /**
-     * Structured-concurrency joiner that fans out one USync IQ per batch and collates the
-     * parsed {@link DeviceListResult} entries from all batches into a single flat list.
-     * Failed subtasks are swallowed so a single failed batch does not lose the successful
-     * results from its siblings. Failures surface later when the expected JID is missing
-     * from the collated output and callers fall back to the primary-only device list.
+     * The {@link Joiner} that collates per-batch USync IQ results into a single flat list.
+     *
+     * @apiNote
+     * Used by {@link #getDevicesFetchedResults(List)} to fan out one IQ per
+     * {@link DeviceUSyncQueryBuilder} batch under a {@link StructuredTaskScope} and merge the
+     * parsed {@link DeviceListResult} entries from every successful batch.
+     *
+     * @implNote
+     * This implementation never propagates a subtask failure: {@link #onComplete} returns
+     * {@code false} for failed subtasks so {@link StructuredTaskScope#join} keeps running, and
+     * {@link #result} flat-maps only the successful subtasks. A failed batch surfaces later in
+     * {@link #fetchDeviceListsFromServer(Collection, String)} as a missing entry that triggers
+     * the primary-only fallback, mirroring WA Web's batch-level error tolerance.
      */
     private static final Joiner<List<DeviceListResult>, List<DeviceListResult>> JOINER = new Joiner<>() {
         private final List<Subtask<? extends List<DeviceListResult>>> subtasks = new ArrayList<>();
@@ -124,104 +143,184 @@ public final class DefaultDeviceService implements DeviceService {
     };
 
     /**
-     * Client used to send IQs and access shared configuration.
+     * The {@link WhatsAppClient} this service is bound to.
+     *
+     * @apiNote
+     * Carries the socket used to dispatch USync IQs and the store/listener tree that device
+     * mutations are reported through.
      */
     private final WhatsAppClient client;
 
     /**
-     * Web app-state service used to schedule the all-devices-responded grace-period check
-     * after a device removal leaves every remaining device unable to produce a requested
-     * sync key.
+     * The {@link WebAppStateService} consulted when a device removal forces a missing-key
+     * grace-period check.
+     *
+     * @apiNote
+     * Invoked from {@link #updateMissingKeyDevices()} when every remaining device of a peer is
+     * unable to produce a requested app-state sync key, mirroring WA Web's
+     * {@code WAWebAppStateSyncKeyDistributionApi} all-devices-responded path.
      */
     private final WebAppStateService webAppStateService;
 
     /**
-     * Store for persisting and retrieving device lists, identities, and sessions.
+     * The {@link WhatsAppStore} that persists device lists, ADV records, and Signal state.
+     *
+     * @apiNote
+     * Backs WA Web's {@code WAWebApiDeviceList} table plus the Signal session and identity
+     * tables; every read and write the service performs goes through this collaborator.
      */
     private final WhatsAppStore store;
 
     /**
-     * Tracks in-flight USync fetches per user JID so concurrent callers wait on the same
-     * future instead of issuing duplicate IQs.
+     * The per-JID in-flight USync fetch futures keyed by user JID.
+     *
+     * @apiNote
+     * Mirrors the {@code d} map in {@code WAWebAdvSyncDeviceListApi.syncDeviceList} so
+     * concurrent callers requesting the same JID share one IQ.
      */
     private final ConcurrentHashMap<Jid, CompletableFuture<DeviceList>> pendingFetches;
 
     /**
-     * Scheduler that runs the daily ADV device info expiration check.
+     * The {@link DeviceADVChecker} that drives the daily ADV expiration job.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebAdvDeviceInfoCheckJob.scheduleAdvDeviceInfoCheck}, scheduled
+     * via {@link #startAdvCheckScheduler()} and stopped via {@link #stopAdvCheckScheduler()}.
      */
     private final DeviceADVChecker advCheckScheduler;
 
     /**
-     * Handler that fetches and stores Signal pre-key bundles and identity keys.
+     * The {@link DevicePreKeyHandler} responsible for fetching and persisting Signal identity
+     * keys and pre-key bundles.
+     *
+     * @apiNote
+     * Invoked during every device sync to preload identity keys for new devices before any
+     * outgoing message attempts encryption.
      */
     private final DevicePreKeyHandler preKeyHandler;
 
     /**
-     * AB property service used for feature gating (hosted devices, username sync,
-     * expiration thresholds).
+     * The {@link ABPropsService} consulted for every feature gate this service honours.
+     *
+     * @apiNote
+     * Gates hosted-device acceptance ({@link ABProp#ADV_ACCEPT_HOSTED_DEVICES}), ADV key-index
+     * list expiration windows, fanout policy decisions, and ICDC inclusion.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Validator for ADV signatures on device identities and key index lists.
+     * The {@link DeviceADVValidator} that verifies ADV signatures on device identities and
+     * key-index lists.
+     *
+     * @apiNote
+     * Owned here so {@link DeviceUSyncResponseParser} and downstream notification handlers
+     * share a single validator instance over the same store.
      */
     private final DeviceADVValidator advValidator;
 
     /**
-     * Parser that turns USync IQ response nodes into structured device list results.
+     * The {@link DeviceUSyncResponseParser} that decodes USync IQ responses into
+     * {@link DeviceListResult} variants.
      */
     private final DeviceUSyncResponseParser usyncResponseParser;
 
     /**
-     * Calculator that produces the per-message fanout device set.
+     * The {@link DeviceFanoutCalculator} that resolves the recipient device set for each
+     * outgoing message.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebDBDeviceListFanout.getFanOutList} and is invoked from the
+     * peer and group send paths through {@link DeviceService}.
      */
     private final DeviceFanoutCalculator fanoutCalculator;
 
     /**
-     * Computer for ICDC (Identity Change Detection Consistency) metadata attached to every
-     * outgoing message's {@code messageContextInfo}.
+     * The {@link IcdcComputer} that builds the ICDC metadata attached to outgoing
+     * {@code messageContextInfo}.
+     *
+     * @apiNote
+     * ICDC (Identity Change Detection Consistency) lets the recipient detect that the
+     * sender's device list at send time differs from what the recipient sees.
      */
     private final IcdcComputer icdcComputer;
 
     /**
-     * Participant-hash (phash) calculator used to verify sender and server agree on the
-     * group recipient list.
+     * The {@link DevicePhashCalculator} that computes participant hashes for group fanout
+     * agreement checks.
+     *
+     * @apiNote
+     * Used both for the {@code expectedPhash} pre-check short-circuit in
+     * {@link #getDeviceLists(Collection, String, String, boolean)} and for the {@code dhash}
+     * delta-update marker on outgoing USync IQs.
      */
     private final DevicePhashCalculator phashCalculator;
 
     /**
-     * Serializes updates that must remain consistent across the device-list, session,
-     * sender-key, missing-keys and contact tables.
+     * The {@link ReentrantLock} serialising every multi-table write that touches device
+     * records together with Signal sessions, sender keys, missing-keys, and contacts.
+     *
+     * @apiNote
+     * Stands in for WA Web's {@code WAWebApiGetDeviceUpdateLock.getDeviceUpdateLock}, which
+     * grabs a multi-resource IndexedDB lock over the same set of tables.
+     *
+     * @implNote
+     * This implementation collapses WA Web's per-table lock array
+     * ({@code participant}, {@code device-list}, {@code message}, {@code message-association},
+     * {@code missing-keys}, {@code contact}) into a single in-process mutex. Cobalt has no
+     * IndexedDB and runs every store mutation in-VM, so coarse-grained locking is sufficient.
      */
     private final ReentrantLock deviceUpdateLock;
 
     /**
-     * Maps user JID to the second at which a hosted system message was last created, so
-     * duplicate insertions within the same second are skipped.
+     * The dedup cache holding the {@link Instant} at which the last initial hosted system
+     * message was inserted for each user JID.
+     *
+     * @apiNote
+     * Backs {@link #shouldDedupInitialHostedSystemMsg(Jid)}; entries live forever, mirroring
+     * WA Web's process-lifetime {@code Set<string>} in {@code WAWebBizCoexUtils}.
      */
     private final ConcurrentHashMap<Jid, Instant> hostedSystemMsgDedupCache;
 
     /**
-     * Senders for which offline hosted ICDC metadata has already been processed in the
-     * current connection. Cleared on reconnect.
+     * The set of sender JIDs whose offline hosted ICDC metadata has been processed for the
+     * current connection.
+     *
+     * @apiNote
+     * Cleared on reconnect to mirror WA Web's per-session {@code Set} in
+     * {@code WAWebHandleBizHostedSenderICDC}.
      */
     private final Set<Jid> offlineBizHostedSenderICDCProcessedCache;
 
     /**
-     * WAM telemetry service used to commit device-related events.
+     * The {@link WamService} that receives every device-related telemetry event.
+     *
+     * @apiNote
+     * Collects {@code ContactSyncEvent} on each USync flow and {@code CoexPrivacySysMsg} on
+     * each account-type transition.
      */
     private final WamService wamService;
 
     /**
-     * Constructs the device service and instantiates every helper it owns. Collaborators
-     * receive the same store and AB props dependencies so they operate on a single
-     * consistent view of device state.
+     * Constructs a {@link DefaultDeviceService} bound to the given client and collaborators.
      *
-     * @param client             the WhatsApp client providing store and network access
-     * @param webAppStateService the web app-state service for missing-key grace-period scheduling
-     * @param abPropsService     the AB props service for feature gating
-     * @param sessionCipher      the Signal session cipher used by the pre-key handler
-     * @param wamService         the WAM telemetry service for committing device events
+     * @apiNote
+     * Internal constructor invoked by the {@link WhatsAppClient} bootstrap; embedders should
+     * not call it directly and instead consume {@link DeviceService} through the client.
+     *
+     * @implNote
+     * This implementation owns the lifecycle of every helper it instantiates
+     * ({@link DevicePreKeyHandler}, {@link DeviceADVValidator}, {@link DeviceFanoutCalculator},
+     * {@link IcdcComputer}, {@link DevicePhashCalculator}, {@link DeviceUSyncResponseParser},
+     * {@link DeviceADVChecker}) so they share the same {@link WhatsAppStore} and
+     * {@link ABPropsService} instances and therefore a single coherent view of device state.
+     *
+     * @param client             the {@link WhatsAppClient} providing store and socket access
+     * @param webAppStateService the {@link WebAppStateService} used for the missing-key
+     *                           grace-period scheduling triggered by self-device removals
+     * @param abPropsService     the {@link ABPropsService} used for every feature gate
+     * @param sessionCipher      the {@link SignalSessionCipher} threaded into the
+     *                           {@link DevicePreKeyHandler}
+     * @param wamService         the {@link WamService} that receives device-related telemetry
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = "syncDeviceList",
@@ -246,9 +345,19 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Runs the given task while holding the device update lock.
+     * Runs {@code task} while holding {@link #deviceUpdateLock}.
      *
-     * @param task the task to execute under the lock
+     * @apiNote
+     * Used by every mutation path that must update the device-list, Signal session, sender-key,
+     * missing-keys, or contact tables atomically with respect to other device updates.
+     *
+     * @implNote
+     * This implementation uses an in-process {@link ReentrantLock} where WA Web's
+     * {@code WAWebApiGetDeviceUpdateLock} grabs a multi-resource IndexedDB lock over six
+     * specific tables; the coarser scope is sufficient because Cobalt holds the entire store
+     * in memory.
+     *
+     * @param task the {@link Runnable} to execute under the lock
      */
     @WhatsAppWebExport(moduleName = "WAWebApiGetDeviceUpdateLock",
             exports = "getDeviceUpdateLock",
@@ -263,48 +372,59 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns whether the hosted-override account-signature-key feature is enabled. When
-     * enabled, the embedded {@code accountSignatureKey} from the protobuf is used to verify
-     * hosted-device identities instead of requiring a stored identity.
+     * Returns whether the embedded {@code accountSignatureKey} from a USync response may be
+     * accepted as an identity key for hosted-device users.
      *
-     * <p>WA Web's {@code WAWebHandleAdvKeyIndexResultApi} now gates the override on
-     * {@code bizHostedDevicesEnabled} alone; the standalone
-     * {@code override_adv_account_signature_key_enabled} prop was retired.
+     * @apiNote
+     * Gates the override branch in {@link #fetchDeviceListsFromServer(Collection, String)}
+     * that calls {@link DevicePreKeyHandler} to ingest the protobuf-carried key for hosted
+     * accounts rather than waiting for a separate pre-key fetch.
      *
-     * @return {@code true} if the hosted-devices AB prop is set
+     * @implNote
+     * This implementation reads {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES} alone, matching
+     * current WA Web behaviour where {@code bizHostedDevicesEnabled} is the single gate;
+     * the legacy {@code override_adv_account_signature_key_enabled} prop has been retired.
+     *
+     * @return {@code true} when hosted devices are accepted
      */
     private boolean isHostedOverrideAdvAccountSignatureKeyEnabled() {
         return abPropsService.getBool(ABProp.ADV_ACCEPT_HOSTED_DEVICES);
     }
 
     /**
-     * Returns the device lists for the specified users, optionally short-circuiting on a
-     * phash pre-check. When {@code expectedPhash} is non-null and matches the locally
-     * computed phash, the server sync is skipped entirely. This is an optimisation for
-     * group messages where the sender already knows the expected participant hash.
+     * Returns the {@link DeviceList} for every user in {@code userJids}, fetching from the
+     * server only what is missing or invalid.
      *
-     * @param userJids              the user JIDs to get device lists for
-     * @param context               the sync context (for example {@code "message"},
+     * @apiNote
+     * Entry point for every Cobalt send path that needs the recipient device fanout, equivalent
+     * to {@code syncAndGetDeviceList} in WA Web. Pass a non-null {@code expectedPhash} when the
+     * caller already knows the server-side participant hash (typical for group fanout): when
+     * the local phash matches, the server round-trip is skipped entirely. Set
+     * {@code shouldMergeAltDevices} to also include the device ids of the user's
+     * alternate-addressing record (LID for a PN input, PN for a LID input).
+     *
+     * @implNote
+     * This implementation feeds cached records into the phash short-circuit even when the
+     * record is marked deleted (treated as an empty device list, matching WA Web). Cached but
+     * deleted records that were not flagged as deleted-changed-to-host fall back to the
+     * primary-only device list rather than a server fetch, also matching WA Web.
+     *
+     * @param userJids              the user JIDs to resolve
+     * @param context               the USync context string (for example {@code "message"},
      *                              {@code "interactive"}, {@code "adv_expiration"})
-     * @param expectedPhash         optional phash to compare against the local device list;
-     *                              when it matches, the server sync is skipped
-     * @param shouldMergeAltDevices whether to merge PN/LID alternate device lists for the
-     *                              same user
-     * @return the device lists, one per user JID
+     * @param expectedPhash         the phash to compare against the local device list, or
+     *                              {@code null} to disable the short-circuit
+     * @param shouldMergeAltDevices whether to merge PN and LID alternate device lists
+     * @return the resolved device lists, one per user JID
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = {"syncDeviceList", "syncAndGetDeviceList"},
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Set<DeviceList> getDeviceLists(Collection<Jid> userJids, String context, String expectedPhash, boolean shouldMergeAltDevices) {
-        // Normalize to user-level JIDs. The map keys downstream (the futures map,
-        // store.findDeviceList, the USync response's <user jid="…">) are all bare
-        // user JIDs, so a device-suffixed input would silently mismatch and produce
-        // a primary-only fallback in fetchDeviceListsFromServer.
         userJids = userJids.stream().map(Jid::toUserJid).toList();
 
         if (expectedPhash != null && !expectedPhash.isEmpty()) {
             try {
-                // WA Web treats missing/deleted records as empty device lists for phash purposes.
                 var cachedLists = userJids.stream()
                         .map(jid -> store.findDeviceList(jid).orElse(null))
                         .toList();
@@ -325,7 +445,6 @@ public final class DefaultDeviceService implements DeviceService {
                     return mergeAlternateDeviceLists(nonNullLists);
                 }
             } catch (NoSuchAlgorithmException e) {
-                // Fall through to a normal sync when phash cannot be computed.
             }
         }
 
@@ -345,7 +464,6 @@ public final class DefaultDeviceService implements DeviceService {
                 continue;
             }
 
-            // Deleted but not due to a hosted transition: fall back to a primary-only list.
             var fallback = createPrimaryOnlyDeviceList(jid);
             store.addDeviceList(fallback);
             result.add(fallback);
@@ -367,45 +485,144 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Merges device lists for users who have both PN and LID identities. During LID
-     * migration, users may have device records under both their phone number (PN) and
-     * LID. The PN identity is treated as canonical and takes precedence on collision.
+     * Returns {@code primaryLists} with each entry's device ids enriched by the device ids of
+     * its alternate-addressing counterpart.
      *
-     * @param deviceLists the device lists to merge
-     * @return merged device lists, one entry per canonical user
+     * @apiNote
+     * Implements the {@code shouldMergeAltDevices} branch of WA Web's
+     * {@link DeviceList#userJid()} of each returned record is the originally-queried JID, so
+     * any device JID minted from the result keeps the addressing mode the caller asked for;
+     * alternate records that are absent from {@code primaryLists} are pulled from the local
+     * store via {@link #bulkGetDeviceRecord(List)}.
+     *
+     * @implNote
+     * This implementation skips the alternate enrichment entirely when no alternate WID can be
+     * resolved for any input, mirroring the early-return shape of WA Web's loop.
+     *
+     * @param primaryLists the device lists for the originally-queried user JIDs
+     * @return one {@link DeviceList} per input, augmented by the alternate record's devices
+     *         when available
      */
-    @WhatsAppWebExport(moduleName = "WAWebLidMigrationUtils",
-            exports = "toPn",
+    @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
+            exports = "getDeviceIds",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    private Set<DeviceList> mergeAlternateDeviceLists(Collection<DeviceList> deviceLists) {
-        var mergedMap = new LinkedHashMap<Jid, DeviceList>();
-
-        for (var deviceList : deviceLists) {
-            var userJid = deviceList.userJid();
-            var canonicalJid = userJid;
-
-            if (userJid.hasLidServer()) {
-                var phoneJid = store.findPhoneByLid(userJid)
-                        .orElse(null);
-                if (phoneJid != null) {
-                    canonicalJid = phoneJid;
-                }
-            }
-
-            mergedMap.merge(canonicalJid, deviceList, DeviceList::merge);
+    private Set<DeviceList> mergeAlternateDeviceLists(Collection<DeviceList> primaryLists) {
+        if (primaryLists.isEmpty()) {
+            return Set.copyOf(primaryLists);
         }
 
-        return Set.copyOf(mergedMap.values());
+        var primaryByJid = new LinkedHashMap<Jid, DeviceList>();
+        for (var primary : primaryLists) {
+            primaryByJid.put(primary.userJid(), primary);
+        }
+
+        var altJidByPrimary = new LinkedHashMap<Jid, Jid>();
+        for (var primaryJid : primaryByJid.keySet()) {
+            var alt = findAlternateUserWid(primaryJid);
+            if (alt != null) {
+                altJidByPrimary.put(primaryJid, alt);
+            }
+        }
+        if (altJidByPrimary.isEmpty()) {
+            return new LinkedHashSet<>(primaryLists);
+        }
+
+        var altListByJid = new HashMap<Jid, DeviceList>();
+        var altsToFetch = new ArrayList<Jid>();
+        for (var altJid : altJidByPrimary.values()) {
+            var inInput = primaryByJid.get(altJid);
+            if (inInput != null) {
+                altListByJid.put(altJid, inInput);
+            } else {
+                altsToFetch.add(altJid);
+            }
+        }
+        if (!altsToFetch.isEmpty()) {
+            var fetched = bulkGetDeviceRecord(altsToFetch);
+            for (var i = 0; i < fetched.size(); i++) {
+                var record = fetched.get(i);
+                if (record != null && !record.deleted()) {
+                    altListByJid.put(altsToFetch.get(i), record);
+                }
+            }
+        }
+
+        var result = new LinkedHashSet<DeviceList>(primaryByJid.size());
+        for (var entry : primaryByJid.entrySet()) {
+            var primary = entry.getValue();
+            if (primary.deleted()) {
+                result.add(primary);
+                continue;
+            }
+            var altJid = altJidByPrimary.get(entry.getKey());
+            var alt = altJid != null ? altListByJid.get(altJid) : null;
+            if (alt == null) {
+                result.add(primary);
+                continue;
+            }
+            var existingIds = new HashSet<Integer>();
+            for (var device : primary.devices()) {
+                existingIds.add(device.id());
+            }
+            var augmented = new ArrayList<>(primary.devices());
+            for (var device : alt.devices()) {
+                if (!existingIds.contains(device.id())) {
+                    augmented.add(device);
+                }
+            }
+            if (augmented.size() != primary.devices().size()) {
+                result.add(withAugmentedDevices(primary, augmented));
+            } else {
+                result.add(primary);
+            }
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     /**
-     * Logs a diagnostic when any of the eligible phone-number JIDs in {@code userJids}
-     * lacks a LID mapping. Bots, hosted users (both {@code hosted} and {@code hosted.lid}
-     * servers) and LIDs are excluded from the eligible set.
+     * Returns a copy of {@code original} with its devices replaced by {@code devices}.
      *
-     * @param userJids the user JIDs to check
-     * @param caller   the caller context for the log line; defaults to {@code "unknown"}
-     *                 when {@code null}, matching WA Web
+     * @apiNote
+     * Helper for {@link #mergeAlternateDeviceLists(Collection)}; every other field is
+     * preserved verbatim, including the {@link DeviceList#userJid()} that carries the
+     * addressing mode (PN or LID) of the originally-queried record.
+     *
+     * @param original the source {@link DeviceList}
+     * @param devices  the {@link DeviceInfo} list to install on the copy
+     * @return the rebuilt {@link DeviceList}
+     */
+    private static DeviceList withAugmentedDevices(DeviceList original, List<DeviceInfo> devices) {
+        return new DeviceListBuilder()
+                .userJid(original.userJid())
+                .devices(devices)
+                .timestamp(original.timestamp())
+                .rawId(original.rawId())
+                .deleted(original.deleted())
+                .deletedChangedToHost(original.deletedChangedToHost())
+                .advAccountType(original.advAccountType())
+                .expectedTimestamp(original.expectedTimestamp())
+                .expectedTimestampLastDeviceJobTimestamp(original.expectedTimestampLastDeviceJobTimestamp())
+                .expectedTimestampUpdateTimestamp(original.expectedTimestampUpdateTimestamp())
+                .currentIndex(original.currentIndex())
+                .validIndexes(original.validIndexes())
+                .build();
+    }
+
+    /**
+     * Emits a warning diagnostic for every regular phone-number JID in {@code userJids} that
+     * lacks a cached LID mapping.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebApiContact.checkPnToLidMapping}, which surfaces missing
+     * LID mappings to telemetry so a high miss-rate can be investigated. Bots and hosted-server
+     * JIDs are excluded as they do not participate in the PN-LID address-pairing scheme.
+     *
+     * @implNote
+     * This implementation defaults {@code caller} to the string {@code "unknown"} when
+     * {@code null}, matching the JS counterpart's fallback.
+     *
+     * @param userJids the user JIDs to inspect
+     * @param caller   a short identifier of the call site for the log line, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiContact",
             exports = "checkPnToLidMapping",
@@ -435,16 +652,34 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Fetches device lists from the server with request deduplication. If a fetch is
-     * already in progress for a JID, waits on that result rather than issuing a duplicate
-     * IQ. USync queries carry an optional {@code device_hash} (dhash) for delta updates.
-     * When the server's dhash matches the local one, the response is "omitted" and the
-     * cached device list is preserved.
+     * Issues USync IQs to fetch {@link DeviceList} records for the given user JIDs, ingests
+     * the response, persists the result, and emits the matching WAM telemetry.
      *
-     * @param userJids the user JIDs to fetch
-     * @param context  the sync context (for example {@code "message"},
-     *                 {@code "interactive"}, {@code "adv_expiration"})
-     * @return device lists fetched or resolved from cache
+     * @apiNote
+     * The single entry point for forcing a server-side device sync; called by
+     * {@link #getDeviceLists(Collection, String, String, boolean)} for cache misses and by
+     * {@link #retryPendingSyncs()} after reconnect. Concurrent calls for the same JID share
+     * the same in-flight {@link CompletableFuture} via {@link #pendingFetches} so duplicate IQs
+     * are coalesced. The {@code device_hash} (dhash) attached to each batch lets the server
+     * answer with an {@link DeviceListResult.Omitted} marker when the local hash already
+     * matches the server's view; an omitted record is reset to primary-only but keeps its
+     * {@code rawId} and {@code validIndexes}.
+     *
+     * @implNote
+     * This implementation drives the entire pipeline that WA Web splits across
+     * {@code WAWebAdvSyncDeviceListApi.syncDeviceList} and
+     * {@code WAWebAdvHandlerApi.handleADVDeviceSyncResult}: dhash construction, identity-key
+     * preloading via {@link DevicePreKeyHandler}, IQ dispatch via
+     * {@link #getDevicesFetchedResults(List)}, PN-to-LID backfill via
+     * {@link #backfillMissingDeviceSyncEntries(Set, List)}, optional hosted-device filtering,
+     * per-record list-reset and account-type-transition detection, expected-timestamp tracking,
+     * listener fan-out, sender-key rotation marking, missing-key reconciliation, and contact
+     * sync telemetry. Failures stash the requested set as a {@link PendingDeviceSync} so
+     * {@link #retryPendingSyncs()} can replay it after reconnect.
+     *
+     * @param userJids the user JIDs to fetch from the server
+     * @param context  the USync context string carried into the IQ and WAM event
+     * @return the resolved device lists
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = "syncDeviceList",
@@ -481,7 +716,7 @@ public final class DefaultDeviceService implements DeviceService {
         }
 
         var syncStartTimestamp = Instant.now();
-        int fetchedResponseCount = 0;
+        var fetchedResponseCount = 0;
 
         try {
             var hashInfos = new HashMap<Jid, DeviceListHashInfo>();
@@ -489,7 +724,6 @@ public final class DefaultDeviceService implements DeviceService {
                 var cached = store.findDeviceList(jid);
                 if (cached.isPresent()) {
                     try {
-                        // phashV2 over sorted legacy JID strings, per-user (allowIncludeMetaBot=false).
                         var hash = phashCalculator.calculate(
                                 cached.get().deviceJids(),
                                 DevicePhashVersion.V2,
@@ -503,24 +737,14 @@ public final class DefaultDeviceService implements DeviceService {
                                 .build();
                         hashInfos.put(jid, hashInfo);
                     } catch (NoSuchAlgorithmException e) {
-                        // Continue without dhash for this JID.
                     }
                 }
             }
 
             checkPnToLidMapping(toFetch, "device_sync_request");
 
-            // WA Web's syncDeviceList runs getAndStoreIdentityKeys before handleADVDeviceSyncResult
-            // so that signed key index list verification can resolve a stored primary identity for
-            // every JID in the response. Without this prefetch, a first-contact USync would parse the
-            // device list, fail signature verification (no stored identity yet), and fall through to
-            // a primary-only fanout — which the server then rejects with error 479 because the
-            // recipient actually has companion devices.
             preKeyHandler.fetchAndStoreIdentityKeys(toFetch);
 
-            // WA Web now calls USyncQuery.withUsernameProtocol() unconditionally
-            // (WAWebContactSyncApi / WAWebContactSyncUtils / WAWebQueryExistsJob —
-            // the username_usync prop that used to gate this was retired).
             var batches = DeviceUSyncQueryBuilder.build(toFetch, context, hashInfos, true);
             var fetchedResults = getDevicesFetchedResults(batches);
             fetchedResponseCount = fetchedResults.size();
@@ -607,8 +831,6 @@ public final class DefaultDeviceService implements DeviceService {
                         Instant newExpectedTsLastDeviceJobTs = null;
                         var finalExpectedTs = newList.expectedTimestamp();
 
-                        // List reset uses the cached timestamp or {@code pastUnixTime((expirationDays-1)*DAY)};
-                        // non-reset uses now.
                         Instant newTimestamp;
                         if (needsListReset) {
                             if (cachedList.isPresent()) {
@@ -675,13 +897,11 @@ public final class DefaultDeviceService implements DeviceService {
                                 }
                             }
 
-                            // Mark for sender-key rotation when membership changed.
                             if (!changes.addedDevices().isEmpty() || !changes.removedDevices().isEmpty()) {
                                 store.markKeyRotation(trackedList.userJid());
                             }
                         }
 
-                        // Track users for which the prefetch via getAndStoreIdentityKeys is appropriate.
                         if (!trackedList.validIndexes().isEmpty() || trackedList.currentIndex() > 0) {
                             usersWithValidatedKeyIndex.add(trackedList.userJid());
                         }
@@ -690,8 +910,6 @@ public final class DefaultDeviceService implements DeviceService {
                     }
 
                     case DeviceListResult.Omitted omitted -> {
-                        // Server confirmed the dhash matches: preserve rawId/validIndexes but
-                        // reset devices to primary-only.
                         var cachedList = omitted.userJid()
                                 .flatMap(store::findDeviceList);
                         if (cachedList.isEmpty() || cachedList.get().deleted()) {
@@ -704,17 +922,13 @@ public final class DefaultDeviceService implements DeviceService {
                                 && omitted.timestamp().get().isBefore(oldList.timestamp())) {
                             yield null;
                         }
-                        // The expectedTs tracking fields are preserved from the cached record by
-                        // default and only mutated when shouldClearExpectedTs returns true.
                         Instant newTimestamp;
-                        Instant finalExpectedTs = oldList.expectedTimestamp();
-                        Instant newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
-                        Instant newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
+                        var finalExpectedTs = oldList.expectedTimestamp();
+                        var newExpectedTsUpdateTs = oldList.expectedTimestampUpdateTimestamp();
+                        var newExpectedTsLastDeviceJobTs = oldList.expectedTimestampLastDeviceJobTimestamp();
                         if (omitted.timestamp().isPresent()) {
                             newTimestamp = omitted.timestamp().get();
 
-                            // The incoming expectedTs is fed only to shouldClearExpectedTs and is
-                            // never written into the record.
                             var incomingExpectedTs = omitted.expectedTimestamp().orElse(null);
                             if (DeviceExpectedTsUtils.shouldClearExpectedTimestamp(newTimestamp, incomingExpectedTs, oldList, lastADVCheckTime)) {
                                 finalExpectedTs = null;
@@ -731,8 +945,6 @@ public final class DefaultDeviceService implements DeviceService {
                                 ? ADVEncryptionType.E2EE
                                 : oldList.advAccountType();
 
-                        // When fromHandleOmittedResult=true and a HOSTED -> E2EE transition is implied,
-                        // run the account-type transition handler.
                         if (omitted.fromHandleOmittedResult()
                                 && oldList.advAccountType() == ADVEncryptionType.HOSTED
                                 && resetAdvAccountType == ADVEncryptionType.E2EE) {
@@ -773,7 +985,6 @@ public final class DefaultDeviceService implements DeviceService {
                 }
             }
 
-            // Fall back to a primary-only device list for any JID the server omitted entirely.
             for (var entry : futures.entrySet()) {
                 if (!entry.getValue().isDone()) {
                     var fallback = createPrimaryOnlyDeviceList(entry.getKey());
@@ -794,8 +1005,6 @@ public final class DefaultDeviceService implements DeviceService {
                 updateMissingKeyDevices();
             }
 
-            // The username sub-protocol is now always included on USync queries
-            // (see the unconditional withUsernameProtocol() above).
             emitContactSyncSuccess(context, toFetch.size(), fetchedResponseCount, syncStartTimestamp,
                     true, result.size());
 
@@ -823,34 +1032,64 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Bit position for the {@code devices} protocol in the contact-sync protocol bitmask.
+     * The bit position of the {@code DEVICE} protocol inside the contact-sync request bitmask.
+     *
+     * @apiNote
+     * Matches {@code WAWebContactSyncLogger.PROTOCOL_BIT.DEVICE = 5} on the WA Web side; used
+     * by {@link #contactSyncProtocolBitmask(boolean)} to build the
+     * {@code request_protocol} WAM property.
      */
     private static final int CONTACT_SYNC_PROTOCOL_BIT_DEVICE = 5;
 
     /**
-     * Bit position for the {@code username} protocol in the contact-sync protocol bitmask.
+     * The bit position of the {@code USERNAME} protocol inside the contact-sync request
+     * bitmask.
+     *
+     * @apiNote
+     * Matches {@code WAWebContactSyncLogger.PROTOCOL_BIT.USERNAME = 10}; toggled on whenever
+     * the USync IQ includes the username sub-protocol.
      */
     private static final int CONTACT_SYNC_PROTOCOL_BIT_USERNAME = 10;
 
     /**
-     * Request origin for device-sync USync queries
-     * ({@code WAWebContactSyncLogger.SYNC_REQUEST_ORIGIN.DEVICE_REQUEST}).
+     * The {@code SYNC_REQUEST_ORIGIN.DEVICE_REQUEST} value reported on every device-sync WAM
+     * event.
+     *
+     * @apiNote
+     * Matches {@code WAWebContactSyncLogger.SYNC_REQUEST_ORIGIN.DEVICE_REQUEST = 48} and is
+     * the origin code attached to {@code ContactSyncEvent} entries emitted by this service.
      */
     private static final int CONTACT_SYNC_REQUEST_ORIGIN_DEVICE_REQUEST = 48;
 
     /**
-     * Error-protocol code used as the 429 fallback when a device-sync USync fails
-     * ({@code WAWebContactSyncErrorCodes.DEVICE_SYNC}). Duplicated here as a plain
-     * {@code int} because {@link com.github.auties00.cobalt.wam.event.ContactSyncEventEvent#contactSyncErrorCode()}
+     * The error code substituted for HTTP {@code 429} when emitting the contact-sync failure
+     * WAM event.
+     *
+     * @apiNote
+     * Mirrors the {@code WAWebContactSyncErrorCodes.DEVICE_SYNC} fallback that
+     * {@code WAWebContactSyncLogger.logFailure} swaps in for rate-limited responses so the WAM
+     * dashboard can distinguish device-sync rate limiting from other 429s.
+     *
+     * @implNote
+     * This implementation duplicates the literal here as a plain {@code int} because the
+     * matching enum constant in
+     * {@link com.github.auties00.cobalt.wam.event.ContactSyncEventEvent#contactSyncErrorCode()}
      * is serialised as a raw integer on the wire.
      */
     private static final int CONTACT_SYNC_ERROR_CODE_DEVICE_SYNC = 1300;
 
     /**
-     * Returns the WAM contact-sync protocol bitmask for the device-sync USync query.
+     * Returns the bitmask written to {@code contactSyncRequestProtocol} on the
+     * {@code ContactSyncEvent}.
      *
-     * @param includeUsernameProtocol whether the username protocol was included
-     * @return the protocol bitmask for the WAM {@code request_protocol} property
+     * @apiNote
+     * Reproduces the {@code p()} helper from {@code WAWebContactSyncLogger}; called from
+     * {@link #emitContactSyncSuccess} and {@link #emitContactSyncFailure} to tag the device
+     * sync with its actual sub-protocol set.
+     *
+     * @param includeUsernameProtocol {@code true} when the IQ also carried the username
+     *                                sub-protocol
+     * @return the OR of every enabled {@code PROTOCOL_BIT_*} flag
      */
     private static int contactSyncProtocolBitmask(boolean includeUsernameProtocol) {
         var bitmask = 1 << CONTACT_SYNC_PROTOCOL_BIT_DEVICE;
@@ -861,11 +1100,18 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Extracts the server-side USync error code from a caught exception, preferring the
-     * code carried on {@link WhatsAppDeviceSyncException}.
+     * Returns the server-reported USync error code carried on {@code throwable}, unwrapping
+     * one layer of cause if necessary.
      *
-     * @param throwable the exception thrown during the USync flow
-     * @return the error code, or {@code 0} when unavailable
+     * @apiNote
+     * Used by {@link #fetchDeviceListsFromServer(Collection, String)} to feed a meaningful
+     * error code into the failure {@code ContactSyncEvent} rather than the wrapper
+     * {@code RuntimeException} thrown to callers.
+     *
+     * @param throwable the exception caught during the device-sync flow
+     * @return the embedded {@link WhatsAppDeviceSyncException#errorCode()}, or {@code 0} when
+     *         neither {@code throwable} nor its direct cause is a
+     *         {@link WhatsAppDeviceSyncException}
      */
     private static int extractUsyncErrorCode(Throwable throwable) {
         if (throwable instanceof WhatsAppDeviceSyncException dse) {
@@ -879,13 +1125,19 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Emits the successful {@code ContactSyncEvent} (id 1006) for the device-sync USync flow.
+     * Commits the success-path {@code ContactSyncEvent} for a completed device sync.
+     *
+     * @apiNote
+     * Reproduces the {@code logSuccess} branch of {@code WAWebContactSyncLogger}; called from
+     * {@link #fetchDeviceListsFromServer(Collection, String)} after the USync results have
+     * been persisted. The sync type literal is upper-cased
+     * ({@code <context>_QUERY}) to match the WA Web event payload.
      *
      * @param context                 the USync context string (for example
      *                                {@code "interactive"}, {@code "background"})
      * @param requestedCount          the number of JIDs originally requested
      * @param responseCount           the number of entries returned by the server
-     * @param syncStartTimestamp      the instant at which the sync started
+     * @param syncStartTimestamp      the {@link Instant} at which the sync started
      * @param includeUsernameProtocol whether the username protocol was included in the request
      * @param deviceResponseNew       the count of successful device results ingested
      */
@@ -913,17 +1165,26 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Emits the failing {@code ContactSyncEvent} (id 1006) for the device-sync USync flow.
-     * The HTTP {@code 429} (rate-limited) status is folded onto {@code fallbackErrorCode}
-     * to match {@code WAWebContactSyncLogger.logFailure}.
+     * Commits the failure-path {@code ContactSyncEvent} for an aborted device sync.
+     *
+     * @apiNote
+     * Reproduces the {@code logFailure} branch of {@code WAWebContactSyncLogger}; called from
+     * the {@code catch} in {@link #fetchDeviceListsFromServer(Collection, String)} so the WAM
+     * dashboard sees aborted device syncs.
+     *
+     * @implNote
+     * This implementation folds HTTP {@code 429} onto {@code fallbackErrorCode} (typically
+     * {@link #CONTACT_SYNC_ERROR_CODE_DEVICE_SYNC}) before committing so rate-limited responses
+     * are bucketed separately from other server errors, matching WA Web's substitution.
      *
      * @param context                 the USync context string
      * @param requestedCount          the number of JIDs originally requested
      * @param responseCount           the number of entries returned before the failure
-     * @param syncStartTimestamp      the instant at which the sync started
+     * @param syncStartTimestamp      the {@link Instant} at which the sync started
      * @param includeUsernameProtocol whether the username protocol was included
-     * @param serverErrorCode         the error code from the USync response
-     * @param fallbackErrorCode       the fallback error code substituted for {@code 429}
+     * @param serverErrorCode         the raw error code from the USync response
+     * @param fallbackErrorCode       the code substituted when {@code serverErrorCode} is
+     *                                {@code 429}
      */
     @WhatsAppWebExport(moduleName = "WAWebContactSyncLogger",
             exports = "contactSyncLogger",
@@ -950,10 +1211,20 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Sends all USync batches in parallel and collates the parsed results into a single list.
+     * Dispatches every USync IQ batch in parallel and returns the parsed results flattened.
      *
-     * @param batches the USync IQ batches to dispatch
-     * @return the flattened list of parsed device list results
+     * @apiNote
+     * Used by {@link #fetchDeviceListsFromServer(Collection, String)} after
+     * {@link DeviceUSyncQueryBuilder} has split the JIDs into one IQ per server-allowed batch
+     * size. Failed batches are tolerated via {@link #JOINER}.
+     *
+     * @implNote
+     * This implementation forks each batch as a subtask under a {@link StructuredTaskScope}
+     * with virtual-thread scheduling, matching WA Web's {@code Promise.all} fan-out but with
+     * structured cancellation semantics.
+     *
+     * @param batches the USync IQ batches produced by {@link DeviceUSyncQueryBuilder}
+     * @return the parsed device list results from every successful batch
      * @throws RuntimeException if the calling virtual thread is interrupted while waiting
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -975,15 +1246,32 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Handles an account-type transition between {@code E2EE} and {@code HOSTED}.
-     * Verifies hosted users are in the verification cache, clears Signal sessions, marks
-     * the device list as deleted-changed-to-host on {@code E2EE -> HOSTED}, updates the
-     * contact's encryption metadata, notifies listeners, and inserts a system message.
+     * Carries out the bookkeeping required when a user's
+     * {@link ADVEncryptionType ADVEncryptionType} switches between {@code E2EE} and
+     * {@code HOSTED}.
+     *
+     * @apiNote
+     * Triggered when the USync flow in {@link #fetchDeviceListsFromServer(Collection, String)}
+     * detects a different {@code advAccountType} from the cached record, or when an
+     * {@link DeviceListResult.Omitted} carries an implicit {@code HOSTED -> E2EE} transition.
+     * Cobalt clients listening on {@link WhatsAppClient#store()} receive
+     * {@code onAccountTypeChanged}.
+     *
+     * @implNote
+     * This implementation rejects {@code -> HOSTED} transitions for JIDs absent from the
+     * interop hosted verification cache (anti-spoofing guard mirroring WA Web's
+     * {@code WAWebBizCoexHostedAddVerification.assertThrowsWidAdvTypeFromVerificationCache}),
+     * clears every Signal session belonging to {@code oldList}, replaces the record with a
+     * {@code deletedChangedToHost} tombstone on {@code -> HOSTED}, updates the contact's
+     * encryption type, fans the change out to listeners on virtual threads, and inserts the
+     * system message via {@link #createAccountTypeChangeSystemMessage(Jid, ADVEncryptionType, ADVEncryptionType)}.
      *
      * @param userJid the user JID whose account type changed
-     * @param oldType the previous account type
-     * @param newType the new account type
-     * @param oldList the cached device list before the transition
+     * @param oldType the previous {@link ADVEncryptionType}
+     * @param newType the new {@link ADVEncryptionType}
+     * @param oldList the cached {@link DeviceList} immediately before the transition
+     * @throws IllegalStateException when transitioning to {@code HOSTED} for a JID not present
+     *                               in the interop hosted verification cache
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "isMeOrCurrentContactHosted",
@@ -991,7 +1279,6 @@ public final class DefaultDeviceService implements DeviceService {
     private void handleAccountTypeTransition(Jid userJid, ADVEncryptionType oldType, ADVEncryptionType newType, DeviceList oldList) {
         LOGGER.log(System.Logger.Level.INFO, "Account type changed for {0}: {1} -> {2}", userJid, oldType, newType);
 
-        // Reject transitions to HOSTED for users not in the verification cache to prevent spoofing.
         if (newType == ADVEncryptionType.HOSTED) {
             if(!store.isInInteropHostedVerificationCache(userJid)) {
                 throw new IllegalStateException(userJid + " is not in the interop hosted verification cache");
@@ -1016,14 +1303,24 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Inserts a system message into the chat for an account-type transition. Emits an
-     * {@code E2E_ENCRYPTED_NOW} stub for {@code HOSTED -> E2EE} and a {@code CIPHERTEXT}
-     * stub for {@code E2EE -> HOSTED}. Initial hosted-transition messages are deduplicated
-     * within the same second.
+     * Inserts the user-visible system message that announces an account-type transition into
+     * the user's chat.
+     *
+     * @apiNote
+     * Surfaces the {@code "Messages are now end-to-end encrypted"} banner for
+     * {@code HOSTED -> E2EE} (stub {@link ChatMessageInfo.StubType#E2E_ENCRYPTED_NOW}) and the
+     * counterpart {@link ChatMessageInfo.StubType#CIPHERTEXT} banner for {@code E2EE -> HOSTED}.
+     * Listeners on {@link WhatsAppClient#store()} receive
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onNewMessage onNewMessage}.
+     *
+     * @implNote
+     * This implementation deduplicates the initial {@code -> HOSTED} message per second via
+     * {@link #shouldDedupInitialHostedSystemMsg(Jid)} so repeated transitions inside the same
+     * USync cycle do not flood the chat, matching the WA Web set-based guard.
      *
      * @param userJid the user JID whose account type changed
-     * @param oldType the previous account type, or {@code null} if unknown
-     * @param newType the new account type
+     * @param oldType the previous {@link ADVEncryptionType}, or {@code null} when unknown
+     * @param newType the new {@link ADVEncryptionType}
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "shouldDedupInitialHostedSystemMsg",
@@ -1071,13 +1368,25 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Commits a {@code CoexPrivacySysMsg} WAM event for an inserted account-type change
-     * system message. The {@code (oldType, newType)} pair maps to the state-transition
-     * enum used by WA Web's subtype routing.
+     * Commits a {@code CoexPrivacySysMsg} WAM event for an inserted account-type-change
+     * system message.
+     *
+     * @apiNote
+     * Reproduces {@code WAWebBizCoexUtils.sendWamCoexPrivacySysMsgInsertSuccess}; tagged with
+     * the {@link CoexSysMsgStateTransitionAttempt} derived from
+     * {@code (oldType, newType)} so the WAM dashboard can attribute the inserted message to the
+     * right transition bucket.
+     *
+     * @implNote
+     * This implementation maps a {@code null -> HOSTED} input onto
+     * {@link CoexSysMsgStateTransitionAttempt#E2EE_TO_HOSTED} because WA Web treats unknown
+     * priors as E2EE for telemetry purposes. The {@code channel} property is left unset on
+     * purpose: only the history-sync entry point in {@code sendWamCoexPrivacySysMsgHistorySyncInsert}
+     * populates {@code HISTORY_SYNC}.
      *
      * @param userJid the user JID whose account type changed
-     * @param oldType the previous account type, or {@code null} if unknown
-     * @param newType the new account type
+     * @param oldType the previous {@link ADVEncryptionType}, or {@code null} if unknown
+     * @param newType the new {@link ADVEncryptionType}
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "sendWamCoexPrivacySysMsgInsertSuccess",
@@ -1089,7 +1398,6 @@ public final class DefaultDeviceService implements DeviceService {
         } else if (oldType == ADVEncryptionType.HOSTED) {
             stateTransition = CoexSysMsgStateTransitionAttempt.HOSTED_TO_HOSTED;
         } else {
-            // E2EE_TO_HOSTED also covers the null -> HOSTED case.
             stateTransition = CoexSysMsgStateTransitionAttempt.E2EE_TO_HOSTED;
         }
 
@@ -1105,17 +1413,27 @@ public final class DefaultDeviceService implements DeviceService {
                 .coexSysMsgStateTransitionAttempt(stateTransition)
                 .coexSysMsgBusinessId(userJid.user());
 
-        // {@code channel} is intentionally unset for this call site: only the history-sync
-        // entry point populates {@code HISTORY_SYNC}.
         wamService.commit(builder.build());
     }
 
     /**
-     * Returns whether an initial hosted system message for the given user has already
-     * been emitted within the current second.
+     * Returns whether an initial hosted-transition system message has already been emitted for
+     * {@code userJid} during the current wall-clock second.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebBizCoexUtils.shouldDedupInitialHostedSystemMsg}; consulted by
+     * {@link #createAccountTypeChangeSystemMessage(Jid, ADVEncryptionType, ADVEncryptionType)}
+     * to suppress duplicate banners when several USync responses report the same hosted
+     * transition in quick succession.
+     *
+     * @implNote
+     * This implementation stores the latest emission second per JID in
+     * {@link #hostedSystemMsgDedupCache} and returns {@code true} when the cached second
+     * matches the current second; entries are never purged, matching the process-lifetime
+     * {@code Set<string>} guard on the WA Web side.
      *
      * @param userJid the user JID
-     * @return {@code true} if the message should be skipped as a duplicate
+     * @return {@code true} when the caller should skip insertion
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "shouldDedupInitialHostedSystemMsg",
@@ -1133,10 +1451,14 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Cleans up Signal sessions and sender keys for every device in the given list.
+     * Tears down every Signal session associated with the devices in {@code oldList}.
+     *
+     * @apiNote
+     * Invoked from list-reset and account-type-transition paths so that subsequent outgoing
+     * messages negotiate fresh sessions instead of resurrecting stale ratchets.
      *
      * @param userJid the owning user JID
-     * @param oldList the device list containing devices to clean up
+     * @param oldList the {@link DeviceList} whose devices should be cleaned up
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityUpdateDeviceTableApi",
             exports = "clearDeviceRecord",
@@ -1149,13 +1471,18 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns whether a full list reset is required because the {@code rawId} has changed.
-     * The {@code rawId} uniquely identifies a user's device configuration; a change implies
-     * re-registration and forces every Signal session to be invalidated.
+     * Returns whether the cached device list must be discarded because the server reports a
+     * new {@code rawId}.
      *
-     * @param cachedList the cached device list
-     * @param newRawId   the new {@code rawId} from the server
-     * @return {@code true} if a full list reset is required
+     * @apiNote
+     * The {@code rawId} is the per-user device-configuration fingerprint; a change implies the
+     * user re-registered, so every cached Signal session targeting their old devices is no
+     * longer usable.
+     *
+     * @param cachedList the cached {@link DeviceList}, or {@code null}
+     * @param newRawId   the {@code rawId} reported by the server
+     * @return {@code true} when {@link #handleListReset(Jid, DeviceList, String, String)} must
+     *         run
      */
     private boolean requiresListReset(DeviceList cachedList, String newRawId) {
         if (cachedList == null || cachedList.deleted()) {
@@ -1166,13 +1493,19 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Performs a full device list reset, clearing every Signal session belonging to the
-     * user's previous devices.
+     * Carries out the Signal-session cleanup that a {@code rawId} change demands.
      *
-     * @param userJid    the user JID
-     * @param cachedList the previous cached device list
-     * @param oldRawId   the previous {@code rawId}
-     * @param newRawId   the new {@code rawId}
+     * @apiNote
+     * Invoked from {@link #fetchDeviceListsFromServer(Collection, String)} when
+     * {@link #requiresListReset(DeviceList, String)} returns {@code true}; the new
+     * {@link DeviceList} is then persisted by the caller with a backdated timestamp so the
+     * next ADV check re-validates the user.
+     *
+     * @param userJid    the user JID being reset
+     * @param cachedList the previous {@link DeviceList} whose devices are about to be
+     *                   invalidated
+     * @param oldRawId   the previous {@code rawId} (logged for diagnostics)
+     * @param newRawId   the new {@code rawId} (logged for diagnostics)
      */
     private void handleListReset(Jid userJid, DeviceList cachedList, String oldRawId, String newRawId) {
         LOGGER.log(System.Logger.Level.INFO,
@@ -1182,17 +1515,29 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Validates an incremental device list update against the cached {@code validIndexes}
-     * and logs the diff. Out-of-order timestamps with an unknown {@code keyIndex} are
-     * rejected as potential replay attempts.
+     * Validates an incremental device-list update against the cached {@code validIndexes} and
+     * logs the diff.
      *
-     * @param userJid    the user JID
-     * @param cachedList the cached device list
-     * @param newList    the new device list from the server
-     * @return the new device list (callers persist it)
+     * @apiNote
+     * Runs on the non-reset branch of {@link #fetchDeviceListsFromServer(Collection, String)};
+     * out-of-order timestamps that carry a non-primary {@code keyIndex} absent from the cached
+     * {@code validIndexes} are rejected because they signal a potential replay of a stale
+     * device list.
      *
-     * @throws IllegalStateException if the new list contains a non-primary {@code keyIndex}
-     *                               outside {@code validIndexes} despite a non-newer timestamp
+     * @implNote
+     * This implementation accepts a device when its {@code keyIndex} is {@code 0} (the primary
+     * device), is contained in {@link DeviceList#validIndexes()}, or is strictly greater than
+     * the cached {@link DeviceList#currentIndex()}. The first two cases match WA Web's check;
+     * the third is a forward-tolerant relaxation for newly-issued indexes that have not yet
+     * been advertised in {@code validIndexes}.
+     *
+     * @param userJid    the user JID being checked
+     * @param cachedList the cached {@link DeviceList}
+     * @param newList    the new {@link DeviceList} from the server
+     * @return {@code newList} unchanged, for caller convenience
+     * @throws IllegalStateException when {@code newList} contains a non-primary
+     *                               {@code keyIndex} outside {@code validIndexes} despite a
+     *                               non-newer timestamp
      */
     private DeviceList handleNoListReset(Jid userJid, DeviceList cachedList, DeviceList newList) {
         var cachedValidIndexes = cachedList.validIndexes();
@@ -1200,7 +1545,6 @@ public final class DefaultDeviceService implements DeviceService {
             var cachedCurrentIndex = cachedList.currentIndex();
             for (var device : newList.devices()) {
                 var keyIndex = device.keyIndex();
-                // Acceptable if keyIndex==0, in validIndexes, or strictly greater than currentIndex.
                 var isValid = keyIndex == 0
                         || cachedValidIndexes.contains(keyIndex)
                         || keyIndex > cachedCurrentIndex;
@@ -1227,13 +1571,27 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Backfills missing device-sync entries when the server returns LID-based results
-     * but the request used the phone number. Duplicates the LID result as a PN entry so
-     * callers receive the data they requested.
+     * Duplicates LID-keyed USync results back onto the original phone-number request when the
+     * server returned only the LID record.
      *
-     * @param requestedJids the JIDs that were originally requested
-     * @param results       the results returned from the server
-     * @return the results with backfilled PN entries appended
+     * @apiNote
+     * Mirrors {@code WAWebContactSyncUtils.backfillMissingDeviceSyncEntries}; called from
+     * {@link #fetchDeviceListsFromServer(Collection, String)} before any record is persisted,
+     * so callers that issued a PN-keyed request receive an entry under that PN even when the
+     * server only knows the user by LID.
+     *
+     * @implNote
+     * This implementation rethrows any {@link DeviceListResult.Error} encountered in the input
+     * as a {@link WhatsAppDeviceSyncException}, then walks the requested JIDs and looks up the
+     * matching LID via {@link WhatsAppStore#findLidByPhone(Jid)}; non-regular-user PNs
+     * (announcements, bots, LIDs) are skipped to match the {@code isRegularUserPn()} filter
+     * applied at the WA Web call site.
+     *
+     * @param requestedJids the JIDs originally passed to the USync IQ
+     * @param results       the parsed USync results
+     * @return {@code results} with PN-keyed clones of LID-keyed entries appended where needed
+     * @throws WhatsAppDeviceSyncException when {@code results} contains a
+     *                                     {@link DeviceListResult.Error}
      */
     @WhatsAppWebExport(moduleName = "WAWebContactSyncUtils",
             exports = "backfillMissingDeviceSyncEntries",
@@ -1314,9 +1672,14 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the timestamp of the last ADV device info check job, if any.
+     * Returns the {@link Instant} at which the daily ADV device-info check last ran.
      *
-     * @return the last check time, or empty if never run
+     * @apiNote
+     * Used by {@link DeviceADVChecker} to compute the delay until the next run; also consulted
+     * inside {@link #fetchDeviceListsFromServer(Collection, String)} to decide whether an
+     * incoming {@code expectedTimestamp} should be retained or cleared.
+     *
+     * @return the last run time, or {@link Optional#empty()} if the check has never run
      */
     @WhatsAppWebExport(moduleName = "WAWebLastADVCheckTimeApi",
             exports = "getLastADVDeviceInfoCheckTime",
@@ -1326,7 +1689,11 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Updates the ADV check time to the current instant.
+     * Records that the daily ADV device-info check has just completed.
+     *
+     * @apiNote
+     * Called from {@link DeviceADVChecker} immediately after a successful run so the next run
+     * is scheduled one {@code DAY_SECONDS} window away.
      */
     @WhatsAppWebExport(moduleName = "WAWebLastADVCheckTimeApi",
             exports = "setLastADVDeviceInfoCheckTime",
@@ -1336,11 +1703,17 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Builds a device list containing only the primary device (device id 0). Used as a
-     * fallback when the server returns no device information.
+     * Builds a fallback {@link DeviceList} containing only the user's primary device
+     * ({@link DeviceConstants#PRIMARY_DEVICE_ID}).
+     *
+     * @apiNote
+     * Used in {@link #getDeviceLists(Collection, String, String, boolean)} and
+     * {@link #fetchDeviceListsFromServer(Collection, String)} when the server reports no
+     * companion devices, mirroring the primary-only branch of
+     * {@code WAWebDBDeviceListFanout.getFanOutList}.
      *
      * @param userJid the user JID
-     * @return a device list with only the primary device
+     * @return a {@link DeviceList} with one {@link DeviceInfo} entry for device id {@code 0}
      */
     @WhatsAppWebExport(moduleName = "WAWebDBDeviceListFanout",
             exports = "getFanOutList",
@@ -1355,12 +1728,18 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Builds a tombstone device list. The {@code changedToHost} flag distinguishes
-     * deletions caused by an {@code E2EE -> HOSTED} transition from generic deletions.
+     * Builds a tombstone {@link DeviceList} marking a user's record as deleted.
      *
-     * @param userJid       the user JID
-     * @param changedToHost whether the deletion is due to a HOSTED transition
-     * @return a deleted device list marker
+     * @apiNote
+     * Mirrors the {@code {deleted: true, deletedChangedToHost?}} record WA Web writes in
+     * {@code WAWebIdentityUpdateDeviceTableApi.clearDeviceRecord}; {@code changedToHost} is
+     * set when the deletion is the direct result of an {@code E2EE -> HOSTED} transition so
+     * later reads can distinguish it from a generic clear and skip the primary-only fallback
+     * in {@link #getDeviceLists(Collection, String, String, boolean)}.
+     *
+     * @param userJid       the user JID being marked deleted
+     * @param changedToHost whether the deletion is caused by a hosted transition
+     * @return the tombstone {@link DeviceList}
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityUpdateDeviceTableApi",
             exports = "clearDeviceRecord",
@@ -1377,7 +1756,12 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Starts the daily ADV device info check scheduler.
+     * Starts the daily ADV device-info check scheduler.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebStartBackend} call to
+     * {@code WAWebAdvDeviceInfoCheckJob.scheduleAdvDeviceInfoCheck}; the
+     * {@link WhatsAppClient} bootstrap is expected to call this once after login completes.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
@@ -1387,8 +1771,11 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Stops the ADV device info check scheduler. Callers should invoke this before
-     * disconnecting to halt background work deterministically.
+     * Stops the daily ADV device-info check scheduler.
+     *
+     * @apiNote
+     * Should be called before disconnecting so the background job does not survive past the
+     * lifetime of the {@link WhatsAppClient}.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
@@ -1398,8 +1785,20 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Retries every queued pending device sync, respecting retry limits and expiration.
-     * Intended to run after reconnect.
+     * Re-runs every {@link PendingDeviceSync} that was stashed when an earlier device sync
+     * failed.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiPendingDeviceSync.doPendingDeviceSync}; expected to be invoked by
+     * the reconnect path so that USync requests that failed offline are replayed once the
+     * socket is back. Expired entries and entries that have exhausted their retry budget are
+     * dropped without retrying.
+     *
+     * @implNote
+     * This implementation re-queues a fresh {@link PendingDeviceSync} via
+     * {@link PendingDeviceSync#nextRetry()} when the replay itself fails, where WA Web simply
+     * removes the row from {@code WAWebSchemaPendingDeviceSync} after a single attempt; the
+     * extra retry budget makes Cobalt's pending-sync recovery more aggressive than WA Web's.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiPendingDeviceSync",
             exports = "doPendingDeviceSync",
@@ -1431,10 +1830,24 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Updates missing-key device tracking when own companion devices are removed. Removed
-     * devices are dropped from each missing-key record. When a key is missing on every
-     * remaining device, schedules the all-devices-responded grace-period check before any
-     * fatal-sync decision.
+     * Reconciles the {@code MissingKeyStore} entries for the local user with the current
+     * companion device set.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebSyncdStoreMissingKeys.updateMissingKeyDevices}; the
+     * {@link WebAppStateService} calls this after a
+     * companion is removed so that syncd does not keep blocking on key responses from a
+     * device that is no longer present. When the resulting set of remaining devices has
+     * all responded without ever sending the missing key, schedules the grace-period
+     * fatal-error check via {@link WebAppStateService#scheduleAllDevicesRespondedCheck()}.
+     *
+     * @implNote
+     * This implementation runs the whole reconciliation under
+     * {@link #withDeviceUpdateLock(Runnable)} to serialise against device-list mutations,
+     * exits silently when no JID is set or the cached list is missing or tombstoned, and
+     * relies on {@link WhatsAppStore#missingSyncKeys()} for the unbatched view of the
+     * missing-key records that WA Web reads from {@code MissingKeyStore} inside an IDB
+     * transaction.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdStoreMissingKeys",
             exports = "updateMissingKeyDevices",
@@ -1474,51 +1887,71 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the fanout device JIDs for a 1:1 user chat. Resolves device lists for both
-     * the recipient and the sender, filters self, applies hosted-device gating, and
-     * removes devices with unconfirmed identity changes. When {@code expectedPhash} is
-     * non-null, the device-list sync short-circuits if the local phash already matches.
+     * Returns the recipient device JIDs to fan out a 1:1 message to.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebDBDeviceListFanout.getFanOutList} for the
+     * {@code chatWidSetToIncludeHostedInFanoutOneToOneChatOnly} branch; called from every
+     * outgoing 1:1 send path before encryption to obtain the per-device targets. When
+     * {@code expectedPhash} is non-{@code null} and the locally-computed phash matches,
+     * the underlying {@link #getDeviceLists(Collection, String, String, boolean)} call
+     * skips the USync IQ so a steady-state thread does not re-query the server on every
+     * keypress.
+     *
+     * @implNote
+     * This implementation resolves the sender's device JID via
+     * {@link #resolveMyDeviceJid(Jid)} so that LID-addressed chats use the LID-side
+     * me-device, then asks the {@link DeviceFanoutCalculator} to drop self and apply
+     * hosted-device gating, and finally strips devices in
+     * {@link WhatsAppStore#unconfirmedIdentityChanges()} so messages do not silently
+     * land on a recipient whose security code has changed but not been re-verified.
      *
      * @param chatJid       the recipient user JID
-     * @param expectedPhash the server-provided phash to match against, or {@code null}
-     *                      for an unconditional sync
-     * @return the fanout device JIDs
+     * @param expectedPhash the server-reported phash to match against, or {@code null}
+     *                      to force a sync
+     * @return the device JIDs to encrypt to
      */
     @WhatsAppWebExport(moduleName = "WAWebDBDeviceListFanout",
             exports = "getFanOutList",
             adaptation = WhatsAppAdaptation.ADAPTED)
     public Collection<Jid> getUserFanout(Jid chatJid, String expectedPhash) {
-        // getDeviceLists is keyed by user-level JIDs (the value of `<user jid="…">`
-        // in the USync response). Passing a device-suffixed self JID here makes the
-        // futures-map lookup miss after fetch — the response carries the bare user
-        // JID, so the device-suffixed future never completes and falls through to a
-        // primary-only fallback. That collapses sender's siblings out of the fanout.
         var myUserJid = resolveMyDeviceJid(chatJid).toUserJid();
         var deviceLists = getDeviceLists(
                 List.of(chatJid.toUserJid(), myUserJid), "message", expectedPhash, false);
 
-        // 1:1 user chats include hosted devices when bizHostedDevicesEnabled.
-        // Pass both PN and LID device JIDs so isMeDevice/isMeAccount filter both sides
-        // (WAWebDBDeviceListFanout uses WAWebUserPrefsMeUser globals which read both).
         var mePnDeviceJid = store.jid().orElse(null);
         var meLidDeviceJid = store.lid().orElse(null);
         var fanoutDevices = fanoutCalculator.calculate(
                 mePnDeviceJid, meLidDeviceJid, deviceLists, chatJid);
 
         var changedIdentities = store.unconfirmedIdentityChanges();
-        var filteredDevices = fanoutCalculator.filterIdentityChanges(fanoutDevices, changedIdentities);
-        return projectFanoutAddressing(filteredDevices, chatJid);
+        return fanoutCalculator.filterIdentityChanges(fanoutDevices, changedIdentities);
     }
 
     /**
-     * Returns the fanout device JIDs and participant hash for a group chat. The phash is
-     * computed over the recipients <em>plus</em> the sender's device JID
-     * ({@code phashV2([].concat(M, [F]))}).
+     * Returns the recipient device JIDs and the participant hash for a group send.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebDBDeviceListFanout.getFanOutList} with the
+     * {@code chatWidSetToIncludeHostedInFanoutOneToOneChatOnly} argument left empty so
+     * hosted devices (id 99) are excluded from group fanout; consumed by the chat-message
+     * sender after participant resolution. The returned
+     * {@link DeviceGroupFanoutResult#phash()} is what the {@code <enc phash="...">}
+     * attribute on the outgoing stanza carries.
+     *
+     * @implNote
+     * This implementation pulls the participant roster via
+     * {@link WhatsAppClient#queryChatMetadata(Jid)}
+     * because Cobalt has no IDB-backed group cache; it then runs
+     * {@link DeviceFanoutCalculator#calculate(Jid, Jid, List, Jid)} with both
+     * me-device JIDs so the {@code isMeDevice}/{@code isMeAccount} filter applies to
+     * both addressing-mode sides, and computes the {@code phashV2} over the filtered
+     * recipient set unioned with {@code senderDeviceJid}.
      *
      * @param groupJid        the group JID
-     * @param senderDeviceJid the sender's own device JID, included in the phash but not
-     *                        in the returned device list
-     * @return the fanout result with devices and phash
+     * @param senderDeviceJid the sender's own device JID; folded into the phash but
+     *                        not into the returned recipient list
+     * @return the fanout result with recipients and phash
      */
     @WhatsAppWebExport(moduleName = "WAWebDBDeviceListFanout",
             exports = "getFanOutList",
@@ -1535,9 +1968,6 @@ public final class DefaultDeviceService implements DeviceService {
                     .toList();
             var deviceLists = getDeviceLists(participants, "message", null, false);
 
-            // Group messages exclude hosted devices. Pass both PN and LID device JIDs so
-            // isMeDevice/isMeAccount filter both addressing-mode sides
-            // (WAWebDBDeviceListFanout uses WAWebUserPrefsMeUser globals which read both).
             var mePnDeviceJid = store.jid().orElse(null);
             var meLidDeviceJid = store.lid().orElse(null);
             var fanoutDevices = fanoutCalculator.calculate(
@@ -1556,10 +1986,79 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Computes ICDC metadata for the given user.
+     * Returns the fanout device JIDs and participant hash for a business
+     * broadcast list whose recipient roster is supplied directly by the
+     * caller.
      *
-     * @param userJid the user JID; normalised to a user-level JID by callees
-     * @return the ICDC result, or {@link Optional#empty()} if no usable device list is cached
+     * @apiNote
+     * Broadcast lists carry their roster in the local
+     * {@link com.github.auties00.cobalt.model.business.BusinessBroadcastList}
+     * record rather than in server-side group metadata, so the caller
+     * passes the resolved recipient user JIDs explicitly instead of
+     * having this method look them up. The phash is computed over the
+     * resolved device set plus {@code senderDeviceJid}, matching the
+     * {@link #getGroupFanout(Jid, Jid)} convention.
+     *
+     * @implNote
+     * This implementation reuses {@link #getDeviceLists(Collection, String, String, boolean)},
+     * the {@link DeviceFanoutCalculator}, and the identity-change filter
+     * verbatim from {@link #getGroupFanout(Jid, Jid)}; the only divergence
+     * is the skipped {@link WhatsAppClient#queryChatMetadata(Jid)}
+     * call, which has no counterpart for client-only audiences.
+     *
+     * @param broadcastJid      the broadcast list JID, used for
+     *                          diagnostic purposes only
+     * @param senderDeviceJid   the sender's own device JID, included in
+     *                          the phash but not in the returned device
+     *                          list
+     * @param recipientUserJids the resolved recipient user JIDs from
+     *                          the local broadcast list roster
+     * @return the fanout result with devices and phash
+     */
+    @WhatsAppWebExport(moduleName = "WAWebDBDeviceListFanout",
+            exports = "getFanOutList",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebPhashUtils",
+            exports = "phashV2",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public DeviceGroupFanoutResult getBroadcastFanout(Jid broadcastJid, Jid senderDeviceJid, Collection<Jid> recipientUserJids) {
+        try {
+            var deviceLists = getDeviceLists(recipientUserJids, "message", null, false);
+            var mePnDeviceJid = store.jid().orElse(null);
+            var meLidDeviceJid = store.lid().orElse(null);
+            var fanoutDevices = fanoutCalculator.calculate(
+                    mePnDeviceJid, meLidDeviceJid, deviceLists, null);
+            var changedIdentities = store.unconfirmedIdentityChanges();
+            var filteredDevices = fanoutCalculator.filterIdentityChanges(fanoutDevices, changedIdentities);
+            var phashDevices = new HashSet<>(filteredDevices);
+            phashDevices.add(senderDeviceJid);
+            var phash = phashCalculator.calculate(phashDevices, DevicePhashVersion.V2, true);
+            return new DeviceGroupFanoutResult(filteredDevices, phash);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new InternalError("Missing SHA-256 implementation", exception);
+        }
+    }
+
+    /**
+     * Returns the Identity Change Detection Consistency (ICDC) metadata for an outgoing
+     * message to {@code userJid}.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebIdentityIcdcApi.getICDCMeta}; the chat-message sender calls this
+     * to populate {@code DeviceListMetadata} on outgoing {@code <message>} stanzas so
+     * recipients can detect when the sender's view of their device list has drifted from
+     * the server's view. The result is empty when no device list is cached, when the
+     * cached list is a tombstone, or when the user is a single-primary-device entry
+     * whose timestamp is older than the {@code 30d} freshness window.
+     *
+     * @implNote
+     * This implementation delegates to {@link IcdcComputer#compute(Jid)}; the underlying
+     * hash truncation length is read from the {@link ABProp} cache to match
+     * {@code md_icdc_hash_length} on the WA Web side.
+     *
+     * @param userJid the user JID, normalised to user-level by the computer
+     * @return the ICDC metadata, or {@link Optional#empty()} when no usable record is
+     *         cached
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMeta",
@@ -1569,15 +2068,29 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Ensures Signal sessions exist for every device JID, fetching pre-key bundles when
-     * needed. Devices that already have an established session are skipped.
+     * Ensures every device JID in {@code deviceJids} has an established Signal session,
+     * fetching pre-key bundles for the ones that do not.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebManageE2ESessionsJob.ensureE2ESessions}; callers (the
+     * chat-message sender, the retry-receipt handler, the broadcast sender) invoke this
+     * before the encrypt step so the {@link SignalSessionCipher}
+     * does not error out on a missing session. Devices that already have a session are
+     * skipped, so the call is cheap on a warm address book.
+     *
+     * @implNote
+     * This implementation delegates to {@link DevicePreKeyHandler#ensureSessions(Collection)};
+     * non-user JIDs and PSA broadcast JIDs are filtered out, the {@code 406} server status
+     * for a non-existent companion device is swallowed (the affected device is reported
+     * back as {@code deletedDevices} in WA Web; Cobalt currently only surfaces the
+     * depleted-pre-key count via the returned int).
      *
      * @param deviceJids the device JIDs to ensure sessions for
-     * @return the number of devices for which the one-time pre-key pool was depleted in
-     *         the server response (no {@code <key>} element for a non-bot device).
-     *         Callers should commit this count via
+     * @return the number of devices whose server response carried no {@code <key>}
+     *         element (a depleted one-time pre-key pool); callers should commit this
+     *         count to a
      *         {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEventBuilder}
-     *         to mirror {@code WAWebPostPrekeysDepletionMetric.maybePostPrekeysDepletionMetric}.
+     *         to mirror {@code WAWebPostPrekeysDepletionMetric.maybePostPrekeysDepletionMetric}
      */
     @WhatsAppWebExport(moduleName = "WAWebManageE2ESessionsJob",
             exports = "ensureE2ESessions",
@@ -1587,13 +2100,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the sender's device JID for the given chat, picking the LID device for
-     * LID-addressed chats and the PN device otherwise.
+     * Returns the local sender's device JID in the addressing mode that matches
+     * {@code chatJid}.
      *
-     * @param chatJid the chat JID that determines addressing
-     * @return the sender's device JID
+     * @apiNote
+     * Mirrors the {@code WAWebUserPrefsMeUser.getMeDeviceOrThrow} branching when WA Web's
+     * {@code removeDevicePnDependenciesEnabled} gate is set; consulted by
+     * {@link #getUserFanout(Jid, String)} so that LID-addressed chats receive a
+     * LID-addressed sender for the self filter.
      *
-     * @throws IllegalStateException if not logged in
+     * @implNote
+     * This implementation falls back to the PN device JID when no LID is recorded for the
+     * current user, matching the {@code getMeDeviceLidOrThrow} fallback chain in WA Web.
+     *
+     * @param chatJid the chat JID that determines addressing mode
+     * @return the sender's device JID, in the matching addressing mode
+     * @throws IllegalStateException when the {@link WhatsAppStore} has no recorded
+     *                               {@link Jid#device()}
      */
     @WhatsAppWebExport(moduleName = "WAWebUserPrefsMeUser",
             exports = {"getMeDeviceLidOrThrow", "getMeDevicePnOrThrow_DO_NOT_USE", "getMeDeviceOrThrow"},
@@ -1608,95 +2131,24 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Projects each fanout device JID to match the addressing mode of {@code chatJid}.
+     * Returns whether business hosted devices (id 99 device entries) are accepted in
+     * this session.
      *
-     * <p>The cached {@link DeviceList} keyed by phone or LID stays canonical under its
-     * original server, but the downstream send pipeline establishes Signal sessions
-     * (via {@link Jid#toSignalAddress()}, which keys on {@code (user, device)}),
-     * encrypts per-device payloads, and labels each {@code <to jid="…">} participant
-     * with the device JID as-is. If those device JIDs disagree with the outer
-     * {@code <message to="…">} addressing mode, the WhatsApp server rejects the
-     * stanza with error 479 ({@code recipient_addressing_mismatch}) — observed during
-     * self-send when the chat JID was rewritten to LID by
-     * {@code WAWebPnlessStanzaMigration.maybeReplaceWidWithAccountLid} but the cached
-     * device list remained PN-keyed via {@link #mergeAlternateDeviceLists}.
+     * @apiNote
+     * Mirrors {@code WAWebBizCoexGatingUtils.bizHostedDevicesEnabled}; consulted by every
+     * notification path before deciding whether to surface a hosted-companion device on
+     * the cached {@link DeviceList}, and by {@link #filterHostedDevicesFromResults(List)}
+     * when stripping hosted devices from USync results for sessions that opt out.
      *
-     * <p>Devices for which no PN↔LID mapping is known are passed through unchanged so
-     * the pipeline still routes them by their original addressing.
+     * @implNote
+     * This implementation reads {@link ABProp#ADV_ACCEPT_HOSTED_DEVICES} from the
+     * {@link ABPropsService}; WA Web reads the same AB-prop key under three separate
+     * exported function names ({@code bizHostedDevicesEnabled},
+     * {@code bizHostedDevicesSystemMessageEnabled},
+     * {@code hostedDeviceSecurityCodeVerificationEnabled}) but Cobalt collapses them to
+     * one call since the underlying gate is identical.
      *
-     * @param devices the fanout device JIDs returned by {@link DeviceFanoutCalculator}
-     * @param chatJid the outer chat JID
-     * @return the projected device set, with device JIDs rewritten to match
-     *         {@code chatJid}'s server where a mapping is available
-     */
-    @WhatsAppWebExport(moduleName = "WAWebPnlessStanzaMigration",
-            exports = "maybeReplaceWidWithAccountLid",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    private Set<Jid> projectFanoutAddressing(Set<Jid> devices, Jid chatJid) {
-        if (chatJid == null) {
-            return devices;
-        }
-        var toLid = chatJid.hasLidServer();
-        var toPn = chatJid.hasUserServer();
-        if (!toLid && !toPn) {
-            return devices;
-        }
-        var projected = new LinkedHashSet<Jid>(devices.size());
-        for (var device : devices) {
-            var rewritten = toLid ? projectDeviceToLid(device) : projectDeviceToPn(device);
-            projected.add(rewritten.orElse(device));
-        }
-        return Collections.unmodifiableSet(projected);
-    }
-
-    /**
-     * Rewrites a PN-server device JID to its LID-server counterpart using the
-     * store's PN→LID mapping. The device suffix is preserved.
-     *
-     * @param device the device JID
-     * @return the LID-form device JID, or {@link Optional#empty()} when no
-     *         mapping exists or the input is already LID/non-user
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLidMigrationUtils",
-            exports = "toLid",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    private Optional<Jid> projectDeviceToLid(Jid device) {
-        if (device.hasLidServer()) {
-            return Optional.of(device);
-        }
-        if (!device.hasUserServer()) {
-            return Optional.empty();
-        }
-        return store.findLidByPhone(device.toUserJid())
-                .map(lidUser -> Jid.of(lidUser.user(), JidServer.lid(), device.device(), 0));
-    }
-
-    /**
-     * Rewrites a LID-server device JID to its PN-server counterpart using the
-     * store's LID→PN mapping. The device suffix is preserved.
-     *
-     * @param device the device JID
-     * @return the PN-form device JID, or {@link Optional#empty()} when no
-     *         mapping exists or the input is already PN/non-user
-     */
-    @WhatsAppWebExport(moduleName = "WAWebLidMigrationUtils",
-            exports = "toPn",
-            adaptation = WhatsAppAdaptation.ADAPTED)
-    private Optional<Jid> projectDeviceToPn(Jid device) {
-        if (device.hasUserServer()) {
-            return Optional.of(device);
-        }
-        if (!device.hasLidServer()) {
-            return Optional.empty();
-        }
-        return store.findPhoneByLid(device.toUserJid())
-                .map(pnUser -> Jid.of(pnUser.user(), JidServer.user(), device.device(), 0));
-    }
-
-    /**
-     * Returns whether the business hosted-devices feature is enabled.
-     *
-     * @return {@code true} if {@code adv_accept_hosted_devices} is set
+     * @return {@code true} when {@code adv_accept_hosted_devices} is set
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexGatingUtils",
             exports = "bizHostedDevicesEnabled",
@@ -1706,12 +2158,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Strips hosted devices (id 99) from every {@code Full} entry. Applied when
-     * {@code bizHostedDevicesEnabled} is false so the client does not send to coex
-     * hosted devices.
+     * Returns {@code results} with hosted devices (id {@link DeviceConstants#HOSTED_DEVICE_ID})
+     * stripped from every {@link DeviceListResult.Full} entry.
      *
-     * @param results the original results
-     * @return results with hosted devices removed from {@code Full} entries
+     * @apiNote
+     * Applied at the head of {@code WAWebAdvHandlerApi.handleADVDeviceSyncResult} when
+     * {@link #isBizHostedDevicesEnabled()} returns {@code false}, so that a session that
+     * has opted out of business hosted devices never persists a hosted entry to its
+     * cached device list nor encrypts to it.
+     *
+     * @implNote
+     * This implementation maps each entry through
+     * {@link DeviceListResult#withoutHostedDevices()}, leaving
+     * {@link DeviceListResult.Omitted} and {@link DeviceListResult.Error} variants
+     * unchanged because they carry no device list.
+     *
+     * @param results the parsed USync results
+     * @return the results with hosted devices removed from every full entry
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvHandlerApi",
             exports = "handleADVDeviceSyncResult",
@@ -1723,12 +2186,28 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Dispatches an incoming device notification ({@code add} or {@code remove}) to the
-     * matching handler under the device update lock.
+     * Dispatches an incoming {@code <notification type="devices">} stanza to the matching
+     * add or remove handler under the device-update lock.
      *
-     * @param node    the notification node containing {@code device-list} and {@code key-index-list}
-     * @param action  the action type ({@code "add"} or {@code "remove"})
-     * @param userJid the user JID whose device list changed
+     * @apiNote
+     * Mirrors {@code WAWebAdvHandlerApi.handleADVDeviceNotification}; the notification
+     * dispatcher in {@link WhatsAppClient} routes
+     * {@code <notification type="devices">} stanzas here so the cached
+     * {@link DeviceList} stays consistent with companion-device add and remove events
+     * pushed by the server outside the daily USync.
+     *
+     * @implNote
+     * This implementation rejects the notification when the {@code key-index-list} or
+     * its {@code ts} attribute is missing (WA Web errors with {@code "notification
+     * without type"} for the equivalent missing case), then routes through
+     * {@link #withDeviceUpdateLock(Runnable)} so the add and remove handlers serialise
+     * against the daily ADV check and against {@link #handleADVDeviceUpdateForMessage}.
+     *
+     * @param node    the {@code <notification>} root carrying {@code device-list} and
+     *                {@code key-index-list} children
+     * @param action  the {@code "add"} or {@code "remove"} action tag
+     * @param userJid the user whose device list is being mutated
+     * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = {"handleDeviceAddNotification", "handleDeviceRemoveNotification"},
@@ -1761,14 +2240,32 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Processes an {@code add} device notification by validating the signed key-index
-     * list, detecting {@code rawId} or account-type changes, and merging the cached
-     * record with the new devices. When no cached record exists, defers to
-     * {@link #triggerUsyncForCoexDeviceAdd}.
+     * Applies a companion-add notification on top of the cached {@link DeviceList}.
      *
-     * @param userJid          the user JID
-     * @param deviceListNode   the {@code device-list} node from the notification
-     * @param keyIndexListNode the {@code key-index-list} node from the notification
+     * @apiNote
+     * Drives the cache update WA Web performs when a user's primary device pushes a
+     * new companion (a new linked phone, tablet or Web/Desktop session) to its
+     * contacts. When no cached record exists the call is bounced to
+     * {@link #triggerUsyncForCoexDeviceAdd(Node, Jid)} so the full list is fetched
+     * instead of being synthesised from the notification alone.
+     *
+     * @implNote
+     * This implementation matches the {@code WAWebHandleAdvDeviceNotificationApi.handleDeviceAddNotification}
+     * shape: it rejects out-of-order notifications by comparing {@code timestamp} to the
+     * cached {@link DeviceList#timestamp()}, validates the signed key-index list (using
+     * the {@code accountSignatureKey} hosted path when both
+     * {@link #isBizHostedDevicesEnabled()} and the presence of an
+     * {@code is_hosted="true"} attribute on the device-list demand it), then merges the
+     * cached devices (keeping those still in the signed {@code validIndexes} or with
+     * {@code keyIndex > currentIndex}) with the notification's devices, dropping the
+     * primary device from both inputs before re-inserting it last. A {@code rawId}
+     * mismatch or an account-type transition triggers a full session cleanup via
+     * {@link #cleanupAllSessionsForUser(Jid, DeviceList)} and a
+     * {@link #handleAccountTypeTransition} call before the merge.
+     *
+     * @param userJid          the user whose device list is being mutated
+     * @param deviceListNode   the {@code device-list} child node, possibly {@code null}
+     * @param keyIndexListNode the {@code key-index-list} child node
      * @param timestamp        the notification timestamp in Unix seconds
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
@@ -1810,13 +2307,10 @@ public final class DefaultDeviceService implements DeviceService {
             return;
         }
 
-        // The device children (with jid and key-index attrs) live under device-list,
-        // not under key-index-list.
         var keyIndexMap = buildKeyIndexMap(deviceListNode);
 
         var validatedKeyIndexInfo = validateKeyIndexList(userJid, deviceListNode, keyIndexListNode);
 
-        // Reject when the protobuf timestamp does not match the stanza timestamp.
         if (validatedKeyIndexInfo != null && validatedKeyIndexInfo.timestamp().getEpochSecond() != timestamp) {
             LOGGER.log(System.Logger.Level.WARNING,
                     "Device add notification timestamp mismatch for {0}: protobuf={1}, notification={2}, ignoring",
@@ -1871,9 +2365,6 @@ public final class DefaultDeviceService implements DeviceService {
             handleAccountTypeTransition(userJid, oldCachedList.advAccountType(), advAccountType, oldCachedList);
         }
 
-        // Merge: keep cached devices whose keyIndex is still valid (in validIndexes or
-        // greater than currentIndex), apply the notification's devices on top, and ensure
-        // the primary device is present.
         var mergedDevices = new LinkedHashMap<Integer, DeviceInfo>();
 
         if (!clearRecord) {
@@ -1965,15 +2456,31 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Parses a single device entry from an {@code add} notification, applying the
-     * notification-specific validation. Notification devices must have a {@code keyIndex}
-     * in the cryptographically signed {@code validIndexes} set; the
-     * {@code keyIndex > currentIndex} allowance that applies to cached devices does not
-     * apply here. Hosted devices (id 99) are also gated by {@code bizHostedDevicesEnabled}.
+     * Parses a single {@code <device>} entry from an add-notification and applies the
+     * notification-only validation gate.
      *
-     * @param deviceNode            the device child node
-     * @param keyIndexMap           map of device id to keyIndex parsed from the device list
-     * @param validatedKeyIndexInfo the validated key-index list, or {@code null}
+     * @apiNote
+     * Helper for {@link #handleDeviceAddNotification(Jid, Node, Node, long)}; returns an
+     * empty stream rather than throwing so the caller can {@code flatMap} the children
+     * without nullable plumbing.
+     *
+     * @implNote
+     * This implementation enforces the stricter notification rule that every non-primary
+     * device must have a {@code keyIndex} present in the signed
+     * {@link ValidatedKeyIndexListResult#validIndexes()} set; the {@code keyIndex > currentIndex}
+     * tolerance that {@link #handleNoListReset(Jid, DeviceList, DeviceList)} grants to
+     * cached devices is intentionally absent here because the notification is the
+     * authoritative carrier of newly-published indexes. Hosted devices
+     * (id {@link DeviceConstants#HOSTED_DEVICE_ID}) are additionally gated by
+     * {@link #isBizHostedDevicesEnabled()}; when the gate is off, the hosted device is
+     * silently dropped rather than rejected.
+     *
+     * @param deviceNode            the {@code <device>} child node
+     * @param keyIndexMap           the {@code (id, keyIndex)} map for the whole
+     *                              device-list, as produced by
+     *                              {@link #buildKeyIndexMap(Node)}
+     * @param validatedKeyIndexInfo the verified key-index list, or {@code null} when no
+     *                              signed list was provided
      * @return a single-element stream with the parsed device, or empty when rejected
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
@@ -1991,8 +2498,6 @@ public final class DefaultDeviceService implements DeviceService {
         if (validatedKeyIndexInfo != null && validatedKeyIndexInfo.validIndexes() != null && !validatedKeyIndexInfo.validIndexes().isEmpty()) {
             var isInValidIndexes = validatedKeyIndexInfo.validIndexes().contains(keyIndex);
 
-            // Primary device (keyIndex 0) is always accepted; everything else must be
-            // present in the signed validIndexes set.
             if (keyIndex != 0 && !isInValidIndexes) {
                 LOGGER.log(System.Logger.Level.WARNING,
                         "Device {0} has keyIndex {1} not in validIndexes {2}, excluding from notification",
@@ -2013,14 +2518,27 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Processes a {@code remove} device notification. The notification carries the
-     * devices being removed. Cached devices stay if they are absent from the notification
-     * or have a different {@code keyIndex}; matching entries trigger a Signal session
-     * cleanup. The primary device is always preserved.
+     * Applies a companion-remove notification on top of the cached {@link DeviceList}.
      *
-     * @param userJid          the user JID
-     * @param deviceListNode   the {@code device-list} node containing devices being removed
-     * @param keyIndexListNode the {@code key-index-list} node from the notification
+     * @apiNote
+     * Mirrors {@code WAWebHandleAdvDeviceNotificationApi.handleDeviceRemoveNotification};
+     * called for {@code <notification type="devices" action="remove">} stanzas after a
+     * user unlinks a companion device. Out-of-order notifications (timestamp before the
+     * cached one) and notifications without a cached record are silently dropped.
+     *
+     * @implNote
+     * This implementation retains a cached device when either the notification omits its
+     * id, or carries a different {@code keyIndex} for it (the device is treated as still
+     * present under a fresh key); the primary device is dropped from the cache filter
+     * and unconditionally re-appended last so the resulting list always has it. Removed
+     * devices have their Signal sessions cleaned up via
+     * {@link WhatsAppStore#cleanupSignalSessions(Jid)}.
+     *
+     * @param userJid          the user whose device list is being mutated
+     * @param deviceListNode   the {@code device-list} child node listing the removed
+     *                         devices, possibly {@code null} for a no-op remove
+     * @param keyIndexListNode the {@code key-index-list} child node (unused by this
+     *                         branch, retained for parity with the add path)
      * @param timestamp        the notification timestamp in Unix seconds
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
@@ -2094,10 +2612,22 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Builds a {@code (deviceId, keyIndex)} map from the device children of the given node.
+     * Returns the {@code (deviceId, keyIndex)} projection of the {@code <device>}
+     * children of {@code keyIndexListNode}.
+     *
+     * @apiNote
+     * Used by both {@link #handleDeviceAddNotification(Jid, Node, Node, long)} and
+     * {@link #handleDeviceRemoveNotification(Jid, Node, Node, long)} to translate the
+     * stanza shape into the lookup table the merge logic expects.
+     *
+     * @implNote
+     * This implementation collects through {@link Collectors#toUnmodifiableMap} so
+     * downstream code cannot mutate the table; entries with a missing JID or an
+     * unparseable {@code key-index} attribute are silently dropped by
+     * {@link #parseDevice(Node)}.
      *
      * @param keyIndexListNode the node whose {@code device} children are parsed
-     * @return map of device id to key index
+     * @return the unmodifiable {@code id -> keyIndex} map
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceAddNotification",
@@ -2109,12 +2639,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Parses a {@code device} child node into a {@code (deviceId, keyIndex)} entry.
-     * Returns an empty stream when the JID is missing or {@code key-index} cannot be
-     * parsed so callers may {@code flatMap} without nullable handling.
+     * Parses a single {@code <device jid="..." key-index="...">} child into a
+     * {@code (deviceId, keyIndex)} {@link Map.Entry}.
      *
-     * @param deviceNode the {@code device} child node
-     * @return a single-element stream with the parsed entry, or empty when invalid
+     * @apiNote
+     * Helper for {@link #buildKeyIndexMap(Node)}; returns a stream so callers may
+     * {@code flatMap} without nullable handling for malformed children.
+     *
+     * @implNote
+     * This implementation extracts the {@link Jid#device()} portion via
+     * {@link Node#getAttributeAsJid(String)} and validates {@code key-index} via the
+     * {@link Node#getAttributeAsInt(String, int)} sentinel form; the WA Web counterpart
+     * relies on the JS parser producing {@code undefined} for missing attributes and is
+     * structurally equivalent.
+     *
+     * @param deviceNode the {@code <device>} child node
+     * @return a single-element stream with the parsed entry, or an empty stream when
+     *         the {@code jid} or {@code key-index} attribute is missing or unparseable
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationApi",
             exports = "handleDeviceAddNotification",
@@ -2134,19 +2675,33 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Validates and decodes the signed key-index list carried by the given node.
+     * Returns the decoded and signature-verified {@link ValidatedKeyIndexListResult}
+     * carried by an ADV device notification.
      *
-     * <p>Mirrors WA Web's {@code handleKeyIndexResultSync} branching: when hosted-business
-     * gating is on and the device-list advertises at least one hosted device the embedded
-     * {@code accountSignatureKey} is used; otherwise the verification key is the user's
-     * locally-stored primary identity.
+     * @apiNote
+     * Mirrors the {@code WAWebHandleAdvDeviceNotificationUtils.decodeSignedKeyIndexBytes}
+     * call and its sibling {@code verifySKeyIndexWithAccSigKey} branch in WA Web's
+     * notification path; called by {@link #handleDeviceAddNotification(Jid, Node, Node, long)}
+     * before the merge decides whether to trust the notification's device list.
      *
-     * @param userJid          the user JID whose primary identity is used for the
-     *                         standard verification path
-     * @param deviceListNode   the {@code device-list} node from the notification, used
-     *                         to detect hosted devices
-     * @param keyIndexListNode the {@code key-index-list} node from the notification
-     * @return the validated key-index list data, or {@code null} if validation fails
+     * @implNote
+     * This implementation picks the verification key per WA Web's notification rule: when
+     * {@link #isBizHostedDevicesEnabled()} is on AND the {@code device-list} carries any
+     * child with {@code is_hosted="true"}, the verification uses the embedded
+     * {@code accountSignatureKey} (the hosted-path
+     * {@link DeviceADVValidator#verifySKeyIndexWithAccSigKey(byte[])}); otherwise the
+     * verification key is the user's locally-stored primary identity. Returns
+     * {@code null} (matching WA Web's null-on-failure contract) when the content bytes
+     * are missing or the signature check fails; the caller logs and drops the
+     * notification.
+     *
+     * @param userJid          the user whose stored primary identity is the verification
+     *                         key in the non-hosted branch
+     * @param deviceListNode   the {@code device-list} child node, inspected for the
+     *                         hosted-device sentinel
+     * @param keyIndexListNode the {@code key-index-list} child whose content bytes carry
+     *                         the signed protobuf
+     * @return the validated key-index data, or {@code null} when validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleAdvDeviceNotificationUtils",
             exports = "decodeSignedKeyIndexBytes",
@@ -2177,12 +2732,27 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Schedules a USync to fetch the complete device list when a device-add notification
-     * arrives without a cached record. While restart is incomplete the request is queued
-     * via {@code addUserToPendingDeviceSync}; otherwise it runs immediately.
+     * Triggers a follow-up USync to materialise the full device list when an add
+     * notification arrives without a cached record.
      *
-     * @param deviceListNode the {@code device-list} node from the notification, or {@code null}
-     * @param userJid        the user JID
+     * @apiNote
+     * Mirrors {@code WAWebBizCoexUtils.triggerUsyncForCoexDeviceAdd}; the entry point is
+     * the no-cached-record branch of
+     * {@link #handleDeviceAddNotification(Jid, Node, Node, long)}. The
+     * {@code coex_device_notification} context tag flows through to the IQ so server-side
+     * logging can correlate the sync with the notification that prompted it.
+     *
+     * @implNote
+     * This implementation routes the USync immediately when the resume-from-restart
+     * sequence is finished
+     * ({@link WhatsAppStore#isResumeFromRestartComplete()}); during resume, the request
+     * is buffered as a {@link PendingDeviceSync} so it replays alongside the rest of the
+     * suspended sync queue once the socket reaches steady state, matching WA Web's
+     * {@code OfflinePendingDeviceCache.addOfflinePendingDevice} path.
+     *
+     * @param deviceListNode the {@code device-list} child node, possibly {@code null};
+     *                       a hosted-device sentinel inside it only changes the log line
+     * @param userJid        the user whose device list needs syncing
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "triggerUsyncForCoexDeviceAdd",
@@ -2206,11 +2776,16 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns whether the given device-list node carries the hosted-device sentinel
-     * ({@link DeviceConstants#HOSTED_DEVICE_ID}, id 99).
+     * Returns whether {@code deviceListNode} contains a child {@code <device>} with the
+     * hosted sentinel id {@link DeviceConstants#HOSTED_DEVICE_ID}.
      *
-     * @param deviceListNode the device-list node
-     * @return {@code true} if any child device carries that id
+     * @apiNote
+     * Diagnostic helper for {@link #triggerUsyncForCoexDeviceAdd(Node, Jid)}; used only
+     * to enrich the queued-during-resume log line so operators can tell hosted-device
+     * notifications apart in the logs without grepping the raw stanza.
+     *
+     * @param deviceListNode the {@code device-list} node
+     * @return {@code true} when any child device carries the hosted id
      */
     @WhatsAppWebExport(moduleName = "WAWebBizCoexUtils",
             exports = "triggerUsyncForCoexDeviceAdd",
@@ -2221,7 +2796,20 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Synchronises the device lists for the current user's PN and LID identities.
+     * Re-syncs the device list for both of the current user's identities (PN and LID).
+     *
+     * @apiNote
+     * Mirrors {@code WAWebAdvSyncDeviceListApi.syncMyDeviceList}; called after pair-success
+     * and from the resume-from-restart path so that the local view of self-companion
+     * devices is current before the message-processing loop starts attributing inbound
+     * stanzas to specific devices.
+     *
+     * @implNote
+     * This implementation collects both me-JIDs via {@link WhatsAppStore#jid()} and
+     * {@link WhatsAppStore#lid()} so a session that has only one of them (initial pair,
+     * or LID-less legacy session) still fires a sync for whichever it has; if neither is
+     * present, the call is a no-op rather than throwing, matching the WA Web
+     * {@code getMePNandLIDWids} contract that returns an empty array in that state.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = "syncMyDeviceList",
@@ -2240,11 +2828,18 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Synchronises the device lists for the given JIDs and returns the cached device
-     * records. {@code null} entries indicate no record was cached.
+     * Returns the cached {@link DeviceList} for each input JID after first issuing a
+     * USync sweep over the same set.
      *
-     * @param userJids the user JIDs to sync and retrieve device lists for
-     * @return one device list per input JID, in input order; {@code null} for missing slots
+     * @apiNote
+     * Mirrors {@code WAWebAdvSyncDeviceListApi.syncAndGetDeviceList}; intended for paths
+     * that need both a fresh sync and the resulting cache rows in one round trip (for
+     * example, callers driving an immediate fanout after a contact add). Slots without a
+     * record surface as {@code null} in the returned list.
+     *
+     * @param userJids the user JIDs to sync and retrieve
+     * @return one record per input JID, in input order; {@code null} for missing or
+     *         tombstoned slots
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = "syncAndGetDeviceList",
@@ -2255,11 +2850,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the cached device record for a user, firing a {@code checkPnToLidMapping}
-     * diagnostic for the requested JID.
+     * Returns the cached {@link DeviceList} for {@code userJid}, recording the lookup
+     * via {@link #checkPnToLidMapping(Collection, String)}.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.getDeviceRecord}; the read path used by every
+     * consumer that wants the cached entry but does not need to trigger a sync. The
+     * {@code waweb_api_device_list_get_device_record} mapping-check tag is preserved so
+     * the LID-PN drift telemetry matches WA Web's bucket name.
+     *
+     * @implNote
+     * This implementation fires the mapping check unconditionally (matching WA Web's
+     * shape, where the LRU always returns a settled promise) even when no record is
+     * cached, so the absence of a record still flows into the LID-PN drift counter.
      *
      * @param userJid the user JID; only the user portion is significant
      * @return the cached record, or {@link Optional#empty()} when none is stored
+     * @throws NullPointerException if {@code userJid} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getDeviceRecord",
@@ -2267,19 +2874,28 @@ public final class DefaultDeviceService implements DeviceService {
     public Optional<DeviceList> getDeviceRecord(Jid userJid) {
         Objects.requireNonNull(userJid, "userJid cannot be null");
         var record = store.findDeviceList(userJid);
-        // WA Web fires this diagnostic unconditionally because the LRU is populated by an
-        // IDB put that always resolves to a non-null promise.
         checkPnToLidMapping(List.of(userJid), "waweb_api_device_list_get_device_record");
         return record;
     }
 
     /**
-     * Returns the cached device records for a collection of users in input order. Missing
-     * entries surface as {@code null}. Fires a single {@code checkPnToLidMapping}
-     * diagnostic over the JIDs that resolved to a non-null record.
+     * Returns one cached {@link DeviceList} per input JID, in input order.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.bulkGetDeviceRecord}; the batched companion to
+     * {@link #getDeviceRecord(Jid)}, used by sync-result handlers and the IDB-backed
+     * pre-key fetch path. Slots without a cached record are {@code null}, allowing the
+     * caller to align inputs and outputs positionally.
+     *
+     * @implNote
+     * This implementation fires a single
+     * {@link #checkPnToLidMapping(Collection, String)} call only over JIDs that did
+     * resolve to a non-null record, matching WA Web's filtered call that excludes
+     * un-resolved entries (the LID-PN drift counter does not count misses).
      *
      * @param userJids the user JIDs to look up
-     * @return one record per input JID, in input order; missing entries are {@code null}
+     * @return one record per input JID, in input order; {@code null} for missing slots
+     * @throws NullPointerException if {@code userJids} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "bulkGetDeviceRecord",
@@ -2308,11 +2924,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Persists a device record and refreshes its cache entry. Fires a
-     * {@code checkPnToLidMapping} diagnostic for the record's owner and emits a warning
-     * when the record is a tombstone for the current user's account.
+     * Persists a single {@link DeviceList} and refreshes its cache slot.
      *
-     * @param record the device list to persist; {@link DeviceList#userJid()} is the cache key
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.createOrReplaceDeviceRecord}; the write half of
+     * the cache, used after every sync, notification, and ICDC repair to commit the
+     * resolved {@link DeviceList}. The owning {@link DeviceList#userJid()} is also the
+     * primary key in the underlying store.
+     *
+     * @implNote
+     * This implementation fires
+     * {@link #checkPnToLidMapping(Collection, String)} over the single owner JID and
+     * routes through {@link #warnIfDeletingOwnDeviceList(DeviceList)} so that a
+     * tombstone targeting the local account produces the
+     * {@code "syncd: trying to delete own device list"} warning WA Web logs.
+     *
+     * @param record the record to persist
+     * @throws NullPointerException if {@code record} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "createOrReplaceDeviceRecord",
@@ -2328,11 +2956,22 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Persists a batch of device records and refreshes their cache entries. Fires a single
-     * {@code checkPnToLidMapping} diagnostic over every owner and a per-record warning
-     * when a record is a tombstone for the current user's account.
+     * Persists a batch of {@link DeviceList} records and refreshes their cache slots.
      *
-     * @param records the device lists to persist
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.bulkCreateOrReplaceDeviceRecord}; used by the
+     * sync-result fan-in path that produces many records per IQ. Sharing one
+     * {@link #checkPnToLidMapping(Collection, String)} call across the batch matches the
+     * WA Web telemetry shape (one bucket per IQ, not one per record).
+     *
+     * @implNote
+     * This implementation iterates the records sequentially, invoking
+     * {@link WhatsAppStore#addDeviceList(DeviceList)} and
+     * {@link #warnIfDeletingOwnDeviceList(DeviceList)} per record; WA Web wraps the same
+     * loop in an IDB bulk write, which Cobalt has no per-record cost to amortise.
+     *
+     * @param records the records to persist
+     * @throws NullPointerException if {@code records} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "bulkCreateOrReplaceDeviceRecord",
@@ -2352,13 +2991,32 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns one cached device record per input JID, in input order. Missing or deleted
-     * slots are {@code null}. When {@code shouldMergeAltDevices} is {@code true},
-     * alternate-identity records (PN for a LID input, LID for a PN input) are folded in.
+     * Returns the cached {@link DeviceList} for each input JID with deleted slots
+     * projected to {@code null}, optionally folding in the alternate-identity record
+     * for each.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.getDeviceIds}; the fanout-side read path used by
+     * {@code WAWebDBDeviceListFanout.getFanOutList}. When {@code shouldMergeAltDevices}
+     * is {@code true}, the alternate-identity record (PN for a LID input, LID for a PN
+     * input) is unioned into the primary's device set so the caller does not have to
+     * issue two lookups for users that exist on both addressing modes.
+     *
+     * @implNote
+     * This implementation resolves the alternate user JID via
+     * {@link #findAlternateUserWid(Jid)}, then for the merge branch deduplicates by
+     * device id (the primary's entry wins on conflict) and synthesises a record under
+     * the original JID when only the alternate is cached, matching WA Web's
+     * {@code byOwner.set(...)} fallback. Non-regular JIDs (no user, LID, bot, hosted,
+     * or hosted-LID server) bypass the alternate lookup entirely to match WA Web's
+     * {@code isUser()} short-circuit.
      *
      * @param userJids              the user JIDs to look up
-     * @param shouldMergeAltDevices whether alternate-identity records should be merged
-     * @return one record per input JID, in input order; missing or deleted entries are {@code null}
+     * @param shouldMergeAltDevices whether to fold alternate-identity records into the
+     *                              result
+     * @return one record per input JID, in input order; missing or tombstoned slots are
+     *         {@code null}
+     * @throws NullPointerException if {@code userJids} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getDeviceIds",
@@ -2460,7 +3118,6 @@ public final class DefaultDeviceService implements DeviceService {
             }
         }
 
-        // Tombstone deleted entries to null to match WA Web's projection shape.
         var result = new ArrayList<DeviceList>(records.size());
         for (var record : records) {
             if (record == null || record.deleted()) {
@@ -2473,11 +3130,20 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the cached device records for a collection of users in input order, with
-     * deleted entries tombstoned to {@code null}.
+     * Returns the cached {@link DeviceList} for each input JID with deleted slots
+     * projected to {@code null}.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.getDeviceInfoForSync}; the lightweight
+     * sync-side read used by {@code WAWebAdvSyncDeviceListApi} to pull the cached
+     * timestamps and {@code expectedTs} fields before deciding which users still need
+     * a USync, bypassing the alternate-identity merge that
+     * {@link #getDeviceIds(Collection, boolean)} performs.
      *
      * @param userJids the user JIDs to look up
-     * @return one record per input JID, in input order; missing or deleted entries are {@code null}
+     * @return one record per input JID, in input order; missing or tombstoned slots
+     *         are {@code null}
+     * @throws NullPointerException if {@code userJids} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getDeviceInfoForSync",
@@ -2497,10 +3163,22 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Logs a diagnostic when a tombstone record belongs to the logged-in user. Mirrors
-     * WA Web's file-private helper {@code f(t)}.
+     * Logs a {@code "syncd: trying to delete own device list"} warning when {@code record}
+     * is a tombstone whose owner matches one of the local user's identities.
      *
-     * @param record the device record about to be persisted
+     * @apiNote
+     * Called from {@link #createOrReplaceDeviceRecord(DeviceList)} and
+     * {@link #bulkCreateOrReplaceDeviceRecord(Collection)}; surfacing this warning
+     * matches the diagnostic WA Web's file-private helper {@code f(t)} emits when an
+     * accidental self-tombstone reaches the persistence layer.
+     *
+     * @implNote
+     * This implementation considers both the PN ({@link WhatsAppStore#jid()}) and LID
+     * ({@link WhatsAppStore#lid()}) projections of the local user; the warning is
+     * logged-only and never blocks the write because the deletion is sometimes the
+     * deliberate outcome of an account-type transition.
+     *
+     * @param record the record about to be persisted
      */
     private void warnIfDeletingOwnDeviceList(DeviceList record) {
         if (!record.deleted()) {
@@ -2518,8 +3196,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the alternate-identity user JID for the given JID. Resolves PN to LID and
-     * LID to PN via the store, with me-user fast paths.
+     * Returns the alternate-identity user JID for {@code userJid}, mapping LID to PN and
+     * vice versa.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebApiContact.getAlternateUserWid}; used by
+     * {@link #getDeviceIds(Collection, boolean)} during the alternate-identity merge.
+     * Returns {@code null} when no mapping exists rather than throwing, so the caller
+     * can skip merge attempts for users that exist on only one addressing mode.
+     *
+     * @implNote
+     * This implementation short-circuits via the local me-user pair when the input
+     * matches one of them (returning the other side without a store lookup); otherwise
+     * it consults {@link WhatsAppStore#findLidByPhone(Jid)} or
+     * {@link WhatsAppStore#findPhoneByLid(Jid)} as appropriate. Device-scoped JIDs are
+     * tolerated (no throw, unlike WA Web's {@code getAlternateUserWid} which rejects
+     * device wids), because Cobalt callers may pass them without first downcasting to
+     * user level.
      *
      * @param userJid the user JID whose alternate identity should be resolved
      * @return the alternate user JID, or {@code null} when no mapping exists
@@ -2548,12 +3241,23 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns whether the given user has the specified device id in their device list.
-     * The primary device (id 0) is always considered present.
+     * Returns whether {@code userJid}'s cached device list contains {@code deviceId}.
      *
-     * @param userJid  the user JID to check
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.hasDevice}; consulted by message paths that need
+     * to know whether a specific companion id is known before encrypting to it or
+     * surfacing it in UI. The primary device (id
+     * {@link DeviceConstants#PRIMARY_DEVICE_ID}) is unconditionally treated as present,
+     * matching WA Web's {@code DEFAULT_DEVICE_ID} fast path.
+     *
+     * @implNote
+     * This implementation returns {@code false} for tombstoned and missing records,
+     * matching the WA Web shape where {@code getDeviceIds([e])[0]} resolves to a
+     * {@code null}-projected entry.
+     *
+     * @param userJid  the user JID
      * @param deviceId the device id to look for
-     * @return {@code true} if the device exists
+     * @return {@code true} when the device is present
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "hasDevice",
@@ -2571,12 +3275,22 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns the device list for the current user, preferring the PN record and falling
-     * back to the LID record.
+     * Returns the cached {@link DeviceList} for the current user, preferring the PN
+     * record and falling back to the LID record.
      *
-     * @return the current user's device list
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.getMyDeviceList}; consulted by syncd-style
+     * code paths that need the local companion roster to attribute syncd writes to a
+     * specific local device. The PN-then-LID order matches WA Web's
+     * {@code getMeDevicePnOrThrow_DO_NOT_USE} preference.
      *
-     * @throws IllegalStateException if neither the PN nor the LID device list is available
+     * @implNote
+     * This implementation logs the {@code "[syncd] no device list pn=.../... lid=.../..."}
+     * diagnostic with the same shape WA Web emits before throwing, so the operator can
+     * tell from the log whether the PN or LID record was the missing piece.
+     *
+     * @return the current user's cached device list
+     * @throws IllegalStateException when neither the PN nor the LID record is cached
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getMyDeviceList",
@@ -2611,10 +3325,15 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Returns every cached device list and logs the size and elapsed time, mirroring
-     * WA Web's {@code "getAllDeviceLists: got %s devices, took %sms"} diagnostic.
+     * Returns every cached {@link DeviceList}.
      *
-     * @return an unmodifiable collection of all cached device lists
+     * @apiNote
+     * Mirrors {@code WAWebApiDeviceList.getAllDeviceLists}; the bulk read consumed by
+     * {@link DeviceADVChecker} when it scans for users whose key-index lists are about
+     * to expire. The {@code "getAllDeviceLists: got %s devices, took %sms"} diagnostic
+     * matches WA Web's log so operators can compare the two corpora at a glance.
+     *
+     * @return an unmodifiable snapshot of all cached device lists
      */
     @WhatsAppWebExport(moduleName = "WAWebApiDeviceList",
             exports = "getAllDeviceLists",
@@ -2630,15 +3349,30 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Processes ICDC (Identity Change Detection Consistency) metadata from an incoming
-     * message. Updates the {@code expectedTs} tracking on the sender's record and, when
-     * the sender is self, on the 1:1 recipient's record. Messages from the primary device
-     * carrying only a sender timestamp trigger a minimal sync via
-     * {@link #handleMinimalTimestampOnlySync}.
+     * Processes the Identity Change Detection Consistency (ICDC) metadata carried by an
+     * incoming message.
      *
-     * @param senderJid        the sender's JID, including device part
-     * @param recipientUserJid the recipient user JID for 1:1 chats, or {@code null} for groups
-     * @param metadata         the device-list metadata from the message's context info
+     * @apiNote
+     * Mirrors {@code WAWebIcdcHandlerApi.handleICDCData}; the message receiver invokes
+     * this so the cached device-list {@code expectedTs}, {@code expectedTsLastDeviceJobTs}
+     * and {@code expectedTsUpdateTs} fields on the sender (and on the 1:1 recipient when
+     * the sender is self) get bumped, which feeds the daily ADV expiration check.
+     * A primary-device message carrying only a sender timestamp (no key hash) takes the
+     * minimal sync path so the cache reflects the implicit
+     * {@code <device-list>=[{primary}]} that the JS path materialises.
+     *
+     * @implNote
+     * This implementation builds an explicit list of
+     * {@link IcdcTimestampEntry} rather than the inline JS array literal so the loop
+     * remains readable; the {@code +1s} adjustment on the minimal-sync branch matches
+     * WA Web's {@code numberOrThrowIfTooLarge(r.senderTimestamp)+1} exactly.
+     *
+     * @param senderJid        the sender device JID
+     * @param recipientUserJid the recipient user JID for 1:1 chats, {@code null} for
+     *                         group sends
+     * @param metadata         the {@code DeviceListMetadata} extracted from the
+     *                         message's context info; the call is a no-op when this is
+     *                         {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebIcdcHandlerApi",
             exports = "handleICDCData",
@@ -2648,8 +3382,6 @@ public final class DefaultDeviceService implements DeviceService {
             return;
         }
 
-        // Primary device with sender timestamp but no sender-key hash: take the minimal
-        // sync path with {@code timestamp+1}.
         if ((senderJid.device() == DeviceConstants.PRIMARY_DEVICE_ID)
                 && metadata.senderTimestamp().isPresent()
                 && metadata.senderKeyHash().isEmpty()) {
@@ -2723,12 +3455,26 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Handles the minimal timestamp-only sync triggered when a primary-device message
-     * carries only a sender timestamp (no key hash). Resets the cached record to the
-     * primary device and bumps the timestamp.
+     * Applies the implicit primary-only device-list that a primary-device message with
+     * only a sender timestamp carries.
      *
-     * @param userJid           the user JID to update
-     * @param adjustedTimestamp the sender timestamp plus one second
+     * @apiNote
+     * Invoked by {@link #handleICDCData(Jid, Jid, DeviceListMetadata)} on the
+     * {@code device==0 AND senderKeyHash==null} branch; materialises the
+     * {@code [{primary}]} device list inline so the cache reflects the same shape that
+     * WA Web's {@code handleADVSyncResult([{id: DEFAULT_DEVICE_ID, keyIndex: 0}], ...)}
+     * call writes.
+     *
+     * @implNote
+     * This implementation drops the call when no record is cached, when the record is a
+     * tombstone, or when {@code adjustedTimestamp} is older than the cached one. The
+     * expected-timestamp fields are cleared per
+     * {@link DeviceExpectedTsUtils#shouldClearExpectedTimestamp(Instant, Instant, DeviceList, Instant)}
+     * so the daily ADV check does not re-trigger immediately on the rewritten record.
+     *
+     * @param userJid           the user JID
+     * @param adjustedTimestamp the sender timestamp plus one second, matching WA Web's
+     *                          off-by-one bump
      */
     private void handleMinimalTimestampOnlySync(Jid userJid, Instant adjustedTimestamp) {
         var cachedList = store.findDeviceList(userJid).orElse(null);
@@ -2773,25 +3519,48 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Internal {@code (jid, timestamp)} pair used by {@link #handleICDCData} to walk
-     * sender and recipient entries uniformly.
+     * Carries one ICDC {@code (jid, timestamp)} pair through
+     * {@link #handleICDCData(Jid, Jid, DeviceListMetadata)}.
      *
-     * @param jid       the user JID
-     * @param timestamp the per-side timestamp from the message metadata
+     * @apiNote
+     * Local helper that lets the ICDC handler iterate the sender and (optional 1:1)
+     * recipient entries with the same body; never escapes the file.
+     *
+     * @param jid       the user JID for this entry
+     * @param timestamp the matching per-side timestamp from the message metadata, or
+     *                  {@code null} when absent
      */
     private record IcdcTimestampEntry(Jid jid, Instant timestamp) {
     }
 
     /**
-     * Handles hosted ICDC metadata inline during message processing. When the relevant
-     * account type is {@code HOSTED} and the cached record is not yet hosted, clears the
-     * record and triggers a device sync. The {@code E2EE} case is treated as a hint to
-     * release any prior dedup state for that sender.
+     * Processes hosted-business ICDC metadata inline during message receipt.
      *
-     * @param chatJid   the chat JID (must be a 1:1 user chat)
-     * @param authorJid the message author JID
-     * @param metadata  the device-list metadata from the message's context info
-     * @return the resulting hosted-ICDC outcome
+     * @apiNote
+     * Mirrors {@code WAWebIcdcHandlerApi.handleHostedIcdcMetadataInline}; called by the
+     * 1:1 message receiver before decryption so a freshly-observed {@code HOSTED}
+     * account type triggers a device-list clear and the appropriate
+     * {@code hostedBizEncMismatch} signal that surfaces in the
+     * {@link HostedIcdcResult}. The {@code E2EE} branch removes the sender from the
+     * one-shot dedup cache so a later hosted transition is not silently ignored.
+     *
+     * @implNote
+     * This implementation short-circuits with {@link HostedIcdcResult#DEFAULT} when
+     * {@link #isBizHostedDevicesEnabled()} is off, when the chat is the local user, or
+     * when the chat JID is not a user JID, mirroring WA Web's
+     * {@code isMeAccount || !isUser()} guard. The relevant account type is taken from
+     * the receiver side when the message author is self, otherwise from the sender
+     * side, matching the {@code d ? receiverAccountType : senderAccountType} branch in
+     * WA Web. Resume-incomplete sessions buffer the follow-up sync via
+     * {@link PendingDeviceSync}; otherwise the sync runs on a fresh virtual thread so
+     * the message receiver thread does not block waiting for the IQ.
+     *
+     * @param chatJid   the chat JID; must be a user JID for the call to be non-default
+     * @param authorJid the message author JID; equality with the local user selects the
+     *                  receiver-side account type
+     * @param metadata  the {@code DeviceListMetadata}; {@code null} produces a default
+     *                  result
+     * @return the hosted-ICDC outcome flags consumed by the message receiver
      */
     @WhatsAppWebExport(moduleName = "WAWebIcdcHandlerApi",
             exports = "handleHostedIcdcMetadataInline",
@@ -2813,8 +3582,6 @@ public final class DefaultDeviceService implements DeviceService {
             return HostedIcdcResult.DEFAULT;
         }
 
-        // Pick the account type belonging to the remote side: if the author is self,
-        // the relevant side is the chat peer (receiver), otherwise it is the sender.
         var isAuthorMe = store.jid().map(myJid -> myJid.toUserJid().equals(authorJid.toUserJid())).orElse(false);
         var accountType = isAuthorMe
                 ? metadata.receiverAccountType().orElse(null)
@@ -2858,8 +3625,6 @@ public final class DefaultDeviceService implements DeviceService {
                     cleanupAllSessionsForUser(relevantJid, existingRecord);
                 }
 
-                // Mark as deleted with deletedChangedToHost=true so the next sync routes
-                // through the hosted-transition path.
                 store.addDeviceList(createDeletedDeviceList(relevantJid, true));
 
                 if (store.isResumeFromRestartComplete()) {
@@ -2879,8 +3644,6 @@ public final class DefaultDeviceService implements DeviceService {
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "handleHostedIcdcMetadataInline: update ADV type for {0}", relevantJid);
 
-                // {@code hostedBizEncMismatch} is set when the prior record was E2EE or has
-                // never observed the hosted transition.
                 var mismatch = (existingRecord != null && existingRecord.advAccountType() == ADVEncryptionType.E2EE)
                         || (existingRecord == null || !existingRecord.deletedChangedToHost());
                 return new HostedIcdcResult(mismatch, true);
@@ -2893,20 +3656,47 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Handles an ADV device update carried by an incoming PKMSG. Decides between a full
-     * list reset (missing record, deleted record, {@code rawId} changed, or new primary
-     * identity) and an incremental {@code keyIndex} update for the companion device.
+     * Applies an ADV companion-device update carried inline by an incoming
+     * {@code pkmsg} signed device identity.
      *
-     * @param deviceJid   the full device JID; must not be the primary device
+     * @apiNote
+     * Mirrors {@code WAWebAdvHandlerApi.handleADVDeviceUpdateForMessage}; the message
+     * receiver calls this when a {@code pkmsg} from a companion arrives with a fresh
+     * signed device identity attached, so the cached {@link DeviceList} reflects the
+     * new {@code keyIndex} without waiting for the next USync. The primary device is
+     * not a valid input because primary-device updates come through pair-success and
+     * the daily ADV check, not through {@code pkmsg}.
+     *
+     * @implNote
+     * This implementation chooses between a full list reset and an incremental key-index
+     * bump: a reset is forced when no record is cached, when the cached record is a
+     * tombstone, when the {@code rawId} changed, or when the local identity bytes
+     * differ from the message-side primary identity. The reset path materialises a
+     * primary-plus-this-companion list backdated by
+     * {@code (NUM_DAYS_KEY_INDEX_LIST_EXPIRATION - 1) * 1d} so the next ADV check
+     * revalidates the user immediately, then re-persists the existing identity for the
+     * primary so the saved primary identity does not drift to the message-side primary
+     * identity (WA Web preserves this invariant via the same {@code putIdentity} dance).
+     * The incremental path rejects out-of-order timestamps that carry an unknown
+     * {@code keyIndex} (the same check that
+     * {@link #handleNoListReset(Jid, DeviceList, DeviceList)} runs for full syncs);
+     * identity changes that surface in the cached-vs-new diff are recorded via
+     * {@link WhatsAppStore#markIdentityChange(Jid)} and their Signal sessions cleaned
+     * up, matching the {@code mismatch.identityChangedDevices} branch.
+     *
+     * @param deviceJid   the companion's full device JID
      * @param rawId       the {@code rawId} from the signed device identity
-     * @param timestamp   the timestamp from the signed device identity in Unix seconds
-     * @param keyIndex    the key index from the signed device identity
-     * @param identityKey the message-side primary identity key, or {@code null}
-     * @param accountType the ADV account type, or {@code null}
-     *
-     * @throws IllegalArgumentException if {@code deviceJid} is the primary device
-     * @throws IllegalStateException    if an incremental update detects an out-of-order
-     *                                  timestamp combined with an unknown {@code keyIndex}
+     * @param timestamp   the timestamp from the signed device identity, in Unix
+     *                    seconds
+     * @param keyIndex    the {@code keyIndex} from the signed device identity
+     * @param identityKey the message-side primary identity bytes, or {@code null} when
+     *                    the message omitted them
+     * @param accountType the ADV account type, or {@code null} when unknown
+     * @throws IllegalArgumentException when {@code deviceJid} is the primary device
+     * @throws IllegalStateException    when the incremental path detects an out-of-order
+     *                                  timestamp combined with an unknown
+     *                                  {@code keyIndex}
+     * @throws NullPointerException     when {@code rawId} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvHandlerApi",
             exports = "handleADVDeviceUpdateForMessage",
@@ -2933,8 +3723,6 @@ public final class DefaultDeviceService implements DeviceService {
                 .map(SignalIdentityPublicKey::toEncodedPoint)
                 .orElse(null);
 
-        // New primary identity when no stored identity exists, or when the stored bytes
-        // differ from the message-side primary identity.
         var isNewPrimaryIdentity = storedIdentityKey == null
                 || (identityKey != null && !Arrays.equals(storedIdentityKey, identityKey));
 
@@ -3062,12 +3850,27 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Extracts and validates a local device identity from a pair-success response.
-     * Validates the {@code SignedDeviceIdentityHMAC} using the {@code advSecretKey},
-     * verifies the account signature, and generates the device signature using the
-     * local identity key.
+     * Returns the validated {@link ADVSignedDeviceIdentity} extracted from the
+     * {@code <device-identity>} node of a pair-success stanza.
      *
-     * @param deviceIdentityNode the {@code device-identity} node from the pair-success stanza
+     * @apiNote
+     * Drives the pair-success handling sequence that
+     * {@code WAWebHandlePairSuccess.handlePairSuccess} performs in WA Web: validates
+     * the {@code ADVSignedDeviceIdentityHMAC} against the {@code advSecretKey},
+     * verifies the embedded account signature against the local identity key, and
+     * generates the device signature so the constructed identity is ready to be sent
+     * back in the pair-device-sign response.
+     *
+     * @implNote
+     * This implementation surfaces validation failures as
+     * {@link Optional#empty()} after notifying the {@link WhatsAppClient} via
+     * {@link WhatsAppClient#handleFailure(Throwable)}, matching WA Web's path that
+     * logs a pair error and triggers
+     * {@code WAWebCompanionRegUtils.logoutAfterValidationFail} without rethrowing to
+     * the caller.
+     *
+     * @param deviceIdentityNode the {@code device-identity} node from the pair-success
+     *                           stanza
      * @return the validated identity, or {@link Optional#empty()} when validation fails
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePairSuccess",
@@ -3084,13 +3887,26 @@ public final class DefaultDeviceService implements DeviceService {
     }
 
     /**
-     * Persists the {@code accountSignatureKey} extracted from a validated pair-success
-     * identity as the local user's Signal identity (against device 0). Failures are
-     * logged but never thrown: WA Web tolerates the signal store write failing because
-     * the key is rederived on the next sync.
+     * Persists the {@code accountSignatureKey} from a validated pair-success identity
+     * as the local user's primary Signal identity.
      *
-     * @param deviceJid           the local device JID assigned by the server
-     * @param accountSignatureKey the {@code accountSignatureKey} bytes, possibly {@code null}
+     * @apiNote
+     * Mirrors WA Web's {@code putIdentity(createSignalAddress(asUserWidOrThrow(...)).toString(), ...)}
+     * call inside {@code handlePairSuccess}; pinning the key against the user-level
+     * (device 0) Signal address is what lets the next outgoing message to a companion
+     * succeed without going through pre-key fetch.
+     *
+     * @implNote
+     * This implementation tolerates {@link RuntimeException} from the signal store write
+     * because WA Web also swallows the equivalent IndexedDB failure: the key is
+     * rederived on the next ICDC/USync cycle, so a transient failure does not need to
+     * roll back pair-success. The {@code null}/empty guard preserves the WA Web
+     * behaviour of skipping the call when the embedded {@code accountSignatureKey} is
+     * missing.
+     *
+     * @param deviceJid           the local device JID the server assigned during pair
+     * @param accountSignatureKey the {@code accountSignatureKey} bytes, possibly
+     *                            {@code null} or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePairSuccess",
             exports = "handlePairSuccess",

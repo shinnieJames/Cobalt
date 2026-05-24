@@ -10,24 +10,34 @@ import com.github.auties00.cobalt.util.RandomIdUtils;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="encrypt" type="set">} stanza variant
- * — wraps the {@code <rotate><skey/>*>} payload.
+ * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads a freshly generated signed
+ * pre-key to the relay, replacing the current one.
+ *
+ * @apiNote
+ * Used by the rolling rotation of the local long-lived signed pre-key. WA Web schedules this as a
+ * persisted job registered under {@code WAWebPersistedJobInitializers#rotateKey}, periodically
+ * driven by the rotation policy; on a {@code 409} response or an unknown error the same job falls
+ * back to {@link IqDigestKeyRequest} to revalidate the relay's view of the key bundle. The request
+ * body is a single {@code <rotate/>} child wrapping the canonical {@code <skey/>} subtree.
  */
 @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
 public final class IqRotateKeyRequest implements IqOperation.Request {
     /**
-     * The freshly-generated signed pre-key being uploaded. Rendered
-     * verbatim into the {@code <skey/>} grandchild.
+     * The freshly generated signed pre-key being uploaded, rendered verbatim into the
+     * {@code <skey/>} grandchild.
      */
     private final IqUploadPreKeysSignedPreKey signedPreKey;
 
     /**
-     * Constructs a new rotate-key request.
+     * Constructs a rotate-key request for the supplied signed pre-key.
      *
-     * @param signedPreKey the freshly-generated signed pre-key; never
-     *                     {@code null}
-     * @throws NullPointerException if {@code signedPreKey} is
-     *                              {@code null}
+     * @apiNote
+     * The caller is expected to have already persisted the new signed pre-key against the local
+     * Signal store before issuing this request; on success the upload is the final step of the
+     * rotation, on failure the local store still records the new key for retry.
+     *
+     * @param signedPreKey the freshly generated signed pre-key
+     * @throws NullPointerException if {@code signedPreKey} is {@code null}
      */
     public IqRotateKeyRequest(IqUploadPreKeysSignedPreKey signedPreKey) {
         this.signedPreKey = Objects.requireNonNull(signedPreKey, "signedPreKey cannot be null");
@@ -36,17 +46,19 @@ public final class IqRotateKeyRequest implements IqOperation.Request {
     /**
      * Returns the signed pre-key being uploaded.
      *
-     * @return the signed pre-key; never {@code null}
+     * @return the signed pre-key
      */
     public IqUploadPreKeysSignedPreKey signedPreKey() {
         return signedPreKey;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <rotate>} payload
+     * @implNote
+     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
+     * {@code xmlns="encrypt"} and {@code type="set"}, wrapping the
+     * {@link IqUploadPreKeysSignedPreKey#toNode()} render under a single {@code <rotate/>} parent.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",
@@ -66,6 +78,13 @@ public final class IqRotateKeyRequest implements IqOperation.Request {
                 .content(rotateNode);
     }
 
+    /**
+     * Compares this request to another instance for equality.
+     *
+     * @param obj the candidate instance
+     * @return {@code true} when {@code obj} is an {@code IqRotateKeyRequest} carrying an equal
+     *         signed pre-key
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -78,11 +97,21 @@ public final class IqRotateKeyRequest implements IqOperation.Request {
         return Objects.equals(this.signedPreKey, that.signedPreKey);
     }
 
+    /**
+     * Returns a hash code derived from the signed pre-key.
+     *
+     * @return the combined hash
+     */
     @Override
     public int hashCode() {
         return Objects.hash(signedPreKey);
     }
 
+    /**
+     * Returns the record-style rendering for this request.
+     *
+     * @return the rendered string
+     */
     @Override
     public String toString() {
         return "IqRotateKeyRequest[signedPreKey=" + signedPreKey + ']';

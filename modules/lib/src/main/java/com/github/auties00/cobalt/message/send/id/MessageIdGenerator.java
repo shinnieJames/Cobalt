@@ -15,12 +15,18 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * Generates unique message identifiers for the WhatsApp protocol.
+ * Generates the per-message stanza id used as the {@code id} attribute on
+ * every outbound WhatsApp {@code <message>}.
  *
- * <p>Every id starts with {@value #PREFIX}. The remainder depends on the
- * {@linkplain MessageIdVersion version}: {@link MessageIdVersion#V2 V2}
- * appends 18 hex chars derived from SHA-256, while {@link MessageIdVersion#V1
- * V1} appends 16 random hex chars.
+ * @apiNote
+ * Called once per outgoing message by the stanza-build pipeline (the Cobalt
+ * counterpart of WA Web's {@code WAWebMsgKey.newId}); the returned string is
+ * the wire identifier the server, the recipient, and every downstream
+ * acknowledgement uses to refer to the message. Embedders that hand Cobalt a
+ * pre-built {@link com.github.auties00.cobalt.model.message.MessageKey} have
+ * already picked an id and should not call this. Every id starts with
+ * {@value #PREFIX}; the suffix shape depends on the requested
+ * {@linkplain MessageIdVersion version}.
  *
  * @see MessageIdVersion
  */
@@ -28,30 +34,35 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebMsgKeyNewId")
 public final class MessageIdGenerator {
     /**
-     * Holds the four-character prefix shared by every WhatsApp Web message id.
+     * The four-character prefix shared by every WhatsApp Web message id.
+     *
+     * @apiNote
+     * Hard-coded on both client (matching WA Web's {@code "3EB0"+...} literal
+     * in {@code newId_DEPRECATED}) and server, so embedders inspecting an
+     * incoming id can rely on this prefix as a sanity check.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgKey", exports = {"newId", "newId_DEPRECATED"},
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String PREFIX = "3EB0";
 
     /**
-     * Holds the number of leading SHA-256 digest bytes used for the V2 hex
-     * suffix.
+     * The number of leading SHA-256 digest bytes used for the V2 hex suffix.
      */
     private static final int V2_DIGEST_SLICE = 9;
 
     /**
-     * Holds the number of random bytes mixed into the V2 pre-image.
+     * The number of random bytes mixed into the V2 pre-image.
      */
     private static final int V2_RANDOM_BYTES = 16;
 
     /**
-     * Holds the number of random bytes hex-encoded into the V1 suffix.
+     * The number of random bytes hex-encoded into the V1 suffix.
      */
     private static final int V1_RANDOM_BYTES = 8;
 
     /**
-     * Holds the uppercase hex formatter that matches WA Web's {@code WAHex.toHex}.
+     * The uppercase hex formatter that matches WA Web's
+     * {@code WAHex.toHex}.
      */
     private static final HexFormat HEX = HexFormat.of().withUpperCase();
 
@@ -65,15 +76,28 @@ public final class MessageIdGenerator {
     }
 
     /**
-     * Generates a message id using the given algorithm version.
+     * Generates a fresh message id using the supplied
+     * {@linkplain MessageIdVersion version}.
      *
-     * <p>When {@code version} is {@link MessageIdVersion#V2 V2} and SHA-256 is
-     * unavailable in the runtime, this method silently falls back to V1.
+     * @apiNote
+     * Used by the send pipeline to mint a stanza id for every outbound
+     * message; the {@code senderJid} is read into the V2 pre-image so two
+     * accounts sending at the same instant cannot collide deterministically.
+     * Typical usage:
+     * {@snippet :
+     *     var id = MessageIdGenerator.generate(MessageIdVersion.V2, store.jid().orElseThrow());
+     * }
+     * @implNote
+     * This implementation silently falls back to {@link MessageIdVersion#V1}
+     * when {@link MessageIdVersion#V2} is requested but the JCA does not
+     * surface {@code SHA-256}; that branch matches WA Web's
+     * try/catch-then-{@code newId_DEPRECATED} fallback in
+     * {@code WAWebMsgKey.newId}.
      *
-     * @param version   the algorithm version
-     * @param senderJid the logged-in user's own PN user JID; mixed into the V2
-     *                  pre-image
-     * @return the generated message id
+     * @param version   the algorithm version to use
+     * @param senderJid the logged-in user's own PN user {@link Jid}; only read
+     *                  for V2
+     * @return the generated stanza id
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgKey", exports = "newId",
@@ -94,8 +118,13 @@ public final class MessageIdGenerator {
     }
 
     /**
-     * Generates a V1 message id, made of {@code "3EB0"} followed by 16
-     * uppercase hex characters drawn from 8 random bytes.
+     * Generates a V1 message id.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code newId_DEPRECATED}: the prefix
+     * {@value #PREFIX} followed by {@value #V1_RANDOM_BYTES} random bytes
+     * formatted as 16 uppercase hex characters. Kept as the SHA-256-unavailable
+     * fallback path for {@link #generate}.
      *
      * @return the V1 message id
      */
@@ -107,11 +136,17 @@ public final class MessageIdGenerator {
     }
 
     /**
-     * Generates a V2 message id, made of {@code "3EB0"} followed by 18
-     * uppercase hex characters taken from the first 9 bytes of
-     * {@code SHA256(int64(time) || utf8(jid) || random(16))}.
+     * Generates a V2 message id.
      *
-     * @param senderJid the sender PN user JID mixed into the pre-image
+     * @apiNote
+     * Equivalent to WA Web's
+     * {@code WAWebMsgKeyNewId.getMsgKeyNewSHA256Id}: the prefix
+     * {@value #PREFIX} followed by the first {@value #V2_DIGEST_SLICE} bytes
+     * of {@code SHA256(int64(unixTime) || utf8(senderJid) || random(16))},
+     * formatted as 18 uppercase hex characters.
+     *
+     * @param senderJid the sender PN user {@link Jid} mixed into the
+     *                  pre-image
      * @return the V2 message id
      * @throws NoSuchAlgorithmException if SHA-256 is unavailable
      */
@@ -123,11 +158,16 @@ public final class MessageIdGenerator {
     /**
      * Builds the SHA-256 pre-image bytes for a V2 message id.
      *
-     * <p>The layout is {@code int64(unixTime) || utf8(jid) || random(16)}.
+     * @apiNote
+     * Matches WA Web's {@code genMsgKeyUint} byte layout
+     * {@code int64(unixTime) || utf8(senderJid) || random(16)}. No length
+     * prefix is written for the JID; the JID is followed directly by the
+     * random bytes, so the recipient cannot parse the pre-image, only verify
+     * the hash.
      *
-     * @param senderJid the sender PN user JID, written into the pre-image
-     *                  without a length prefix
-     * @return the pre-image bytes
+     * @param senderJid the sender PN user {@link Jid} written verbatim into
+     *                  the pre-image
+     * @return the pre-image bytes ready to feed into SHA-256
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgKeyNewId", exports = "genMsgKeyUint",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -152,8 +192,13 @@ public final class MessageIdGenerator {
     /**
      * Hashes the pre-image with SHA-256 and returns the prefixed V2 id.
      *
-     * @param payload the pre-image produced by {@link #genMsgKeyUint}
-     * @return {@code "3EB0"} concatenated with 18 uppercase hex characters
+     * @apiNote
+     * Mirrors WA Web's {@code getMsgKeyNewSHA256Id}: the digest is sliced to
+     * {@value #V2_DIGEST_SLICE} bytes (18 hex characters) so the full id
+     * including the {@value #PREFIX} prefix fits in 22 characters.
+     *
+     * @param payload the pre-image bytes produced by {@link #genMsgKeyUint}
+     * @return {@value #PREFIX} concatenated with 18 uppercase hex characters
      * @throws NoSuchAlgorithmException if SHA-256 is unavailable
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgKeyNewId", exports = "getMsgKeyNewSHA256Id",

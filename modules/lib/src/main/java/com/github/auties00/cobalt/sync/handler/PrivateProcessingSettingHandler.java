@@ -6,41 +6,48 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles {@link PrivateProcessingSettingAction} sync mutations
- * ({@code "private_processing_setting"}).
+ * Applies the {@code private_processing_setting} app-state action that
+ * distributes the user's private-processing preference across linked
+ * devices.
  *
- * <p>Each mutation carries a single
+ * @apiNote
+ * Persists a single
  * {@link PrivateProcessingSettingAction.PrivateProcessingStatus} value
- * (one of {@code UNDEFINED}, {@code ENABLED}, {@code DISABLED}) which is
- * persisted on the local {@code WhatsAppStore} via
- * {@code setPrivateProcessingStatus}. Only {@code SET} operations are accepted;
- * any other operation maps to
- * {@link MutationApplicationResult#unsupported()} and a missing or unparseable
- * value maps to {@link MutationApplicationResult#malformed()}.
+ * (one of {@code UNDEFINED}, {@code ENABLED}, {@code DISABLED}) on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+ * private-processing toggle stays consistent across paired devices.
+ * Only {@link SyncdOperation#SET} is accepted; any other operation is
+ * reported as {@link MutationApplicationResult#unsupported()} and a
+ * missing or unparseable enum as
+ * {@link MutationApplicationResult#malformed()}.
  *
- * <p><b>NO_WA_BASIS:</b> The {@code SyncActionValue.PrivateProcessingSettingAction}
- * protobuf is defined in {@code WAWebProtobufSyncAction.pb} as field index
- * {@code 74} with a single {@code privateProcessingStatus} enum, but the
- * current WA Web snapshot does <em>not</em> ship a corresponding sync handler
- * module (no {@code WAWebPrivateProcessingSettingSync}). The action is also
- * absent from {@code WAWebCollectionHandlerActions.ActionHandlers}, the
- * registry consumed by {@code WAWebSyncdGetActionHandler.setActionHandlers},
- * so WA Web would never dispatch any incoming mutation with this action.
- * The literal {@code "private_processing_setting"} only appears in the
- * protobuf spec module and nowhere else in the WA Web source.
- *
- * <p>The Cobalt handler is a forward-looking implementation: it follows the
- * Cobalt sync handler conventions used by every other registered handler
- * (singleton, {@code applyMutation} producing a typed
- * {@link MutationApplicationResult}, eager store update on
- * {@code SET}). Every behavioural step here is Cobalt-inferred until WA Web
- * ships the matching {@code WAWebPrivateProcessingSettingSync} module.
+ * @implNote
+ * This implementation has no WA Web counterpart: the
+ * {@code SyncActionValue.PrivateProcessingSettingAction} protobuf
+ * (action index 74) is declared in
+ * {@code WAWebProtobufSyncAction.pb} but no
+ * {@code WAWebPrivateProcessingSettingSync} module ships and the
+ * action is absent from
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
+ * silently drops any incoming mutation. The
+ * {@link SyncPatchType#REGULAR_HIGH} collection is inferred from
+ * sibling preference-style handlers; the version and apply path are
+ * inferred from the protobuf shape (single mandatory enum).
  */
 public final class PrivateProcessingSettingHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor that enforces the singleton pattern.
+     * Constructs the private processing setting sync handler.
+     *
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; the handler holds no
+     * AB-prop / store / WAM dependency.
      */
     public PrivateProcessingSettingHandler() {
 
@@ -48,7 +55,6 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
 
     /**
      * {@inheritDoc}
-     * @return the canonical {@code "private_processing_setting"} string
      */
     @Override
     public String actionName() {
@@ -58,17 +64,19 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
     /**
      * {@inheritDoc}
      *
-     * <p>Returns {@link SyncPatchType#REGULAR_HIGH} as an inferred default.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR_HIGH}
+     * as a forward-looking default; sibling preference-style handlers
+     * use the same collection and no WA Web handler module exists to
+     * consult.
      */
     @Override
     public SyncPatchType collectionName() {
-        return SyncPatchType.REGULAR_HIGH; // NO_WA_BASIS: no WA Web sync handler declares a collection for "private_processing_setting"; REGULAR_HIGH matches sibling preference-style handlers
+        return SyncPatchType.REGULAR_HIGH;
     }
 
     /**
      * {@inheritDoc}
-     * @return the integer version constant declared on the action class
      */
     @Override
     public int version() {
@@ -76,33 +84,16 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
     }
 
     /**
-     * Applies a private processing setting mutation and returns the detailed
-     * outcome.
+     * {@inheritDoc}
      *
-     * <p>The processing pipeline is:
-     * <ol>
-     *   <li>If the operation is not {@link SyncdOperation#SET}, return
-     *       {@link MutationApplicationResult#unsupported()}. Only {@code SET}
-     *       mutations are accepted; the action carries a single mandatory
-     *       {@code privateProcessingStatus} enum and there is no semantic for
-     *       {@code REMOVE}.</li>
-     *   <li>Resolve the mutation value to a
-     *       {@link PrivateProcessingSettingAction}; if the value is missing
-     *       or of the wrong type, or if {@code privateProcessingStatus} is
-     *       empty, return {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>Persist the resolved
-     *       {@link PrivateProcessingSettingAction.PrivateProcessingStatus}
-     *       on the store via {@code WhatsAppStore.setPrivateProcessingStatus}
-     *       and return {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>The store accessors {@code privateProcessingStatus()} and
-     * {@code setPrivateProcessingStatus(...)} already exist on
-     * {@code WhatsAppStore} / {@code AbstractWhatsAppStore}; this handler is
-     * the sole writer.
-     * @param client   the {@link WhatsAppClient} instance linked to the mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation accepts only {@link SyncdOperation#SET}: the
+     * action carries a single mandatory enum and there is no semantic
+     * for {@code REMOVE}. A missing or empty
+     * {@link PrivateProcessingSettingAction#privateProcessingStatus()}
+     * is rejected as {@link MutationApplicationResult#malformed()}; on
+     * success the resolved enum is written via
+     * {@code WhatsAppStore.setPrivateProcessingStatus}.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
@@ -111,7 +102,7 @@ public final class PrivateProcessingSettingHandler implements WebAppStateActionH
         }
 
         if (!(mutation.value().action().orElse(null) instanceof PrivateProcessingSettingAction action)
-                || action.privateProcessingStatus().isEmpty()) { // NO_WA_BASIS: privateProcessingStatus is the only field on the protobuf and is required for any meaningful update
+                || action.privateProcessingStatus().isEmpty()) {
             return MutationApplicationResult.malformed();
         }
 

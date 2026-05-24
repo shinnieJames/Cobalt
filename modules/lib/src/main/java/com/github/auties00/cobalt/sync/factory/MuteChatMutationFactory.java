@@ -9,7 +9,7 @@ import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -20,24 +20,43 @@ import java.util.List;
 /**
  * Builds outgoing mute-chat sync mutations.
  *
- * <p>Mirrors the {@code generateMuteMutation} export of WhatsApp Web's
- * {@code WAWebMuteChatSync} module. The factory is the outgoing-mutation
- * counterpart of {@link com.github.auties00.cobalt.sync.handler.MuteChatHandler}
- * — the handler keeps the inbound {@code applyMutation} pipeline while this
- * class produces the {@link SyncPendingMutation} values dispatched by
- * {@link com.github.auties00.cobalt.client.WhatsAppClient}.
+ * @apiNote
+ * Drives the chat-mute picker in the chat-info surface; supports muting
+ * for a fixed duration, indefinitely ({@code muteEndSeconds == -1}), or
+ * unmuting ({@code muteEndSeconds == 0}). Group chats additionally
+ * support a separate mention-everyone mute window gated by the
+ * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} AB prop. Mutations
+ * produced here are consumed on receiving devices by
+ * {@link com.github.auties00.cobalt.sync.handler.MuteChatHandler}.
+ *
+ * @implNote
+ * This implementation mirrors {@code WAWebMuteChatSync.generateMuteMutation}
+ * including its three-way sentinel for {@code muteEndTimestamp}:
+ * {@code -1} stored verbatim (muted indefinitely), {@code 0} stored
+ * verbatim (unmuted), every other value multiplied by 1000 to convert
+ * seconds to milliseconds.
  */
 public final class MuteChatMutationFactory {
     /**
      * The AB-props service consulted for the
-     * {@code enable_mention_everyone_syncd_sender} gate when building the
-     * outgoing mute mutation.
+     * {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} gate when
+     * building the outgoing mute mutation.
+     *
+     * @apiNote
+     * The mention-everyone mute window is only populated when the
+     * remote-config gate is enabled; otherwise the field is omitted from
+     * the {@code MuteAction} regardless of what the caller passes.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs a mute-chat mutation factory bound to the given AB-props
      * service.
+     *
+     * @apiNote
+     * Required by the dependency-injection container; the AB-props
+     * service is consulted on every generated mute mutation for the
+     * mention-everyone gate.
      *
      * @param abPropsService the AB-props service consulted on every
      *                       generated mute mutation
@@ -49,67 +68,44 @@ public final class MuteChatMutationFactory {
     /**
      * Builds a pending mutation for muting or unmuting a chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebMuteChatSync.generateMuteMutation}:
-     * <pre>{@code
-     * generateMuteMutation(chatWid, muteEndSeconds, mentionAllSeconds) {
-     *   var muted = muteEndSeconds !== undefined && muteEndSeconds !== 0;
-     *   var now   = unixTimeMs();
-     *   var endMs = muteEndSeconds;
-     *   if (endMs !== -1) endMs *= 1000; // keep -1 as sentinel, otherwise seconds -> millis
-     *   var mute  = {muted, muteEndTimestamp: endMs};
-     *   if (isGroup(chatWid) && mentionAllSeconds != null
-     *       && getABPropConfigValue("enable_mention_everyone_syncd_sender")) {
-     *     mute.muteEveryoneMentionEndTimestamp = mentionAllSeconds > 0
-     *         ? mentionAllSeconds * 1000
-     *         : mentionAllSeconds;
-     *   }
-     *   return buildPendingMutation({
-     *     collection: this.collectionName,
-     *     indexArgs:  [await getChatJidMutationIndexForChat(chatWid, Actions.Mute)],
-     *     operation:  SyncdOperation.SET,
-     *     version:    this.getVersion(),
-     *     value:      {muteAction: mute},
-     *     timestamp:  now,
-     *     action:     this.getAction()
-     *   });
-     * }
-     * }</pre>
+     * @apiNote
+     * Invoked from the public mute setter on
+     * {@link WhatsAppClient}.
+     * Receiving devices merge the resulting {@code muteExpiration} (in
+     * seconds) into the chat table and fire a
+     * {@code muteCollectionAdd} backend event. For group chats with an
+     * active {@link ABProp#ENABLE_MENTION_EVERYONE_SYNCD_SENDER} gate,
+     * the mention-everyone window propagates as a separate
+     * {@code mentionAllMuteExpiration} field.
      *
-     * <p>In WA Web {@code muteEndSeconds === -1} is a reserved sentinel meaning
-     * "muted indefinitely" and is stored verbatim in the protobuf {@code int64}
-     * field (NOT multiplied by 1000). Cobalt mirrors this: when
-     * {@code muteEndSeconds == -1} the resulting {@link Instant} is
-     * {@code Instant.ofEpochMilli(-1)} so that the on-wire int64 value is
-     * {@code -1}. For all other non-zero values the seconds are converted to
-     * milliseconds via {@link Instant#ofEpochMilli(long)}. When
-     * {@code muteEndSeconds == 0} the chat is being unmuted and the timestamp
-     * is serialised as {@code Instant.ofEpochMilli(0)} which matches WA Web's
-     * {@code l = 0 * 1000 = 0} branch.
+     * @implNote
+     * This implementation preserves the WA Web sentinel for indefinite
+     * mutes: {@code muteEndSeconds == -1} is stored verbatim in the
+     * protobuf {@code int64} field, all other non-zero values are scaled
+     * from seconds to milliseconds via {@link Instant#ofEpochMilli(long)},
+     * and {@code muteEndSeconds == 0} maps to {@code Instant.ofEpochMilli(0)}
+     * to match WA Web's {@code 0 * 1000 = 0} branch on the unmute path.
+     * The {@code mentionAllSeconds} value follows the same sentinel
+     * convention: non-positive values pass through unchanged, positive
+     * values are multiplied by 1000. The supplied {@code chatJid} is
+     * used verbatim in the index; WA Web's
+     * {@code getChatJidMutationIndexForChat} would swap a PN for its
+     * paired LID under LID1x1 migration, which Cobalt does not yet
+     * track at this layer.
      *
-     * <p>The {@code mentionAllSeconds} parameter follows the same sentinel
-     * convention for non-positive values (passed through without scaling);
-     * positive values are multiplied by 1000. The conversion is only applied
-     * for groups and only when the
-     * {@code enable_mention_everyone_syncd_sender} AB prop is enabled.
-     *
-     * <p>Per the comment in {@code WAWebLockChatSync.getChatLockMutation},
-     * Cobalt does not yet track the outgoing-mutation LID/PN swap at this
-     * layer (WA Web's {@code getChatJidMutationIndexForChat} would swap a PN
-     * for its paired LID when LID1x1 migration is active). Callers that need
-     * LID-aware indexing should resolve the index JID before invoking this
-     * method.
-     *
-     * @param client            the WhatsApp client, used to read the
-     *                          {@code enable_mention_everyone_syncd_sender}
-     *                          AB prop and to supply the current timestamp
+     * @param client            the WhatsApp client, reserved for callers
+     *                          that need to thread the active session
+     *                          state through the factory
      * @param chatJid           the JID of the chat to mute or unmute
-     * @param muteEndSeconds    the mute end time in seconds since the epoch;
-     *                          {@code 0} means unmute, {@code -1} means muted
-     *                          indefinitely, any other positive value is the
-     *                          expiration timestamp
-     * @param mentionAllSeconds the optional mention-everyone mute end time in
-     *                          seconds, or {@code null} if the caller does
-     *                          not wish to set a mention-everyone mute
+     * @param muteEndSeconds    the mute end time in seconds since the
+     *                          epoch; {@code 0} means unmute, {@code -1}
+     *                          means muted indefinitely, any other
+     *                          positive value is the expiration
+     *                          timestamp
+     * @param mentionAllSeconds the optional mention-everyone mute end
+     *                          time in seconds, or {@code null} if the
+     *                          caller does not wish to set a
+     *                          mention-everyone mute
      * @return the pending mutation for the mute action
      */
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "generateMuteMutation", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -121,14 +117,12 @@ public final class MuteChatMutationFactory {
     ) {
         var now = Instant.now();
         var muted = muteEndSeconds != 0L;
-        // Preserves the -1 sentinel; all other values are scaled from seconds to milliseconds.
         var muteEndInstant = muteEndSeconds == -1L
                 ? Instant.ofEpochMilli(-1L)
                 : Instant.ofEpochMilli(muteEndSeconds * 1000L);
         var actionBuilder = new MuteActionBuilder()
                 .muted(muted)
                 .muteEndTimestamp(muteEndInstant);
-        //   && (n > 0 ? s.muteEveryoneMentionEndTimestamp = n * 1e3 : s.muteEveryoneMentionEndTimestamp = n)
         if (chatJid.hasGroupOrCommunityServer()
                 && mentionAllSeconds != null
                 && abPropsService.getBool(ABProp.ENABLE_MENTION_EVERYONE_SYNCD_SENDER)) {
@@ -150,6 +144,6 @@ public final class MuteChatMutationFactory {
                 now,
                 MuteAction.ACTION_VERSION
         );
-        return new SyncPendingMutation(trusted, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
+        return new SyncPendingMutation(trusted, 0);
     }
 }

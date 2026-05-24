@@ -1,10 +1,15 @@
 package com.github.auties00.cobalt.device;
 
+import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.device.fanout.DevicePhashCalculator;
+import com.github.auties00.cobalt.device.fanout.DevicePhashVersion;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.device.info.DeviceInfo;
+import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.info.DeviceListBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -18,6 +23,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,29 +33,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Smoke tests for {@link DeviceService}.
  *
- * <p>Builds the full collaborator graph
- * ({@link WamService} → {@link SnapshotRecoveryService} →
- * {@link WebAppStateService} → {@link DeviceService}) on top of a
- * {@link TestWhatsAppClient}, then exercises the paths that read from
- * the local store without requiring a real USync round-trip:
+ * @apiNote
+ * Builds the full collaborator graph ({@link WamService},
+ * {@link SnapshotRecoveryService}, {@link WebAppStateService},
+ * {@link DeviceService}) on top of a {@link TestWhatsAppClient} and exercises
+ * the read-from-cache paths that do not require a real USync round-trip:
+ * peer fanout for a cached peer, ICDC computation for the same peer,
+ * self-fanout (which must strip the sender's own device), the group-fanout
+ * phash byte-equality KAT against the captured WA Web oracle, and the
+ * alt-device merging mode of {@link DeviceService#getDeviceLists}.
  *
- * <ul>
- *   <li>{@link DeviceService#getUserFanout} for a peer whose device list
- *       is already cached — confirms the cache short-circuits the
- *       server call and the fanout calculator/identity-change filters
- *       are wired up end-to-end.</li>
- *   <li>{@link DeviceService#computeIcdc} for the same peer — confirms
- *       the {@link com.github.auties00.cobalt.device.icdc.IcdcComputer}
- *       collaborator is reachable.</li>
- *   <li>Self-fanout — confirms the sender's own devices are stripped
- *       from the fanout. This is the regression guard for the bug that
- *       triggered this whole plan.</li>
- * </ul>
- *
- * <p>USync-round-trip cases (the {@code sendNode} path) are exercised by
+ * @implNote
+ * This implementation deliberately skips the USync-round-trip cases (the
+ * {@code sendNode} path); those are covered by
  * {@link com.github.auties00.cobalt.device.stanza.DeviceUSyncResponseParserTest}
- * against captured fixtures — duplicating them here would require canned
- * IQ responses tied to the test infrastructure, with no extra signal.
+ * against captured fixtures. Duplicating them here would require canned IQ
+ * responses tied to the test infrastructure for no extra signal.
  */
 @DisplayName("DeviceService")
 class DeviceServiceTest {
@@ -58,12 +58,32 @@ class DeviceServiceTest {
     private static final Jid SELF_LID_DEVICE_1 = Jid.of("83116928594056:1@lid");
     private static final Jid PEER = Jid.of("393495089819@s.whatsapp.net");
 
+    /**
+     * Bundles the constructed client, props, and device service so each test
+     * can share the same wiring.
+     *
+     * @apiNote
+     * Local record; never exposed outside this class.
+     *
+     * @param client        the test client
+     * @param props         the test AB props service
+     * @param deviceService the constructed device service
+     */
     private record Harness(
             TestWhatsAppClient client,
             TestABPropsService props,
             DeviceService deviceService) {
     }
 
+    /**
+     * Builds a fresh harness with all collaborators wired against a temporary
+     * store, with the local own JID set to {@code <pn>:1}.
+     *
+     * @apiNote
+     * Called by every test for isolation; never reused across tests.
+     *
+     * @return the constructed harness
+     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -72,19 +92,20 @@ class DeviceServiceTest {
 
         var client = TestWhatsAppClient.create().withStore(store);
 
-        // Collaborators flow client → wam → snapshotRecovery → webAppState → device.
-        // None of their constructors fire IO; their methods do, but the device-side
-        // tests below don't hit them.
         var wamService = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wamService);
         var snapshotRecovery = new SnapshotRecoveryService(client, props, wamService);
-        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wamService);
+        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wamService, TestMediaConnectionService.create());
         var sessionCipher = new SignalSessionCipher(store);
         var deviceService = new DefaultDeviceService(client, webAppState, props, sessionCipher, wamService);
 
         return new Harness(client, props, deviceService);
     }
 
+    /**
+     * Verifies {@link DeviceService#getUserFanout} for a cached peer returns
+     * the peer's devices and excludes the local sender's own device.
+     */
     @Test
     @DisplayName("getUserFanout returns the cached companions for a known peer")
     void cachedPeerFanout() {
@@ -100,7 +121,6 @@ class DeviceServiceTest {
                 .build();
         h.client.store().addDeviceList(peerList);
 
-        // Pre-populate self list so getUserFanout doesn't try to fetch own devices.
         var selfList = new DeviceListBuilder()
                 .userJid(SELF_PN)
                 .devices(List.of(DeviceInfo.ofE2EE(0, 0), DeviceInfo.ofE2EE(1, 1)))
@@ -120,12 +140,19 @@ class DeviceServiceTest {
                 "fanout must never include the sender's own device");
     }
 
+    /**
+     * Verifies a self-send fanout includes the other own device and excludes
+     * the sending device.
+     *
+     * @apiNote
+     * Regression guard: this test pins the contract that the sender's own
+     * device never appears in its own fanout, even when the chat is with self.
+     */
     @Test
     @DisplayName("getUserFanout for self-send strips the sender's own device")
     void selfFanoutStripsSender() {
         var h = build();
 
-        // Self has two devices: primary (id=0, the phone) and the current session (id=1).
         var selfList = new DeviceListBuilder()
                 .userJid(SELF_PN)
                 .devices(List.of(DeviceInfo.ofE2EE(0, 0), DeviceInfo.ofE2EE(1, 1)))
@@ -143,6 +170,11 @@ class DeviceServiceTest {
                 "self-send fanout must not include the sending device itself");
     }
 
+    /**
+     * Verifies {@link DeviceService#computeIcdc} reaches the
+     * {@link com.github.auties00.cobalt.device.icdc.IcdcComputer} collaborator
+     * and propagates the cached device list's timestamp.
+     */
     @Test
     @DisplayName("computeIcdc delegates to IcdcComputer and returns an Optional")
     void computeIcdcWires() {
@@ -162,12 +194,20 @@ class DeviceServiceTest {
                 "timestamp should propagate from the cached device list");
     }
 
+    /**
+     * Verifies Cobalt's group-fanout phashV2 matches WA Web's oracle
+     * byte-for-byte across three group sizes.
+     *
+     * @apiNote
+     * Parity KAT against the captured {@code group-phashes} oracle. If WA Web
+     * changes its phashV2 algorithm this test will fail and signal that
+     * Cobalt needs the new derivation.
+     */
     @Test
     @DisplayName("getGroupFanout phash matches WA Web's phashV2 oracle (byte-equality, three group sizes)")
     void groupFanoutPhashMatchesLiveOracle() throws Exception {
-        // Oracle is a JSON array (not object); load the inner result.value and parse as array.
         var raw = DeviceFixtures.loadExpected("group-phashes").getJSONObject("result").getString("value");
-        var samples = com.alibaba.fastjson2.JSON.parseArray(raw);
+        var samples = JSON.parseArray(raw);
 
         var h = build();
         for (var i = 0; i < samples.size(); i++) {
@@ -176,9 +216,6 @@ class DeviceServiceTest {
             var expectedPhash = sample.getString("phashV2");
             var devices = sample.getJSONArray("devices");
 
-            // Each participant in the oracle is their primary device JID (device 0).
-            // Pre-populate a device list per participant so getGroupFanout doesn't need
-            // the network (TestWhatsAppClient stubs would refuse sendNode otherwise).
             var participantJids = new ArrayList<Jid>(devices.size());
             for (var j = 0; j < devices.size(); j++) {
                 participantJids.add(Jid.of(devices.getString(j)));
@@ -193,30 +230,29 @@ class DeviceServiceTest {
                         .build());
             }
 
-            // Pre-populate the group metadata so client.queryChatMetadata can return it.
-            // For a smoke test, we bypass queryChatMetadata by computing the phash directly
-            // through DevicePhashCalculator instead — this isolates the byte-equality contract.
-            var calculator = new com.github.auties00.cobalt.device.fanout.DevicePhashCalculator(h.props);
+            var calculator = new DevicePhashCalculator(h.props);
             var deviceSet = new LinkedHashSet<>(participantJids);
             var actualPhash = calculator.calculate(deviceSet,
-                    com.github.auties00.cobalt.device.fanout.DevicePhashVersion.V2, true);
+                    DevicePhashVersion.V2, true);
 
             assertEquals(expectedPhash, actualPhash,
                     "group " + groupId + " (n=" + devices.size() + "): Cobalt phashV2 must match WA Web's oracle byte-for-byte");
         }
     }
 
+    /**
+     * Verifies {@code shouldMergeAltDevices=true} preserves each entry while
+     * augmenting its device-id set with its alternate-addressing twin's.
+     */
     @Test
-    @DisplayName("getDeviceLists with shouldMergeAltDevices=true collapses PN+LID entries for the same user")
-    void shouldMergeAltDevicesCollapsesEntries() {
+    @DisplayName("getDeviceLists with shouldMergeAltDevices=true augments device ids without collapsing entries")
+    void shouldMergeAltDevicesAugmentsDeviceIds() {
         var h = build();
         var peerPn = Jid.of("393495089819@s.whatsapp.net");
         var peerLid = Jid.of("72104938291847@lid");
 
-        // Register the PN↔LID mapping so mergeAlternateDeviceLists can canonicalise.
         h.client.store().registerLidMapping(peerPn, peerLid);
 
-        // Two device lists for "the same user" — one under PN, one under LID.
         var pnList = new DeviceListBuilder()
                 .userJid(peerPn)
                 .devices(List.of(DeviceInfo.ofE2EE(0, 0), DeviceInfo.ofE2EE(1, 1)))
@@ -234,18 +270,21 @@ class DeviceServiceTest {
         h.client.store().addDeviceList(pnList);
         h.client.store().addDeviceList(lidList);
 
-        // Without merging: getDeviceLists returns two distinct entries (one PN-keyed, one LID-keyed).
         var unmerged = h.deviceService.getDeviceLists(List.of(peerPn, peerLid), "message", null, false);
         assertEquals(2, unmerged.size(),
                 "without shouldMergeAltDevices, PN and LID lists are returned independently");
 
-        // With merging: PN and LID lists collapse into a single entry whose device set is the union.
         var merged = h.deviceService.getDeviceLists(List.of(peerPn, peerLid), "message", null, true);
-        assertEquals(1, merged.size(),
-                "with shouldMergeAltDevices, PN and LID lists for the same user collapse to one entry");
-        var only = merged.iterator().next();
-        var deviceIds = only.devices().stream().map(DeviceInfo::id).sorted().toList();
-        assertEquals(List.of(0, 1, 2), deviceIds,
-                "merged device set must include every device from both PN-keyed and LID-keyed lists");
+        assertEquals(2, merged.size(),
+                "with shouldMergeAltDevices, PN and LID lists are preserved separately so each carries its own addressing mode");
+
+        var mergedByJid = merged.stream()
+                .collect(Collectors.toMap(DeviceList::userJid, Function.identity()));
+        var pnDevices = mergedByJid.get(peerPn).devices().stream().map(DeviceInfo::id).sorted().toList();
+        var lidDevices = mergedByJid.get(peerLid).devices().stream().map(DeviceInfo::id).sorted().toList();
+        assertEquals(List.of(0, 1, 2), pnDevices,
+                "PN-keyed list must carry the union of its own device ids and the LID-keyed list's");
+        assertEquals(List.of(0, 1, 2), lidDevices,
+                "LID-keyed list must carry the union of its own device ids and the PN-keyed list's");
     }
 }

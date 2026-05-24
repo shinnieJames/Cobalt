@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.device.StubDeviceService;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.TestSignalSession;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -18,6 +19,8 @@ import com.github.auties00.libsignal.groups.SignalGroupCipher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,14 +29,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link PeerMessageSender}, mirroring
- * {@code WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg}.
+ * Exercises {@link PeerMessageSender}'s wire-stanza shape against the
+ * {@code WAWebSendAppStateSyncMsgJob.encryptAndSendKeyMsg} contract.
  *
- * <p>Peer messages target one of the user's own devices and are wire-tagged
- * with {@code category="peer"} and {@code push_priority="high"}. The
- * payload is encrypted per-device via the Signal session cipher; the very
- * first send carries a {@code PKMSG} envelope plus a sibling
- * {@code <device-identity>} child.
+ * @apiNote
+ * Peer messages target one of the user's own devices, are encrypted
+ * per-device via the Signal session cipher, and are wire-tagged with
+ * {@code category="peer"} and {@code push_priority="high"} so the server
+ * routes them on the linked-device shelf. The first send on a fresh
+ * session yields a {@code PKMSG} envelope and a sibling
+ * {@code <device-identity>} child; subsequent sends drop the identity
+ * child once the recipient has processed the prekey.
+ *
+ * @implNote
+ * This implementation drives the sender through a captured
+ * {@link TestWhatsAppClient} and a
+ * pre-established {@link TestSignalSession}
+ * so the encryption stage runs against a real Signal session.
  */
 @DisplayName("PeerMessageSender")
 class PeerMessageSenderTest {
@@ -41,6 +53,12 @@ class PeerMessageSenderTest {
     private static final Jid SELF_PRIMARY = Jid.of("12025550100:0@s.whatsapp.net");
     private static final Jid SELF_COMPANION = Jid.of("12025550100:73@s.whatsapp.net");
 
+    /**
+     * Asserts that a fresh-session peer send emits a
+     * {@code <message category="peer" push_priority="high">} with a
+     * {@code <enc type="pkmsg">} and a sibling
+     * {@code <device-identity>}.
+     */
     @Test
     @DisplayName("send: emits <message category=\"peer\" push_priority=\"high\"> with <enc> and <device-identity>")
     void sendShape() {
@@ -83,24 +101,24 @@ class PeerMessageSenderTest {
         assertEquals("high", stanza.getAttributeAsString("push_priority").orElseThrow(),
                 "push_priority=high asks the server to deliver promptly");
 
-        // No <participants> wrapper — peer sends go straight to the device.
         assertFalse(stanza.getChild("participants").isPresent(),
                 "peer fanout has no <participants> wrapper");
 
-        // <enc v="2" type="pkmsg"> direct child.
         var enc = stanza.getChild("enc").orElseThrow();
         assertEquals("2", enc.getAttributeAsString("v").orElseThrow());
         assertEquals("pkmsg", enc.getAttributeAsString("type").orElseThrow(),
                 "first send carries PKMSG since the recipient hasn't processed the prekey yet");
 
-        // <device-identity> sibling for PKMSG sends.
         assertTrue(stanza.getChild("device-identity").isPresent(),
                 "PKMSG peer sends must include <device-identity> for the recipient to verify the identity key");
 
-        // Sanity: the ack handler returned a parseable success ack.
-        assertTrue(ack.isSuccess(), "stub returned a t-only ack → success");
+        assertTrue(ack.isSuccess(), "stub returned a t-only ack so AckParser reports success");
     }
 
+    /**
+     * Asserts that {@code deviceService.ensureSessions} is invoked exactly
+     * once per peer send and receives the target device.
+     */
     @Test
     @DisplayName("send: invokes deviceService.ensureSessions exactly once with the target device")
     void ensureSessionsCalled() {
@@ -108,7 +126,7 @@ class PeerMessageSenderTest {
         var recipientStore = MessageFixtures.temporaryStore(Jid.of("12025550100@s.whatsapp.net"), null);
         TestSignalSession.establishSession(senderStore, SELF_COMPANION, recipientStore);
 
-        var ensureCalls = new java.util.ArrayList<java.util.Collection<Jid>>();
+        var ensureCalls = new ArrayList<Collection<Jid>>();
         var client = TestWhatsAppClient.create()
                 .withStore(senderStore)
                 .withAbPropsService(TestABPropsService.builder().build())
@@ -135,8 +153,13 @@ class PeerMessageSenderTest {
                 "ensureSessions must receive the target device JID");
     }
 
+    /**
+     * Asserts that the outer {@code type} attribute is derived from the
+     * payload (an {@code ExtendedTextMessage} body yields
+     * {@code type="text"}).
+     */
     @Test
-    @DisplayName("send: stanza type is derived from the payload (text content → type=\"text\")")
+    @DisplayName("send: stanza type is derived from the payload (text content -> type=\"text\")")
     void stanzaTypeFromContent() {
         var senderStore = MessageFixtures.temporaryStore(Jid.of("12025550100@s.whatsapp.net"), null);
         var recipientStore = MessageFixtures.temporaryStore(Jid.of("12025550100@s.whatsapp.net"), null);
@@ -159,20 +182,24 @@ class PeerMessageSenderTest {
         sender.send(SELF_COMPANION, peerMessageInfo("3EB0TYPE01", SELF_COMPANION));
 
         var stanza = capturedStanza.get();
-        // ExtendedTextMessage content → "text" stanza type.
         assertEquals("text", stanza.getAttributeAsString("type").orElseThrow(),
                 "ExtendedTextMessage payload must produce a type=\"text\" peer stanza");
     }
 
     /**
-     * Builds a peer-bound {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
-     * for the supplied target device.
+     * Builds a peer-bound
+     * {@link ChatMessageInfo} for
+     * the supplied target device.
+     *
+     * @apiNote
+     * Helper used by every peer-send test cell; pairs the target device
+     * JID as both the parent JID and the wire {@code to} attribute.
      *
      * @param id           the wire message id
-     * @param targetDevice the target device JID
+     * @param targetDevice the target device {@link Jid}
      * @return the configured message info
      */
-    private static com.github.auties00.cobalt.model.chat.ChatMessageInfo peerMessageInfo(
+    private static ChatMessageInfo peerMessageInfo(
             String id, Jid targetDevice) {
         var key = new MessageKeyBuilder()
                 .id(id)

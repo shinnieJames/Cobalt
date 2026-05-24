@@ -13,8 +13,13 @@ import com.github.auties00.cobalt.node.usync.result.PictureResult;
 import java.util.Optional;
 
 /**
- * USync {@code picture} protocol descriptor. Asks the relay for each peer's
- * profile-picture id so the client can fetch the JPEG payload separately.
+ * USync {@code picture} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay for each peer's profile-picture id; the JPEG payload is
+ * fetched separately through the media URL. Used by contact-import flows
+ * (see {@code WAWebContactImportContactVerifier}, which combines picture
+ * and business protocols in one IQ).
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncPicture")
 public final class UsyncPictureProtocol implements UsyncProtocol {
@@ -24,7 +29,11 @@ public final class UsyncPictureProtocol implements UsyncProtocol {
     public static final String NAME = "picture";
 
     /**
-     * Constructs a default picture-protocol descriptor.
+     * Builds a default picture-protocol descriptor.
+     *
+     * @apiNote
+     * The descriptor is stateless; pair it with any {@link UsyncUser} that
+     * carries an addressing slot.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncPicture",
             exports = "USyncPictureProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -32,9 +41,7 @@ public final class UsyncPictureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncPicture",
@@ -44,9 +51,11 @@ public final class UsyncPictureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds an empty {@code <picture/>} query element.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation emits an empty {@code <picture/>} element,
+     * matching the JS {@code wap("picture", null)} shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncPicture",
@@ -56,11 +65,13 @@ public final class UsyncPictureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns no per-user element because the picture protocol carries no
-     * per-user payload on the request side.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return always {@link Optional#empty()}
+     * @implNote
+     * This implementation always returns {@link Optional#empty()} because
+     * the picture protocol has no per-user payload on the request side,
+     * matching the JS {@code null} return in
+     * {@code USyncPictureProtocol.getUserElement}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncPicture",
@@ -70,12 +81,11 @@ public final class UsyncPictureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <picture>} child of a {@code <user>} response into a
-     * {@link PictureResult} or a per-protocol error.
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation reads the {@code id} attribute as a required int,
+     * matching the JS {@code attrInt("id")} call.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncPicture",

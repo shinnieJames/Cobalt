@@ -4,9 +4,9 @@ import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
-import com.github.auties00.cobalt.message.send.ack.AckParser;
-import com.github.auties00.cobalt.message.send.ack.AckResult;
-import com.github.auties00.cobalt.message.send.ack.NackReason;
+import com.github.auties00.cobalt.ack.AckParser;
+import com.github.auties00.cobalt.ack.AckResult;
+import com.github.auties00.cobalt.ack.NackReason;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
@@ -32,7 +32,7 @@ import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.AddressingModeMismatchEventBuilder;
@@ -58,12 +58,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Sends messages to group chats. The default path uses sender-key (SKMSG)
- * encryption: the payload is encrypted once with the group sender key, and a
- * separate sender-key distribution message is encrypted per device for
- * members that do not yet hold the key. When the server reports a phash
- * mismatch, the delta devices receive the same message as a per-device
- * group-direct fanout.
+ * Sends messages to group and community chats.
+ *
+ * <p>The default path uses sender-key (SKMSG) encryption: the payload is
+ * encrypted once with the group sender key and a separate sender-key
+ * distribution payload is encrypted per device for participants that do not
+ * yet hold the key. When the server reports a phash mismatch the delta
+ * devices receive the same message through the per-device group-direct
+ * fanout. When the server reports a stale addressing mode the group is
+ * migrated (LID to PN or vice versa) and the send is retried from scratch.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendGroupMsgJob")
 @WhatsAppWebModule(moduleName = "WAWebSendGroupSkmsgJob")
@@ -71,67 +74,83 @@ import java.util.stream.Stream;
 @WhatsAppWebModule(moduleName = "WAWebSendGroupKeyDistributionMsgJob")
 final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     /**
-     * Holds the logger used for group-send diagnostics.
+     * The {@link System.Logger} used for group-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(GroupMessageSender.class.getName());
 
     /**
-     * Holds the encryption service used for both sender-key and per-device
-     * encryption paths.
+     * The {@link MessageEncryption} service used for both the SKMSG and the
+     * per-device fanout paths.
      */
     private final MessageEncryption encryption;
 
     /**
-     * Holds the device service used for fanout resolution and session management.
+     * The {@link DeviceService} used for group fanout resolution and Signal
+     * session management.
      */
     private final DeviceService deviceService;
 
     /**
-     * Holds the sender-key distribution service used to encrypt the
+     * The {@link SenderKeyDistribution} service used to encrypt the
      * per-device sender-key distribution payloads.
      */
     private final SenderKeyDistribution senderKeyDistribution;
 
     /**
-     * Holds the bot-specific stanza builder.
+     * The {@link BotStanza} builder responsible for the {@code <bot>} child.
      */
     private final BotStanza botStanza;
 
     /**
-     * Holds the business-specific stanza builder used for payment native flows.
+     * The {@link BizStanza} builder responsible for the
+     * payment-native-flow business child.
      */
     private final BizStanza bizStanza;
 
     /**
-     * Holds the meta stanza builder.
+     * The {@link MetaStanza} builder responsible for the {@code <meta>}
+     * child.
      */
     private final MetaStanza metaStanza;
 
     /**
-     * Holds the reporting stanza builder.
+     * The {@link ReportingStanza} builder responsible for the
+     * {@code <reporting>} child.
      */
     private final ReportingStanza reportingStanza;
 
     /**
-     * Holds the per-group locks used to serialise sender-key encryption.
+     * Per-group {@link ReentrantLock} map used to serialise sender-key
+     * encryption.
+     *
+     * @apiNote
      * Concurrent sends to the same group are serialised because the Signal
-     * sender-key counter must increase monotonically per group per sender.
+     * sender-key counter must increase monotonically per group per sender;
+     * sends to different groups proceed in parallel.
      */
     private final ConcurrentMap<String, ReentrantLock> locks;
 
     /**
-     * Constructs a group sender bound to the given dependencies.
+     * Constructs a {@link GroupMessageSender} bound to the supplied
+     * dependencies.
      *
-     * @param client                the WhatsApp client used to dispatch stanzas
-     * @param encryption            the message encryption service
-     * @param deviceService         the device service
-     * @param abPropsService        the AB-props service
-     * @param senderKeyDistribution the sender-key distribution service
-     * @param botStanza             the bot stanza builder
-     * @param bizStanza             the business stanza builder
-     * @param metaStanza            the meta stanza builder
-     * @param reportingStanza       the reporting stanza builder
-     * @param wamService            the WAM telemetry service shared with the base sender
+     * @apiNote
+     * Constructed once by {@link MessageSendingService}; embedders should
+     * not instantiate directly.
+     *
+     * @param client                the {@link WhatsAppClient} used to
+     *                              dispatch stanzas
+     * @param encryption            the {@link MessageEncryption} service
+     * @param deviceService         the {@link DeviceService}
+     * @param abPropsService        the {@link ABPropsService}
+     * @param senderKeyDistribution the {@link SenderKeyDistribution} service
+     * @param botStanza             the {@link BotStanza} builder
+     * @param bizStanza             the {@link BizStanza} builder
+     * @param metaStanza            the {@link MetaStanza} builder
+     * @param reportingStanza       the {@link ReportingStanza} builder
+     * @param wamService            the {@link WamService} shared with the
+     *                              base sender
+     * @throws NullPointerException if any non-base argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupMsgJob", exports = "encryptAndSendGroupMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -159,13 +178,17 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Runs the given task while holding the lock associated with {@code key}.
-     * Tasks under the same key are serialised; tasks under different keys may
-     * run concurrently.
+     * Runs the given {@link Callable} while holding the {@link ReentrantLock}
+     * associated with {@code key}.
      *
-     * @param <T>  the task result type
+     * @apiNote
+     * Used to serialise concurrent send and key-distribution operations on
+     * the same group; mirrors WA Web's per-conversation
+     * {@code sendMsgQueueMap.enqueue} queue.
+     *
+     * @param <T>  the {@code task} result type
      * @param key  the lock key, typically the group JID string
-     * @param task the task to execute under the lock
+     * @param task the {@link Callable} to execute under the lock
      * @return the value returned by {@code task}
      * @throws NullPointerException if any argument is {@code null}
      * @throws Exception            propagated from {@code task}
@@ -185,15 +208,14 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Sends the given message to a group chat. Resolves the addressing mode,
-     * encrypts the payload with the sender key, distributes the sender key to
-     * devices that do not yet hold it, and reacts to the server ack by
-     * migrating the addressing mode and/or resending to the delta devices
-     * when needed.
+     * {@inheritDoc}
      *
-     * @param groupJid    the target group JID
-     * @param messageInfo the outgoing message
-     * @return the server ack result
+     * @apiNote
+     * Resolves the addressing mode, encrypts the payload with the group
+     * sender key, distributes the sender key to devices that do not yet
+     * hold it, dispatches the stanza, and reacts to the server ack by
+     * migrating the addressing mode and/or resending to the delta devices.
+     * The dispatch is serialised per group through {@link #enqueue}.
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupMsgJob", exports = "encryptAndSendGroupMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -409,14 +431,17 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Sends a standalone sender-key distribution to the group, with no
-     * message content. The stanza carries the per-device encrypted
-     * {@code SenderKeyDistributionMessage} payloads, the {@code text} type
-     * marker, and {@code device_fanout="false"}. Returns silently when every
-     * audience device already holds the sender key.
+     * Dispatches a standalone sender-key distribution to a group with no
+     * message content.
      *
-     * @param groupJid the group JID to distribute keys for
-     * @param msgId    the id used for the distribution stanza
+     * @apiNote
+     * Pre-distributes the sender key to participants that do not yet hold
+     * it. The stanza carries the per-device PKMSG envelopes,
+     * {@code type="text"}, and {@code device_fanout="false"}. Returns
+     * silently when every audience device already has the key.
+     *
+     * @param groupJid the group {@link Jid}
+     * @param msgId    the wire id stamped on the distribution stanza
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupKeyDistributionMsgJob",
@@ -519,14 +544,20 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Generates the per-recipient RCAT content-binding tags for the message,
-     * or {@code null} when the conditions to emit them are not met (no
-     * message secret, non-URL payload, or group size above the configured
-     * RCAT limit).
+     * Generates the per-recipient RCAT content-binding tags for the
+     * outgoing message.
      *
-     * @param messageInfo     the outgoing message
-     * @param participantJids the list of participant user JIDs
-     * @return the per-recipient RCAT tags, or {@code null} when not applicable
+     * @apiNote
+     * RCAT tags are emitted only for URL-bearing extended-text payloads in
+     * groups smaller than the {@link ABProp#MAXIMUM_GROUP_SIZE_FOR_RCAT}
+     * limit; they let the receiver attribute the link impression to the
+     * sender without exposing the participant set. Returns {@code null} when
+     * the conditions are not met (no message secret, non-URL payload, or
+     * group too big).
+     *
+     * @param messageInfo     the outgoing {@link ChatMessageInfo}
+     * @param participantJids the list of participant user {@link Jid}s
+     * @return the per-recipient RCAT tags, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "genContentBindingForMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -564,11 +595,15 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Returns the given container with {@code capiCreatedGroup} set to
-     * {@code true} on its message-context info, mutating the existing
-     * context info when present and otherwise creating a new one.
+     * Returns the given container with {@code capiCreatedGroup=true} stamped
+     * onto its message-context info.
      *
-     * @param container the original message container
+     * @apiNote
+     * Called for CAPI-created groups so the receiver can render the
+     * "group created via Cloud API" badge; mutates the existing context
+     * info in place when present and otherwise allocates a new one.
+     *
+     * @param container the original {@link MessageContainer}
      * @return the container with the CAPI flag applied
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoGenerator", exports = "updateGroupMsgProtoWithCapiFlag",
@@ -587,11 +622,15 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Returns whether the given container holds a CAG addon payload that
-     * must always reach LID-addressed participants (reactions, comments,
-     * event responses, and poll votes).
+     * Returns whether the given container holds a CAG addon payload.
      *
-     * @param container the message container
+     * @apiNote
+     * CAG addons (reactions, comments, event responses, poll votes) must
+     * reach LID-addressed participants regardless of the group's nominal
+     * addressing mode; the caller forces the addressing-mode-LID branch on
+     * detection.
+     *
+     * @param container the {@link MessageContainer}
      * @return {@code true} when the payload is a CAG addon
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupMsgJob", exports = "isCagAddon",
@@ -604,24 +643,29 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Resends the message to the delta devices using per-device group-direct
-     * encryption after a phash mismatch. Emits the {@code MdDeviceSyncAck}
-     * WAM event before re-querying the group, then encrypts and dispatches
-     * the resend stanza for the new devices.
+     * Resends the message to the delta devices via the per-device
+     * group-direct path after a server phash mismatch.
      *
-     * @param groupJid               the target group JID
+     * @apiNote
+     * Emits the {@code MdDeviceSyncAck} WAM event, re-queries the group
+     * fanout, computes the delta against the original device list, and
+     * dispatches the per-device fanout stanza with an empty SKMSG sibling
+     * to match WA Web's wire shape.
+     *
+     * @param groupJid               the group {@link Jid}
      * @param messageInfo            the message being resent
-     * @param originalDevices        the device list used for the initial send
-     * @param addressingMode         the local addressing mode used on the wire
-     *                               ({@code "lid"} or {@code "pn"})
-     * @param serverAddressingMode   the addressing mode reported on the ack,
-     *                               possibly {@code null}
-     * @param groupMetadataCandidate the group metadata used to derive the
-     *                               {@code localAddressingMode} property on
-     *                               the emitted {@code MdDeviceSyncAck} event
+     * @param originalDevices        the device list used for the original
+     *                               send
+     * @param addressingMode         the local addressing mode used on the
+     *                               wire ({@code "lid"} or {@code "pn"})
+     * @param serverAddressingMode   the addressing mode reported on the
+     *                               ack, possibly {@code null}
+     * @param groupMetadataCandidate the group metadata used to populate the
+     *                               {@code localAddressingMode} slot on the
+     *                               emitted event
      * @param senderJid              the sender device JID used for the
-     *                               original send; its server type drives
-     *                               the {@code isLid} property
+     *                               original send; drives the {@code isLid}
+     *                               slot on the emitted event
      */
     @WhatsAppWebExport(moduleName = "WAWebResendGroupMsg", exports = "resendGroupMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -731,13 +775,20 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
     /**
      * Commits the {@code MdGroupParticipantMissAck} WAM event when the
-     * group's participant record changed between the original SKMSG fan-out
-     * and the post-phash-mismatch re-query. The event is suppressed when no
-     * participants were added or removed.
+     * group's participant set changed between the original SKMSG fanout and
+     * the post-phash-mismatch re-query.
+     *
+     * @apiNote
+     * Suppressed when no participants were added or removed. The emitted
+     * event records the size bucket, the group type, and the participant
+     * add/remove counts so the server can compare client-side participant
+     * lag against its own view.
      *
      * @param messageInfo       the message being resent
-     * @param originalDevices   the device list used for the initial SKMSG send
-     * @param refreshedMetadata the refreshed chat metadata, possibly {@code null}
+     * @param originalDevices   the device list used for the original SKMSG
+     *                          send
+     * @param refreshedMetadata the refreshed {@link ChatMetadata}, possibly
+     *                          {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMaybePostMdGroupSyncMetrics",
             exports = "maybePostGroupSyncMetrics", adaptation = WhatsAppAdaptation.DIRECT)
@@ -779,7 +830,7 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
         var isLid = originalDevices.stream().anyMatch(Jid::hasLidServer);
 
-        int participantCount = 0;
+        var participantCount = 0;
         if (refreshedMetadata instanceof GroupMetadata gm) {
             participantCount = gm.participants().size();
         }
@@ -802,9 +853,15 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Maps the given participant count to its {@link ClientGroupSizeBucket}.
      *
-     * @param count the participant count, already capped to a minimum of 32
-     *              by the caller
-     * @return the matching bucket; never {@code null}
+     * @apiNote
+     * Used to bucket group-size metrics on the
+     * {@code MdGroupParticipantMissAck} event; the cascade mirrors WA Web's
+     * {@code WAWebWamNumberToClientGroupSizeBucket} default export.
+     *
+     * @param count the participant count, already capped to a minimum of
+     *              {@code 32} by the caller
+     * @return the matching {@link ClientGroupSizeBucket}; never
+     *         {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebWamNumberToClientGroupSizeBucket",
             exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -827,10 +884,16 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Maps the given {@link GroupMetadata} to the WAM {@link TypeOfGroupEnum}
-     * used on metrics events.
+     * Maps the given {@link GroupMetadata} to the WAM
+     * {@link TypeOfGroupEnum} used on metrics events.
      *
-     * @param metadata the group metadata
+     * @apiNote
+     * Routes default subgroups to {@link TypeOfGroupEnum#DEFAULT_SUBGROUP},
+     * non-default community subgroups to {@link TypeOfGroupEnum#SUBGROUP},
+     * and everything else (standalone groups, general subgroups) to
+     * {@link TypeOfGroupEnum#GROUP}.
+     *
+     * @param metadata the {@link GroupMetadata}
      * @return the matching {@link TypeOfGroupEnum}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGroupType",
@@ -851,10 +914,17 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
 
     /**
      * Migrates the group's addressing mode by converting every participant
-     * JID to the target server, updating the metadata flag, and clearing the
-     * sender-key distribution state so the next send redistributes the keys.
+     * JID to the target server and clearing the sender-key distribution
+     * state.
      *
-     * @param groupJid the group JID
+     * @apiNote
+     * Triggered by a {@link NackReason#STALE_GROUP_ADDRESSING_MODE} nack or
+     * by an ack whose {@code addressing_mode} attribute differs from the
+     * mode used on the wire; clearing the sender-key distribution forces
+     * the next send to redistribute the keys to the migrated participant
+     * set.
+     *
+     * @param groupJid the group {@link Jid}
      * @param toLid    {@code true} to migrate to LID, {@code false} to PN
      */
     @WhatsAppWebExport(moduleName = "WAWebGroupHandleAddressingModeMismatch", exports = "handleAddressingModeMismatch",
@@ -897,12 +967,18 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Converts the given JID to the target addressing mode by consulting the
-     * LID/PN mapping in the store.
+     * Converts the given JID to the target addressing mode through the
+     * store's LID/PN mapping.
      *
-     * @param jid   the JID to convert
+     * @apiNote
+     * Returns the original JID unchanged when it already matches the
+     * target mode, the mapped JID when a mapping exists, or {@code null}
+     * when the store has no mapping for the requested conversion.
+     *
+     * @param jid   the {@link Jid} to convert
      * @param toLid {@code true} for PN to LID, {@code false} for LID to PN
-     * @return the converted JID, or {@code null} when no mapping exists
+     * @return the converted {@link Jid}, or {@code null} when no mapping
+     *         exists
      */
     @WhatsAppWebExport(moduleName = "WAWebLidMigrationUtils", exports = "toAddressingModeFactory",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -915,11 +991,17 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Maps the stanza addressing-mode string to the WAM
-     * {@link AddressingMode} enum used by
-     * {@link AddressingModeMismatchEventBuilder}.
+     * Maps the wire addressing-mode string to the WAM
+     * {@link AddressingMode} enum.
      *
-     * @param mode the stanza addressing-mode string, possibly {@code null}
+     * @apiNote
+     * Used to populate the {@code localAddressingMode} and
+     * {@code serverAddressingMode} slots on the
+     * {@link AddressingModeMismatchEventBuilder} and the
+     * {@link MdDeviceSyncAckEventBuilder} events; {@code null} input
+     * propagates as {@code null}.
+     *
+     * @param mode the wire addressing-mode string, possibly {@code null}
      * @return {@link AddressingMode#LID} for {@code "lid"},
      *         {@link AddressingMode#PN} for any other non-null value, or
      *         {@code null} when {@code mode} is {@code null}
@@ -937,11 +1019,14 @@ final class GroupMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Commits one {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEvent}
      * per depleted one-time pre-key reported by the last
-     * {@code ensureSessions} call. No-op when {@code depletedPrekeyCount} is
-     * not positive.
+     * {@code ensureSessions} call.
+     *
+     * @apiNote
+     * No-op when {@code depletedPrekeyCount} is not positive. Mirrors WA
+     * Web's {@code maybePostPrekeysDepletionMetric}.
      *
      * @param depletedPrekeyCount the number of depleted one-time pre-keys
-     * @param messageType         the WAM message type for this send
+     * @param messageType         the WAM {@link MessageType} for this send
      * @param deviceCount         the device count used for the
      *                            {@code deviceSizeBucket} classification, or
      *                            {@code null} to omit the bucket

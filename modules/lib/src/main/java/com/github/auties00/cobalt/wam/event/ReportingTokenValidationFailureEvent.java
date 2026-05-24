@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.EditType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.ReportingTokenValidationFailureReason;
 
 import java.util.Optional;
@@ -52,4 +53,7 @@ public interface ReportingTokenValidationFailureEvent extends WamEventSpec {
 
     @WamProperty(index = 9, type = WamType.INTEGER)
     OptionalInt reportingTokenVersion();
+
+    @WamProperty(index = 14, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
 }

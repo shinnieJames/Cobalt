@@ -15,6 +15,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -24,43 +25,38 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Behavioural tests for {@link WamPrivateStatsTokenIssuer}'s IQ
- * orchestration, paired with a deterministic
- * {@link SecureRandom} so the resulting blinded credential and
- * unblinded token can be pinned against the
- * {@code ed25519-live-bundle-vectors.json} KAT.
+ * Exercises {@link WamPrivateStatsTokenIssuer}'s IQ orchestration
+ * against the captured live-bundle vectors.
  *
- * <p>The crypto primitives themselves (blind / unblind) are byte-for-byte
- * KAT'd in {@code Ed25519LiveBundleKatTest}; this class only asserts
- * that the issuer:
+ * @apiNote
+ * Pins the outbound {@code <iq xmlns="privatestats" type="get">}
+ * stanza shape, the response parsing path, and the resulting
+ * {@link WamPrivateStatsToken} bytes against the
+ * {@code ed25519-live-bundle-vectors.json} KAT so issuance is
+ * byte-validated against the same vectors that
+ * {@code Ed25519LiveBundleKatTest} pins for the blind and unblind
+ * primitives in isolation.
  *
- * <ul>
- *   <li>builds the outbound {@code <iq xmlns="privatestats" type="get">}
- *       stanza correctly with the blinded credential as the
- *       {@code <blinded_credential>} content;</li>
- *   <li>parses the server response's {@code <signed_credential>} +
- *       {@code <acs_public_key>} children and produces a token whose
- *       {@code token()} bytes equal the live-bundle's
- *       {@code unblinded} vector;</li>
- *   <li>raises the documented exception on server-side errors,
- *       missing fields, and wrong-length payloads.</li>
- * </ul>
+ * @implNote
+ * This implementation feeds a deterministic {@link SecureRandom} into
+ * the package-private constructor so the {@code token} and
+ * {@code blindingFactor} draws line up with the captured vector.
  */
 @DisplayName("WamPrivateStatsTokenIssuer behavioural")
 class WamPrivateStatsTokenIssuerTest {
     /**
-     * Path of the ed25519 KAT vectors fixture, reused as the source
-     * of the deterministic token / blinding-factor / response
-     * payload bytes.
+     * The classpath path of the ed25519 KAT vectors fixture, reused
+     * as the source of the deterministic token, blinding factor,
+     * and response-payload bytes.
      */
     private static final String VECTORS_FIXTURE = "/fixtures/wam/ed25519-live-bundle-vectors.json";
 
     /**
-     * Verifies that {@link WamPrivateStatsTokenIssuer#issue()} sends
-     * an IQ whose blinded-credential content equals the live JS
-     * bundle's {@code blind(msg, scalar)} output for the same
-     * inputs, and that the returned token's bytes equal the
-     * captured {@code unblinded} value.
+     * Verifies that {@link WamPrivateStatsTokenIssuer#issue()}
+     * produces an IQ whose blinded-credential bytes match the
+     * captured {@code blind(msg, scalar)} output and returns a
+     * token whose {@code token()} and {@code sharedSecret()} bytes
+     * match the captured vector.
      */
     @Test
     @DisplayName("issue round-trip produces the captured unblinded token")
@@ -85,20 +81,12 @@ class WamPrivateStatsTokenIssuerTest {
         var token = issuer.issue();
 
         assertNotNull(token, "issue() must return a non-null token");
-        // WamPrivateStatsToken.token() carries the original random
-        // token bytes (what the scripted SecureRandom delivered as
-        // the first nextBytes call, i.e. `msg`).
         assertArrayEquals(msg, token.token(),
                 "token.token() bytes must equal the original randomised token");
-        // sharedSecret = SHA-512(token || unblind(signed, scalar, pk))
-        // per WAACSTokenUtils.getSharedSecret.
         var expectedSharedSecret = sha512Concat(msg, expectedUnblinded);
         assertArrayEquals(expectedSharedSecret, token.sharedSecret(),
                 "sharedSecret bytes must equal SHA-512(token || unblinded)");
 
-        // The IQ outbound shape: <iq xmlns="privatestats" type="get" to="s.whatsapp.net">
-        //   <sign_credential version="1"><blinded_credential>BYTES</blinded_credential></sign_credential>
-        // </iq>
         var iq = capturedIq.get();
         assertNotNull(iq, "sendNode must have been invoked");
         assertEquals("iq", iq.description());
@@ -118,8 +106,9 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Verifies that a server-side error response — {@code type="error"}
-     * — raises {@code WhatsAppPrivateStatsTokenIssuerException}.
+     * Verifies that a server-side error response (an IQ with
+     * {@code type="error"}) raises
+     * {@code WhatsAppPrivateStatsTokenIssuerException}.
      */
     @Test
     @DisplayName("server error response throws WhatsAppPrivateStatsTokenIssuerException")
@@ -137,8 +126,8 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Verifies that a response missing the
-     * {@code <signed_credential>} child throws.
+     * Verifies that a response missing the {@code <signed_credential>}
+     * child throws rather than returning a malformed token.
      */
     @Test
     @DisplayName("response missing signed_credential throws")
@@ -165,8 +154,8 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Verifies that a response whose {@code signed_credential} is
-     * the wrong length throws.
+     * Verifies that a wrong-length {@code <signed_credential>}
+     * payload throws.
      */
     @Test
     @DisplayName("wrong-length signed_credential throws")
@@ -183,7 +172,7 @@ class WamPrivateStatsTokenIssuerTest {
                                 .description("sign_credential")
                                 .content(new NodeBuilder()
                                         .description("signed_credential")
-                                        .content(new byte[16]) // wrong: should be 32 bytes
+                                        .content(new byte[16])
                                         .build())
                                 .content(new NodeBuilder()
                                         .description("acs_public_key")
@@ -197,13 +186,16 @@ class WamPrivateStatsTokenIssuerTest {
 
     /**
      * Builds a successful IQ response shaped like the live server's
-     * {@code sign_credential} reply, with the given signed
-     * credential and ACS public key as the two byte-content
-     * children.
+     * {@code sign_credential} reply.
+     *
+     * @apiNote
+     * Used by the round-trip and edge-case tests to canned-respond
+     * to the issuer's {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode}
+     * call.
      *
      * @param signed the signed-credential bytes
      * @param pk     the ACS public key bytes
-     * @return the synthetic success node
+     * @return the synthetic IQ result node
      */
     private static Node successResponse(byte[] signed, byte[] pk) {
         return new NodeBuilder()
@@ -211,7 +203,7 @@ class WamPrivateStatsTokenIssuerTest {
                 .attribute("type", "result")
                 .content(new NodeBuilder()
                         .description("sign_credential")
-                        .content(java.util.List.of(
+                        .content(List.of(
                                 new NodeBuilder()
                                         .description("signed_credential")
                                         .content(signed)
@@ -225,7 +217,12 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Loads the first ed25519 KAT vector.
+     * Loads the first ed25519 KAT vector from the fixture file.
+     *
+     * @apiNote
+     * Every test reuses the same vector so the captured bytes are
+     * easy to cross-reference with the ones pinned by
+     * {@code Ed25519LiveBundleKatTest}.
      *
      * @return the deserialised first vector
      */
@@ -250,13 +247,15 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Returns a {@link SecureRandom} that returns {@code first}
-     * on the first {@code nextBytes} call and {@code second} on
-     * the second; any third call throws.
+     * Returns a {@link SecureRandom} that delivers exactly two
+     * scripted byte sequences and refuses a third call.
      *
-     * <p>The token issuer calls {@code nextBytes} exactly twice
-     * per {@code issue()} — once for the token, once for the
-     * blinding factor — so this script suffices.
+     * @apiNote
+     * The token issuer draws from {@code nextBytes} exactly twice
+     * per {@link WamPrivateStatsTokenIssuer#issue()} (once for the
+     * token, once for the blinding factor); failing loudly on a
+     * third call ensures the test breaks if the production code's
+     * draw count drifts.
      *
      * @param first  the first byte sequence to deliver
      * @param second the second byte sequence to deliver
@@ -284,10 +283,13 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Smoke assertion that the script delivers exactly two
-     * sequences and then refuses a third — defends against the
-     * production code drifting to call {@code nextBytes} a third
-     * time without updating this test.
+     * Verifies that the scripted {@link SecureRandom} fails loudly on
+     * a third call.
+     *
+     * @apiNote
+     * Defends the surrounding tests against the production code
+     * drifting to call {@code nextBytes} more than twice without
+     * the helper being updated.
      */
     @Test
     @DisplayName("scripted SecureRandom rejects a third call (issue must use exactly two random sequences)")
@@ -300,8 +302,11 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Computes {@code SHA-512(a || b)}, matching
-     * {@code WAACSTokenUtils.getSharedSecret(token, unblindedSignedToken)}.
+     * Computes {@code SHA-512(a || b)}.
+     *
+     * @apiNote
+     * Mirrors {@code WAACSTokenUtils.getSharedSecret(token, unblindedSignedToken)}
+     * for use as the assertion oracle.
      *
      * @param a the first input
      * @param b the second input
@@ -319,7 +324,15 @@ class WamPrivateStatsTokenIssuerTest {
     }
 
     /**
-     * Compact holder for the fixture's per-vector hex strings.
+     * A compact holder for the per-vector hex strings consumed by
+     * the tests.
+     *
+     * @param msg       the message hex
+     * @param scalar    the blinding-factor hex
+     * @param blinded   the captured blinded-credential hex
+     * @param pk        the captured ACS public-key hex
+     * @param signed    the captured signed-credential hex
+     * @param unblinded the captured unblinded hex
      */
     private record Vector(String msg, String scalar, String blinded, String pk, String signed, String unblinded) {
     }

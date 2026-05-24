@@ -34,6 +34,15 @@ public interface SmbUserJourneyEvent extends WamEventSpec {
     @WamProperty(index = 4, type = WamType.STRING)
     Optional<String> extraAttributes();
 
+    @WamProperty(index = 19, type = WamType.BOOLEAN)
+    Optional<Boolean> hasCatalog();
+
+    @WamProperty(index = 20, type = WamType.BOOLEAN)
+    Optional<Boolean> isCoexAccount();
+
+    @WamProperty(index = 21, type = WamType.BOOLEAN)
+    Optional<Boolean> isMvSubscriber();
+
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<OppositePlatformEnum> oppositePlatform();
 

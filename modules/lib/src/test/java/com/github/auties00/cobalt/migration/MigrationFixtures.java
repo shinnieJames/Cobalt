@@ -24,49 +24,56 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Loads migration-package fixtures captured from a live WhatsApp Web session and
- * exposes them to JUnit tests.
+ * Loads migration-package fixtures captured from a live WhatsApp Web
+ * session and exposes them to JUnit tests.
  *
- * <p>Fixture provenance:
- * <ul>
- *   <li>JSONL stanza captures are written by the MCP tool
- *       {@code web_live_stanza_dump_to_file} and re-hydrate into Cobalt
- *       {@link Node} instances through {@link #loadEvents(String)} and
- *       {@link #buildNode(JSONObject)}.</li>
- *   <li>{@code .expected.json} oracle outputs are written by
- *       {@code web_live_debug_eval_to_file} and exposed as raw
- *       {@link JSONObject} so individual tests can assert against the
- *       fields they care about.</li>
- * </ul>
+ * @apiNote
+ * Backing storage for the migration-package live-oracle tests. Both
+ * fixture families live under
+ * {@code src/test/resources/fixtures/migration/} and are discovered
+ * via the classpath; missing fixtures are reported by
+ * {@link #isAvailable(String)} so the tests can opt-in cleanly without
+ * a corpus.
  *
- * <p>Both fixture families live under
- * {@code src/test/resources/fixtures/migration/} and are discovered through
- * the classpath. The class is a direct mirror of
- * {@code com.github.auties00.cobalt.device.DeviceFixtures} — the
- * JSON-tree-walking decoder is generic across packages, only the
+ * @implNote
+ * This implementation supports two fixture shapes: JSONL stanza
+ * captures from the MCP {@code web_live_stanza_dump_to_file} tool
+ * (decoded back into {@link Node} instances via
+ * {@link #loadEvents(String)} and {@link #buildNode(JSONObject)}), and
+ * oracle outputs from {@code web_live_debug_eval_to_file} exposed
+ * verbatim as {@link JSONObject} via {@link #loadExpected(String)} or
+ * unwrapped via {@link #loadOracle(String)}. The class mirrors
+ * {@code com.github.auties00.cobalt.device.DeviceFixtures}; only
  * {@link #FIXTURE_ROOT} differs.
  */
 public final class MigrationFixtures {
     /**
-     * The classpath prefix every migration-fixture path lives under.
+     * The classpath prefix under which every migration fixture is
+     * placed.
      */
     private static final String FIXTURE_ROOT = "fixtures/migration";
 
     /**
-     * Hidden constructor; this is a static-helper class.
+     * Prevents instantiation; this class exposes only static helpers.
      */
     private MigrationFixtures() {
         throw new AssertionError("MigrationFixtures is not instantiable");
     }
 
     /**
-     * Returns every captured stanza event in the given JSONL fixture, in
+     * Loads every captured stanza event in the given JSONL fixture, in
      * capture order.
      *
-     * @param topic the fixture topic without the {@code .jsonl} extension
-     * @return the list of {@code event} sub-objects, each shaped like the
-     *         output of the MCP stanza logger
-     * @throws UncheckedIOException if the fixture is missing or malformed
+     * @apiNote
+     * The standard entry point for tests that walk a captured stanza
+     * stream end-to-end; pair with {@link #loadEventWhere(String, String, JSONObject)}
+     * to single out a specific event by tag and attributes.
+     *
+     * @param topic the fixture topic without the {@code .jsonl}
+     *              extension
+     * @return the {@code event} sub-objects, in capture order
+     * @throws UncheckedIOException when the fixture is missing or
+     *                              malformed
      */
     public static List<JSONObject> loadEvents(String topic) {
         Objects.requireNonNull(topic, "topic");
@@ -91,15 +98,22 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns the first event in the given fixture whose {@code tag} matches
-     * and whose attributes contain every key/value pair in {@code attrs}.
+     * Returns the first event in the given fixture whose {@code tag}
+     * matches and whose attributes contain every key/value pair in
+     * {@code attrs}.
+     *
+     * @apiNote
+     * Used by tests that need to pick a single representative stanza
+     * (for example, the first {@code <ib>} with a specific
+     * {@code from} attribute) out of a longer capture.
      *
      * @param topic the fixture topic
-     * @param tag   the required stanza tag, or {@code null} to match any
-     * @param attrs the required attribute key/value pairs, or {@code null}
-     *              to skip attribute filtering
-     * @return the matching event
-     * @throws AssertionError if no event matches
+     * @param tag   the required stanza tag, or {@code null} to match
+     *              any tag
+     * @param attrs the required attribute key/value pairs, or
+     *              {@code null} to skip attribute filtering
+     * @return the first matching event
+     * @throws AssertionError when no event matches
      */
     public static JSONObject loadEventWhere(String topic, String tag, JSONObject attrs) {
         for (var event : loadEvents(topic)) {
@@ -123,12 +137,18 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a
-     * captured event.
+     * Reconstructs a Cobalt {@link Node} from the {@code node}
+     * sub-tree of a captured event.
      *
-     * @param event the event object from {@link #loadEvents(String)}
+     * @apiNote
+     * Companion to {@link #loadEvents(String)} for tests that drive
+     * the Cobalt stanza receivers against captured input by feeding
+     * them real {@link Node} instances.
+     *
+     * @param event the event object returned by
+     *              {@link #loadEvents(String)}
      * @return the reconstructed {@link Node}
-     * @throws IllegalArgumentException if the tree is malformed
+     * @throws IllegalArgumentException when the tree is malformed
      */
     public static Node buildNodeFromEvent(JSONObject event) {
         Objects.requireNonNull(event, "event");
@@ -140,25 +160,36 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Recursively reconstructs a {@link Node} from a captured plain-JSON
-     * tree.
+     * Reconstructs a {@link Node} from a plain-JSON tree without an
+     * enclosing event wrapper.
+     *
+     * @apiNote
+     * Use when the fixture is a bare node tree rather than the full
+     * {@code {event: {node: ...}}} envelope produced by
+     * {@link #loadEvents(String)}.
      *
      * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
-     * @throws IllegalArgumentException if {@code tree} has no tag
+     * @return the reconstructed {@link Node}
+     * @throws IllegalArgumentException when {@code tree} has no tag
      */
     public static Node buildNodeFromTree(JSONObject tree) {
         return buildNode(tree);
     }
 
     /**
-     * Returns the expected-output JSON document paired with the given
-     * fixture topic, loaded from {@code <topic>.expected.json} alongside the
-     * stanza capture.
+     * Loads the expected-output JSON document paired with the given
+     * fixture topic.
+     *
+     * @apiNote
+     * Returns the raw {@code <topic>.expected.json} contents so
+     * individual tests can pick out the fields they care about; for
+     * the common case of an {@code eval}-style payload use
+     * {@link #loadOracle(String)} instead.
      *
      * @param topic the fixture topic
      * @return the parsed expected document
-     * @throws UncheckedIOException if the fixture is missing or malformed
+     * @throws UncheckedIOException when the fixture is missing or
+     *                              malformed
      */
     public static JSONObject loadExpected(String topic) {
         Objects.requireNonNull(topic, "topic");
@@ -171,21 +202,24 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns the live-runtime result payload for an eval-style oracle
-     * fixture, unwrapping the {@code result.value} field and re-parsing it
-     * as JSON.
+     * Returns the unwrapped live-runtime result payload for an
+     * eval-style oracle fixture.
      *
-     * <p>{@code web_live_debug_eval_to_file} captures wrap the evaluation
-     * outcome as
+     * @apiNote
+     * Standard helper for tests that consume
+     * {@code web_live_debug_eval_to_file} captures, which wrap the
+     * evaluation outcome as
      * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
-     * The vast majority of oracle invocations stringify their result before
-     * returning so the live runtime can deliver it through CDP without
-     * structured-clone hazards; this helper undoes that stringification.
+     * Most oracle invocations stringify their result before
+     * returning so the live runtime can deliver it through CDP
+     * without structured-clone hazards; this helper undoes the
+     * stringification in one place.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
-     * @throws IllegalStateException if the fixture is malformed or the
-     *                               result is not a {@code string} payload
+     * @throws IllegalStateException when the fixture is malformed
+     *                               or the result is not a
+     *                               {@code string} payload
      */
     public static JSONObject loadOracle(String topic) {
         var outer = loadExpected(topic);
@@ -202,21 +236,33 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Returns whether the given fixture topic exists on the classpath.
+     * Returns whether the given fixture topic exists on the
+     * classpath.
+     *
+     * @apiNote
+     * Used as the opt-in gate in fresh checkouts, where the live
+     * captures are committed separately and a topic-specific
+     * fixture may not yet be present.
      *
      * @param topic the fixture topic
-     * @return {@code true} when {@code <topic>.jsonl} is on the classpath
+     * @return {@code true} when {@code <topic>.jsonl} is on the
+     *         classpath
      */
     public static boolean isAvailable(String topic) {
         return MigrationFixtures.class.getResourceAsStream("/" + FIXTURE_ROOT + "/" + topic + ".jsonl") != null;
     }
 
     /**
-     * Returns the parsed expected document for the given topic if available.
+     * Returns the parsed expected document for the given topic, or
+     * an empty {@link Optional} when no expected file is present.
+     *
+     * @apiNote
+     * Companion to {@link #isAvailable(String)} for tests that
+     * gracefully skip when the oracle output is not yet committed.
      *
      * @param topic the fixture topic
-     * @return the document, or {@link Optional#empty()} when no expected
-     *         file accompanies the fixture
+     * @return the parsed document, or {@link Optional#empty()} when
+     *         missing
      */
     public static Optional<JSONObject> findExpected(String topic) {
         var resource = FIXTURE_ROOT + "/" + topic + ".expected.json";
@@ -229,16 +275,24 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Creates an in-memory temporary store pre-configured with the given
-     * self-PN and self-LID. Use as the {@code store} dependency for any
-     * migration-package class that takes a {@link WhatsAppStore}.
+     * Creates an in-memory temporary {@link WhatsAppStore} configured
+     * with the given self-PN and optional self-LID.
+     *
+     * @apiNote
+     * Standard {@code store} dependency for any migration-package
+     * test that builds a {@link com.github.auties00.cobalt.client.WhatsAppClient}
+     * harness. The store is pre-advanced past the offline-delivery
+     * gate so
+     * {@link LidMigrationService#executeMigration()}
+     * proceeds immediately; production code drives the gate through
+     * the connection lifecycle.
      *
      * @param selfPn  the local user's PN-form bare JID
-     * @param selfLid the local user's LID-form bare JID, or {@code null}
-     *                when the test wants a pre-LID-migration store
+     * @param selfLid the local user's LID-form bare JID, or
+     *                {@code null} for a pre-LID-migration store
      * @return the configured temporary store
-     * @throws UncheckedIOException if the underlying factory cannot create
-     *                              the store
+     * @throws UncheckedIOException when the underlying factory cannot
+     *                              create the store
      */
     public static WhatsAppStore temporaryStore(Jid selfPn, Jid selfLid) {
         Objects.requireNonNull(selfPn, "selfPn");
@@ -249,9 +303,6 @@ public final class MigrationFixtures {
             if (selfLid != null) {
                 store.setLid(selfLid);
             }
-            // Mark offline delivery complete so LidMigrationService.executeMigration's
-            // waitForOfflineDeliveryEnd returns immediately. Production code advances this
-            // through the connection lifecycle; tests must opt-in.
             store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
             return store;
         } catch (IOException e) {
@@ -262,9 +313,15 @@ public final class MigrationFixtures {
     /**
      * Opens the named classpath resource.
      *
-     * @param resourcePath the resource path under {@code src/test/resources/}
-     * @return an input stream over the resource bytes
-     * @throws IOException if the resource is missing
+     * @apiNote
+     * Centralises the resource lookup so every fixture-loading
+     * helper surfaces a consistent error message when the resource
+     * is missing.
+     *
+     * @param resourcePath the resource path under
+     *                     {@code src/test/resources/}
+     * @return an open stream over the resource bytes
+     * @throws IOException when the resource is missing
      */
     private static InputStream open(String resourcePath) throws IOException {
         var stream = MigrationFixtures.class.getResourceAsStream("/" + resourcePath);
@@ -275,11 +332,19 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Flattens a captured attribute value into the string form the Cobalt
-     * {@code NodeBuilder.attribute(String, String)} setter expects.
+     * Flattens a captured attribute value into the string form the
+     * Cobalt {@link NodeBuilder#attribute(String, String)} setter
+     * expects.
+     *
+     * @apiNote
+     * Captured attributes may arrive as JID objects with a
+     * {@code $1} wrapper that encodes {@code user}, {@code server},
+     * {@code domainType}, and {@code device} fields; this helper
+     * unwraps the wrapper and rebuilds the canonical
+     * {@code user[:device]@server} string form.
      *
      * @param value the raw captured attribute value
-     * @return the string-form value
+     * @return the canonical string form
      */
     private static String attrValueAsString(Object value) {
         if (value instanceof JSONObject obj && obj.containsKey("$1")) {
@@ -308,11 +373,17 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Decodes a binary leaf object into raw bytes.
+     * Decodes a captured binary leaf into raw bytes.
      *
-     * @param binary the {@code {kind: "binary", base64: "..."}} object
+     * @apiNote
+     * Binary node content is captured as
+     * {@code {kind: "binary", base64: "..."}}; this helper unwraps
+     * the base64 payload for {@link #applyContent(NodeBuilder, Object)}.
+     *
+     * @param binary the binary leaf object
      * @return the decoded bytes
-     * @throws IllegalArgumentException if the object is not a binary leaf
+     * @throws IllegalArgumentException when the object lacks the
+     *                                  {@code base64} field
      */
     private static byte[] decodeBinary(JSONObject binary) {
         var base64 = binary.getString("base64");
@@ -323,10 +394,17 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Builds a {@link Node} from a plain-JSON tree.
+     * Builds a {@link Node} by walking a plain-JSON
+     * {@code {tag, attrs, content}} tree.
      *
-     * @param tree the {@code {tag, attrs, content}} object
-     * @return the reconstructed node
+     * @apiNote
+     * Shared core of {@link #buildNodeFromEvent(JSONObject)} and
+     * {@link #buildNodeFromTree(JSONObject)}; recurses into nested
+     * objects through {@link #applyContent(NodeBuilder, Object)}.
+     *
+     * @param tree the captured tree
+     * @return the reconstructed {@link Node}
+     * @throws IllegalArgumentException when {@code tree} has no tag
      */
     private static Node buildNode(JSONObject tree) {
         var tag = tree.getString("tag");
@@ -351,8 +429,13 @@ public final class MigrationFixtures {
     }
 
     /**
-     * Applies a {@code content} value (binary leaf, child array, string, or
-     * {@code null}) onto the builder.
+     * Applies a captured {@code content} value (binary leaf, child
+     * array, string, or {@code null}) onto the given builder.
+     *
+     * @apiNote
+     * Handles the four content shapes WA Web emits over its capture
+     * channel and rebuilds the structure the Cobalt
+     * {@link NodeBuilder} expects.
      *
      * @param builder the target builder
      * @param content the JSON-shaped content value

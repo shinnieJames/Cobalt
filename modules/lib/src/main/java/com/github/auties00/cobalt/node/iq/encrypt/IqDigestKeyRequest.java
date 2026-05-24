@@ -9,22 +9,36 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import com.github.auties00.cobalt.util.RandomIdUtils;
 
 /**
- * The outbound {@code <iq xmlns="encrypt" type="get">} stanza variant
- * — wraps a single bare {@code <digest/>} payload.
+ * Builds the outbound {@code <iq xmlns="encrypt" type="get"/>} that asks the relay to echo back its
+ * recorded Signal key-bundle digest for the local user.
+ *
+ * @apiNote
+ * Used by the digest-key sanity check that fires when the relay sends an
+ * {@code <notification type="encrypt"><digest/></notification>} push: the client compares the relay's
+ * SHA-1 over {@code identityPubKey || skeyPubKey || skeySignature || preKeyPubKeys} against a local
+ * recomputation, and on mismatch falls back to a full
+ * {@link IqUploadPreKeysRequest pre-key re-upload}. The request carries no payload other than a
+ * bare {@code <digest/>} child.
  */
 @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
 public final class IqDigestKeyRequest implements IqOperation.Request {
     /**
-     * Constructs a new digest-key request.
+     * Constructs an empty digest-key probe.
+     *
+     * @apiNote
+     * The request body has no parameters; the only outbound information is the {@code <digest/>}
+     * tag and the IQ envelope identifier.
      */
     public IqDigestKeyRequest() {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <digest/>} payload
+     * @implNote
+     * This implementation produces an {@code <iq>} addressed to {@link JidServer#user()} with
+     * {@code xmlns="encrypt"} and {@code type="get"}, carrying a single empty {@code <digest/>}
+     * child and a freshly minted {@link RandomIdUtils#newId() request identifier}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
@@ -42,6 +56,16 @@ public final class IqDigestKeyRequest implements IqOperation.Request {
                 .content(digestNode);
     }
 
+    /**
+     * Compares this request to another instance for equality.
+     *
+     * @apiNote
+     * All instances of {@code IqDigestKeyRequest} are interchangeable because the request carries
+     * no per-instance state; equality reduces to a class-identity check.
+     *
+     * @param obj the candidate instance
+     * @return {@code true} when {@code obj} is a non-{@code null} {@code IqDigestKeyRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -50,11 +74,21 @@ public final class IqDigestKeyRequest implements IqOperation.Request {
         return obj != null && obj.getClass() == this.getClass();
     }
 
+    /**
+     * Returns a stable hash code shared by all instances.
+     *
+     * @return the class identity hash
+     */
     @Override
     public int hashCode() {
         return IqDigestKeyRequest.class.hashCode();
     }
 
+    /**
+     * Returns the canonical record-style rendering for this request.
+     *
+     * @return the literal {@code "IqDigestKeyRequest[]"}
+     */
     @Override
     public String toString() {
         return "IqDigestKeyRequest[]";

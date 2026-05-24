@@ -10,29 +10,44 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps an optional {@code <item dhash/>}
- * child in the canonical {@code <iq xmlns="optoutlist" type="get">}
- * envelope and optionally narrows the query to a single
- * {@code category}.
+ * The outbound {@code <iq xmlns="optoutlist" type="get">} stanza fetching the user's marketing-message opt-out list.
+ *
+ * @apiNote
+ * Drives the marketing-messages opt-out surface; the WA Web caller is {@code WAWebGetOptOutList.getOptOutList},
+ * which seeds the request with the cached digest from {@code WAWebUserPrefsMultiDevice.getOptOutListHash} and
+ * optionally scopes the result to a single marketing category.
+ *
+ * @implNote
+ * This implementation flattens WA Web's {@code makeGetOptOutListRequest} and
+ * {@code makeGetOptOutListRequestItem} factories into a single method; both attributes are optional and emitted
+ * only when the corresponding field is set.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsGetOptOutListRequest")
 public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
     /**
-     * The optional client-side {@code dhash} digest of the cached
-     * opt-out list. Supplied so the relay can return
-     * {@link SmaxGetOptOutListResponse.SuccessWithMatch} when the client's
-     * cache is up to date, avoiding a re-download of the full list.
+     * The cached digest of the opt-out list or {@code null} to request a full list.
+     *
+     * @apiNote
+     * Populated from {@code WAWebUserPrefsMultiDevice.getOptOutListHash}; pass {@code null} on first boot or
+     * after a cache wipe.
      */
     private final String itemDhash;
 
     /**
-     * The optional category filter. Used to narrow the query to a
-     * subset of opt-out entries.
+     * The marketing-message category scoping the query or {@code null} for an unscoped fetch.
+     *
+     * @apiNote
+     * One of the user-controls category constants; consumers typically pass the active category surfaced by the
+     * UI.
      */
     private final String iqCategory;
 
     /**
-     * Constructs a request.
+     * Constructs an opt-out-list request.
+     *
+     * @apiNote
+     * Pass {@code null} for either argument to omit the corresponding wire attribute and fall back to the
+     * relay's defaults (full list, all categories).
      *
      * @param itemDhash  the cached digest; may be {@code null}
      * @param iqCategory the category filter; may be {@code null}
@@ -43,35 +58,31 @@ public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional cached digest.
+     * Returns the cached digest when set.
      *
-     * @return an {@link Optional} carrying the digest, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
     public Optional<String> itemDhash() {
         return Optional.ofNullable(itemDhash);
     }
 
     /**
-     * Returns the optional category filter.
+     * Returns the category filter when set.
      *
-     * @return an {@link Optional} carrying the category, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the category, or empty when no category was supplied
      */
     public Optional<String> iqCategory() {
         return Optional.ofNullable(iqCategory);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza ready for dispatch.
      *
-     * <p>Mirrors {@code makeGetOptOutListRequest(t)} from the WA Web
-     * source: emits {@code <iq to=S_WHATSAPP_NET xmlns="optoutlist"
-     * type="get">}, conditionally appends the {@code category}
-     * attribute via {@code OPTIONAL(CUSTOM_STRING, r)}, and
-     * conditionally attaches the {@code <item dhash/>} child via
-     * {@code OPTIONAL_CHILD(e, n)}. The {@code id} attribute is
-     * generated downstream by {@code WhatsAppClient.sendNode}.
+     * @apiNote
+     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="optoutlist"} and
+     * {@code type="get"}; the {@code id} attribute is filled in downstream by the central client dispatcher.
+     * The {@code category} attribute is added only when {@link #iqCategory()} is present; the
+     * {@code <item dhash="..."/>} child is added only when {@link #itemDhash()} is present.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -81,18 +92,15 @@ public final class SmaxGetOptOutListRequest implements SmaxOperation.Request {
     @WhatsAppWebExport(moduleName = "WASmaxOutBlocklistsGetOptOutListRequest",
             exports = "makeGetOptOutListRequestItem", adaptation = WhatsAppAdaptation.ADAPTED)
     public NodeBuilder toNode() {
-        // WASmaxOutBlocklistsGetOptOutListRequest.makeGetOptOutListRequest: smax("iq", {to: S_WHATSAPP_NET, xmlns: "optoutlist", type: "get", category: OPTIONAL(CUSTOM_STRING, r), id: generateId()}, OPTIONAL_CHILD(e, n))
         var iqBuilder = new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "optoutlist")
                 .attribute("to", JidServer.user())
                 .attribute("type", "get");
         if (iqCategory != null) {
-            // WASmaxOutBlocklistsGetOptOutListRequest.makeGetOptOutListRequest: category: OPTIONAL(CUSTOM_STRING, r)
             iqBuilder.attribute("category", iqCategory);
         }
         if (itemDhash != null) {
-            // WASmaxOutBlocklistsGetOptOutListRequest.makeGetOptOutListRequestItem: smax("item", {dhash: CUSTOM_STRING(t)})
             var itemNode = new NodeBuilder()
                     .description("item")
                     .attribute("dhash", itemDhash)

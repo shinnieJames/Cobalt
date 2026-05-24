@@ -12,18 +12,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay.
+ * The inbound reply to a {@link SmaxLinkQueryRequest}, projecting the
+ * relay's {@code <ack class="call">} stanza into one of two documented
+ * variants: {@link Success} (link metadata returned) and {@link ClientError}
+ * (token rejected).
+ *
+ * @apiNote
+ * Consumed by the call-link join flow to decide whether to present a join
+ * prompt, route the user through the waiting room, or surface an
+ * "Invalid link" error.
  */
 public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         permits SmaxLinkQueryResponse.Success, SmaxLinkQueryResponse.ClientError {
 
     /**
-     * Tries each {@link SmaxLinkQueryResponse} variant in priority order.
+     * Parses an inbound stanza into the first matching reply variant.
+     *
+     * @apiNote
+     * Mirrors the dispatcher in {@code WASmaxVoipLinkQueryRPC.sendLinkQueryRPC};
+     * Cobalt returns {@link Optional#empty()} on no-match instead of throwing
+     * the JS {@code SmaxParsingFailure}.
      *
      * @param node    the inbound stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty on no-match
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxVoipLinkQueryRPC",
@@ -39,13 +51,17 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
     }
 
     /**
-     * Validates the {@code <ack class="call">} envelope shared by
-     * both reply variants.
+     * Validates the {@code <ack class="call">} envelope common to both reply
+     * variants.
+     *
+     * @implNote
+     * This implementation mirrors {@code WASmaxInVoipCallAckBaseMixin.parseCallAckBaseMixin}:
+     * it requires the {@code <ack>} description, the {@code class="call"} marker,
+     * the echoed request {@code id}, and the literal {@code from="call"} server.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return {@code true} when the envelope matches; {@code false}
-     *         otherwise
+     * @return {@code true} when the envelope matches; {@code false} otherwise
      */
     private static boolean validateAckEnvelope(Node node, Node request) {
         if (!node.hasDescription("ack")) {
@@ -69,20 +85,28 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant. The relay resolved the
-     * supplied token and returned the call link's full metadata.
+     * The successful reply carrying the call link's full metadata.
+     *
+     * @apiNote
+     * Surfaces the creator identity (device JID and optional PN-form
+     * mapping plus optional display username), the echoed token and media,
+     * the scheduled-event presence flag, and the optional waiting-room
+     * descriptor consumed by the join UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkQueryResponseLinkQueryAck")
     final class Success implements SmaxLinkQueryResponse {
         /**
-         * The call link's creator device JID.
+         * The creator-device JID carried by the {@code link_creator} attribute.
          */
         private final Jid linkQueryLinkCreator;
 
         /**
-         * The optional creator phone-number JID. Supplied when the
-         * relay knows both the LID and PN identifiers for the
-         * creator.
+         * The optional creator phone-number JID carried by the
+         * {@code link_creator_pn} attribute.
+         *
+         * @apiNote
+         * Supplied when the relay knows both the LID and PN identifiers for
+         * the creator, typical for migrated 1:1 chat accounts.
          */
         private final Jid linkQueryLinkCreatorPn;
 
@@ -92,7 +116,8 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         private final String linkQueryLinkCreatorUsername;
 
         /**
-         * The optional echoed action attribute.
+         * The optional echoed action attribute. Either {@code "preview"} or
+         * {@code "edit"} when present.
          */
         private final String linkQueryAction;
 
@@ -102,12 +127,13 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         private final String linkQueryToken;
 
         /**
-         * The echoed media type.
+         * The echoed media type. Either {@code "audio"} or {@code "video"}.
          */
         private final String linkQueryMedia;
 
         /**
-         * Whether the link is associated with a scheduled event.
+         * Whether the inner {@code <event/>} child is present, indicating
+         * the link is bound to a scheduled call.
          */
         private final boolean hasLinkQueryEvent;
 
@@ -117,27 +143,17 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         private final WaitingRoom linkQueryWaitingRoom;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply.
          *
-         * @param linkQueryLinkCreator         the creator device JID;
-         *                                     never {@code null}
-         * @param linkQueryLinkCreatorPn       the optional creator PN;
-         *                                     may be {@code null}
-         * @param linkQueryLinkCreatorUsername the optional creator
-         *                                     username; may be
-         *                                     {@code null}
-         * @param linkQueryAction              the optional echoed
-         *                                     action; may be
-         *                                     {@code null}
-         * @param linkQueryToken               the echoed token; never
-         *                                     {@code null}
-         * @param linkQueryMedia               the echoed media type;
-         *                                     never {@code null}
-         * @param hasLinkQueryEvent            whether the link has an
-         *                                     associated event
-         * @param linkQueryWaitingRoom         the optional waiting-room
-         *                                     descriptor; may be
-         *                                     {@code null}
+         * @param linkQueryLinkCreator         the creator-device JID; never {@code null}
+         * @param linkQueryLinkCreatorPn       the optional creator PN-form JID; may be {@code null}
+         * @param linkQueryLinkCreatorUsername the optional creator display username; may be {@code null}
+         * @param linkQueryAction              the optional echoed action; may be {@code null}
+         * @param linkQueryToken               the echoed token; never {@code null}
+         * @param linkQueryMedia               the echoed media type; never {@code null}
+         * @param hasLinkQueryEvent            whether the link has an associated scheduled event
+         * @param linkQueryWaitingRoom         the optional waiting-room descriptor; may be {@code null}
+         * @throws NullPointerException if any non-optional argument is {@code null}
          */
         public Success(Jid linkQueryLinkCreator,
                        Jid linkQueryLinkCreatorPn,
@@ -158,7 +174,7 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the creator device JID.
+         * Returns the creator-device JID.
          *
          * @return the creator JID; never {@code null}
          */
@@ -169,18 +185,16 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         /**
          * Returns the optional creator phone-number JID.
          *
-         * @return an {@link Optional} carrying the creator PN, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the PN-form JID, or empty when omitted
          */
         public Optional<Jid> linkQueryLinkCreatorPn() {
             return Optional.ofNullable(linkQueryLinkCreatorPn);
         }
 
         /**
-         * Returns the optional creator username.
+         * Returns the optional creator-supplied display username.
          *
-         * @return an {@link Optional} carrying the username, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the username, or empty when omitted
          */
         public Optional<String> linkQueryLinkCreatorUsername() {
             return Optional.ofNullable(linkQueryLinkCreatorUsername);
@@ -189,15 +203,14 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         /**
          * Returns the optional echoed action.
          *
-         * @return an {@link Optional} carrying the action, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the action, or empty when omitted
          */
         public Optional<String> linkQueryAction() {
             return Optional.ofNullable(linkQueryAction);
         }
 
         /**
-         * Returns the echoed token.
+         * Returns the echoed call-link token.
          *
          * @return the token; never {@code null}
          */
@@ -215,9 +228,9 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns whether the link has an associated event.
+         * Returns whether the link has an associated scheduled event.
          *
-         * @return {@code true} when the {@code <event/>} child was
+         * @return {@code true} when the inner {@code <event/>} child was
          *         present; {@code false} otherwise
          */
         public boolean hasLinkQueryEvent() {
@@ -227,22 +240,28 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         /**
          * Returns the optional waiting-room descriptor.
          *
-         * @return an {@link Optional} carrying the descriptor, or
-         *         empty when the {@code <waiting_room/>} child was
-         *         absent
+         * @return an {@link Optional} carrying the descriptor, or empty when
+         *         the {@code <waiting_room/>} child was absent
          */
         public Optional<WaitingRoom> linkQueryWaitingRoom() {
             return Optional.ofNullable(linkQueryWaitingRoom);
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link Success} variant.
+         *
+         * @implNote
+         * This implementation mirrors {@code parseLinkQueryResponseLinkQueryAck}:
+         * after the shared ack envelope it requires {@code type="link_query"},
+         * an inner {@code <link_query>} child with {@code link_creator},
+         * {@code token}, and {@code media} attributes, and optionally parses
+         * {@code link_creator_pn}, {@code link_creator_username},
+         * {@code action}, the {@code <event/>} child presence, and the
+         * {@code <waiting_room/>} descriptor.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipLinkQueryResponseLinkQueryAck",
                 exports = "parseLinkQueryResponseLinkQueryAck",
@@ -331,30 +350,33 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         }
 
         /**
-         * Descriptor for the inner {@code <waiting_room
-         * is_admin enabled/>} child carried by some
-         * {@code Success} replies.
+         * Descriptor projecting the inner {@code <waiting_room is_admin enabled/>}
+         * child carried by {@link Success} replies when the call link has a
+         * configured waiting room.
          */
         public static final class WaitingRoom {
             /**
-             * Whether the caller is an admin of this call link's
-             * waiting room (the {@code is_admin="1"} marker).
+             * Whether the caller is an admin of this call link's waiting
+             * room.
+             *
+             * @apiNote
+             * Reflects the {@code is_admin="1"} marker; the relay omits the
+             * attribute for non-admin callers.
              */
             private final boolean isAdmin;
 
             /**
-             * Whether the waiting-room gate is currently enabled.
-             * Mirrors the {@code enabled} attribute, which carries
-             * either {@code "0"} or {@code "1"} on the wire.
+             * The raw {@code enabled} attribute. Either {@code "0"} or
+             * {@code "1"} per the WA Web {@code ENUM_0_1} validator.
              */
             private final String enabled;
 
             /**
-             * Constructs a new descriptor.
+             * Constructs a descriptor.
              *
-             * @param isAdmin whether the caller is an admin
-             * @param enabled the raw enabled string; never
-             *                {@code null}
+             * @param isAdmin whether the caller is an admin of the waiting room
+             * @param enabled the raw enabled string; never {@code null}
+             * @throws NullPointerException if {@code enabled} is {@code null}
              */
             public WaitingRoom(boolean isAdmin, String enabled) {
                 this.isAdmin = isAdmin;
@@ -362,7 +384,8 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns whether the caller is an admin.
+             * Returns whether the caller is an admin of this call link's
+             * waiting room.
              *
              * @return {@code true} when the caller is an admin
              */
@@ -371,7 +394,7 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
             }
 
             /**
-             * Returns the raw enabled string.
+             * Returns the raw {@code enabled} attribute value.
              *
              * @return the enabled string; never {@code null}
              */
@@ -380,12 +403,18 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
             }
 
             /**
-             * Tries to parse a descriptor from the given
-             * {@code <waiting_room>} node.
+             * Parses a descriptor from an inner {@code <waiting_room>} node.
+             *
+             * @implNote
+             * This implementation mirrors
+             * {@code parseLinkQueryResponseLinkQueryAckLinkQueryWaitingRoom}:
+             * it asserts the {@code <waiting_room>} tag, requires a non-null
+             * {@code enabled} attribute, and treats a missing {@code is_admin}
+             * marker as {@code false}.
              *
              * @param node the inner stanza; never {@code null}
-             * @return an {@link Optional} carrying the parsed
-             *         descriptor, or empty when malformed
+             * @return an {@link Optional} carrying the parsed descriptor, or empty when malformed
+             * @throws NullPointerException if {@code node} is {@code null}
              */
             public static Optional<WaitingRoom> of(Node node) {
                 Objects.requireNonNull(node, "node cannot be null");
@@ -426,35 +455,36 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * query because the supplied token is invalid, expired, revoked,
-     * or refers to a link the caller is not authorised to view.
+     * The client-error reply produced when the relay rejects the query.
+     *
+     * @apiNote
+     * Typical causes are an unknown or revoked token; the per-RPC
+     * {@link #errorToken()} echoes the token that triggered the error so
+     * the caller can distinguish errors when multiple queries are in flight.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipLinkQueryResponseLinkQueryNack")
     final class ClientError implements SmaxLinkQueryResponse {
         /**
-         * The numeric error code, parsed from the {@code @error}
-         * attribute when it is a decimal integer; {@code -1} when
-         * non-numeric.
+         * The numeric error code parsed from the {@code error} attribute,
+         * or {@code -1} when the raw value is non-numeric.
          */
         private final int errorCode;
 
         /**
-         * The raw {@code @error} attribute string.
+         * The raw {@code error} attribute value.
          */
         private final String errorText;
 
         /**
-         * The per-RPC token attribute carried by the inner
-         * {@code <error/>} child.
+         * The per-RPC token attribute carried by the inner {@code <error>}
+         * child; identifies which token the error refers to.
          */
         private final String errorToken;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply.
          *
-         * @param errorCode  the numeric code; {@code -1} when the
-         *                   raw attribute is non-numeric
+         * @param errorCode  the numeric code; {@code -1} when the raw attribute is non-numeric
          * @param errorText  the raw error string; may be {@code null}
          * @param errorToken the per-RPC token; may be {@code null}
          */
@@ -467,7 +497,8 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code, or {@code -1} when the raw {@code error}
+         *         attribute was non-numeric
          */
         public int errorCode() {
             return errorCode;
@@ -476,31 +507,35 @@ public sealed interface SmaxLinkQueryResponse extends SmaxOperation.Response
         /**
          * Returns the optional raw error string.
          *
-         * @return an {@link Optional} carrying the error string, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the error string, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Returns the optional per-RPC token attribute.
+         * Returns the per-RPC token attribute carried by the inner
+         * {@code <error>} child.
          *
-         * @return an {@link Optional} carrying the token, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the token, or empty when omitted
          */
         public Optional<String> errorToken() {
             return Optional.ofNullable(errorToken);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link ClientError} variant.
+         *
+         * @implNote
+         * This implementation requires the shared ack envelope, the
+         * {@code type="link_query"} marker, a non-null {@code error} attribute,
+         * and a non-null {@code token} attribute on the inner {@code <error>}
+         * child; the attribute value is parsed as a decimal integer and falls
+         * back to {@code -1} when non-numeric.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipLinkQueryResponseLinkQueryNack",
                 exports = "parseLinkQueryResponseLinkQueryNack",

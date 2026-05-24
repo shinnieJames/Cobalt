@@ -7,31 +7,31 @@ import com.github.auties00.libsignal.key.SignalPreKeyPair;
 import com.github.auties00.libsignal.state.SignalPreKeyBundleBuilder;
 
 /**
- * Builds a libsignal session between two {@link WhatsAppStore} instances
- * so the {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption}
- * pipeline can encrypt for a recipient that the sender has not yet
- * messaged.
+ * Builds a libsignal session between two {@link WhatsAppStore} instances so
+ * the
+ * {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption}
+ * pipeline can encrypt for a recipient the sender has never talked to.
  *
- * <p>The helper mimics the production wire flow:
- *
- * <ol>
- *   <li>The recipient's store advertises a {@code SignalPreKeyBundle}
- *       (identity key + signed prekey + one-time prekey) — equivalent to
- *       what WA Web's prekey-fetch IQ returns.</li>
- *   <li>The sender's {@link SignalSessionCipher} processes the bundle,
- *       installing a session record keyed by the recipient's
- *       {@link com.github.auties00.libsignal.SignalProtocolAddress}.</li>
- * </ol>
- *
- * <p>After this call returns, the sender's
+ * @apiNote Mimics the production wire flow in two steps: the recipient's
+ * store advertises a {@code SignalPreKeyBundle} (identity key, signed
+ * prekey, one-time prekey), equivalent to what WA Web's prekey-fetch IQ
+ * returns; the sender's {@link SignalSessionCipher} then processes the
+ * bundle, installing a session record keyed by the recipient's
+ * {@link com.github.auties00.libsignal.SignalProtocolAddress}. After this
+ * call returns, the sender's
  * {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption#encryptForDevice}
- * will produce a {@code PreKeySignalMessage} that the recipient can
- * decrypt with its own {@link SignalSessionCipher}.
+ * produces a {@code PreKeySignalMessage} that the recipient can decrypt
+ * with its own {@link SignalSessionCipher}.
+ *
+ * @implNote Test-only helper; intentionally bypasses the network prekey
+ * fetch so tests can synthesise sender and recipient stores in process.
  */
 public final class TestSignalSession {
 
     /**
      * Hidden constructor; this is a static-helper class.
+     *
+     * @throws AssertionError always
      */
     private TestSignalSession() {
         throw new AssertionError("TestSignalSession is not instantiable");
@@ -39,12 +39,14 @@ public final class TestSignalSession {
 
     /**
      * Seeds {@code store} with at least one one-time prekey so it can
-     * publish a complete {@link com.github.auties00.libsignal.state.SignalPreKeyBundle}.
+     * publish a complete
+     * {@link com.github.auties00.libsignal.state.SignalPreKeyBundle}.
      *
-     * <p>Idempotent — if the store already has a prekey, this is a no-op.
+     * @apiNote Idempotent; when the store already carries a prekey the
+     * existing prekey is returned and no new one is generated.
      *
      * @param store the store to seed
-     * @return the (existing or newly-added) prekey
+     * @return the existing or newly added prekey
      */
     public static SignalPreKeyPair seedOneTimePreKey(WhatsAppStore store) {
         var existing = store.preKeys();
@@ -57,9 +59,15 @@ public final class TestSignalSession {
     }
 
     /**
-     * Installs a session on {@code senderStore} so it can encrypt to
-     * {@code recipientJid}. The recipient's identity is drawn from
-     * {@code recipientStore} and packaged into a {@link com.github.auties00.libsignal.state.SignalPreKeyBundle}.
+     * Installs a Signal session on {@code senderStore} so it can encrypt to
+     * {@code recipientJid}.
+     *
+     * @apiNote The recipient's identity material is drawn from
+     * {@code recipientStore}, packaged into a
+     * {@link com.github.auties00.libsignal.state.SignalPreKeyBundle}, and
+     * processed by a {@link SignalSessionCipher} backed by
+     * {@code senderStore}. Idempotent in the sense that a repeated call
+     * simply reseats the session under the same recipient address.
      *
      * @param senderStore    the sender's protocol store
      * @param recipientJid   the recipient device JID

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Per-classifier natives bundle assembly — packs every binary under
-  `${project.basedir}/dependencies/<lib>/bin/${natives.classifier}/`
-  into `modules/lib/dependencies/<lib>/bin/${natives.classifier}/`
+  Per-classifier natives bundle assembly — packs every FFmpeg
+  shared library under
+  `${project.basedir}/dependencies/ffmpeg/bin/${natives.classifier}/`
+  into
+  `modules/lib/dependencies/ffmpeg/bin/${natives.classifier}/`
   inside a JAR named
   `cobalt-${project.version}-natives-${natives.classifier}.jar`.
 
@@ -11,7 +13,8 @@
   path verbatim) finds binaries in the bundled JAR at the same
   coordinate it would download them from.
 
-  Activated indirectly via the `natives` profile in modules/lib/pom.xml.
+  Activated indirectly via the `natives` profile in
+  modules/lib/pom.xml.
 -->
 <assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -23,54 +26,21 @@
     <includeBaseDirectory>false</includeBaseDirectory>
     <fileSets>
         <!--
-            One file set per native lib we ship — each picks up the
-            classifier-specific binaries from
-            `${project.basedir}/dependencies/<lib>/bin/<classifier>/`
-            and preserves the repo-relative path inside the JAR.
-            Missing directories are silently skipped, so a partial
-            cut (e.g. only Linux) still produces a usable JAR.
+            Single fileset per FFmpeg drop — the build-ffmpeg.sh
+            script produces six shared libraries
+            (libavformat / libavcodec / libavdevice / libavutil /
+            libswscale / libswresample) into one
+            `dependencies/ffmpeg/bin/<classifier>/` directory and we
+            ship them all together. Missing files are silently
+            skipped, so a partial cut (e.g. only Linux) still
+            produces a usable JAR for that classifier.
         -->
         <fileSet>
-            <directory>${project.basedir}/dependencies/libopus/bin/${natives.classifier}</directory>
-            <outputDirectory>modules/lib/dependencies/libopus/bin/${natives.classifier}</outputDirectory>
+            <directory>${project.basedir}/dependencies/ffmpeg/bin/${natives.classifier}</directory>
+            <outputDirectory>modules/lib/dependencies/ffmpeg/bin/${natives.classifier}</outputDirectory>
             <includes>
                 <include>*.so</include>
-                <include>*.dylib</include>
-                <include>*.dll</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/dependencies/speexdsp/bin/${natives.classifier}</directory>
-            <outputDirectory>modules/lib/dependencies/speexdsp/bin/${natives.classifier}</outputDirectory>
-            <includes>
-                <include>*.so</include>
-                <include>*.dylib</include>
-                <include>*.dll</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/dependencies/libvpx/bin/${natives.classifier}</directory>
-            <outputDirectory>modules/lib/dependencies/libvpx/bin/${natives.classifier}</outputDirectory>
-            <includes>
-                <include>*.so</include>
-                <include>*.dylib</include>
-                <include>*.dll</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/dependencies/openh264/bin/${natives.classifier}</directory>
-            <outputDirectory>modules/lib/dependencies/openh264/bin/${natives.classifier}</outputDirectory>
-            <includes>
-                <include>*.so</include>
-                <include>*.dylib</include>
-                <include>*.dll</include>
-            </includes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/dependencies/usrsctp/bin/${natives.classifier}</directory>
-            <outputDirectory>modules/lib/dependencies/usrsctp/bin/${natives.classifier}</outputDirectory>
-            <includes>
-                <include>*.so</include>
+                <include>*.so.*</include>
                 <include>*.dylib</include>
                 <include>*.dll</include>
             </includes>

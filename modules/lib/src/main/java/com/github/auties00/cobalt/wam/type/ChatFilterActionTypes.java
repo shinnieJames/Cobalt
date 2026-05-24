@@ -274,5 +274,10 @@ public enum ChatFilterActionTypes {
     @WamEnumConstant(269) THREE_DOT_MENU_TAP,
     @WamEnumConstant(270) CONVERSATION_STARTER_TAP,
     @WamEnumConstant(271) DOCUMENT_TAP,
-    @WamEnumConstant(272) THREADING_HISTORY_TAP
+    @WamEnumConstant(272) THREADING_HISTORY_TAP,
+    @WamEnumConstant(273) CONVERSATION_STARTER_IMPRESSION,
+    @WamEnumConstant(274) SLASH_ICON_BUTTON_CLICK,
+    @WamEnumConstant(275) SLASH_COMMAND_CLICK,
+    @WamEnumConstant(276) SLASH_ICON_TYPED,
+    @WamEnumConstant(277) SLASH_COMMAND_PROMPT_SUBMIT
 }

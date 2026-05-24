@@ -21,8 +21,10 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.OppositeVisibleIdentificationType;
 import com.github.auties00.cobalt.wam.type.PairedMediaType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.PrivateAiFeatureName;
 import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 import com.github.auties00.cobalt.wam.type.StickerMakerSourceType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
@@ -193,8 +195,14 @@ public interface MessageReceiveEvent extends WamEventSpec {
     @WamProperty(index = 11, type = WamType.INTEGER)
     OptionalInt senderDefaultDisappearingDuration();
 
+    @WamProperty(index = 64, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
+
     @WamProperty(index = 35, type = WamType.ENUM)
     Optional<AddressingMode> serverAddressingMode();
+
+    @WamProperty(index = 63, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 48, type = WamType.INTEGER)
     OptionalInt stanzaProcessCount();

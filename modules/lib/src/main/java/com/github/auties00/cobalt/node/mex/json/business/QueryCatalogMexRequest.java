@@ -12,30 +12,52 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the list of products that belong to a WhatsApp Business catalog.
+ * Outbound MEX request that fetches the products of a WhatsApp Business
+ * catalog.
  *
- * <p>A catalog is the flat storefront attached to a business JID. The query
- * returns the products it contains together with their core metadata such as
- * name, description, currency, price and image URLs. WA Web exposes the
- * operation under two names depending on whether the caller is the catalog
+ * @apiNote Drives the catalog browser surface for business products. A
+ * catalog is the flat storefront attached to a business JID; the response
+ * carries the contained products together with their core metadata (name,
+ * description, currency, price, image URLs). WA Web's
+ * {@code WAWebQueryCatalog.default} routes between two named functions on
+ * the same compiled document depending on whether the caller is the catalog
  * owner ({@code queryCatalogGraphQLByOwner}) or a guest browser
- * ({@code queryCatalogGraphQLByGuest}); both paths materialise the same
- * GraphQL query.
+ * ({@code queryCatalogGraphQLByGuest}); Cobalt issues the single query and
+ * lets the relay disambiguate. Callers are
+ * {@code WAWebBizProductCatalogBridge.queryCatalog} and the
+ * {@code WAWebBusinessProfileCollection} prefetch path.
+ *
+ * @implNote This implementation omits the WA Web {@code checkmark_collection_id}
+ * variable (Cobalt does not surface the WhatsApp shop checkmark UI), the
+ * {@code variant_info_fields}, {@code variant_thumbnail_height} and
+ * {@code variant_thumbnail_width} variables (variant info is not projected
+ * onto the Cobalt domain model), the {@code direct_connection_encrypted_info}
+ * variable (Cobalt does not implement the business direct-connection retry
+ * loop), and the {@code catalog_session_id} variable; all of those are sent
+ * as explicit {@code null} so the relay accepts the document shape.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalog")
 @WhatsAppWebModule(moduleName = "WAWebQueryCatalogQuery.graphql")
 public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebQueryCatalogQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebQueryCatalogQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebQueryCatalogQuery.graphql}. The relay maps this id to its
+     * persisted operation; the GraphQL text is never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCatalogQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9916553288394782";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCatalog", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -52,6 +74,11 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
      * Creates a new catalog query request with the WA Web default
      * {@code allowShopSource=false}.
      *
+     * @apiNote Convenience overload for the common browse path. Equivalent to
+     * the six-argument constructor with {@code allowShopSource=false},
+     * matching how {@code WAWebBizProductCatalogBridge.queryCatalog} is
+     * invoked when the caller does not opt into the WhatsApp shop source.
+     *
      * @param catalogJid  the target business JID owning the catalog
      * @param limit       the page size (maximum number of products returned
      *                    per page)
@@ -67,6 +94,11 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
 
     /**
      * Creates a new catalog query request.
+     *
+     * @apiNote Use this constructor when the caller needs to set
+     * {@code allowShopSource} explicitly. The value is wire-serialised as the
+     * WA Web enum literal {@code "ALLOWSHOPSOURCE_TRUE"} or
+     * {@code "ALLOWSHOPSOURCE_FALSE"}.
      *
      * @param catalogJid      the target business JID owning the catalog
      * @param limit           the page size (maximum number of products
@@ -90,9 +122,7 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -100,9 +130,7 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -110,10 +138,17 @@ public final class QueryCatalogMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp
-     * relay.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter}, mirroring the
+     * {@code {"variables": {"request": {"product_catalog": {...}}}}} shape
+     * expected by {@code xwa_product_catalog_get_product_catalog}, then
+     * delegates to {@link MexOperation.Request.Json#createMexNode(String, String)}
+     * to wrap the JSON in the {@code w:mex} envelope. Width, height and
+     * pagination fields are stringified to match the WA Web wire shape, which
+     * sends them as JSON strings even though they are integers in the GraphQL
+     * schema.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryCatalog", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)

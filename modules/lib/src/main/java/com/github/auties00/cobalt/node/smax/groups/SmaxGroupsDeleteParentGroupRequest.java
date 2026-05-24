@@ -13,42 +13,56 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq type="set" xmlns="w:g2" to="<parentGroupJid>">} stanza that deactivates a community
+ * (parent group) along with its sub-groups.
+ *
+ * @apiNote
+ * Drives the community-delete pipeline surfaced by {@code WAWebGroupCommunityJob.deleteParentGroup}; emit
+ * one of these per community to be torn down and pair it with {@link SmaxGroupsDeleteParentGroupResponse} to
+ * read the relay's verdict. The payload is a bare {@code <delete_parent/>} child with no attributes; the
+ * target community is identified solely by the IQ envelope's {@code to} attribute.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsDeleteParentGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsDeleteParentGroupRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group JID to deactivate.
+     * The parent (community) group {@link Jid} routed verbatim into the IQ envelope's {@code to} attribute.
      */
     private final Jid parentGroupJid;
 
     /**
-     * Constructs a request.
+     * Constructs a request targeting the given community.
      *
-     * @param parentGroupJid the community JID; never {@code null}
-     * @throws NullPointerException if {@code parentGroupJid} is
-     *                              {@code null}
+     * @apiNote
+     * Build one request per community deletion; the relay does not accept multiple parents in a single IQ.
+     *
+     * @param parentGroupJid the community {@link Jid}; never {@code null}
+     * @throws NullPointerException if {@code parentGroupJid} is {@code null}
      */
     public SmaxGroupsDeleteParentGroupRequest(Jid parentGroupJid) {
         this.parentGroupJid = Objects.requireNonNull(parentGroupJid, "parentGroupJid cannot be null");
     }
 
     /**
-     * Returns the parent group JID.
+     * Returns the parent community {@link Jid} targeted by this request.
      *
-     * @return the parent group JID; never {@code null}
+     * @apiNote
+     * Mirrors the value that will appear in the rendered IQ envelope's {@code to} attribute.
+     *
+     * @return the parent group {@link Jid}; never {@code null}
      */
     public Jid parentGroupJid() {
         return parentGroupJid;
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <delete_parent/>} payload
+     * @implNote
+     * This implementation emits a single empty {@code <delete_parent/>} child inside the canonical
+     * {@code <iq xmlns="w:g2" type="set" to="<parentGroupJid>">} envelope; no further attributes or children
+     * are sent.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsDeleteParentGroupRequest",

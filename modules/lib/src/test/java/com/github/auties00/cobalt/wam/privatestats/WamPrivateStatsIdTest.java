@@ -12,49 +12,56 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Behavioural tests for {@link WamPrivateStatsId}'s rotation
- * machinery. The eight rotation groups match what
- * {@code WAWebWamPrivateStats}'s initialiser sets up; rotation
- * boundaries are driven by an injected
- * {@link java.util.function.LongSupplier} so the period boundary
- * crossings are deterministic.
+ * Exercises {@link WamPrivateStatsId}'s rotation machinery
+ * against a controlled clock.
+ *
+ * @apiNote
+ * Pins the eight rotation groups declared by
+ * {@code WAWebWamPrivateStats}'s initialiser and checks that
+ * {@link WamPrivateStatsId#rotateAndReportChanges} fires when (and
+ * only when) the supplied clock crosses a period boundary.
+ *
+ * @implNote
+ * This implementation drives the {@link java.util.function.LongSupplier}
+ * exposed by the package-private constructor so the period-boundary
+ * crossings are deterministic without sleeping; the production
+ * constructor wires the supplier to {@link java.time.Instant#now()}.
  */
 @DisplayName("WamPrivateStatsId rotation behaviour")
 class WamPrivateStatsIdTest {
     /**
-     * Number of seconds in a day; cached locally so the test
-     * doesn't need to reach into {@link java.time.Duration}
-     * arithmetic at each call site.
+     * The number of seconds in one UTC day.
      */
     private static final long DAY_SECONDS = 86_400L;
 
     /**
-     * A stable starting epoch on a day boundary (relative to UTC),
-     * chosen far from epoch zero so any sign-related arithmetic
-     * surfaces.
+     * The starting epoch shared by every test, pinned to a day
+     * boundary far from epoch zero so sign-related arithmetic
+     * cannot mask a bug.
      */
     private static final long T0 = 100 * DAY_SECONDS;
 
     /**
-     * Wire hash integer for the "IdTtlDaily" rotation group; rotates
-     * every 1 day.
+     * The wire-level hash integer of the {@code IdTtlDaily}
+     * rotation group, which rotates every day.
      */
     private static final int DAILY_HASH = 248614979;
 
     /**
-     * Wire hash integer for the "IdTtlWeekly" group; rotates every
-     * 7 days.
+     * The wire-level hash integer of the {@code IdTtlWeekly}
+     * rotation group, which rotates every 7 days.
      */
     private static final int WEEKLY_HASH = 42196056;
 
     /**
-     * Wire hash integer for the "DefaultPsId" group; never rotates.
+     * The wire-level hash integer of the {@code DefaultPsId}
+     * rotation group, which never rotates.
      */
     private static final int NEVER_HASH = 113760892;
 
     /**
      * Verifies the eight rotation groups are present in
-     * {@link WamPrivateStatsId#snapshotAll()} with the documented
+     * {@link WamPrivateStatsId#snapshotAll()} with the expected
      * rotation periods.
      */
     @Test
@@ -66,7 +73,6 @@ class WamPrivateStatsIdTest {
         assertEquals(8, groups.size(),
                 "WAWebWamPrivateStats defines exactly eight rotation groups");
 
-        // Spot-check a few groups against the table in the javadoc.
         var dailyDescriptor = groups.stream().filter(g -> g.keyHashInt() == DAILY_HASH).findFirst();
         assertTrue(dailyDescriptor.isPresent());
         assertEquals(1, dailyDescriptor.orElseThrow().rotationDays(),
@@ -81,11 +87,10 @@ class WamPrivateStatsIdTest {
     }
 
     /**
-     * Verifies that calling {@link WamPrivateStatsId#rotateAndReportChanges}
-     * before any period has elapsed produces no rotations.
+     * Verifies that no time elapsing yields no rotations.
      */
     @Test
-    @DisplayName("no time has elapsed → no rotations")
+    @DisplayName("no time has elapsed yields no rotations")
     void noTimeElapsedNoRotations() {
         var time = new AtomicLong(T0);
         var psId = new WamPrivateStatsId(time::get);
@@ -95,9 +100,8 @@ class WamPrivateStatsIdTest {
     }
 
     /**
-     * Verifies that {@code rotateAndReportChanges} fires for the
-     * daily group exactly once when the clock crosses a day
-     * boundary after the entries were created.
+     * Verifies that crossing a day boundary rotates the daily
+     * group exactly once and regenerates its identifier.
      */
     @Test
     @DisplayName("crossing a day boundary rotates IdTtlDaily exactly once")
@@ -106,29 +110,22 @@ class WamPrivateStatsIdTest {
         var psId = new WamPrivateStatsId(time::get);
         var originalDailyValue = psId.getValueForHash(DAILY_HASH);
 
-        // Advance the clock by 2 days so the next period boundary
-        // has definitely passed.
         time.set(T0 + 2 * DAY_SECONDS);
         var rotated = psId.rotateAndReportChanges();
 
-        // Every entry whose period <= 2 days has rotated. Daily and
-        // every multi-day group whose creation epoch is before the
-        // current period start. IdTtlDaily must be among them.
         var dailyRotated = rotated.stream().anyMatch(r -> r.keyHashInt() == DAILY_HASH);
         assertTrue(dailyRotated, "IdTtlDaily must have rotated after 2 elapsed days");
 
-        // The daily value has been regenerated.
         assertNotEquals(originalDailyValue, psId.getValueForHash(DAILY_HASH),
                 "daily value should be a fresh hex after the rotation");
 
-        // The never-rotate group's value is unchanged.
         var neverDescriptor = rotated.stream().anyMatch(r -> r.keyHashInt() == NEVER_HASH);
         assertFalse(neverDescriptor, "DefaultPsId must never rotate, regardless of elapsed time");
     }
 
     /**
-     * Verifies that re-calling {@link WamPrivateStatsId#rotateAndReportChanges}
-     * within the same period produces no further rotations.
+     * Verifies that a repeat rotation call within the same period
+     * yields no further rotations.
      */
     @Test
     @DisplayName("subsequent rotation within the same period does nothing")
@@ -136,21 +133,19 @@ class WamPrivateStatsIdTest {
         var time = new AtomicLong(T0);
         var psId = new WamPrivateStatsId(time::get);
 
-        // Cross into day 2: rotations fire.
         time.set(T0 + 2 * DAY_SECONDS);
         var first = psId.rotateAndReportChanges();
         assertFalse(first.isEmpty(),
                 "first rotation across the boundary should rotate at least the daily group");
 
-        // Stay in day 2: no new rotations.
         var second = psId.rotateAndReportChanges();
         assertTrue(second.isEmpty(),
                 "second rotation within the same period must report no changes");
     }
 
     /**
-     * Verifies that the weekly group does not rotate when only 2
-     * days have elapsed, but does rotate after 8 days.
+     * Verifies that the weekly group is silent after 2 days and
+     * fires after 8 days.
      */
     @Test
     @DisplayName("weekly group rotates after 7 days, not after 2")
@@ -170,8 +165,8 @@ class WamPrivateStatsIdTest {
     }
 
     /**
-     * Verifies that the regenerated identifier is a fresh hex
-     * string of the documented 32-character length.
+     * Verifies that the regenerated identifier is a fresh 32-character
+     * hex string.
      */
     @Test
     @DisplayName("rotated identifier is a 32-char hex string")
@@ -191,7 +186,7 @@ class WamPrivateStatsIdTest {
     }
 
     /**
-     * Verifies that every entry has a unique hash key and a
+     * Verifies that every group has a unique hash key and a
      * distinct initial value.
      */
     @Test
@@ -212,8 +207,8 @@ class WamPrivateStatsIdTest {
 
     /**
      * Verifies that {@link WamPrivateStatsId#getKeyNameForHash}
-     * returns the documented {@code "none"} sentinel for zero and
-     * {@code "unknown_<hash>"} for any other unknown hash integer.
+     * returns the documented sentinels for unknown hashes and the
+     * key name for a known hash.
      */
     @Test
     @DisplayName("getKeyNameForHash sentinels match the documented contract")
@@ -229,8 +224,8 @@ class WamPrivateStatsIdTest {
 
     /**
      * Verifies that {@link WamPrivateStatsId#getValueForHash}
-     * returns the {@code "none"} sentinel for any unknown hash
-     * integer.
+     * returns {@code "none"} for unknown hashes and the live value
+     * for a known hash.
      */
     @Test
     @DisplayName("getValueForHash returns 'none' for unknown hashes")

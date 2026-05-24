@@ -13,24 +13,38 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <query><blocking_status/></query>}
- * payload in the canonical {@code <iq xmlns="w:comms:chat" type="get"
- * to="s.whatsapp.net">} envelope.
+ * The outbound {@code <iq type="get"><query><blocking_status/></query></iq>}
+ * request that asks the relay whether the current account has muted the
+ * PSA broadcast channel.
+ *
+ * @apiNote
+ * Surfaces {@code WAWebQueryBlockListJob.getBlockingStatusForPSAUser}, which
+ * the post-login blocklist refresh consults to populate the local "PSA
+ * muted" preference. The reply
+ * ({@link SmaxPsaChatBlockGetResponse}) is the typed projection of the
+ * server response.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaChatBlockGetRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaBaseIQGetRequestMixin")
 public final class SmaxPsaChatBlockGetRequest implements SmaxOperation.Request {
     /**
-     * Constructs a new request. No parameters.
+     * Constructs the empty request.
      */
     public SmaxPsaChatBlockGetRequest() {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <query><blocking_status/></query>} payload
+     * @implNote
+     * This implementation emits the canonical
+     * {@code <iq xmlns="w:comms:chat" type="get" to="s.whatsapp.net">}
+     * envelope around a {@code <query><blocking_status/></query>} payload,
+     * mirroring the composition in
+     * {@code makeChatBlockGetRequest} + {@code mergeBaseIQGetRequestMixin}.
+     *
+     * @return a {@link NodeBuilder} carrying the
+     *         {@code <iq><query><blocking_status/></query></iq>} stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPsaChatBlockGetRequest",
@@ -43,7 +57,6 @@ public final class SmaxPsaChatBlockGetRequest implements SmaxOperation.Request {
                 .description("query")
                 .content(blockingStatusNode)
                 .build();
-        // smax("iq", {to: S_WHATSAPP_NET, xmlns: "w:comms:chat", id: generateId(), type: "get"})
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:comms:chat")

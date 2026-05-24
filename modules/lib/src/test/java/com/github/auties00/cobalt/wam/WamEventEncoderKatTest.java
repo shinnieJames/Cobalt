@@ -16,44 +16,42 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical agreement tests for full event-with-fields encoding
- * sequences against vectors captured from the live WhatsApp Web
- * bundle's {@code WAWebWamLibProtocol} module.
+ * Byte-identical KAT for full event-with-fields encoding sequences
+ * against vectors captured from {@code WAWebWamLibProtocol}.
  *
- * <p>Each vector reproduces what a Cobalt {@code *Impl.encode} emits
- * for a given event id, sampling weight, and ordered field list:
+ * @apiNote
+ * Reproduces what a generated Cobalt {@code *Impl.encode} emits for a
+ * given (event id, sampling weight, field list) tuple: an
+ * {@code writeEventMarker} call followed by one
+ * {@code writeIntField} / {@code writeStringField} / {@code writeBoolField} /
+ * {@code writeFloatField} / {@code writeNull} per field, with the
+ * {@code LAST} flag on the trailing entry only. Vectors live in
+ * {@code fixtures/wam/wam-encoder-type-matrix.json} and pin snapshot
+ * revision {@code 1039260921}.
  *
- * <ol>
- *   <li>{@link WamEventEncoder#writeEventMarker(int, int, boolean)},</li>
- *   <li>followed by one
- *       {@link WamEventEncoder#writeIntField(int, long, boolean)} /
- *       {@link WamEventEncoder#writeStringField(int, String, boolean)} /
- *       {@link WamEventEncoder#writeBoolField(int, boolean, boolean)} /
- *       {@link WamEventEncoder#writeFloatField(int, double, boolean)} /
- *       {@link WamEventEncoder#writeNull(int, int)} call per field, with
- *       the {@code LAST} flag applied to the trailing entry.</li>
- * </ol>
- *
- * <p>The vector matrix covers every {@code WamType} (INTEGER, BOOLEAN,
- * STRING, FLOAT, ENUM-as-INT, NULL) and every numeric boundary
- * ({@code 0}, {@code 1}, {@code Byte.MAX_VALUE}, {@code Short.MIN_VALUE},
- * {@code Integer.MIN_VALUE / MAX_VALUE}), plus WIDE_ID interleaving
- * and weight permutations.
- *
- * <p>Vectors live in {@code fixtures/wam/wam-encoder-type-matrix.json};
- * see {@code tools/web/wam-fixtures/README.md} for the re-capture
- * procedure.
+ * @implNote
+ * The vector matrix covers every {@code WamType} branch (INTEGER,
+ * BOOLEAN, STRING, FLOAT, ENUM-as-INT, NULL) at every numeric boundary
+ * ({@code 0}, {@code 1}, {@link Byte#MAX_VALUE},
+ * {@link Short#MIN_VALUE}, {@link Integer#MIN_VALUE},
+ * {@link Integer#MAX_VALUE}) and at the WIDE_ID transition. The JS
+ * encoder writes its weight argument verbatim while Cobalt's
+ * {@link WamEventEncoder#writeEventMarker(int, int, boolean)} negates
+ * internally; {@link #assertVectorAgrees(JSONObject)} passes
+ * {@code -capturedWeight} to recover identical bytes.
  */
 @DisplayName("WamEventEncoder KAT against live WhatsApp Web bundle")
 class WamEventEncoderKatTest {
     /**
-     * Snapshot revision the vectors were captured against.
+     * The snapshot revision the KAT vectors were captured against;
+     * compared against the fixture header so revision drift fails
+     * loudly.
      */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
     /**
-     * Output buffer size, chosen with comfortable headroom for the
-     * 256-byte UTF-8 boundary case plus header overhead.
+     * The shared output buffer size, sized for the 256-byte UTF-8
+     * boundary case plus header overhead.
      */
     private static final int MAX_BUFFER = 4_096;
 
@@ -77,8 +75,15 @@ class WamEventEncoderKatTest {
 
     /**
      * Builds the event-with-fields byte sequence through Cobalt's
-     * {@link WamEventEncoder} and asserts the produced hex matches
-     * the captured bytes.
+     * {@link WamEventEncoder} and asserts the produced hex matches the
+     * captured bytes.
+     *
+     * @implNote
+     * Negates {@code capturedWeight} on the way in because the JS
+     * encoder writes the weight argument verbatim while Cobalt's
+     * {@link WamEventEncoder#writeEventMarker(int, int, boolean)}
+     * negates internally; without the negation every vector with a
+     * non-zero weight would fail at the first marker byte.
      *
      * @param vector the captured vector
      */
@@ -92,9 +97,6 @@ class WamEventEncoderKatTest {
         var buffer = new byte[MAX_BUFFER];
         var encoder = WamEventEncoder.of(buffer);
         var hasFields = fields != null && !fields.isEmpty();
-        // The JS encoder writes the weight argument directly; Cobalt's
-        // writeEventMarker negates its weight argument internally to
-        // match the JS sign convention, so we pass -capturedWeight.
         encoder.writeEventMarker(eventId, -capturedWeight, hasFields);
 
         if (hasFields) {
@@ -117,9 +119,10 @@ class WamEventEncoderKatTest {
      * matching primitive based on the captured field {@code type}.
      *
      * @param encoder the destination encoder
-     * @param field   the captured field descriptor
-     *                {@code {id, value, type}}
-     * @param hasMore whether more fields follow in this event
+     * @param field   the captured field descriptor with {@code id},
+     *                {@code value}, and {@code type} entries
+     * @param hasMore whether another field follows this one in the
+     *                same event (controls the {@code LAST} flag)
      */
     private static void emitField(WamEventEncoder encoder, JSONObject field, boolean hasMore) {
         var id = field.getIntValue("id");
@@ -136,11 +139,14 @@ class WamEventEncoderKatTest {
 
     /**
      * Extracts the field's string value, expanding the
-     * {@code {kind, length, head}} summary form when present.
+     * {@code {kind, length, head}} summary form when the capture
+     * elided a long repeated-character string.
      *
      * @param raw the captured value (a {@link String} or a
      *            {@link JSONObject} summary)
      * @return the reconstructed string
+     * @throws IllegalStateException if {@code raw} is neither a string
+     *                               nor a recognised summary shape
      */
     private static String extractString(Object raw) {
         if (raw instanceof String s) {
@@ -157,12 +163,15 @@ class WamEventEncoderKatTest {
     }
 
     /**
-     * Returns the count of captured vectors after the fixture loader
-     * filters out malformed entries. Failing fast here surfaces
-     * fixture-format regressions before the per-vector dynamic tests
-     * run.
+     * Returns a single dynamic test that fails loudly when the fixture
+     * decodes to zero vectors.
      *
-     * @return the vector count for the matrix
+     * @apiNote
+     * Catches the most common fixture-format regression (the
+     * {@code vectors} array gets renamed, or the file ships empty)
+     * before the per-vector dynamic tests run and obscure the cause.
+     *
+     * @return the bookkeeping dynamic test
      */
     @TestFactory
     DynamicTest vectorCountIsNonZero() {

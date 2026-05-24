@@ -12,28 +12,62 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The hosted (Meta-AI / business-platform) companion's pair-success
- * reply, carrying the bare
- * {@code <hosted-pair-set><device-identity/></hosted-pair-set>}
- * payload.
+ * The outbound
+ * {@code <iq type="result"><hosted-pair-set><device-identity/></hosted-pair-set></iq>}
+ * reply emitted by a hosted (Meta-hosted / business-platform)
+ * companion after verifying a {@link SmaxMdSetRegResponse}.
+ *
+ * @apiNote
+ * Hosted accounts (recognised by the ADV
+ * {@code ADVEncryptionType.HOSTED} signal inside the inbound device
+ * identity) reply with the bare {@code <hosted-pair-set/>} envelope
+ * rather than the regular {@code <pair-device-sign/>} envelope:
+ * key-attestation and GPIA are not signalled, and there is no
+ * {@code key-index} attribute on the inner {@code <device-identity/>}.
+ * Non-hosted companions use {@link SmaxMdSetRegResponseClient}
+ * instead, and rejection flows use {@link SmaxMdSetRegResponseError}.
+ *
+ * @implNote
+ * This implementation folds WA Web's
+ * {@code WASmaxOutMdHostedCompanionSetRegResponseBundleMixin} into
+ * the builder: the outer envelope is pinned to
+ * {@code <iq to="s.whatsapp.net" type="result">} and the inner
+ * {@code <hosted-pair-set/>} carries a single
+ * {@code <device-identity/>} child with no attributes.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetRegResponseHostedClientResponse")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdHostedCompanionSetRegResponseBundleMixin")
 public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Request {
     /**
-     * The id of the inbound IQ being replied to.
+     * The {@code id} of the inbound IQ being replied to.
+     *
+     * @apiNote
+     * Echoed into the outbound {@code <iq id="..."/>} attribute.
      */
     private final String iqId;
 
     /**
-     * The signed device-identity content bytes.
+     * The signed device-identity bytes carried in the inner
+     * {@code <device-identity/>}.
+     *
+     * @apiNote
+     * The re-encoded {@code ADVSignedDeviceIdentity} produced by the
+     * hosted companion; the upstream signing path additionally
+     * prefixes the device identity with the
+     * {@code ADV_HOSTED_PREFIX_DEVICE_IDENTITY_ACCOUNT_SIGNATURE}
+     * constant before HMAC verification.
      */
     private final byte[] deviceIdentity;
 
     /**
-     * Constructs a new hosted pair-success reply.
+     * Constructs a hosted pair-success reply.
      *
-     * @param iqId           the IQ id; never {@code null}
+     * @apiNote
+     * Library code typically derives {@code iqId} from the matching
+     * {@link SmaxMdSetRegResponse} and obtains
+     * {@code deviceIdentity} from the post-pair signing pipeline.
+     *
+     * @param iqId           the inbound IQ id; never {@code null}
      * @param deviceIdentity the signed device-identity bytes; never {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
@@ -63,7 +97,17 @@ public final class SmaxMdSetRegResponseHostedClient implements SmaxOperation.Req
     /**
      * Builds the outbound hosted pair-success reply stanza.
      *
-     * @return a {@link NodeBuilder} carrying the reply envelope
+     * @apiNote
+     * Returns the unfinished {@link NodeBuilder} so the dispatch path
+     * can stamp the wire-level identifiers before flushing, matching
+     * {@link SmaxOperation.Request#toNode()}.
+     *
+     * @implNote
+     * This implementation does not emit the {@code key-index}
+     * attribute on the inner {@code <device-identity/>}; the upstream
+     * hosted mixin omits attributes entirely.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutMdSetRegResponseHostedClientResponse",

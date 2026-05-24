@@ -13,9 +13,14 @@ import com.github.auties00.cobalt.node.usync.result.StatusResult;
 import java.util.Optional;
 
 /**
- * USync {@code status} protocol descriptor. Asks the relay for each peer's
- * legacy status string. Distinguishes "no status set" from "status hidden by
- * peer privacy" via a {@code code="401"} marker on the response.
+ * USync {@code status} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay for each peer's legacy "about" string; used by
+ * {@code WAWebGetAboutQueryJob.getAbout} and bundled into the larger
+ * {@code WAWebContactSyncApi} contact sync. The response distinguishes
+ * "no status set" from "status hidden by privacy" via a {@code code="401"}
+ * marker.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncStatus")
 public final class UsyncStatusProtocol implements UsyncProtocol {
@@ -25,7 +30,13 @@ public final class UsyncStatusProtocol implements UsyncProtocol {
     public static final String NAME = "status";
 
     /**
-     * Constructs a default status-protocol descriptor.
+     * Builds a default status-protocol descriptor.
+     *
+     * @apiNote
+     * The descriptor is stateless; pair it with any {@link UsyncUser} that
+     * carries an addressing slot and, when required by the relay, a
+     * trusted-contact token through
+     * {@link UsyncUser#withTrustedContactToken(byte[])}.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncStatus",
             exports = "USyncStatusProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -33,9 +44,7 @@ public final class UsyncStatusProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncStatus",
@@ -45,9 +54,11 @@ public final class UsyncStatusProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds an empty {@code <status/>} query element.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation emits an empty {@code <status/>} element,
+     * matching the JS {@code wap("status", null)} shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncStatus",
@@ -57,12 +68,15 @@ public final class UsyncStatusProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds a per-user {@code <tctoken>} child carrying the trusted-contact
-     * token attached to the user entry. Returns empty when the user carries
-     * no token.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return the per-user element, or empty
+     * @implNote
+     * This implementation emits a per-user {@code <tctoken>} carrying the
+     * trusted-contact token whenever the user has one set, unconditionally
+     * of WA Web's {@code WAWebPrivacyGatingUtils.isProfileScrappingProtectionInUsyncEnabled()}
+     * gate; the JS path returns {@code null} for the per-user element when
+     * the gate is off. Cobalt always ships the token when present and lets
+     * the relay enforce the policy.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncStatus",
@@ -75,15 +89,16 @@ public final class UsyncStatusProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <status>} child of a {@code <user>} response into a
-     * {@link StatusResult} or a per-protocol error. Distinguishes three
-     * states: live status text, privacy-blocked (preserved as the empty
-     * string when the relay returns {@code code="401"}), and no status set
-     * (preserved as {@code null}).
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation distinguishes three response shapes, matching the
+     * JS {@code statusParser} branches: inline content yields the live
+     * status text (or {@code null} when the content is the empty string,
+     * preserving the JS {@code length === 0 ? "" : content}); no content
+     * with {@code code="401"} yields the empty string to mark "hidden by
+     * peer privacy"; any other shape yields {@code null} to mark "no status
+     * set".
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncStatus",

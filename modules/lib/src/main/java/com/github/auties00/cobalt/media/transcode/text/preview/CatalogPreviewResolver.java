@@ -1,0 +1,273 @@
+package com.github.auties00.cobalt.media.transcode.text.preview;
+
+import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.media.transcode.text.link.DeepLinkParser;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.business.BusinessVerifiedName;
+import com.github.auties00.cobalt.model.business.catalog.BusinessCatalogEntry;
+import com.github.auties00.cobalt.model.business.catalog.BusinessReviewStatus;
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The per-source resolver that builds preview cards for
+ * {@code wa.me/c/...} catalog and {@code wa.me/p/.../...} product
+ * deep links.
+ *
+ * @apiNote
+ * Mirrors {@code WAWebBizLinkPreviewCatalogUtils.getProductOrCatalogLinkPreview};
+ * invoked from {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run} on the
+ * {@link DeepLinkParser.DeepLink.Catalog} and
+ * {@link DeepLinkParser.DeepLink.Product} branches.
+ */
+@WhatsAppWebModule(moduleName = "WAWebBizLinkPreviewCatalogUtils")
+public final class CatalogPreviewResolver {
+    /**
+     * The hidden constructor of the utility class.
+     *
+     * @throws UnsupportedOperationException always
+     */
+    private CatalogPreviewResolver() {
+        throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
+    }
+
+    /**
+     * Resolves the preview for a catalog or product URL and stamps
+     * the result onto {@code message}.
+     *
+     * @apiNote
+     * When {@code productId} is non-null the preview renders the
+     * single matching product (name + description + price); when
+     * {@code productId} is null the preview renders the
+     * "View {owner}'s catalog" card backed by the first approved
+     * and visible product. On a successful resolve the
+     * {@code title}, {@code description}, {@code previewType},
+     * {@code doNotPlayInline}, and {@code jpegThumbnail} fields are
+     * written onto {@code message} in place.
+     *
+     * @implNote
+     * This implementation only considers entries whose
+     * {@link BusinessReviewStatus} is
+     * {@link BusinessReviewStatus#APPROVED} and which are not
+     * hidden, mirroring the
+     * {@code reviewStatus === "APPROVED" && !isHidden} JS filter on
+     * the product collection.
+     *
+     * @param client     the WhatsApp client used to query the
+     *                   server-side catalog
+     * @param ownerJid   the catalog owner JID, in
+     *                   {@code <number>@s.whatsapp.net} form
+     * @param productId  the optional product identifier; when
+     *                   {@code null} the first approved-and-visible
+     *                   product is selected
+     * @param httpClient the HTTP client used to download the product
+     *                   image
+     * @param timeout    the per-download timeout
+     * @param message    the outgoing message to enrich; mutated in
+     *                   place
+     * @return {@code true} when a preview was applied
+     */
+    @WhatsAppWebExport(moduleName = "WAWebBizLinkPreviewCatalogUtils", exports = "getProductOrCatalogLinkPreview",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static boolean resolve(WhatsAppClient client, String ownerJid, String productId,
+                                  HttpClient httpClient, Duration timeout, ExtendedTextMessage message) {
+        if (client == null || ownerJid == null || message == null) {
+            return false;
+        }
+        Jid wid;
+        try {
+            wid = Jid.of(ownerJid);
+        } catch (RuntimeException malformed) {
+            return false;
+        }
+        var catalog = safeQueryCatalog(client, wid);
+        if (catalog.isEmpty()) {
+            return false;
+        }
+        var product = pickProduct(catalog, productId);
+        if (product == null) {
+            return false;
+        }
+        var ownerName = ownerDisplayName(client, wid);
+        var hasProductFocus = productId != null;
+        var title = hasProductFocus
+                ? "%s from %s on WhatsApp.".formatted(product.name().orElse(""), ownerName)
+                : "View %s's catalog on WhatsApp".formatted(ownerName);
+        var description = hasProductFocus
+                ? buildProductDescription(product)
+                : "Learn more about their products & services";
+        message.setTitle(title);
+        message.setDescription(description);
+        message.setPreviewType(ExtendedTextMessage.PreviewType.NONE);
+        message.setDoNotPlayInline(Boolean.TRUE);
+        var imageUri = product.encryptedImage().orElse(null);
+        if (imageUri != null) {
+            var thumbnailBytes = PreviewThumbnailFetcher.download(httpClient, imageUri, timeout);
+            if (thumbnailBytes != null) {
+                message.setJpegThumbnail(thumbnailBytes);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Issues the catalog query and swallows any transport-level
+     * error.
+     *
+     * @apiNote
+     * Called from {@link #resolve}; on failure the link-preview
+     * pipeline falls back to the minimal preview card so the
+     * recipient still sees a clickable URL.
+     *
+     * @param client the WhatsApp client used to query the server
+     * @param wid    the catalog owner JID
+     * @return the catalog entries, or the empty list when the query
+     *         failed
+     */
+    private static List<BusinessCatalogEntry> safeQueryCatalog(WhatsAppClient client, Jid wid) {
+        try {
+            return client.queryBusinessCatalog(wid);
+        } catch (RuntimeException _) {
+            return List.of();
+        }
+    }
+
+    /**
+     * Picks the product entry to render on the preview card.
+     *
+     * @apiNote
+     * When {@code productId} is supplied the matching entry is
+     * picked; otherwise the first approved-and-visible entry in the
+     * catalog is picked, matching the JS
+     * {@code productCollection.getProductModels().find(...)} call.
+     *
+     * @param catalog   the catalog entries
+     * @param productId the product identifier, or {@code null}
+     * @return the picked entry, or {@code null} when none is
+     *         eligible
+     */
+    private static BusinessCatalogEntry pickProduct(List<BusinessCatalogEntry> catalog, String productId) {
+        for (var entry : catalog) {
+            if (productId != null && !productId.equals(entry.id())) {
+                continue;
+            }
+            if (entry.reviewStatus().orElse(null) != BusinessReviewStatus.APPROVED) {
+                continue;
+            }
+            if (entry.hidden()) {
+                continue;
+            }
+            return entry;
+        }
+        return null;
+    }
+
+    /**
+     * Resolves the display name of the catalog owner.
+     *
+     * @apiNote
+     * Mirrors WA Web's branching: when the catalog owner is the
+     * current user, the local contact's display name is used; for
+     * any other JID the cached verified-business name has priority,
+     * followed by the cached contact's pushname, and finally a
+     * fresh usync round-trip via
+     * {@link WhatsAppClient#queryBusinessProfile(Jid)} which
+     * surfaces the server-supplied {@link BusinessVerifiedName}.
+     *
+     * @implNote
+     * This implementation swallows the {@link RuntimeException} from
+     * the usync round-trip so the fallback to the JID user portion
+     * still runs when the server is unreachable.
+     *
+     * @param client the WhatsApp client whose stores and usync are
+     *               consulted
+     * @param wid    the catalog owner JID
+     * @return the display name, falling back to the JID's user
+     *         portion when nothing else resolves
+     */
+    @WhatsAppWebExport(moduleName = "WAWebGetOrQueryUsyncInfoContactAction", exports = "getOrQueryUsyncInfo",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String ownerDisplayName(WhatsAppClient client, Jid wid) {
+        var contactName = client.store().findContactByJid(wid)
+                .flatMap(contact -> contact.chosenName().or(contact::shortName))
+                .orElse(null);
+        if (contactName != null && !contactName.isEmpty()) {
+            return contactName;
+        }
+        var verified = client.store().findVerifiedBusinessName(wid)
+                .flatMap(BusinessVerifiedName::name)
+                .orElse(null);
+        if (verified != null && !verified.isEmpty()) {
+            return verified;
+        }
+        try {
+            client.queryBusinessProfile(wid);
+            var refreshed = client.store().findVerifiedBusinessName(wid)
+                    .flatMap(BusinessVerifiedName::name)
+                    .orElse(null);
+            if (refreshed != null && !refreshed.isEmpty()) {
+                return refreshed;
+            }
+        } catch (RuntimeException _) {
+        }
+        return wid.user();
+    }
+
+    /**
+     * Builds the description rendered for a single-product preview.
+     *
+     * @apiNote
+     * Mirrors the WA Web branching inside
+     * {@code getProductOrCatalogLinkPreview}: when both description
+     * and price are available, both are surfaced; otherwise the
+     * available half is used; an empty string is returned when
+     * neither is present.
+     *
+     * @param product the catalog entry
+     * @return the description string
+     */
+    private static String buildProductDescription(BusinessCatalogEntry product) {
+        var description = product.description().orElse(null);
+        var currency = product.currency().orElse(null);
+        var price = product.price();
+        if (description != null && currency != null && price > 0) {
+            return description + " · " + formatAmount(currency, price);
+        }
+        if (description != null) {
+            return description;
+        }
+        if (currency != null && price > 0) {
+            return formatAmount(currency, price);
+        }
+        return "";
+    }
+
+    /**
+     * Formats a price expressed in thousandths of the major currency
+     * unit.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebCurrencyUtils.formatAmount1000} which
+     * delegates to {@code Intl.NumberFormat}. Cobalt uses
+     * {@link String#format} with {@link Locale#US} as the fallback
+     * formatter because no equivalent locale-aware
+     * currency-formatter is wired into the lib module.
+     *
+     * @param currency the ISO 4217 currency code
+     * @param amount   the amount in thousandths
+     * @return the formatted amount
+     */
+    @WhatsAppWebExport(moduleName = "WAWebCurrencyUtils", exports = "formatAmount1000",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String formatAmount(String currency, long amount) {
+        var major = amount / 1000d;
+        return String.format(Locale.US, "%.2f %s", major, currency);
+    }
+}

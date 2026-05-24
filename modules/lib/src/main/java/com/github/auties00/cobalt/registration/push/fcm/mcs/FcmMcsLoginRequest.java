@@ -8,8 +8,11 @@ import it.auties.protobuf.model.ProtobufType;
 import java.util.List;
 
 /**
- * First framed packet (tag {@code 2}) sent on the MCS stream after the
- * 1-byte version preamble. Authenticates the device with the
+ * First framed packet (MCS frame tag {@code 2}) sent on the MCS
+ * stream after the 1-byte version preamble.
+ *
+ * @apiNote
+ * Authenticates the device with the
  * {@code androidId}/{@code securityToken} pair from
  * {@link FcmCheckinResponse} and replays any unacked persistent ids
  * from previous sessions so the server can drop them from its retry
@@ -18,84 +21,130 @@ import java.util.List;
 @ProtobufMessage(name = "FcmMcsLoginRequest")
 public final class FcmMcsLoginRequest {
     /**
-     * Client id, always {@code "android-30"} (matches the SDK level
-     * Cobalt advertises in checkin).
+     * Client id.
+     *
+     * @apiNote
+     * Always {@code "android-30"}; matches the SDK level Cobalt
+     * advertises in checkin.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String id;
 
     /**
-     * MCS domain, always {@code "mcs.android.com"}.
+     * MCS domain; always {@code "mcs.android.com"}.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String domain;
 
     /**
-     * MCS username, the decimal {@code androidId} as a string.
+     * MCS username.
+     *
+     * @apiNote
+     * The decimal {@code androidId} as a string.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.STRING)
     String user;
 
     /**
-     * MCS resource, also the decimal {@code androidId} as a string.
-     * The native client uses the same value here as in {@link #user}.
+     * MCS resource.
+     *
+     * @apiNote
+     * Also the decimal {@code androidId} as a string; the native
+     * client uses the same value here as in {@link #user}.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.STRING)
     String resource;
 
     /**
-     * MCS password, the decimal {@code securityToken} as a string.
+     * MCS password.
+     *
+     * @apiNote
+     * The decimal {@code securityToken} as a string.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
     String authToken;
 
     /**
-     * Device id derived from {@link #user}, formatted as
-     * {@code "android-" + Long.toHexString(androidId)}.
+     * Device id derived from {@link #user}.
+     *
+     * @apiNote
+     * Formatted as {@code "android-" + Long.toHexString(androidId)}.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String deviceId;
 
     /**
-     * Repeated key/value settings; Cobalt always sends a single
-     * {@code new_vc=1} entry, mirroring the native client.
+     * Repeated key/value settings.
+     *
+     * @apiNote
+     * Cobalt always sends a single {@code new_vc=1} entry, mirroring
+     * the native client.
      */
     @ProtobufProperty(index = 8, type = ProtobufType.MESSAGE)
     List<Setting> settings;
 
     /**
-     * Persistent ids the client has already acked locally. The server
-     * uses this list to skip redelivery of those messages.
+     * Persistent ids the client has already acked locally.
+     *
+     * @apiNote
+     * The server uses this list to skip redelivery of those messages
+     * after a reconnect.
      */
     @ProtobufProperty(index = 10, type = ProtobufType.STRING)
     List<String> persistentIds;
 
     /**
-     * Whether to use adaptive heartbeats. The native client sends
-     * {@code false}.
+     * Whether to use adaptive heartbeats.
+     *
+     * @apiNote
+     * The native client sends {@code false}.
      */
     @ProtobufProperty(index = 12, type = ProtobufType.BOOL)
     boolean adaptiveHeartbeat;
 
     /**
-     * Whether to use the RMQ2 ack scheme. The native client sends
-     * {@code true}.
+     * Whether to use the RMQ2 ack scheme.
+     *
+     * @apiNote
+     * The native client sends {@code true}.
      */
     @ProtobufProperty(index = 14, type = ProtobufType.BOOL)
     boolean useRmq2;
 
     /**
-     * Auth service id. The native client sends {@code 2}.
+     * Auth service id.
+     *
+     * @apiNote
+     * The native client sends {@code 2}.
      */
     @ProtobufProperty(index = 16, type = ProtobufType.INT64)
     long authService;
 
     /**
-     * Network type id. The native client sends {@code 1}.
+     * Network type id.
+     *
+     * @apiNote
+     * The native client sends {@code 1}.
      */
     @ProtobufProperty(index = 17, type = ProtobufType.INT64)
     long networkType;
 
+    /**
+     * Constructs a new login request with the given values.
+     *
+     * @param id                the client id
+     * @param domain            the MCS domain
+     * @param user              the MCS username
+     * @param resource          the MCS resource
+     * @param authToken         the MCS password
+     * @param deviceId          the device id
+     * @param settings          the key/value settings
+     * @param persistentIds     the persistent ids to replay
+     * @param adaptiveHeartbeat whether to negotiate adaptive heartbeats
+     * @param useRmq2           whether to negotiate the RMQ2 ack scheme
+     * @param authService       the auth service id
+     * @param networkType       the network type id
+     */
     FcmMcsLoginRequest(String id, String domain, String user, String resource,
                        String authToken, String deviceId, List<Setting> settings,
                        List<String> persistentIds, boolean adaptiveHeartbeat,
@@ -116,15 +165,31 @@ public final class FcmMcsLoginRequest {
 
     /**
      * One key/value setting on the login packet.
+     *
+     * @apiNote
+     * Cobalt only ever sends {@code new_vc=1}; other settings the
+     * native client may include are not modeled.
      */
     @ProtobufMessage(name = "FcmMcsLoginRequest.Setting")
     public static final class Setting {
+        /**
+         * Setting name.
+         */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String name;
 
+        /**
+         * Setting value.
+         */
         @ProtobufProperty(index = 2, type = ProtobufType.STRING)
         String value;
 
+        /**
+         * Constructs a new setting.
+         *
+         * @param name  the setting name
+         * @param value the setting value
+         */
         Setting(String name, String value) {
             this.name = name;
             this.value = value;

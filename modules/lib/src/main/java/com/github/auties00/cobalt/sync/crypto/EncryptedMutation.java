@@ -13,23 +13,22 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 /**
- * Represents the result of encrypting a sync mutation for upload to the server.
+ * A single mutation that has been encrypted and authenticated for upload.
  *
- * <p>Contains the computed index MAC, the encrypted value (IV || ciphertext || value MAC),
- * the key ID, and the operation type. These four fields mirror the subset of the
- * returned object in {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation} that the
- * rest of the sync pipeline actually consumes: the spread
- * {@code {...t, keyId, keyData, indexMac, indexAndValueCipherText, valueMac}} is flattened
- * into {@code indexMac}, {@code encryptedValue} (which concatenates
- * {@code indexAndValueCipherText} and {@code valueMac} — the wire representation), and
- * {@code keyId}. The {@code keyData} entry on the WA Web result is an intermediate that is
- * not needed after encryption, and the {@code valueMac} is recomputable from
- * {@code encryptedValue} via {@link #valueMac()} so it is not stored separately.
+ * @apiNote
+ * Produced by the outgoing patch builder that runs every time the local
+ * device wants to push an app-state change (chat archive, mute, pin, label,
+ * etc.) up to the relay. The four fields are the subset of the WA Web
+ * encryption-wrapper result that the patch serializer actually places on the
+ * wire: {@link #indexMac} goes into the {@code SyncdRecord.index.blob} slot
+ * and {@link #encryptedValue} into {@code SyncdRecord.value.blob}, while
+ * {@link #keyId} and {@link #operation} flow into the surrounding
+ * {@code SyncdMutation} envelope.
  *
- * @param indexMac       the HMAC-SHA256 of the index bytes using the index key
- * @param encryptedValue the encrypted payload: IV (16 bytes) || AES-CBC ciphertext || value MAC (32 bytes)
- * @param keyId          the sync key ID used for encryption
- * @param operation      the sync operation type (SET or REMOVE)
+ * @param indexMac       the HMAC-SHA256 of the UTF-8 index bytes
+ * @param encryptedValue the wire payload {@code IV (16) || ciphertext || valueMac (32)}
+ * @param keyId          the sync key id used for encryption
+ * @param operation      the sync operation
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdEncryptMutations")
 @WhatsAppWebModule(moduleName = "WAWebSyncdEncryptMutationsWrapper")
@@ -41,62 +40,47 @@ public record EncryptedMutation(
         SyncdOperation operation
 ) {
     /**
-     * Encrypts a pending mutation into the wire format expected by the server.
+     * Encrypts a pending mutation into its wire form.
      *
-     * <p>Performs the following steps matching WA Web's {@code syncdEncryptMutation},
-     * delegating each cryptographic primitive to {@link MutationKeys}:
-     * <ol>
-     *   <li>Builds the {@code SyncActionData} protobuf with index, value, padding, and version</li>
-     *   <li>Encodes it to protobuf bytes</li>
-     *   <li>Encrypts with AES-256-CBC via {@link MutationKeys#generateCipherText(byte[])}</li>
-     *   <li>Computes value MAC via {@link MutationKeys#generateMac(byte[], byte[])} (HMAC-SHA512 truncated to 32 bytes)</li>
-     *   <li>Concatenates IV || ciphertext || value MAC</li>
-     *   <li>Computes index MAC via {@link MutationKeys#generateIndexMac(byte[])} (HMAC-SHA256)</li>
-     * </ol>
+     * @apiNote
+     * Called from the outgoing patch builder (the Cobalt counterpart of
+     * {@code WAWebSyncdRequestBuilderBuild.buildPatch}) once per pending
+     * mutation. SET mutations encrypt under the device's currently active
+     * sync key; REMOVE mutations re-encrypt under the original key id of the
+     * matching SET (the caller resolves that lookup before invoking this
+     * factory and passes the resolved {@code keys} and {@code keyId}).
      *
-     * <p>This factory also acts as the semantic merge-point for
-     * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}. The wrapper is a thin
-     * orchestration layer on top of {@code syncdEncryptMutation} that adds three
-     * responsibilities:
+     * @implNote
+     * This implementation merges three responsibilities that WA Web splits
+     * across {@code WAWebSyncdEncryptMutations.syncdEncryptMutation},
+     * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}, and
+     * {@code WAWebSyncdRequestEncode.encodeSyncActionData}:
      * <ul>
-     *   <li><b>Operation dispatch</b> — {@code SET} uses the caller-supplied active key,
-     *       while {@code REMOVE} looks up the original key via
-     *       {@code WAWebGetSyncAction.getSyncActionInTransaction(indexString)} and
-     *       {@code WAWebSyncdKeyCache.getKeyData(keyId)} before calling
-     *       {@code syncdEncryptMutation}.</li>
-     *   <li><b>Per-{@code keyId} key-data caching</b> — {@code WAWebSyncdKeyCache.getKeyData}
-     *       memoizes the {@code keyData} lookup so repeated REMOVE mutations against the
-     *       same key avoid redundant DB reads.</li>
-     *   <li><b>Result reshaping</b> — the wrapper returns
-     *       {@code {...t, keyId, keyData, indexMac, indexAndValueCipherText, valueMac}}
-     *       where {@code valueMac} is extracted via
-     *       {@code WAWebSyncdCrypto.valueMacFromIndexAndValueCipherText(indexAndValueCipherText)}.</li>
+     *   <li>The protobuf encoding of {@link SyncActionData} via
+     *       {@link SyncActionDataSpec#encode}; the WA Web fatal-error WAM
+     *       counter is not emitted (Cobalt does not run WAM), but the
+     *       throw on serialization failure is preserved as a
+     *       {@link WhatsAppWebAppStateSyncException.UnexpectedError}.</li>
+     *   <li>The AES-CBC encryption with a fresh IV, the HMAC-SHA512 MAC
+     *       over the AAD prefix, and the concatenation into the wire
+     *       layout.</li>
+     *   <li>The reshape of the WA Web wrapper result; in Cobalt the only
+     *       fields kept are those that the outgoing serializer consumes,
+     *       and the value MAC is recomputable on demand via
+     *       {@link #valueMac()} rather than stored separately.</li>
      * </ul>
+     * REMOVE-mutation key resolution and per-{@code keyId} {@code keyData}
+     * caching live in {@code WAWebSyncdEncryptMutationsWrapper} on the WA
+     * Web side; on the Cobalt side they live in the caller, which holds a
+     * single {@link MutationKeys} per pipeline pass and reuses it across
+     * every mutation that shares the key id.
      *
-     * <p>In Cobalt those three concerns are split as follows:
-     * <ul>
-     *   <li>Operation dispatch and REMOVE key lookup live in
-     *       {@code MutationRequestBuilder.encryptMutations}, which selects between the
-     *       caller-supplied active {@code MutationKeys} (for SET) and freshly derived
-     *       keys loaded via {@link MutationKeys#ofSyncKey(byte[])} (for REMOVE).</li>
-     *   <li>The WA Web per-{@code keyId} cache is replaced by the {@link MutationKeys}
-     *       instance itself: once keys are derived for a given sync key, the caller holds
-     *       the derived {@code MutationKeys} and reuses it across every mutation sharing
-     *       that key for the lifetime of the encryption pass. This is structurally
-     *       equivalent to the memoization performed by {@code WAWebSyncdKeyCache} (which
-     *       caches {@code keyData}) combined with {@code WAWebSyncdCrypto.generateEncryptionKeys}
-     *       (which memoizes the HKDF expansion from {@code keyData}).</li>
-     *   <li>Result reshaping is performed by this factory (assembling the
-     *       {@code EncryptedMutation} record) and by {@link #valueMac()}, which extracts
-     *       the MAC suffix from {@code encryptedValue} on demand, matching
-     *       {@code valueMacFromIndexAndValueCipherText}.</li>
-     * </ul>
-     *
-     * @param patch the pending mutation to encrypt
-     * @param keys  the derived mutation keys
-     * @param keyId the sync key ID bytes
-     * @return a new {@code EncryptedMutation} with the encrypted data
-     * @throws GeneralSecurityException if any cryptographic operation fails
+     * @param patch the pending mutation, with its action payload and operation
+     * @param keys  the derived mutation keys for the relevant key id
+     * @param keyId the raw sync key id bytes
+     * @return the wire-ready {@link EncryptedMutation}
+     * @throws GeneralSecurityException if a JCE primitive fails
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError if the action data fails to encode
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdEncryptMutations", exports = "syncdEncryptMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WAWebSyncdEncryptMutationsWrapper", exports = "encryptMutation", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -106,24 +90,16 @@ public record EncryptedMutation(
             MutationKeys keys,
             byte[] keyId
     ) throws GeneralSecurityException {
-        // Create SyncActionData with padding — WAWebSyncdEncryptMutations.d (encodeSyncActionData)
         var mutation = patch.mutation();
-        var indexBytes = mutation.index().getBytes(StandardCharsets.UTF_8); // WAArrayBufferUtils.stringToArrayBuffer(l)
-        // Padding is always empty while MAX_OF_MIN_DATA_LENGTH = 0 in WA Web, so the value-length
-        // argument is irrelevant (any non-negative value produces the same empty array). We pass
-        // indexBytes.length and 0 here and let MutationKeys.generatePadding centralize the formula.
-        var padding = MutationKeys.generatePadding(indexBytes.length, 0); // WAWebSyncdMutationsCryptoUtils.generatePadding
-        var actionData = new SyncActionDataBuilder() // WAWebSyncdEncryptMutations.d: encodeSyncActionData({index, value, padding, version})
-                .index(indexBytes) // WAWebSyncdEncryptMutations.d: index: e (stringToArrayBuffer result)
-                .value(mutation.value()) // WAWebSyncdEncryptMutations.d: value: decodeProtobuf(SyncActionValueSpec, binarySyncAction)
-                .padding(padding) // WAWebSyncdMutationsCryptoUtils.generatePadding — currently always empty (MAX_OF_MIN_DATA_LENGTH = 0)
-                .version(mutation.actionVersion()) // WAWebSyncdEncryptMutations: t.version (top-level field on mutation)
+        var indexBytes = mutation.index().getBytes(StandardCharsets.UTF_8);
+        var padding = MutationKeys.generatePadding(indexBytes.length, 0);
+        var actionData = new SyncActionDataBuilder()
+                .index(indexBytes)
+                .value(mutation.value())
+                .padding(padding)
+                .version(mutation.actionVersion())
                 .build();
 
-        // Encode to protobuf — WAWebSyncdRequestEncode.encodeSyncActionData
-        // WA Web throws SyncdFatalError("action data protobuf serialization failed") on failure
-        // and reports a WAM fatal-error metric (ACTION_DATA_PROTOBUF_SERIALIZATION_FAILED);
-        // the metric is skipped per Cobalt's telemetry policy, but the throw is preserved.
         byte[] plaintext;
         try {
             plaintext = SyncActionDataSpec.encode(actionData);
@@ -133,37 +109,31 @@ public record EncryptedMutation(
             );
         }
 
-        // Encrypt with AES-256-CBC — WAWebSyncdMutationsCryptoUtils.generateCipherText → WACryptoAesCbc.aesCbcEncrypt
-        // Returns [IV (16 bytes) || ciphertext]
         var ivAndCipherText = keys.generateCipherText(plaintext);
 
-        // Build associated data: [opByte] || keyIdBytes — WAWebSyncdMutationsCryptoUtils.generateAssociatedData
         var associatedData = MutationKeys.generateAssociatedData(mutation.operation(), keyId);
 
-        // Compute value MAC using HMAC-SHA-512 truncated to 32 bytes — WAWebSyncdMutationsCryptoUtils.generateMac
         var valueMac = keys.generateMac(associatedData, ivAndCipherText);
 
-        // Concatenate IV || ciphertext || value MAC — WAWebSyncdCryptoUtils.combine([b, S])
         var encryptedValue = new byte[ivAndCipherText.length + valueMac.length];
         System.arraycopy(ivAndCipherText, 0, encryptedValue, 0, ivAndCipherText.length);
         System.arraycopy(valueMac, 0, encryptedValue, ivAndCipherText.length, valueMac.length);
 
-        // Compute index MAC — WAWebSyncdCrypto.generateIndexMac
         var indexMacResult = keys.generateIndexMac(indexBytes);
 
-        // Create EncryptedMutation — WAWebSyncdEncryptMutations: return {indexMac, indexAndValueCipherText}
         return new EncryptedMutation(indexMacResult, encryptedValue, keyId, mutation.operation());
     }
 
     /**
-     * Extracts the value MAC from the encrypted value (last 32 bytes).
+     * Returns the trailing 32 bytes of {@link #encryptedValue}.
      *
-     * <p>Delegates to {@link MutationKeys#valueMacFromIndexAndValueCipherText(byte[])}
-     * to avoid duplicating the slicing logic. In WA Web,
-     * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation} performs the same
-     * extraction inline via {@code valueMacFromIndexAndValueCipherText(indexAndValueCipherText)}
-     * before returning the wrapped result; Cobalt instead exposes the MAC as a computed
-     * accessor so callers that only need the ciphertext+MAC buffer do not pay for the slice.
+     * @apiNote
+     * Helper for the outgoing-patch MAC chaining: the patch MAC is computed
+     * over the concatenation of the snapshot MAC and every mutation's value
+     * MAC, and the value MAC for an outgoing mutation lives at the tail of
+     * its own ciphertext. The result equals
+     * {@link MutationKeys#valueMacFromIndexAndValueCipherText(byte[])}
+     * applied to {@link #encryptedValue}.
      *
      * @return the 32-byte value MAC
      */

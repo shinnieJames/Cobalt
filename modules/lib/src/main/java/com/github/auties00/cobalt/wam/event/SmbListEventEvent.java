@@ -10,6 +10,8 @@ import com.github.auties00.cobalt.wam.type.LabelOperations;
 import com.github.auties00.cobalt.wam.type.LabelTargets;
 import com.github.auties00.cobalt.wam.type.LastMessageDirection;
 import com.github.auties00.cobalt.wam.type.ListType;
+import com.github.auties00.cobalt.wam.type.SmbListFeatureNameType;
+import com.github.auties00.cobalt.wam.type.SmbListSurfaceType;
 import com.github.auties00.cobalt.wam.type.UpdateEntryPoint;
 
 import java.util.Optional;
@@ -18,6 +20,9 @@ import java.util.OptionalInt;
 @WhatsAppWebModule(moduleName = "WAWebSmbListEventWamEvent")
 @WamEvent(id = 7102)
 public interface SmbListEventEvent extends WamEventSpec {
+    @WamProperty(index = 17, type = WamType.STRING)
+    Optional<String> appSessionId();
+
     @WamProperty(index = 12, type = WamType.BOOLEAN)
     Optional<Boolean> bulkLabeling();
 
@@ -29,6 +34,9 @@ public interface SmbListEventEvent extends WamEventSpec {
 
     @WamProperty(index = 2, type = WamType.STRING)
     Optional<String> entryPointConversionSource();
+
+    @WamProperty(index = 18, type = WamType.STRING)
+    Optional<String> extraAttributes();
 
     @WamProperty(index = 3, type = WamType.ENUM)
     Optional<LabelOperations> labelOperation();
@@ -60,9 +68,18 @@ public interface SmbListEventEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.INTEGER)
     OptionalInt predefinedId();
 
+    @WamProperty(index = 20, type = WamType.ENUM)
+    Optional<SmbListFeatureNameType> smbListFeatureName();
+
+    @WamProperty(index = 21, type = WamType.ENUM)
+    Optional<SmbListSurfaceType> smbListSurface();
+
     @WamProperty(index = 10, type = WamType.STRING)
     Optional<String> threadIdHmac();
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<UpdateEntryPoint> updateEntryPoint();
+
+    @WamProperty(index = 19, type = WamType.STRING)
+    Optional<String> userActionTarget();
 }

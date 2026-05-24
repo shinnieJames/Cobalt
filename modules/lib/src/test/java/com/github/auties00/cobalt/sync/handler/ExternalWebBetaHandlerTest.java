@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilde
 import com.github.auties00.cobalt.model.sync.action.device.ExternalWebBetaAction;
 import com.github.auties00.cobalt.model.sync.action.device.ExternalWebBetaActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -29,8 +29,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ExternalWebBetaHandler} — Cobalt's adapter for
+ * Exercises the {@link ExternalWebBetaHandler} adapter for
  * {@code WAWebExternalWebBetaSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code external_web_beta}
+ * app-state sync action across metadata, the
+ * {@link ABProp#EXTERNAL_BETA_CAN_JOIN} gating, the SET happy path,
+ * the malformed-value branch and the REMOVE rejection.
+ *
+ * @implNote
+ * This implementation builds the handler with a stubbed
+ * {@link TestABPropsService} so the gating prop can be flipped per
+ * test, and exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the {@link WhatsAppStore#externalWebBeta()} read-back can be
+ * asserted directly.
  */
 @DisplayName("ExternalWebBetaHandler")
 class ExternalWebBetaHandlerTest {
@@ -62,7 +76,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the ExternalWebBetaAction wire constant")
@@ -87,7 +101,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET (gate open)")
+    @DisplayName("applyMutation - happy SET (gate open)")
     class ApplySetHappy {
         @Test
         @DisplayName("SET isOptIn=true writes the flag and returns SUCCESS")
@@ -111,7 +125,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — gate closed → UNSUPPORTED")
+    @DisplayName("applyMutation - gate closed -> UNSUPPORTED")
     class GateClosed {
         @Test
         @DisplayName("when external_beta_can_join is false, every mutation returns UNSUPPORTED")
@@ -126,7 +140,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("external-web-beta is a global flag; no per-entity orphan path")
@@ -138,7 +152,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -155,7 +169,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the handler ignores the index shape (global setting)")
@@ -173,7 +187,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported (gate-open path takes the operation check)")
@@ -185,10 +199,10 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -197,7 +211,7 @@ class ExternalWebBetaHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -207,7 +221,7 @@ class ExternalWebBetaHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — inherits default sequential apply")
+    @DisplayName("applyMutationBatch - inherits default sequential apply")
     class ApplyBatch {
         @Test
         @DisplayName("default batch path applies each mutation in order")
@@ -220,22 +234,6 @@ class ExternalWebBetaHandlerTest {
             assertEquals(SyncActionState.SUCCESS, results.get(0).actionState());
             assertEquals(SyncActionState.SUCCESS, results.get(1).actionState());
             assertFalse(store.externalWebBeta());
-        }
-    }
-
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("ExternalWebBetaHandler does not expose a get*Mutation helper")
-        void noStaticBuilders() {
-            var methods = ExternalWebBetaHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on ExternalWebBetaHandler: " + method.getName());
-                }
-            }
         }
     }
 

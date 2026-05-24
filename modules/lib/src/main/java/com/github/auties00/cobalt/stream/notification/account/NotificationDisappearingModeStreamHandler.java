@@ -1,60 +1,86 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.chat.ChatEphemeralTimer;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 import java.time.Instant;
 
 /**
- * Handles incoming {@code disappearing_mode} notification stanzas.
+ * Handles {@code type="disappearing_mode"} notifications carrying a
+ * peer-initiated change to a one-to-one chat's ephemeral-message timer.
  *
- * <p>When a contact changes their default disappearing-message duration, the server
- * pushes a notification of type {@code disappearing_mode}. This handler parses the
- * duration and setting timestamp from the child {@code <disappearing_mode>} element,
- * updates the corresponding chat's ephemeral timer in the local store (with a
- * timestamp guard to prevent stale updates from overwriting newer ones), and sends
- * an acknowledgement stanza back to the server.
+ * @apiNote
+ * Dispatched by {@link NotificationAccountDispatcher}. Each notification
+ * targets the chat identified by its {@code from} attribute and updates
+ * that chat's ephemeral expiration plus the per-chat "ephemeral setting
+ * timestamp". The handler ignores stanzas whose target chat is not in
+ * the local store; absent chats are not auto-created here.
  *
+ * @implNote
+ * This implementation operates on chat-level ephemeral fields; WA Web's
+ * {@code WAWebUpdateDisappearingModeForContact.updateDisappearingModeForContact}
+ * persists the same value on a contact record because WA Web models
+ * disappearing-mode at the contact level rather than the chat level.
+ * The semantics converge: each chat has at most one timer at a time
+ * and the timestamp guard prevents a late stanza from clobbering a
+ * fresher value.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleDisappearingModeNotification")
 final class NotificationDisappearingModeStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic messages from this handler.
+     * Logger reserved for future diagnostics; currently unused because
+     * the handler logs only at exception sites.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationDisappearingModeStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client providing access to the store and socket operations.
+     * The {@link WhatsAppClient} used for store reads and chat mutations.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new handler with the specified WhatsApp client.
-     *
-     * @param whatsapp the non-{@code null} WhatsApp client instance
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification" type="disappearing_mode"/>}
+     * stanza.
      */
-    NotificationDisappearingModeStreamHandler(WhatsAppClient whatsapp) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with the shared client and ack sender.
+     *
+     * @apiNote
+     * Called once by {@link NotificationAccountDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp  the non-{@code null} client
+     * @param ackSender the non-{@code null} ack sender
+     */
+    NotificationDisappearingModeStreamHandler(WhatsAppClient whatsapp, AckSender ackSender) {
         this.whatsapp = whatsapp;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles a {@code disappearing_mode} notification stanza by parsing the disappearing
-     * mode duration and setting timestamp, updating the corresponding chat's ephemeral
-     * timer in the local store, and sending an acknowledgement stanza.
+     * Applies the new ephemeral timer to the addressed chat (when known)
+     * and sends the protocol-level ACK.
      *
-     * <p>The handler extracts the {@code from} attribute as a user JID and looks up the
-     * corresponding chat. If the chat does not exist, the notification is silently ignored
-     * (matching WA Web's behavior of skipping absent contact records). Updates are guarded
-     * by a timestamp comparison: the chat's ephemeral settings are only modified if the
-     * existing setting timestamp is {@code null} (and the new timestamp is non-zero) or
-     * if the existing timestamp is strictly less than the new one, preventing stale
-     * notifications from overwriting newer settings.
+     * @apiNote
+     * Drives the in-thread "disappearing messages set to X" affordance
+     * for the addressed contact. Invoked by
+     * {@link NotificationAccountDispatcher}.
      *
-     * @param node the non-{@code null} notification stanza node
+     * @implNote
+     * This implementation always sends the ACK regardless of whether
+     * the chat existed, matching WA Web's
+     * {@code WAWebHandleDisappearingModeNotification.handleDisappearingModeNotificationJob}
+     * which returns the ack from the parser's promise resolution path.
+     *
+     * @param node the non-{@code null} {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -63,9 +89,24 @@ final class NotificationDisappearingModeStreamHandler implements SocketStream.Ha
     }
 
     /**
-     * Performs the core disappearing-mode update logic by parsing the notification, looking up the chat, applying the timestamp guard, and updating the ephemeral settings.
+     * Parses the duration and setting timestamp from the
+     * {@code <disappearing_mode>} child, looks up the addressed chat, and
+     * writes the new timer only when the incoming timestamp is strictly
+     * fresher than the stored one.
      *
-     * @param node the non-{@code null} notification stanza node
+     * @apiNote
+     * The timestamp guard is what makes the mutation idempotent against
+     * stanza replays: a stanza older than the stored value is ignored,
+     * and a stanza with the same timestamp is also ignored.
+     *
+     * @implNote
+     * This implementation only writes when (a) the stored timestamp is
+     * absent and the incoming timestamp is non-zero, or (b) the stored
+     * timestamp strictly precedes the incoming timestamp. WA Web's
+     * {@code updateDisappearingModeForContact} performs the same guard
+     * but at the contact-record level.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handleDisappearingModeNotification(Node node) {
         var from = node.getAttributeAsJid("from")
@@ -80,7 +121,6 @@ final class NotificationDisappearingModeStreamHandler implements SocketStream.Ha
         var rawTimestamp = disappearingMode.getAttributeAsLong("t", (Long) null);
         var settingTimestamp = rawTimestamp != null ? Instant.ofEpochSecond(rawTimestamp) : null;
 
-        // WA Web looks up a contact record; Cobalt uses chat-level ephemeral fields.
         var chat = whatsapp.store()
                 .findChatByJid(from)
                 .orElse(null);
@@ -88,7 +128,6 @@ final class NotificationDisappearingModeStreamHandler implements SocketStream.Ha
             return;
         }
 
-        // Timestamp guard: only update when the existing timestamp is null and the new one is non-zero, or when the existing timestamp is strictly older than the new one.
         var existingTimestamp = chat.ephemeralSettingTimestamp().orElse(null);
         var newTimestampSeconds = rawTimestamp != null ? rawTimestamp : 0L;
         if (existingTimestamp == null && newTimestampSeconds != 0
@@ -99,27 +138,16 @@ final class NotificationDisappearingModeStreamHandler implements SocketStream.Ha
     }
 
     /**
-     * Sends an acknowledgement stanza back to the server for the received notification.
+     * Sends the {@code <ack class="notification" type="disappearing_mode"/>}
+     * stanza for the processed notification.
      *
-     * <p>The ack stanza includes the original stanza's {@code id} as its own {@code id},
-     * the {@code from} JID as the {@code to} target, a {@code class} of
-     * {@code "notification"}, and a {@code type} of {@code "disappearing_mode"}.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's ack-builder
+     * inside {@code handleDisappearingModeNotificationJob}.
      *
-     * @param node the non-{@code null} notification stanza node to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("to", stanzaFrom)
-                .attribute("class", "notification")
-                .attribute("type", "disappearing_mode")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("disappearing_mode").send();
     }
 }

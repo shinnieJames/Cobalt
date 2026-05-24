@@ -10,27 +10,25 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant.
+ * The typed outbound {@code <iq xmlns="w:biz" type="set">} stanza that detaches a previously-uploaded cover photo from the current merchant's business profile.
  *
- * <p>Legacy-IQ RPC: detaches a previously-uploaded cover photo from the
- * current merchant's business profile.
- *
- * <p>The relay accepts the request irrespective of whether the cover photo
- * actually exists; the {@code id} field carries the upload id so the relay
- * can fan the right detach event into the business profile mutation
- * pipeline.
+ * @apiNote
+ * Use this request from the SMB profile editor to clear the cover photo previously uploaded via the matching {@code sendCoverPhoto} sibling stanza; the relay accepts the request irrespective of whether the cover photo still exists, and the {@code id} field carries the upload id so the relay can route the matching detach event into the business-profile mutation pipeline.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public final class IqDeleteCoverPhotoRequest implements IqOperation.Request {
     /**
-     * The upload id of the cover photo to detach.
+     * The upload identifier of the cover photo to detach, emitted as the {@code id} attribute of {@code <cover_photo op="delete"/>}.
      */
     private final String id;
 
     /**
-     * Constructs a request.
+     * Constructs a typed request.
      *
-     * @param id the upload id; never {@code null}
+     * @apiNote
+     * Call this constructor with the upload id of the cover photo that should be detached; the value is the same id stamped by the original cover-photo upload stanza.
+     *
+     * @param id the upload identifier; never {@code null}
      * @throws NullPointerException if {@code id} is {@code null}
      */
     public IqDeleteCoverPhotoRequest(String id) {
@@ -38,18 +36,22 @@ public final class IqDeleteCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the upload id.
+     * Returns the upload identifier.
      *
-     * @return the id; never {@code null}
+     * @apiNote
+     * Use this getter to read back the upload id that the stanza will detach.
+     *
+     * @return the identifier; never {@code null}
      */
     public String id() {
         return id;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by {@code WAWebBusinessProfileJob.deleteCoverPhoto}: a single {@code <cover_photo op="delete" id/>} child wrapped in a {@code <business_profile v="3" mutation_type="delta"/>} mutation envelope.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob",

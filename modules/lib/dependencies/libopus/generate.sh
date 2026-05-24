@@ -15,16 +15,16 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DIR/../.." && pwd)"
+ROOT="$(cd "$DIR/../../../.." && pwd)"
 if [ -n "${JEXTRACT_HOME:-}" ]; then
   JEXTRACT="$JEXTRACT_HOME/bin/jextract"
 else
   JEXTRACT="$(command -v jextract || true)"
 fi
-[ -n "$JEXTRACT" ] && [ -x "$JEXTRACT" ] || { echo "jextract not found; set JEXTRACT_HOME or add to PATH" >&2; exit 1; }
+[ -n "$JEXTRACT" ] && [ -f "$JEXTRACT" ] || { echo "jextract not found; set JEXTRACT_HOME or add to PATH" >&2; exit 1; }
 
 OUT="$ROOT/modules/lib/src/main/java"
-PKG="com.github.auties00.cobalt.call.audio.opus.bindings"
+PKG="com.github.auties00.cobalt.call.internal.audio.opus.bindings"
 
 rm -f "$OUT/${PKG//.//}/Opus.java" "$OUT/${PKG//.//}/Opus\$shared.java"
 

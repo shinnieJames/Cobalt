@@ -14,39 +14,56 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Retrieves the most recent linked-identity (LID) change for the authenticated account, returning the previous and
- * current identifier pair.
+ * Builds the MEX IQ stanza that retrieves a linked-identity (LID) change
+ * notification.
  *
- * <p>LID is WhatsApp's non-phone account identifier used during the LID migration rollout. When the server rotates an
- * account's LID, clients reconcile local storage by issuing this query to learn the old-to-new mapping so that chat
- * references can be updated without losing history.
+ * @apiNote Powers the LID migration flow. WA Web's
+ * {@code WAWebMexLidChangeNotificationHandler.mexHandleLidChangeNotification}
+ * dispatches this stanza (gated on
+ * {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled}) when the
+ * server emits a {@code lid_change} notification, then inserts a chat-side
+ * "change_lid" notification template so the user sees the new identifier.
+ * Pair the dispatched stanza with {@link LidChangeNotificationMexResponse}
+ * to consume the reply.
+ *
+ * @see LidChangeNotificationMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLidChangeNotification")
 public final class LidChangeNotificationMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexLidChangeNotificationQuery.graphql} for the snapshot
+     * this file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9892367127524985";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexLidChangeNotificationQuery.graphql}; WA Web tags the
+     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotificationQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "parseLidChangeNotification";
 
     /**
-     * Constructs a new request. The query takes no variables.
+     * Constructs a LID-change notification fetch request.
+     *
+     * @apiNote The compiled GraphQL document declares no variables; the
+     * dispatched stanza carries an empty {@code variables} object.
      */
     public LidChangeNotificationMexRequest() {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -54,9 +71,7 @@ public final class LidChangeNotificationMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -64,10 +79,11 @@ public final class LidChangeNotificationMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Serialises an empty GraphQL variables envelope and wraps it in a {@code w:mex} IQ stanza. The compiled Relay
-     * artifact declares an empty {@code argumentDefinitions} array.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {}}} and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotification", exports = "parseLidChangeNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)

@@ -9,32 +9,53 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the optional {@code type}
- * (e.g. {@code "available"} or {@code "unavailable"}) and {@code name}
- * (the local push-name) attributes into the bare
- * {@code <presence/>} envelope.
+ * The outbound {@code <presence type? name?/>} availability broadcast.
+ *
+ * @apiNote
+ * Drives WA Web's
+ * {@code WASmaxPresenceAvailabilityRPC.sendAvailabilityRPC}, the
+ * fire-and-forget {@code castSmaxStanza} surface invoked by
+ * {@code WASendPresenceStatusProtocol.sendPresenceStatusProtocol} when
+ * the local user transitions between
+ * {@code available}/{@code unavailable} or republishes their push name;
+ * Cobalt embedders dispatch one of these to announce their own
+ * presence to peers subscribed via {@link SmaxSubscribeRequest}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPresenceAvailabilityRequest")
 public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
-     * The optional presence type (e.g. {@code "available"} /
-     * {@code "unavailable"}). When {@code null} the relay treats the
-     * stanza as a pure name update.
+     * The optional presence type.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code type} attribute as an
+     * {@code OPTIONAL(CUSTOM_STRING, presenceType)}; typically
+     * {@code "available"} or {@code "unavailable"}, though the relay
+     * accepts any string. When {@code null} the stanza degenerates to
+     * a pure name republish.
      */
     private final String presenceType;
 
     /**
-     * The optional push-name to advertise. When {@code null} the
-     * relay reuses the previously-broadcast value.
+     * The optional push-name to advertise.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code name} attribute as an
+     * {@code OPTIONAL(CUSTOM_STRING, presenceName)}; the relay reuses
+     * the previously-broadcast value when {@code null}.
      */
     private final String presenceName;
 
     /**
      * Constructs a new availability broadcast.
      *
-     * @param presenceType the optional presence type. May be
+     * @apiNote
+     * Both fields are optional so callers may craft pure
+     * type-transition, pure name-republish, or combined stanzas in a
+     * single dispatch.
+     *
+     * @param presenceType the optional presence type; may be
      *                     {@code null}
-     * @param presenceName the optional push-name. May be {@code null}
+     * @param presenceName the optional push-name; may be {@code null}
      */
     public SmaxAvailabilityRequest(String presenceType, String presenceName) {
         this.presenceType = presenceType;
@@ -44,8 +65,11 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
      * Returns the optional presence type.
      *
-     * @return an {@link Optional} carrying the type, or empty when
-     *         omitted
+     * @apiNote
+     * Empty when this broadcast does not change the user's
+     * available/unavailable status.
+     *
+     * @return an {@link Optional} carrying the type
      */
     public Optional<String> presenceType() {
         return Optional.ofNullable(presenceType);
@@ -54,8 +78,11 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
     /**
      * Returns the optional push-name.
      *
-     * @return an {@link Optional} carrying the name, or empty when
-     *         omitted
+     * @apiNote
+     * Empty when this broadcast does not republish the user's display
+     * name.
+     *
+     * @return an {@link Optional} carrying the name
      */
     public Optional<String> presenceName() {
         return Optional.ofNullable(presenceName);
@@ -63,6 +90,12 @@ public final class SmaxAvailabilityRequest implements SmaxOperation.Request {
 
     /**
      * Builds the outbound presence stanza ready for dispatch.
+     *
+     * @apiNote
+     * Returned unbuilt so the dispatch path can stamp a fresh stanza
+     * id before flushing; null-valued attributes are dropped at
+     * render time, matching the WA Web {@code OPTIONAL} attribute
+     * semantics.
      *
      * @return a {@link NodeBuilder} carrying the
      *         {@code <presence type? name?/>} envelope

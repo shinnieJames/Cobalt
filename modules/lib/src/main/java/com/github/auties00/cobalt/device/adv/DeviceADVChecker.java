@@ -12,7 +12,7 @@ import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.info.DeviceListBuilder;
 import com.github.auties00.cobalt.model.device.sync.PendingDeviceSync;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.wam.WamService;
 import com.github.auties00.cobalt.wam.event.AdvStoredTimestampExpiredEventBuilder;
@@ -27,25 +27,24 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Schedules the recurring ADV (Account Device Verification) device info check that
- * keeps cached device lists fresh.
+ * Recurring job that keeps cached device lists fresh by detecting expiration and
+ * triggering proactive resyncs.
  *
- * <p>Once every 24 hours this checker walks all cached device lists and decides
- * which are expired (based on their timestamp, the expected-timestamp tracking
- * fields, and the age of the last check) and which are merely approaching
- * expiration. Expired records have their Signal sessions torn down, group sender
- * keys rotated, and the record itself marked deleted; both expired and
- * close-to-expiration records are queued for a proactive device sync so that
- * message sends made after them use an up-to-date view of the recipient's
- * companion devices. If the user's own device list expires and the corresponding
- * AB prop is on, the client logs out to avoid sending with a stale view of its
- * own devices.
+ * <p>The checker is started once per session by {@link DeviceService#startAdvCheckScheduler()}
+ * and wakes up every 24 hours. On each tick it walks every cached device list,
+ * classifies entries as expired (timestamp older than the
+ * {@code num_days_key_index_list_expiration} AB prop) or close to expiration
+ * (within the {@code num_days_before_device_expiry_check} warning window), tears
+ * down Signal sessions for expired companion devices, rotates group sender keys
+ * for the affected users, queues a proactive USync for every classified user, and
+ * logs the local user out when its own device list expired and the
+ * {@code web_adv_logout_on_self_device_list_expired} AB prop is on.
  *
- * <p>Started by {@link DeviceService#startAdvCheckScheduler()} and stopped via
- * {@link DeviceService#stopAdvCheckScheduler()}.
- *
- * @apiNote WAWebAdvDeviceInfoCheckJob: manages automated periodic verification and
- * expiration of device information lists for Advanced Device Verification.
+ * @apiNote
+ * Embedders that drive Cobalt's full multi-device lifecycle leave the scheduler
+ * on via {@link DeviceService#startAdvCheckScheduler()}; embedders that only use
+ * Cobalt for short-lived single-message sessions can leave it off and accept
+ * stale device lists.
  */
 @WhatsAppWebModule(moduleName = "WAWebAdvDeviceInfoCheckJob")
 public final class DeviceADVChecker implements AutoCloseable {
@@ -55,7 +54,10 @@ public final class DeviceADVChecker implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(DeviceADVChecker.class.getName());
 
     /**
-     * Recurrence interval for the ADV check, mirroring WA Web's 24-hour cadence.
+     * Recurrence interval for the ADV check.
+     *
+     * @apiNote
+     * Pins the WA Web cadence of one tick per 24 hours; not configurable.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
@@ -84,13 +86,18 @@ public final class DeviceADVChecker implements AutoCloseable {
     private final WamService wamService;
 
     /**
-     * The scheduled executor running the periodic check, or {@code null} when the
-     * scheduler is stopped.
+     * The scheduled executor running the periodic check, or {@code null} when
+     * the scheduler is stopped.
      */
     private volatile ScheduledExecutorService scheduler;
 
     /**
      * Constructs a new ADV check scheduler.
+     *
+     * @apiNote
+     * Wired up by the device-service construction graph; embedders do not
+     * usually call this directly. The constructor only captures collaborators
+     * and does not schedule anything until {@link #start()} is invoked.
      *
      * @param client         the WhatsApp client
      * @param deviceService  the device service
@@ -110,10 +117,18 @@ public final class DeviceADVChecker implements AutoCloseable {
     /**
      * Starts the ADV check scheduler.
      *
-     * <p>Computes the initial delay based on the time elapsed since the last check
-     * to avoid waiting a full 24 hours if a check was performed recently. If no
-     * previous check exists, runs immediately but only records the timestamp
-     * without performing the actual device info check.
+     * @apiNote
+     * Called once after the socket is online to begin the 24-hour cadence.
+     * Idempotent: a second call while the scheduler is already running is a
+     * no-op. The first tick fires immediately when no previous check time is
+     * stored, but only records the timestamp without running the actual job
+     * (mirroring WA Web's first-run no-op {@code Promise.resolve()}).
+     *
+     * @implNote
+     * This implementation runs the scheduler on a single virtual-thread executor
+     * named {@code adv-check-N}. {@link #computeInitialDelay()} subtracts the
+     * elapsed time since the last check so a session that reconnects within the
+     * 24-hour window does not get a fresh full delay.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
@@ -139,13 +154,15 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Computes the initial delay for the first ADV check.
+     * Computes the initial delay before the first scheduled tick.
      *
-     * <p>If no previous check exists, returns zero so the scheduler runs
-     * immediately (the actual job is skipped on first run, only recording the
-     * timestamp). If a check was performed within the last 24 hours, returns
-     * the remaining time until the next interval.
-     * @return the computed initial delay
+     * @apiNote
+     * Called from {@link #start()} to honour any check that already ran during
+     * a previous session: a session reconnecting after twelve hours waits the
+     * remaining twelve, not a full twenty-four.
+     *
+     * @return the computed initial delay; zero when no previous check exists or
+     *         when the previous check is at least {@link #CHECK_INTERVAL} old
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "scheduleAdvDeviceInfoCheck",
@@ -153,8 +170,6 @@ public final class DeviceADVChecker implements AutoCloseable {
     private Duration computeInitialDelay() {
         var lastCheck = deviceService.lastAdvCheckTime();
         if (lastCheck.isEmpty()) {
-            // No previous check, so run immediately. The actual job is skipped in
-            // performCheck for the first run.
             return Duration.ZERO;
         }
 
@@ -169,13 +184,24 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Performs the ADV device info check.
+     * Performs one ADV device info check tick.
      *
-     * <p>On the first invocation (when no previous check time exists), only records
-     * the current timestamp without running the actual check. On subsequent
-     * invocations, retrieves all cached device lists, classifies them as expired
-     * or close-to-expiration, handles companion removal (including logout on own
-     * device expiration), and queues proactive device syncs.
+     * @apiNote
+     * The body of every scheduled tick. On the first ever invocation (no
+     * previous check time) records the timestamp and returns immediately,
+     * mirroring WA Web's no-op first run. Subsequent ticks read the two
+     * expiration AB props, classify cached lists via
+     * {@link #analyzeDeviceLists}, emit one
+     * {@link com.github.auties00.cobalt.wam.event.AdvStoredTimestampExpiredEvent}
+     * per expired list, log the local user out when self-expired and the AB prop
+     * agrees, clear expired records, and queue proactive USyncs for the rest.
+     *
+     * @implNote
+     * This implementation surfaces unexpected exceptions through
+     * {@link WhatsAppClient#handleFailure} as a
+     * {@link WhatsAppAdvCheckException} so the error pipeline can route them
+     * the same way as any other ADV failure. The WAM events fire before the
+     * self-expired logout so telemetry is not lost on the logout path.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
@@ -183,8 +209,6 @@ public final class DeviceADVChecker implements AutoCloseable {
     private void performCheck() {
         var lastCheck = deviceService.lastAdvCheckTime();
         if (lastCheck.isEmpty()) {
-            // The first run only records the timestamp, mirroring WA Web's no-op
-            // Promise.resolve() path.
             deviceService.updateAdvCheckTime();
             return;
         }
@@ -209,8 +233,6 @@ public final class DeviceADVChecker implements AutoCloseable {
                     myUserJid
             );
 
-            // The expired-timestamp WAM events fire before the self-expired logout so
-            // telemetry is not lost on the logout path.
             sendAdvStoredTimestampExpiredEvents(result.expiredLists(), now, expiryThreshold);
 
             if (result.selfExpired() && shouldLogoutOnSelfExpired()) {
@@ -234,20 +256,28 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Analyzes all cached device lists and classifies them as expired or
-     * close-to-expiration.
+     * Classifies cached device lists as expired or close to expiration.
      *
-     * <p>Skips deleted device lists and lists containing only the primary device.
-     * For each remaining list, checks timestamp-based expiration via
-     * {@link DeviceExpectedTsUtils#isDeviceListStale} and proximity-to-expiration
-     * via {@link DeviceExpectedTsUtils#isDeviceListCloseToExpiration}.
+     * @apiNote
+     * Extracted as a package-private method so unit tests can pass a synthetic
+     * {@code now} and {@code lastCheck} without driving the real scheduler.
+     * Skips deleted lists and primary-only lists (no companion to chase). For
+     * each remaining list, consults
+     * {@link DeviceExpectedTsUtils#isDeviceListStale} for expiration and
+     * {@link DeviceExpectedTsUtils#isDeviceListCloseToExpiration} for the
+     * warning window; expired lists are added to the result and also to the
+     * sync queue; close-to-expiration lists are only queued.
+     *
      * @param deviceLists      the device lists to analyze
-     * @param now              the current time
-     * @param expiryThreshold  the threshold for full expiration
-     * @param warningThreshold the threshold for close-to-expiration warning
-     * @param lastCheck        the last ADV device info check time
-     * @param myUserJid        the current user's JID, or {@code null}
-     * @return the analysis result containing expired lists and JIDs needing sync
+     * @param now              the reference instant for "now"
+     * @param expiryThreshold  the full-expiration threshold (from the
+     *                         {@code num_days_key_index_list_expiration} AB
+     *                         prop)
+     * @param warningThreshold the close-to-expiration warning window
+     * @param lastCheck        the time the last ADV check ran
+     * @param myUserJid        the local user's JID, or {@code null} when no
+     *                         self JID is set
+     * @return the analysis result
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
@@ -284,12 +314,16 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Checks whether a device list contains only the primary device.
+     * Returns whether a device list contains only the primary device.
      *
-     * <p>Returns {@code true} when the list has exactly one device and that
-     * device's ID equals the default (primary) device ID.
+     * @apiNote
+     * Mirrors the WA Web {@code v(n)} predicate that exempts primary-only
+     * users from the staleness check: there is no companion device to refresh
+     * for them.
+     *
      * @param deviceList the device list to check
-     * @return {@code true} if the list contains only the primary device
+     * @return {@code true} when the list has exactly one device and that
+     *         device is primary
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
@@ -300,8 +334,16 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Checks whether the client should log out when its own device list has expired.
-     * @return {@code true} if the AB prop indicates logout on self device list expiration
+     * Returns whether the local user should be logged out when its own device
+     * list has expired.
+     *
+     * @apiNote
+     * Consulted by {@link #performCheck()} immediately after the
+     * {@code selfExpired} flag is set; the AB prop
+     * {@code web_adv_logout_on_self_device_list_expired} acts as a server-side
+     * kill switch.
+     *
+     * @return {@code true} when the AB prop is on
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvDeviceInfoCheckJob",
             exports = "runAdvDeviceInfoCheck",
@@ -311,9 +353,16 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Clears an expired device record by removing Signal sessions for all
-     * companion devices, rotating group sender keys, and marking the device
-     * list as deleted.
+     * Clears an expired device record by tearing down Signal sessions for every
+     * companion device, rotating group sender keys, and marking the list as
+     * deleted.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code clearDeviceRecord} side-effect bundle invoked from
+     * {@code removeCompanions}. The {@code deletedChangedToHost} marker stays
+     * unset on this path because the call site does not carry account-type
+     * arguments; it only fires on the coexistence transition path.
+     *
      * @param deviceList the expired device list to clear
      */
     private void clearExpiredDeviceRecord(DeviceList deviceList) {
@@ -327,8 +376,6 @@ public final class DeviceADVChecker implements AutoCloseable {
 
         client.store().markKeyRotation(userJid);
 
-        // removeCompanions calls clearDeviceRecord without account type parameters,
-        // so deletedChangedToHost is never set in this path.
         var deletedList = new DeviceListBuilder()
                 .userJid(userJid)
                 .deleted(true)
@@ -341,16 +388,20 @@ public final class DeviceADVChecker implements AutoCloseable {
 
     /**
      * Emits one {@code AdvStoredTimestampExpired} WAM event per expired device
-     * list reporting, in hours, how far past its expiration the stored
-     * timestamp is.
+     * list, reporting overshoot in hours.
      *
-     * <p>For every expired device list the overshoot is computed as
-     * {@code now - (timestamp + expiryThreshold)}. When non-negative the
-     * overshoot is converted to hours (rounded to the nearest hour) and a
-     * {@link com.github.auties00.cobalt.wam.event.AdvStoredTimestampExpiredEvent}
-     * is committed through the client's {@code WamService}. Lists whose
-     * overshoot is negative (not yet past the expiration cutoff) are skipped,
-     * matching WA Web's inline {@code if (!(r < 0))} guard.
+     * @apiNote
+     * Drives the {@code advExpireTimeInHours} server-side dashboard. For every
+     * expired list the overshoot is computed as
+     * {@code now - (timestamp + expiryThreshold)}; lists whose overshoot is
+     * negative are skipped (not yet past the cutoff), matching the WA Web inline
+     * {@code if (!(r < 0))} guard.
+     *
+     * @implNote
+     * This implementation rounds overshoot seconds to the nearest hour via
+     * {@link Math#round(double)} and forwards via {@link WamService#commit} so
+     * the broader WAM batching policy decides when the events ship.
+     *
      * @param expiredLists    the device lists classified as expired
      * @param now             the reference instant used to compute overshoot
      * @param expiryThreshold the configured key-index-list expiration threshold
@@ -375,12 +426,15 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Schedules proactive sync for device lists that are expired or approaching
-     * expiration.
+     * Queues a proactive USync for the given user JIDs through the pending
+     * device sync pipeline.
      *
-     * <p>Adds all specified JIDs to the pending device sync queue and triggers
-     * the pending sync process.
-     * @param jids the JIDs of users needing device sync
+     * @apiNote
+     * Called at the end of every tick with the union of expired and
+     * close-to-expiration user JIDs; the pipeline coalesces and flushes them on
+     * the next eligible event-loop window.
+     *
+     * @param jids the JIDs to enqueue
      */
     private void scheduleProactiveSync(List<Jid> jids) {
         LOGGER.log(Level.DEBUG, "Proactively syncing {0} device lists", jids.size());
@@ -391,6 +445,11 @@ public final class DeviceADVChecker implements AutoCloseable {
 
     /**
      * Stops the ADV check scheduler and cancels pending checks.
+     *
+     * @apiNote
+     * Called on client teardown and idempotent: a second call once the
+     * scheduler is already shut down is a no-op. Never call from inside a
+     * scheduler tick; the executor it shuts down is the one running the tick.
      */
     @Override
     public void close() {
@@ -405,10 +464,19 @@ public final class DeviceADVChecker implements AutoCloseable {
     }
 
     /**
-     * Result of analyzing cached device lists for expiration and staleness.
-     * @param selfExpired    {@code true} if the current user's device list is expired
-     * @param expiredLists   the list of expired device lists
-     * @param jidsNeedingSync the JIDs needing proactive device sync (expired + close-to-expiration)
+     * Output of {@link #analyzeDeviceLists} bundling the self-expiration flag,
+     * the expired lists, and the union of user JIDs needing a proactive sync.
+     *
+     * @apiNote
+     * Package-private container that lets the staleness analysis stay pure
+     * (input in, output out) so unit tests can assert against the classification
+     * without driving the scheduler's side effects.
+     *
+     * @param selfExpired     {@code true} when the local user's own device list
+     *                        is expired
+     * @param expiredLists    the device lists classified as expired
+     * @param jidsNeedingSync the JIDs needing proactive device sync (expired
+     *                        plus close-to-expiration)
      */
     record AnalysisResult(
             boolean selfExpired,

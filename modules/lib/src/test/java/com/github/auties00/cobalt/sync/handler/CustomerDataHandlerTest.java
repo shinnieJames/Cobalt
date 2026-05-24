@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Tests for {@link CustomerDataHandler} — Cobalt's adapter for
+ * Tests for {@link CustomerDataHandler} - Cobalt's adapter for
  * {@code WAWebCustomerDataSync}.
  *
  * <p>Cobalt does not currently maintain a dedicated customer-data store,
@@ -75,7 +75,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the wire constant")
@@ -99,7 +99,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET acknowledgement")
+    @DisplayName("applyMutation - SET acknowledgement")
     class ApplySet {
         @Test
         @DisplayName("a valid SET with a parseable chat JID and present payload returns SUCCESS")
@@ -119,7 +119,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("Cobalt has no dedicated customer-data store, so an orphan branch is never taken")
@@ -134,7 +134,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -152,7 +152,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a SET with a blank chat JID at indexParts[1] returns MALFORMED")
@@ -174,10 +174,10 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
-        @DisplayName("REMOVE with a valid chat JID returns SUCCESS — acknowledged no-op")
+        @DisplayName("REMOVE with a valid chat JID returns SUCCESS - acknowledged no-op")
         void validRemoveSucceeds() {
             var result = handler.applyMutation(client,
                     buildMutation(CHAT_JID, null, SyncdOperation.REMOVE, Instant.now()));
@@ -188,7 +188,7 @@ class CustomerDataHandlerTest {
         @DisplayName("REMOVE with a blank chat JID is silently acknowledged")
         void blankRemoveSucceeds() {
             // Per the handler source, the REMOVE branch acknowledges with SUCCESS regardless of
-            // whether a chat JID was supplied — there is no removal target to validate.
+            // whether a chat JID was supplied - there is no removal target to validate.
             var result = handler.applyMutation(client,
                     buildMutation("", null, SyncdOperation.REMOVE, Instant.now()));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
@@ -196,7 +196,7 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — unknown operation")
+    @DisplayName("applyMutation - unknown operation")
     class UnknownOperation {
         @Test
         @DisplayName("an unknown operation falls through to UNSUPPORTED")
@@ -206,11 +206,11 @@ class CustomerDataHandlerTest {
             // explicit unsupported-fall-through outcome documenting the else branch.
             var ts = Instant.now();
             var value = new SyncActionValueBuilder().timestamp(ts).build();
-            // No action installed — even SET on this value with a valid chat JID will trip the
+            // No action installed - even SET on this value with a valid chat JID will trip the
             // malformed-action-value branch rather than the unsupported one. The unsupported
             // branch is only reachable from a non-SET, non-REMOVE op, which the SyncdOperation
             // enum does not currently expose. Confirm at least that SET with no value content
-            // does NOT silently produce SUCCESS — it must surface as a typed failure.
+            // does NOT silently produce SUCCESS - it must surface as a typed failure.
             var index = JSON.toJSONString(List.of(handler.actionName(), CHAT_JID));
             var mutation = new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, handler.version());
 
@@ -221,10 +221,10 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -233,7 +233,7 @@ class CustomerDataHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -248,10 +248,10 @@ class CustomerDataHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("CustomerDataHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("CustomerDataHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
             // Customer data is authored via the WA Web business UI and Cobalt does not currently
             // emit `customer_data` mutations from this handler.

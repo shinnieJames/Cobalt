@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerBuilder;
 import com.github.auties00.cobalt.model.message.FutureProofMessageType;
 import com.github.auties00.cobalt.model.message.media.ImageMessageBuilder;
+import com.github.auties00.cobalt.model.message.system.FutureProofMessage;
 import com.github.auties00.cobalt.model.message.system.FutureProofMessageBuilder;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessageBuilder;
 import org.junit.jupiter.api.DisplayName;
@@ -21,36 +22,42 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * Tests for the {@code FutureProofMessage} wrapping path on
- * {@link MessageContainer}.
+ * Exercises the {@code FutureProofMessage} unwrapping path on every
+ * {@link MessageContainer} wrapper field.
  *
- * <p>{@code FutureProofMessage} envelopes 19 different
- * {@link MessageContainer} fields used as forward-compat wrappers
- * (viewOnce, ephemeral, editedMessage, groupMentioned, status*, lottie
- * sticker, etc.). All of them share the resolver behaviour: the wrapper
- * is opaque on the wire, and {@link MessageContainer#content()} must
- * unwrap to the innermost message.
+ * @apiNote
+ * {@code FutureProofMessage} envelopes a large set of forward-compatible
+ * wrapper fields (viewOnce, ephemeral, editedMessage, groupMentioned,
+ * status mentions, lottie sticker, document-with-caption, and the bot,
+ * poll, event, and newsletter wrappers). The receiver-side resolver and
+ * every send-path consumer rely on {@link MessageContainer#content()}
+ * unwrapping to the innermost payload while
+ * {@link MessageContainer#futureProofContentType()} reports which wrapper
+ * was used; the parity asserted here is the load-bearing invariant for the
+ * outbound stanza-type and media-type resolvers in
+ * {@link MessageSender}.
  *
- * <p>This class parameterises every wrap-index variant and asserts:
- *
- * <ul>
- *   <li>{@link MessageContainer#content()} returns the innermost payload
- *       by reference, regardless of the wrapper field used.</li>
- *   <li>{@link MessageContainer#futureProofContentType()} reports the
- *       correct {@link FutureProofMessageType} for each wrapper.</li>
- *   <li>Empty wrappers (no inner content) fall back to
- *       {@link EmptyMessage}.</li>
- * </ul>
+ * @implNote
+ * This implementation parameterises the wrap-index variants from one
+ * shared {@link MethodSource}; the parameterised cells assert that the
+ * unwrap returns the inner payload by reference (not by structural
+ * equality) and that empty wrappers fall back to the
+ * {@link EmptyMessage} sentinel.
  */
 @DisplayName("FutureProofMessage unwrapping")
 class FutureProofUnwrappingTest {
 
     /**
-     * One test cell per wrapper field — pairs the
-     * {@link FutureProofMessageType} enum value with the corresponding
-     * setter on {@link MessageContainerBuilder}.
+     * Returns one parameter tuple per {@code FutureProofMessage} wrapper
+     * field.
      *
-     * @return the parameterised test arguments
+     * @apiNote
+     * Feeds {@link #wrapperUnwrapsToInner(FutureProofMessageType, WrapperSetter)}
+     * and {@link #wrapperWithEmptyInnerFallsBack(FutureProofMessageType, WrapperSetter)};
+     * each tuple pairs the {@link FutureProofMessageType} with the
+     * matching {@link MessageContainerBuilder} setter.
+     *
+     * @return the parameter {@link Stream}
      */
     static Stream<Arguments> wrappers() {
         return Stream.of(
@@ -78,6 +85,9 @@ class FutureProofUnwrappingTest {
         );
     }
 
+    /**
+     * Asserts that every wrapper unwraps to its inner payload by reference.
+     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("wrappers")
     @DisplayName("every FutureProof wrapper unwraps to its inner payload by reference")
@@ -96,6 +106,10 @@ class FutureProofUnwrappingTest {
                 "futureProofContentType() must report " + type + " for this wrapper");
     }
 
+    /**
+     * Asserts that every wrapper with an empty inner falls back to
+     * {@link EmptyMessage}.
+     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("wrappers")
     @DisplayName("every FutureProof wrapper with an empty inner falls back to EmptyMessage")
@@ -111,6 +125,10 @@ class FutureProofUnwrappingTest {
                 "wrapper " + type + " with empty inner must unwrap to EmptyMessage sentinel");
     }
 
+    /**
+     * Asserts that nested wrappers unwrap recursively to the innermost
+     * payload.
+     */
     @Test
     @DisplayName("nested wrappers (viewOnce inside ephemeral) unwrap recursively")
     void nestedWrappersUnwrap() {
@@ -124,11 +142,15 @@ class FutureProofUnwrappingTest {
         var container = new MessageContainerBuilder().ephemeralMessage(ephemeral).build();
 
         assertSame(inner, container.content(),
-                "double wrap (ephemeral→viewOnce→extendedText) must unwrap to innermost");
-        // The outermost futureProofContentType reports the OUTER wrapper, not the inner one.
+                "double wrap (ephemeral -> viewOnce -> extendedText) must unwrap to innermost");
+        // futureProofContentType reports the OUTER wrapper, not the inner one.
         assertEquals(FutureProofMessageType.EPHEMERAL, container.futureProofContentType());
     }
 
+    /**
+     * Asserts that an empty container reports
+     * {@link FutureProofMessageType#NONE}.
+     */
     @Test
     @DisplayName("container with no payload at all returns FutureProofMessageType.NONE")
     void noWrapperGivesNone() {
@@ -136,20 +158,31 @@ class FutureProofUnwrappingTest {
         assertEquals(FutureProofMessageType.NONE, container.futureProofContentType());
     }
 
+    /**
+     * Asserts that a direct (non-wrapper) field reports
+     * {@link FutureProofMessageType#NONE}.
+     */
     @Test
     @DisplayName("container with a direct (non-wrapper) field returns NONE")
     void directFieldGivesNone() {
         var image = new ImageMessageBuilder().caption("direct").build();
         var container = new MessageContainerBuilder().imageMessage(image).build();
         assertEquals(FutureProofMessageType.NONE, container.futureProofContentType(),
-                "imageMessage is a direct field, not a wrapper — futureProofContentType is NONE");
+                "imageMessage is a direct field, not a wrapper, so futureProofContentType is NONE");
     }
 
     /**
-     * Builds a parameterised argument tuple for a wrapper case.
+     * Builds a parameter tuple for a single wrapper case.
      *
-     * @param type    the corresponding {@link FutureProofMessageType}
-     * @param setter  the builder setter that places a wrapper into the field
+     * @apiNote
+     * Helper for {@link #wrappers()}; pairs the
+     * {@link FutureProofMessageType} with the {@link WrapperSetter} that
+     * plants the wrapper on the {@link MessageContainerBuilder}.
+     *
+     * @param type   the {@link FutureProofMessageType} reported by the
+     *               wrapper
+     * @param setter the {@link WrapperSetter} that places the wrapper into
+     *               the right builder field
      * @return the JUnit parameter tuple
      */
     private static Arguments wrapperArg(
@@ -160,10 +193,15 @@ class FutureProofUnwrappingTest {
     }
 
     /**
-     * A typed alias for the {@link BiConsumer} that maps a wrapper into a
-     * {@link MessageContainerBuilder} field.
+     * Typed {@link BiConsumer} that places a
+     * {@code FutureProofMessage} wrapper onto a
+     * {@link MessageContainerBuilder}.
+     *
+     * @apiNote
+     * Used as the second parameter of every parameterised cell to keep the
+     * setter strongly typed at the call site.
      */
     @FunctionalInterface
-    interface WrapperSetter extends BiConsumer<MessageContainerBuilder, com.github.auties00.cobalt.model.message.system.FutureProofMessage> {
+    interface WrapperSetter extends BiConsumer<MessageContainerBuilder, FutureProofMessage> {
     }
 }

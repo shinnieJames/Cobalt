@@ -16,22 +16,48 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Response variant for {@link FetchNewsletterAdminCapabilitiesMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the fetch-newsletter-admin-capabilities query
+ * built by {@link FetchNewsletterAdminCapabilitiesMexRequest}.
+ *
+ * @apiNote
+ * Exposes the raw capability tokens echoed under
+ * {@code xwa2_newsletter_admin.capabilities}; callers can map each token to
+ * the corresponding {@code WAWebNewsletterCapability} enum themselves,
+ * mirroring WA Web's
+ * {@code WAWebNewsletterModelUtils.getNewsletterCapabilityFromValue} call.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterAdminCapabilitiesJob")
 public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOperation.Response.Json {
+    /**
+     * The unmodifiable list of capability tokens granted to the local user.
+     */
     private final List<String> capabilities;
 
+    /**
+     * Constructs a response wrapping the parsed capability list.
+     *
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param capabilities the capability tokens echoed by the relay
+     */
     private FetchNewsletterAdminCapabilitiesMexResponse(List<String> capabilities) {
         this.capabilities = capabilities;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletter_admin} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<FetchNewsletterAdminCapabilitiesMexResponse> of(Node node) {
         return node.getChild("result")
@@ -40,10 +66,13 @@ public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOpe
     }
 
     /**
-     * Returns the raw newsletter capability values granted to the
-     * authenticated admin.
+     * Returns the raw capability tokens granted to the authenticated admin.
      *
-     * @return an unmodifiable {@link List} of capability identifiers; never
+     * @apiNote
+     * Callers wishing to mirror WA Web's behaviour should map each token
+     * via {@code WAWebNewsletterCapability} before consuming the result.
+     *
+     * @return the unmodifiable list of capability tokens, never
      *         {@code null} but possibly empty
      */
     public List<String> capabilities() {
@@ -51,12 +80,21 @@ public final class FetchNewsletterAdminCapabilitiesMexResponse implements MexOpe
     }
 
     /**
-     * Parses a {@link FetchNewsletterAdminCapabilitiesMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation drops {@code null} entries from the
+     * {@code capabilities} array and returns an unmodifiable copy of the
+     * surviving tokens; the relay reports an empty array when the local
+     * user holds no admin capabilities.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletter_admin} root
      */
     private static Optional<FetchNewsletterAdminCapabilitiesMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

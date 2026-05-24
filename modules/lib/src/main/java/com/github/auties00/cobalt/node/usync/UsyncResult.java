@@ -12,51 +12,63 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Aggregated result of a USync query.
+ * Aggregated result of a {@link UsyncQuery}.
  *
- * <p>The relay's response carries three sections. A per-protocol
- * {@code <result>} block carries optional {@code <error/>} or
- * {@code refresh="..."} attributes that apply to every user in the response,
- * looked up via {@link #getProtocolError(UsyncProtocol)} and
- * {@link #getProtocolRefresh(UsyncProtocol)}. A {@code <list>} block carries
- * one {@code <user>} child per peer, exposed as an unmodifiable list via
- * {@link #users()}. A top-level error appears when the IQ failed wholesale,
- * exposed via {@link #topLevelError()}.
+ * @apiNote
+ * Returned by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)}.
+ * The relay structures its response in three layers: an optional top-level
+ * IQ error (exposed via {@link #topLevelError()} and {@link #failed()}),
+ * per-protocol metadata that applies to every user in the batch
+ * (exposed via {@link #getProtocolError(UsyncProtocol)} and
+ * {@link #getProtocolRefresh(UsyncProtocol)}), and a per-user, per-protocol
+ * result list (exposed via {@link #users()}).
  *
- * <p>Maps are not exposed directly. Every per-protocol lookup goes through a
- * method so callers always interact with the result through a stable typed
- * surface.
+ * @implNote
+ * This implementation collapses three discrete fields of the JS result object
+ * ({@code error}, {@code refresh}, {@code list}) into the same shape Cobalt
+ * exposes, but funnels the per-protocol maps through accessors so the
+ * surface stays immutable and clients always go through a typed lookup.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public final class UsyncResult {
     /**
-     * Holds the per-user, per-protocol parse results in relay order.
+     * Per-user, per-protocol parse results in the order the relay returned
+     * them.
      */
     private final List<UsyncUserResult> users;
 
     /**
-     * Maps protocol name to the error metadata that applied to every user in
-     * the response.
+     * Maps protocol wire name to the per-protocol error that applied to every
+     * user in the batch.
      */
     private final Map<String, UsyncProtocolError> protocolErrors;
 
     /**
-     * Maps protocol name to the requested refresh window.
+     * Maps protocol wire name to the {@code refresh} hint the relay attached
+     * to the per-protocol result envelope.
      */
     private final Map<String, Duration> protocolRefreshes;
 
     /**
-     * Holds the top-level error populated when the IQ failed entirely.
+     * Top-level error populated when the IQ itself failed; {@code null}
+     * otherwise.
      */
     private final UsyncTopLevelError topLevelError;
 
     /**
-     * Creates a new aggregated result. All collections are defensively copied
-     * so the public surface stays immutable.
+     * Builds a new aggregated result from the parsed sections.
+     *
+     * @apiNote
+     * Constructed exclusively by {@link UsyncQuery#parseResponse(com.github.auties00.cobalt.node.Node)};
+     * not part of the public surface.
+     *
+     * @implNote
+     * This implementation defensively copies every collection so callers see
+     * an immutable snapshot.
      *
      * @param users             the per-user results
-     * @param protocolErrors    map from protocol name to error
-     * @param protocolRefreshes map from protocol name to refresh window
+     * @param protocolErrors    map from protocol wire name to error
+     * @param protocolRefreshes map from protocol wire name to refresh window
      * @param topLevelError     top-level error, or {@code null} on success
      */
     public UsyncResult(
@@ -73,18 +85,28 @@ public final class UsyncResult {
     /**
      * Returns the per-user results in relay order.
      *
-     * @return an unmodifiable list, never {@code null}
+     * @apiNote
+     * The returned list is unmodifiable; iterate or pattern-match the
+     * per-protocol payloads inside each {@link UsyncUserResult}.
+     *
+     * @return the per-user results, never {@code null}
      */
     public List<UsyncUserResult> users() {
         return Collections.unmodifiableList(users);
     }
 
     /**
-     * Returns the protocol-level error that applied to every user, when
+     * Returns the per-protocol error that applied to every user, when
      * present.
      *
+     * @apiNote
+     * Use this to detect "the relay refused this protocol for the whole
+     * batch" before iterating {@link #users()}. The error may carry an
+     * {@link UsyncProtocolError#errorBackoff()} hint that drives
+     * {@link UsyncBackoff#setProtocolBackoffMs(String, long)}.
+     *
      * @param protocol the protocol descriptor
-     * @return the error metadata
+     * @return the per-protocol error, or empty
      */
     public Optional<UsyncProtocolError> getProtocolError(UsyncProtocol protocol) {
         Objects.requireNonNull(protocol, "protocol cannot be null");
@@ -92,21 +114,30 @@ public final class UsyncResult {
     }
 
     /**
-     * Returns the protocol-level error for the named protocol, when present.
+     * Returns the per-protocol error for the named protocol, when present.
      *
-     * @param protocolName the protocol's wire name
-     * @return the error metadata
+     * @apiNote
+     * Overload that takes a raw protocol wire name; prefer the
+     * {@link #getProtocolError(UsyncProtocol)} form when the descriptor is
+     * already in scope.
+     *
+     * @param protocolName the protocol wire name
+     * @return the per-protocol error, or empty
      */
     public Optional<UsyncProtocolError> getProtocolError(String protocolName) {
         return Optional.ofNullable(protocolErrors.get(protocolName));
     }
 
     /**
-     * Returns the refresh-window hint the relay attached to the protocol, when
-     * present.
+     * Returns the {@code refresh} window the relay attached to a protocol,
+     * when present.
+     *
+     * @apiNote
+     * The relay uses {@code refresh} to ask clients to re-query the protocol
+     * after the supplied duration even though the current response succeeded.
      *
      * @param protocol the protocol descriptor
-     * @return the refresh duration
+     * @return the refresh window, or empty
      */
     public Optional<Duration> getProtocolRefresh(UsyncProtocol protocol) {
         Objects.requireNonNull(protocol, "protocol cannot be null");
@@ -114,26 +145,40 @@ public final class UsyncResult {
     }
 
     /**
-     * Returns the refresh-window hint for the named protocol, when present.
+     * Returns the {@code refresh} window for the named protocol, when
+     * present.
      *
-     * @param protocolName the protocol's wire name
-     * @return the refresh duration
+     * @apiNote
+     * Overload that takes a raw protocol wire name; prefer the
+     * {@link #getProtocolRefresh(UsyncProtocol)} form when the descriptor is
+     * already in scope.
+     *
+     * @param protocolName the protocol wire name
+     * @return the refresh window, or empty
      */
     public Optional<Duration> getProtocolRefresh(String protocolName) {
         return Optional.ofNullable(protocolRefreshes.get(protocolName));
     }
 
     /**
-     * Returns the top-level IQ error when the request failed wholesale.
+     * Returns the top-level IQ error envelope when the request failed
+     * wholesale.
      *
-     * @return the error metadata
+     * @apiNote
+     * Mirrors the {@code error.all} entry the JS module attaches to its
+     * result object when the IQ {@code type} attribute is not {@code "result"}.
+     *
+     * @return the top-level error, or empty
      */
     public Optional<UsyncTopLevelError> topLevelError() {
         return Optional.ofNullable(topLevelError);
     }
 
     /**
-     * Returns whether the request failed wholesale.
+     * Returns whether the IQ failed wholesale.
+     *
+     * @apiNote
+     * Shortcut for {@code topLevelError().isPresent()}.
      *
      * @return {@code true} when the IQ returned an error envelope
      */

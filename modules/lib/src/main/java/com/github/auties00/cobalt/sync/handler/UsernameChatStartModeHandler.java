@@ -6,64 +6,46 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Applies {@code usernameChatStartMode} mutations decoded from app state sync.
+ * Mirrors the user's preferred addressing scheme for chats started from a
+ * username (LID versus phone number).
  *
- * <p>Handles the {@code SyncActionValue.UsernameChatStartModeAction} sync
- * action in the {@link SyncPatchType#REGULAR} collection. A mutation of this
- * type carries the user's preferred chat-start identifier mode for chats
- * initiated against another user's username, encoded as a
- * {@link UsernameChatStartModeAction.ChatStartMode} enum value:
- * {@code LID} (start the chat from the linked-device identifier) or
- * {@code PN} (start the chat from the phone-number identifier). The setting
- * controls which addressing scheme is used when materialising a new chat
- * thread that was opened via the username discovery surface.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * would route incoming {@code usernameChatStartMode} mutations here if the
+ * server ever emits one. The handler persists the
+ * {@link UsernameChatStartModeAction.ChatStartMode} value onto
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}
+ * so any chat the user opens from the username discovery surface uses the
+ * preferred identifier.
  *
- * <h2>Forward-looking handler &mdash; no current WA Web counterpart</h2>
- *
- * <p>This handler has <b>no concrete WA Web sync module</b>. WA Web defines
- * the {@code UsernameChatStartModeAction} protobuf schema (action index
- * {@code 59}, action name {@code "usernameChatStartMode"}, collection
- * {@code REGULAR}, version {@code 1}) inside {@code WAWebProtobufSyncAction.pb},
- * but it never registers a {@code WAWebUsernameChatStartModeSync} module in
- * {@code WAWebCollectionHandlerActions.ActionHandlers}. As a result, when such
- * a mutation reaches WA Web, {@code WAWebSyncdGetActionHandler.getActionHandler}
- * returns {@code undefined} and the mutation is dropped by the upstream
- * dispatcher as unsupported.
- *
- * <p>Cobalt anticipates a future WA Web release that adds the missing handler
- * by implementing the obvious shape derived from the protobuf metadata:
- * <ul>
- *   <li>{@code SET}-only operation,</li>
- *   <li>routed via {@link UsernameChatStartModeAction#ACTION_NAME},</li>
- *   <li>persisted to {@link com.github.auties00.cobalt.store.WhatsAppStore#setUsernameChatStartMode},</li>
- *   <li>stored in {@link SyncPatchType#REGULAR} at version
- *       {@link UsernameChatStartModeAction#ACTION_VERSION}.</li>
- * </ul>
- *
- * <p>The metadata mirrors {@code WAWebProtobufSyncAction.pb}'s
- * {@code getMutationProps$CollectionName} branch
- * {@code e === c.USERNAME_CHAT_START_MODE ? u.REGULAR}, so when WA Web ships
- * the real {@code WAWebUsernameChatStartModeSync} this file should already be
- * wire-compatible.
+ * @implNote
+ * This implementation is forward-looking. WA Web defines the
+ * {@code UsernameChatStartModeAction} protobuf in
+ * {@code WAWebProtobufSyncAction.pb} at action index 59 with name
+ * {@code "usernameChatStartMode"} and the
+ * {@code USERNAME_CHAT_START_MODE -> REGULAR} collection-router branch,
+ * but the bundle ships no concrete {@code WAWebUsernameChatStartModeSync}
+ * module: WA Web's dispatcher would currently drop any incoming mutation
+ * with this action as unsupported. Cobalt's handler ingests it today so
+ * the wire payload is not lost.
  */
 public final class UsernameChatStartModeHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates a new {@code UsernameChatStartModeHandler}.
+     * Constructs the handler.
      *
-     * <p>The constructor is private because callers should always go through
-     * {@link #INSTANCE}, matching the WA Web module-level singleton pattern
-     * used by other sync handlers.
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     public UsernameChatStartModeHandler() {
 
     }
 
     /**
-     * Returns the action name this handler processes.
-     * @return the constant {@link UsernameChatStartModeAction#ACTION_NAME},
-     *         always {@code "usernameChatStartMode"}
+     * {@inheritDoc}
      */
     @Override
     public String actionName() {
@@ -71,13 +53,13 @@ public final class UsernameChatStartModeHandler implements WebAppStateActionHand
     }
 
     /**
-     * Returns the sync collection this handler's action belongs to.
+     * {@inheritDoc}
      *
-     * <p>Per {@code WAWebProtobufSyncAction.pb} the
-     * {@code getMutationProps$CollectionName} resolver branches on
-     * {@code e === c.USERNAME_CHAT_START_MODE} and returns {@code u.REGULAR},
-     * so the mutation is stored in the regular-priority sync collection.
-     * @return {@link SyncPatchType#REGULAR}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR} as
+     * declared by WA Web's
+     * {@code e === c.USERNAME_CHAT_START_MODE ? u.REGULAR} branch in
+     * {@code WAWebProtobufSyncAction.pb}'s collection router.
      */
     @Override
     public SyncPatchType collectionName() {
@@ -85,16 +67,13 @@ public final class UsernameChatStartModeHandler implements WebAppStateActionHand
     }
 
     /**
-     * Returns the mutation format version this handler supports.
+     * {@inheritDoc}
      *
-     * <p>WA Web has no concrete sync module for this action, so there is no
-     * {@code getVersion()} method to inspect. The protobuf shape only defines
-     * a single field ({@code chatStartMode} at index 1), so Cobalt declares
-     * the initial version {@code 1} as a forward-looking default. The actual
-     * value should be re-checked when WA Web ships the matching
-     * {@code WAWebUsernameChatStartModeSync} module.
-     * @return the constant {@link UsernameChatStartModeAction#ACTION_VERSION},
-     *         always {@code 1}
+     * @implNote
+     * This implementation returns
+     * {@link UsernameChatStartModeAction#ACTION_VERSION}; WA Web has no
+     * concrete sync module so the value is the initial protobuf version
+     * and should be revisited once WA Web ships the matching handler.
      */
     @Override
     public int version() {
@@ -102,63 +81,35 @@ public final class UsernameChatStartModeHandler implements WebAppStateActionHand
     }
 
     /**
-     * Applies a single decoded username chat start mode mutation and returns
-     * the detailed result.
+     * {@inheritDoc}
      *
-     * <p>WA Web has no concrete handler to mirror, so this implementation
-     * follows the canonical shape used by every other sibling sync handler
-     * (e.g. {@code WAWebLocaleSettingSync.applyMutations}):
-     * <ol>
-     *   <li><b>Operation filter</b> &mdash; only {@code SET} mutations are
-     *       processed; any other operation falls through to
-     *       {@link MutationApplicationResult#unsupported()}, mirroring the
-     *       trailing {@code p++; return {actionState: Unsupported}} branch in
-     *       sibling handlers.</li>
-     *   <li><b>Action type and payload check</b> &mdash; the mutation value
-     *       must decode to a {@link UsernameChatStartModeAction} with a
-     *       non-empty {@code chatStartMode} enum field. Sibling handlers
-     *       express the same guard as
-     *       {@code var n = e.value, a = n.someAction; if (!a) { i++; return malformedActionValue(this.collectionName) }}.
-     *       Cobalt collapses the equivalent
-     *       {@link SyncdIndexUtils#malformedActionValue}
-     *       contract into {@link MutationApplicationResult#malformed()}.</li>
-     *   <li><b>Apply the new setting</b> &mdash; persists the decoded enum
-     *       into {@link com.github.auties00.cobalt.store.WhatsAppStore#setUsernameChatStartMode}.
-     *       Since WA Web does not yet have an apply path, there is no UI/IPC
-     *       call to mirror; only the store side-effect is performed.</li>
-     *   <li><b>Success</b> &mdash; returns {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>Sibling WA Web handlers also wrap the per-mutation body in a
-     * {@code try/catch} that swallows any exception and returns
-     * {@code {actionState: Failed}}. In Cobalt, exceptions are allowed to
-     * propagate and the configured {@code WhatsAppClientErrorHandler} decides
-     * recovery, per Cobalt's pluggable error model.
-     * @param client   the WhatsApp client the mutation is being applied to
-     * @param mutation the trusted, decoded mutation to apply
-     * @return {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     *         operations; {@link MutationApplicationResult#malformed()} if the
-     *         decoded action is not a {@link UsernameChatStartModeAction} or
-     *         has no {@code chatStartMode} field;
-     *         {@link MutationApplicationResult#success()} otherwise
+     * @implNote
+     * This implementation follows the canonical shape used by sibling
+     * handlers because WA Web ships no concrete module to mirror:
+     * non-{@code SET} operations are unsupported, the mutation value
+     * must decode to a {@link UsernameChatStartModeAction} with a
+     * populated {@link UsernameChatStartModeAction#chatStartMode()}, and
+     * the resolved enum is written into
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode)}.
+     * Sibling WA Web handlers wrap their body in a {@code try/catch}
+     * that maps any throw to {@link MutationApplicationResult#failed()};
+     * Cobalt lets exceptions propagate to the configured
+     * {@link com.github.auties00.cobalt.exception.WhatsAppClientErrorHandler}
+     * per the Cobalt error model.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: if (e.operation === "set") { ... } p++; return {actionState: Unsupported}
         if (mutation.operation() != SyncdOperation.SET) {
             return MutationApplicationResult.unsupported();
         }
 
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: var n = e.value, a = n.chatStartMode; if (!a) { i++; return malformedActionValue(this.collectionName) }
         if (!(mutation.value().action().orElse(null) instanceof UsernameChatStartModeAction action)
                 || action.chatStartMode().isEmpty()) {
             return MutationApplicationResult.malformed();
         }
 
-        // NO_WA_BASIS: WA Web has no apply path; Cobalt persists the decoded enum into the store as the obvious side-effect
         client.store().setUsernameChatStartMode(action.chatStartMode().get());
 
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: return {actionState: Success}
         return MutationApplicationResult.success();
     }
 }

@@ -19,16 +19,50 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The response variant of {@link FetchNewsletterEnforcementsMexResponse} that exposes the data
- * returned by the server after a successful query.
+ * Parses the MEX response of the fetch-newsletter-enforcements query
+ * built by {@link FetchNewsletterEnforcementsMexRequest}.
+ *
+ * @apiNote
+ * Exposes the four enforcement buckets echoed under
+ * {@code xwa2_channel_enforcements}: profile-picture deletions,
+ * full-account suspensions, per-message takedowns of violating messages
+ * and per-country geo-suspensions; each entry carries the policy
+ * information used to render the admin moderation surface plus appeal
+ * state for those that are appealable.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterEnforcementsJob")
 public final class FetchNewsletterEnforcementsMexResponse implements MexOperation.Response.Json {
+    /**
+     * The list of profile-picture-deletion enforcements.
+     */
     private final List<ProfilePictureDeletions> profilePictureDeletions;
+
+    /**
+     * The list of full-account suspension enforcements.
+     */
     private final List<Suspensions> suspensions;
+
+    /**
+     * The list of per-message takedown enforcements.
+     */
     private final List<ViolatingMessages> violatingMessages;
+
+    /**
+     * The list of geographical suspension enforcements.
+     */
     private final List<Geosuspensions> geosuspensions;
 
+    /**
+     * Constructs a response wrapping the parsed enforcement buckets.
+     *
+     * @apiNote
+     * Reserved for the static parser.
+     *
+     * @param profilePictureDeletions the profile-picture deletions bucket
+     * @param suspensions             the full-account suspensions bucket
+     * @param violatingMessages       the per-message takedowns bucket
+     * @param geosuspensions          the geographical suspensions bucket
+     */
     private FetchNewsletterEnforcementsMexResponse(List<ProfilePictureDeletions> profilePictureDeletions, List<Suspensions> suspensions, List<ViolatingMessages> violatingMessages, List<Geosuspensions> geosuspensions) {
         this.profilePictureDeletions = profilePictureDeletions;
         this.suspensions = suspensions;
@@ -37,10 +71,17 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * Parses the MEX response carried by the given IQ result node.
+     *
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_channel_enforcements} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<FetchNewsletterEnforcementsMexResponse> of(Node node) {
         return node.getChild("result")
@@ -49,54 +90,110 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * Returns the {@code profile_picture_deletions} field.
+     * Returns the profile-picture-deletion enforcements.
      *
-     * @return the list of values, empty if absent
+     * @return the parsed entries, empty when the relay returned none
      */
     public List<ProfilePictureDeletions> profilePictureDeletions() {
         return profilePictureDeletions;
     }
 
     /**
-     * Returns the {@code suspensions} field.
+     * Returns the full-account suspension enforcements.
      *
-     * @return the list of values, empty if absent
+     * @return the parsed entries, empty when the relay returned none
      */
     public List<Suspensions> suspensions() {
         return suspensions;
     }
 
     /**
-     * Returns the {@code violating_messages} field.
+     * Returns the per-message takedown enforcements.
      *
-     * @return the list of values, empty if absent
+     * @return the parsed entries, empty when the relay returned none
      */
     public List<ViolatingMessages> violatingMessages() {
         return violatingMessages;
     }
 
     /**
-     * Returns the {@code geosuspensions} field.
+     * Returns the geographical suspension enforcements.
      *
-     * @return the list of values, empty if absent
+     * @return the parsed entries, empty when the relay returned none
      */
     public List<Geosuspensions> geosuspensions() {
         return geosuspensions;
     }
 
     /**
-     * A parsed {@code ProfilePictureDeletions} object.
+     * Wraps one entry of the {@code profile_picture_deletions} bucket.
+     *
+     * @apiNote
+     * Records a moderator-driven profile-picture removal; carries the
+     * enforcement timestamps, appeal state, violation category, source,
+     * id, optional extra data and optional policy information.
      */
     public static final class ProfilePictureDeletions {
+        /**
+         * The enforcement creation epoch-second.
+         */
         private final Long enforcementCreationTime;
+
+        /**
+         * The appeal creation epoch-second, or {@code null} when no appeal
+         * has been filed.
+         */
         private final Long appealCreationTime;
+
+        /**
+         * The appeal state label.
+         */
         private final String appealState;
+
+        /**
+         * The violation category label.
+         */
         private final String enforcementViolationCategory;
+
+        /**
+         * The enforcement source label.
+         */
         private final String enforcementSource;
+
+        /**
+         * The enforcement identifier.
+         */
         private final String enforcementId;
+
+        /**
+         * The optional extra-data sub-object.
+         */
         private final EnforcementExtraData enforcementExtraData;
+
+        /**
+         * The optional policy-information sub-object.
+         */
         private final EnforcementPolicyInformation enforcementPolicyInformation;
 
+        /**
+         * Constructs a profile-picture-deletion wrapper from the parsed
+         * sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param enforcementCreationTime      the enforcement creation
+         *                                     epoch-second
+         * @param appealCreationTime           the appeal creation
+         *                                     epoch-second, or {@code null}
+         * @param appealState                  the appeal state label
+         * @param enforcementViolationCategory the violation category label
+         * @param enforcementSource            the enforcement source label
+         * @param enforcementId                the enforcement identifier
+         * @param enforcementExtraData         the extra-data sub-object
+         * @param enforcementPolicyInformation the policy-information
+         *                                     sub-object
+         */
         private ProfilePictureDeletions(Long enforcementCreationTime, Long appealCreationTime, String appealState, String enforcementViolationCategory, String enforcementSource, String enforcementId, EnforcementExtraData enforcementExtraData, EnforcementPolicyInformation enforcementPolicyInformation) {
             this.enforcementCreationTime = enforcementCreationTime;
             this.appealCreationTime = appealCreationTime;
@@ -109,105 +206,164 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Returns the {@code enforcement_creation_time} field.
+         * Returns the enforcement creation instant.
          *
-         * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+         * @return the creation instant, or empty when the relay omitted the
+         *         field
          */
         public Optional<Instant> enforcementCreationTime() {
             return Optional.ofNullable(enforcementCreationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the {@code appeal_creation_time} field.
+         * Returns the appeal creation instant.
          *
-         * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+         * @return the appeal instant, or empty when no appeal has been
+         *         filed
          */
         public Optional<Instant> appealCreationTime() {
             return Optional.ofNullable(appealCreationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the {@code appeal_state} field.
+         * Returns the appeal state label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the appeal state, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> appealState() {
             return Optional.ofNullable(appealState);
         }
 
         /**
-         * Returns the {@code enforcement_violation_category} field.
+         * Returns the violation category label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the violation category, or empty when the relay omitted
+         *         the field
          */
         public Optional<String> enforcementViolationCategory() {
             return Optional.ofNullable(enforcementViolationCategory);
         }
 
         /**
-         * Returns the {@code enforcement_source} field.
+         * Returns the enforcement source label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the enforcement source, or empty when the relay omitted
+         *         the field
          */
         public Optional<String> enforcementSource() {
             return Optional.ofNullable(enforcementSource);
         }
 
         /**
-         * Returns the {@code enforcement_id} field.
+         * Returns the enforcement identifier.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the enforcement id, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> enforcementId() {
             return Optional.ofNullable(enforcementId);
         }
 
         /**
-         * Returns the {@code enforcement_extra_data} field.
+         * Returns the extra-data sub-object.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link EnforcementExtraData}, or empty when
+         *         the relay omitted the field
          */
         public Optional<EnforcementExtraData> enforcementExtraData() {
             return Optional.ofNullable(enforcementExtraData);
         }
 
         /**
-         * Returns the {@code enforcement_policy_information} field.
+         * Returns the policy-information sub-object.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link EnforcementPolicyInformation}, or empty
+         *         when the relay omitted the field
          */
         public Optional<EnforcementPolicyInformation> enforcementPolicyInformation() {
             return Optional.ofNullable(enforcementPolicyInformation);
         }
 
         /**
-         * A parsed {@code EnforcementExtraData} object.
+         * Wraps the {@code enforcement_extra_data} sub-object as projected
+         * for profile-picture-deletion enforcements.
+         *
+         * @apiNote
+         * Carries the optional IP-violation report data attached to a
+         * profile-picture takedown.
          */
         public static final class EnforcementExtraData {
+            /**
+             * The IP-violation report data sub-object.
+             */
             private final IpViolationReportData ipViolationReportData;
 
+            /**
+             * Constructs an extra-data wrapper from the parsed sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param ipViolationReportData the IP-violation report data
+             *                              sub-object
+             */
             private EnforcementExtraData(IpViolationReportData ipViolationReportData) {
                 this.ipViolationReportData = ipViolationReportData;
             }
 
             /**
-             * Returns the {@code ip_violation_report_data} field.
+             * Returns the IP-violation report data sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link IpViolationReportData}, or empty
+             *         when the relay omitted the field
              */
             public Optional<IpViolationReportData> ipViolationReportData() {
                 return Optional.ofNullable(ipViolationReportData);
             }
 
             /**
-             * A parsed {@code IpViolationReportData} object.
+             * Wraps the {@code ip_violation_report_data} sub-object.
+             *
+             * @apiNote
+             * Carries the Facebook report id, the appeal-form URL the
+             * admin can use to contest the takedown, and the reporter's
+             * contact data when the takedown was filed against an IP
+             * holder.
              */
             public static final class IpViolationReportData {
+                /**
+                 * The Facebook report identifier.
+                 */
                 private final String reportFbid;
+
+                /**
+                 * The appeal-form URL.
+                 */
                 private final String appealFormUrl;
+
+                /**
+                 * The reporter contact email.
+                 */
                 private final String reporterEmail;
+
+                /**
+                 * The reporter contact name.
+                 */
                 private final String reporterName;
 
+                /**
+                 * Constructs an IP-violation-report-data wrapper from the
+                 * parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param reportFbid    the Facebook report identifier
+                 * @param appealFormUrl the appeal-form URL
+                 * @param reporterEmail the reporter contact email
+                 * @param reporterName  the reporter contact name
+                 */
                 private IpViolationReportData(String reportFbid, String appealFormUrl, String reporterEmail, String reporterName) {
                     this.reportFbid = reportFbid;
                     this.appealFormUrl = appealFormUrl;
@@ -216,46 +372,57 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code report_fbid} field.
+                 * Returns the Facebook report identifier.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the report id, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> reportFbid() {
                     return Optional.ofNullable(reportFbid);
                 }
 
                 /**
-                 * Returns the {@code appeal_form_url} field.
+                 * Returns the appeal-form URL.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the URL, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> appealFormUrl() {
                     return Optional.ofNullable(appealFormUrl);
                 }
 
                 /**
-                 * Returns the {@code reporter_email} field.
+                 * Returns the reporter contact email.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the email, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> reporterEmail() {
                     return Optional.ofNullable(reporterEmail);
                 }
 
                 /**
-                 * Returns the {@code reporter_name} field.
+                 * Returns the reporter contact name.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the name, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> reporterName() {
                     return Optional.ofNullable(reporterName);
                 }
 
                 /**
-                 * Parses a {@code IpViolationReportData} from the given JSON object.
+                 * Parses an {@link IpViolationReportData} from the given
+                 * JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link EnforcementExtraData#of(JSONObject)} to
+                 * hydrate the nested {@code ip_violation_report_data}
+                 * entry.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<IpViolationReportData> of(JSONObject obj) {
                     if (obj == null) {
@@ -270,10 +437,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code IpViolationReportData} from the given JSON array.
+                 * Parses a list of {@link IpViolationReportData} entries
+                 * from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<IpViolationReportData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -289,10 +461,16 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code EnforcementExtraData} from the given JSON object.
+             * Parses an {@link EnforcementExtraData} from the given JSON
+             * object.
+             *
+             * @apiNote
+             * Used by {@link ProfilePictureDeletions#of(JSONObject)} to
+             * hydrate the nested {@code enforcement_extra_data} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<EnforcementExtraData> of(JSONObject obj) {
                 if (obj == null) {
@@ -304,10 +482,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code EnforcementExtraData} from the given JSON array.
+             * Parses a list of {@link EnforcementExtraData} entries from
+             * the given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<EnforcementExtraData> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -323,15 +506,52 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code EnforcementPolicyInformation} object.
+         * Wraps the {@code enforcement_policy_information} sub-object.
+         *
+         * @apiNote
+         * Carries the human-readable policy text surfaced to the admin in
+         * the enforcement explanation: a one-line overview, headline,
+         * subtitle, full explanation body, and an admin-only disclaimer.
          */
         public static final class EnforcementPolicyInformation {
+            /**
+             * The policy overview text.
+             */
             private final String overview;
+
+            /**
+             * The policy headline text.
+             */
             private final String headline;
+
+            /**
+             * The policy subtitle text.
+             */
             private final String subtitle;
+
+            /**
+             * The policy explanation body.
+             */
             private final String explanation;
+
+            /**
+             * The admin-only disclaimer.
+             */
             private final String adminDisclaimer;
 
+            /**
+             * Constructs a policy-information wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param overview        the policy overview text
+             * @param headline        the policy headline text
+             * @param subtitle        the policy subtitle text
+             * @param explanation     the policy explanation body
+             * @param adminDisclaimer the admin-only disclaimer
+             */
             private EnforcementPolicyInformation(String overview, String headline, String subtitle, String explanation, String adminDisclaimer) {
                 this.overview = overview;
                 this.headline = headline;
@@ -341,55 +561,67 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code overview} field.
+             * Returns the policy overview text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the overview, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> overview() {
                 return Optional.ofNullable(overview);
             }
 
             /**
-             * Returns the {@code headline} field.
+             * Returns the policy headline text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the headline, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> headline() {
                 return Optional.ofNullable(headline);
             }
 
             /**
-             * Returns the {@code subtitle} field.
+             * Returns the policy subtitle text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the subtitle, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> subtitle() {
                 return Optional.ofNullable(subtitle);
             }
 
             /**
-             * Returns the {@code explanation} field.
+             * Returns the policy explanation body.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the explanation, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> explanation() {
                 return Optional.ofNullable(explanation);
             }
 
             /**
-             * Returns the {@code admin_disclaimer} field.
+             * Returns the admin-only disclaimer.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the disclaimer, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> adminDisclaimer() {
                 return Optional.ofNullable(adminDisclaimer);
             }
 
             /**
-             * Parses a {@code EnforcementPolicyInformation} from the given JSON object.
+             * Parses an {@link EnforcementPolicyInformation} from the given
+             * JSON object.
+             *
+             * @apiNote
+             * Used by {@link ProfilePictureDeletions#of(JSONObject)} to
+             * hydrate the nested {@code enforcement_policy_information}
+             * entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<EnforcementPolicyInformation> of(JSONObject obj) {
                 if (obj == null) {
@@ -405,10 +637,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code EnforcementPolicyInformation} from the given JSON array.
+             * Parses a list of {@link EnforcementPolicyInformation} entries
+             * from the given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<EnforcementPolicyInformation> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -424,10 +661,17 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a {@code ProfilePictureDeletions} from the given JSON object.
+         * Parses a {@link ProfilePictureDeletions} from the given JSON
+         * object.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate one entry of the {@code profile_picture_deletions}
+         * array.
          *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @return the parsed entry, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<ProfilePictureDeletions> of(JSONObject obj) {
             if (obj == null) {
@@ -446,10 +690,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a list of {@code ProfilePictureDeletions} from the given JSON array.
+         * Parses a list of {@link ProfilePictureDeletions} entries from the
+         * given JSON array.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate the {@code profile_picture_deletions} array.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<ProfilePictureDeletions> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -465,18 +714,74 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * A parsed {@code Suspensions} object.
+     * Wraps one entry of the {@code suspensions} bucket.
+     *
+     * @apiNote
+     * Records a full-account suspension applied to the newsletter; carries
+     * the enforcement timestamps, appeal state, violation category, id,
+     * source, optional extra-data with the message that triggered the
+     * action, and optional policy-information body.
      */
     public static final class Suspensions {
+        /**
+         * The appeal creation epoch-second, or {@code null} when no appeal
+         * has been filed.
+         */
         private final Long appealCreationTime;
+
+        /**
+         * The enforcement creation epoch-second.
+         */
         private final Long enforcementCreationTime;
+
+        /**
+         * The appeal state label.
+         */
         private final String appealState;
+
+        /**
+         * The violation category label.
+         */
         private final String enforcementViolationCategory;
+
+        /**
+         * The enforcement identifier.
+         */
         private final String enforcementId;
+
+        /**
+         * The enforcement source label.
+         */
         private final String enforcementSource;
+
+        /**
+         * The optional extra-data sub-object.
+         */
         private final EnforcementExtraData enforcementExtraData;
+
+        /**
+         * The optional policy-information sub-object.
+         */
         private final EnforcementPolicyInformation enforcementPolicyInformation;
 
+        /**
+         * Constructs a suspension wrapper from the parsed sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param appealCreationTime           the appeal creation
+         *                                     epoch-second, or {@code null}
+         * @param enforcementCreationTime      the enforcement creation
+         *                                     epoch-second
+         * @param appealState                  the appeal state label
+         * @param enforcementViolationCategory the violation category label
+         * @param enforcementId                the enforcement identifier
+         * @param enforcementSource            the enforcement source label
+         * @param enforcementExtraData         the extra-data sub-object
+         * @param enforcementPolicyInformation the policy-information
+         *                                     sub-object
+         */
         private Suspensions(Long appealCreationTime, Long enforcementCreationTime, String appealState, String enforcementViolationCategory, String enforcementId, String enforcementSource, EnforcementExtraData enforcementExtraData, EnforcementPolicyInformation enforcementPolicyInformation) {
             this.appealCreationTime = appealCreationTime;
             this.enforcementCreationTime = enforcementCreationTime;
@@ -489,85 +794,123 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Returns the {@code appeal_creation_time} field.
+         * Returns the appeal creation instant.
          *
-         * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+         * @return the appeal instant, or empty when no appeal has been
+         *         filed
          */
         public Optional<Instant> appealCreationTime() {
             return Optional.ofNullable(appealCreationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the {@code enforcement_creation_time} field.
+         * Returns the enforcement creation instant.
          *
-         * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+         * @return the creation instant, or empty when the relay omitted the
+         *         field
          */
         public Optional<Instant> enforcementCreationTime() {
             return Optional.ofNullable(enforcementCreationTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the {@code appeal_state} field.
+         * Returns the appeal state label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the appeal state, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> appealState() {
             return Optional.ofNullable(appealState);
         }
 
         /**
-         * Returns the {@code enforcement_violation_category} field.
+         * Returns the violation category label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the violation category, or empty when the relay omitted
+         *         the field
          */
         public Optional<String> enforcementViolationCategory() {
             return Optional.ofNullable(enforcementViolationCategory);
         }
 
         /**
-         * Returns the {@code enforcement_id} field.
+         * Returns the enforcement identifier.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the enforcement id, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> enforcementId() {
             return Optional.ofNullable(enforcementId);
         }
 
         /**
-         * Returns the {@code enforcement_source} field.
+         * Returns the enforcement source label.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the enforcement source, or empty when the relay omitted
+         *         the field
          */
         public Optional<String> enforcementSource() {
             return Optional.ofNullable(enforcementSource);
         }
 
         /**
-         * Returns the {@code enforcement_extra_data} field.
+         * Returns the extra-data sub-object.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link EnforcementExtraData}, or empty when
+         *         the relay omitted the field
          */
         public Optional<EnforcementExtraData> enforcementExtraData() {
             return Optional.ofNullable(enforcementExtraData);
         }
 
         /**
-         * Returns the {@code enforcement_policy_information} field.
+         * Returns the policy-information sub-object.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link EnforcementPolicyInformation}, or empty
+         *         when the relay omitted the field
          */
         public Optional<EnforcementPolicyInformation> enforcementPolicyInformation() {
             return Optional.ofNullable(enforcementPolicyInformation);
         }
 
         /**
-         * A parsed {@code EnforcementExtraData} object.
+         * Wraps the {@code enforcement_extra_data} sub-object as projected
+         * for suspension enforcements.
+         *
+         * @apiNote
+         * Suspension extra data adds an {@link EnforcementTargetData}
+         * pointer to the triggering message and an {@link AppealExtraData}
+         * sub-object carrying the appeal-form URL, on top of the
+         * IP-violation reporter data.
          */
         public static final class EnforcementExtraData {
+            /**
+             * The IP-violation report data sub-object.
+             */
             private final IpViolationReportData ipViolationReportData;
+
+            /**
+             * The target-message pointer sub-object.
+             */
             private final EnforcementTargetData enforcementTargetData;
+
+            /**
+             * The appeal-form-URL sub-object.
+             */
             private final AppealExtraData appealExtraData;
 
+            /**
+             * Constructs an extra-data wrapper from the parsed sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param ipViolationReportData the IP-violation report data
+             *                              sub-object
+             * @param enforcementTargetData the target-message pointer
+             *                              sub-object
+             * @param appealExtraData       the appeal-form-URL sub-object
+             */
             private EnforcementExtraData(IpViolationReportData ipViolationReportData, EnforcementTargetData enforcementTargetData, AppealExtraData appealExtraData) {
                 this.ipViolationReportData = ipViolationReportData;
                 this.enforcementTargetData = enforcementTargetData;
@@ -575,41 +918,75 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code ip_violation_report_data} field.
+             * Returns the IP-violation report data sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link IpViolationReportData}, or empty
+             *         when the relay omitted the field
              */
             public Optional<IpViolationReportData> ipViolationReportData() {
                 return Optional.ofNullable(ipViolationReportData);
             }
 
             /**
-             * Returns the {@code enforcement_target_data} field.
+             * Returns the target-message pointer sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link EnforcementTargetData}, or empty
+             *         when the relay omitted the field
              */
             public Optional<EnforcementTargetData> enforcementTargetData() {
                 return Optional.ofNullable(enforcementTargetData);
             }
 
             /**
-             * Returns the {@code appeal_extra_data} field.
+             * Returns the appeal-form-URL sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link AppealExtraData}, or empty when the
+             *         relay omitted the field
              */
             public Optional<AppealExtraData> appealExtraData() {
                 return Optional.ofNullable(appealExtraData);
             }
 
             /**
-             * A parsed {@code IpViolationReportData} object.
+             * Wraps the {@code ip_violation_report_data} sub-object.
+             *
+             * @apiNote
+             * Same shape as
+             * {@link ProfilePictureDeletions.EnforcementExtraData.IpViolationReportData}.
              */
             public static final class IpViolationReportData {
+                /**
+                 * The Facebook report identifier.
+                 */
                 private final String reportFbid;
+
+                /**
+                 * The appeal-form URL.
+                 */
                 private final String appealFormUrl;
+
+                /**
+                 * The reporter contact email.
+                 */
                 private final String reporterEmail;
+
+                /**
+                 * The reporter contact name.
+                 */
                 private final String reporterName;
 
+                /**
+                 * Constructs an IP-violation-report-data wrapper from the
+                 * parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param reportFbid    the Facebook report identifier
+                 * @param appealFormUrl the appeal-form URL
+                 * @param reporterEmail the reporter contact email
+                 * @param reporterName  the reporter contact name
+                 */
                 private IpViolationReportData(String reportFbid, String appealFormUrl, String reporterEmail, String reporterName) {
                     this.reportFbid = reportFbid;
                     this.appealFormUrl = appealFormUrl;
@@ -618,46 +995,57 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code report_fbid} field.
+                 * Returns the Facebook report identifier.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the report id, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> reportFbid() {
                     return Optional.ofNullable(reportFbid);
                 }
 
                 /**
-                 * Returns the {@code appeal_form_url} field.
+                 * Returns the appeal-form URL.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the URL, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> appealFormUrl() {
                     return Optional.ofNullable(appealFormUrl);
                 }
 
                 /**
-                 * Returns the {@code reporter_email} field.
+                 * Returns the reporter contact email.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the email, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> reporterEmail() {
                     return Optional.ofNullable(reporterEmail);
                 }
 
                 /**
-                 * Returns the {@code reporter_name} field.
+                 * Returns the reporter contact name.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the name, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> reporterName() {
                     return Optional.ofNullable(reporterName);
                 }
 
                 /**
-                 * Parses a {@code IpViolationReportData} from the given JSON object.
+                 * Parses an {@link IpViolationReportData} from the given
+                 * JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link EnforcementExtraData#of(JSONObject)} to
+                 * hydrate the nested {@code ip_violation_report_data}
+                 * entry.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<IpViolationReportData> of(JSONObject obj) {
                     if (obj == null) {
@@ -672,10 +1060,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code IpViolationReportData} from the given JSON array.
+                 * Parses a list of {@link IpViolationReportData} entries
+                 * from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<IpViolationReportData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -691,29 +1084,56 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code EnforcementTargetData} object.
+             * Wraps the {@code enforcement_target_data} sub-object.
+             *
+             * @apiNote
+             * Points to the triggering message by server message id; the
+             * presence of this sub-object is what WA Web uses to flip the
+             * enforcement type from {@code SUSPEND} to
+             * {@code SUSPEND_INFORM}.
              */
             public static final class EnforcementTargetData {
+                /**
+                 * The server message id of the triggering message.
+                 */
                 private final String serverMsgId;
 
+                /**
+                 * Constructs a target-data wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param serverMsgId the server message id of the
+                 *                    triggering message
+                 */
                 private EnforcementTargetData(String serverMsgId) {
                     this.serverMsgId = serverMsgId;
                 }
 
                 /**
-                 * Returns the {@code server_msg_id} field.
+                 * Returns the server message id of the triggering message.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the server message id, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> serverMsgId() {
                     return Optional.ofNullable(serverMsgId);
                 }
 
                 /**
-                 * Parses a {@code EnforcementTargetData} from the given JSON object.
+                 * Parses an {@link EnforcementTargetData} from the given
+                 * JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link EnforcementExtraData#of(JSONObject)} to
+                 * hydrate the nested {@code enforcement_target_data}
+                 * entry.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<EnforcementTargetData> of(JSONObject obj) {
                     if (obj == null) {
@@ -725,10 +1145,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code EnforcementTargetData} from the given JSON array.
+                 * Parses a list of {@link EnforcementTargetData} entries
+                 * from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<EnforcementTargetData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -744,29 +1169,52 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code AppealExtraData} object.
+             * Wraps the {@code appeal_extra_data} sub-object.
+             *
+             * @apiNote
+             * Carries the appeal-form URL the admin can open to contest
+             * the enforcement.
              */
             public static final class AppealExtraData {
+                /**
+                 * The appeal-form URL.
+                 */
                 private final String appealFormUrl;
 
+                /**
+                 * Constructs an appeal-extra-data wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param appealFormUrl the appeal-form URL
+                 */
                 private AppealExtraData(String appealFormUrl) {
                     this.appealFormUrl = appealFormUrl;
                 }
 
                 /**
-                 * Returns the {@code appeal_form_url} field.
+                 * Returns the appeal-form URL.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the URL, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> appealFormUrl() {
                     return Optional.ofNullable(appealFormUrl);
                 }
 
                 /**
-                 * Parses a {@code AppealExtraData} from the given JSON object.
+                 * Parses an {@link AppealExtraData} from the given JSON
+                 * object.
+                 *
+                 * @apiNote
+                 * Used by {@link EnforcementExtraData#of(JSONObject)} to
+                 * hydrate the nested {@code appeal_extra_data} entry.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<AppealExtraData> of(JSONObject obj) {
                     if (obj == null) {
@@ -778,10 +1226,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code AppealExtraData} from the given JSON array.
+                 * Parses a list of {@link AppealExtraData} entries from the
+                 * given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<AppealExtraData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -797,10 +1250,16 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code EnforcementExtraData} from the given JSON object.
+             * Parses an {@link EnforcementExtraData} from the given JSON
+             * object.
+             *
+             * @apiNote
+             * Used by {@link Suspensions#of(JSONObject)} to hydrate the
+             * nested {@code enforcement_extra_data} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<EnforcementExtraData> of(JSONObject obj) {
                 if (obj == null) {
@@ -814,10 +1273,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code EnforcementExtraData} from the given JSON array.
+             * Parses a list of {@link EnforcementExtraData} entries from
+             * the given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<EnforcementExtraData> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -833,15 +1297,51 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code EnforcementPolicyInformation} object.
+         * Wraps the {@code enforcement_policy_information} sub-object.
+         *
+         * @apiNote
+         * Same shape as
+         * {@link ProfilePictureDeletions.EnforcementPolicyInformation}.
          */
         public static final class EnforcementPolicyInformation {
+            /**
+             * The policy overview text.
+             */
             private final String overview;
+
+            /**
+             * The policy headline text.
+             */
             private final String headline;
+
+            /**
+             * The policy subtitle text.
+             */
             private final String subtitle;
+
+            /**
+             * The policy explanation body.
+             */
             private final String explanation;
+
+            /**
+             * The admin-only disclaimer.
+             */
             private final String adminDisclaimer;
 
+            /**
+             * Constructs a policy-information wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param overview        the policy overview text
+             * @param headline        the policy headline text
+             * @param subtitle        the policy subtitle text
+             * @param explanation     the policy explanation body
+             * @param adminDisclaimer the admin-only disclaimer
+             */
             private EnforcementPolicyInformation(String overview, String headline, String subtitle, String explanation, String adminDisclaimer) {
                 this.overview = overview;
                 this.headline = headline;
@@ -851,55 +1351,66 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code overview} field.
+             * Returns the policy overview text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the overview, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> overview() {
                 return Optional.ofNullable(overview);
             }
 
             /**
-             * Returns the {@code headline} field.
+             * Returns the policy headline text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the headline, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> headline() {
                 return Optional.ofNullable(headline);
             }
 
             /**
-             * Returns the {@code subtitle} field.
+             * Returns the policy subtitle text.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the subtitle, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> subtitle() {
                 return Optional.ofNullable(subtitle);
             }
 
             /**
-             * Returns the {@code explanation} field.
+             * Returns the policy explanation body.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the explanation, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> explanation() {
                 return Optional.ofNullable(explanation);
             }
 
             /**
-             * Returns the {@code admin_disclaimer} field.
+             * Returns the admin-only disclaimer.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the disclaimer, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> adminDisclaimer() {
                 return Optional.ofNullable(adminDisclaimer);
             }
 
             /**
-             * Parses a {@code EnforcementPolicyInformation} from the given JSON object.
+             * Parses an {@link EnforcementPolicyInformation} from the given
+             * JSON object.
+             *
+             * @apiNote
+             * Used by {@link Suspensions#of(JSONObject)} to hydrate the
+             * nested {@code enforcement_policy_information} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<EnforcementPolicyInformation> of(JSONObject obj) {
                 if (obj == null) {
@@ -915,10 +1426,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code EnforcementPolicyInformation} from the given JSON array.
+             * Parses a list of {@link EnforcementPolicyInformation} entries
+             * from the given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<EnforcementPolicyInformation> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -934,10 +1450,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a {@code Suspensions} from the given JSON object.
+         * Parses a {@link Suspensions} from the given JSON object.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate one entry of the {@code suspensions} array.
          *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @return the parsed entry, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<Suspensions> of(JSONObject obj) {
             if (obj == null) {
@@ -956,10 +1477,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a list of {@code Suspensions} from the given JSON array.
+         * Parses a list of {@link Suspensions} entries from the given JSON
+         * array.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate the {@code suspensions} array.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<Suspensions> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -975,43 +1501,94 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * A parsed {@code ViolatingMessages} object.
+     * Wraps one entry of the {@code violating_messages} bucket.
+     *
+     * @apiNote
+     * Pairs the shared {@link BaseEnforcementData} with the {@link ContentData}
+     * pointer to the violating message (either a chat message identified
+     * by {@code server_msg_id} or a status identified by {@code server_id}).
      */
     public static final class ViolatingMessages {
+        /**
+         * The shared enforcement record.
+         */
         private final BaseEnforcementData baseEnforcementData;
+
+        /**
+         * The pointer to the violating message.
+         */
         private final ContentData contentData;
 
+        /**
+         * Constructs a violating-message wrapper from the parsed sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param baseEnforcementData the shared enforcement record
+         * @param contentData         the pointer to the violating message
+         */
         private ViolatingMessages(BaseEnforcementData baseEnforcementData, ContentData contentData) {
             this.baseEnforcementData = baseEnforcementData;
             this.contentData = contentData;
         }
 
         /**
-         * Returns the {@code base_enforcement_data} field.
+         * Returns the shared enforcement record.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link BaseEnforcementData}, or empty when the
+         *         relay omitted the field
          */
         public Optional<BaseEnforcementData> baseEnforcementData() {
             return Optional.ofNullable(baseEnforcementData);
         }
 
         /**
-         * Returns the {@code content_data} field.
+         * Returns the pointer to the violating message.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link ContentData}, or empty when the relay
+         *         omitted the field
          */
         public Optional<ContentData> contentData() {
             return Optional.ofNullable(contentData);
         }
 
         /**
-         * A parsed {@code content_data} polymorphic object.
+         * Wraps the {@code content_data} polymorphic sub-object.
+         *
+         * @apiNote
+         * The {@link #typename()} discriminator selects which inline
+         * fragment the relay populated: {@code XWA2ChannelServerMsgData}
+         * sets {@link #serverMsgId()} (a chat message), and
+         * {@code XWA2ChannelStatusData} sets {@link #serverId()} (a
+         * status). Only one of the two id fields is populated at a time.
          */
         public static final class ContentData {
+            /**
+             * The GraphQL inline-fragment type-name discriminator.
+             */
             private final String typename;
+
+            /**
+             * The server message id from the chat-message inline fragment.
+             */
             private final String serverMsgId;
+
+            /**
+             * The server status id from the status inline fragment.
+             */
             private final String serverId;
 
+            /**
+             * Constructs a content-data wrapper from the parsed sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param typename    the GraphQL type-name discriminator
+             * @param serverMsgId the chat-message server id
+             * @param serverId    the status server id
+             */
             private ContentData(String typename, String serverMsgId, String serverId) {
                 this.typename = typename;
                 this.serverMsgId = serverMsgId;
@@ -1019,39 +1596,53 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code __typename} discriminator.
+             * Returns the GraphQL inline-fragment type-name discriminator.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the typename, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> typename() {
                 return Optional.ofNullable(typename);
             }
 
             /**
-             * Returns the {@code server_msg_id} field from the
-             * {@code XWA2ChannelServerMsgData} inline fragment.
+             * Returns the chat-message server id.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @apiNote
+             * Populated only when {@link #typename()} is
+             * {@code "XWA2ChannelServerMsgData"}.
+             *
+             * @return the server message id, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> serverMsgId() {
                 return Optional.ofNullable(serverMsgId);
             }
 
             /**
-             * Returns the {@code server_id} field from the
-             * {@code XWA2ChannelStatusData} inline fragment.
+             * Returns the status server id.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @apiNote
+             * Populated only when {@link #typename()} is
+             * {@code "XWA2ChannelStatusData"}.
+             *
+             * @return the status server id, or empty when the relay omitted
+             *         the field
              */
             public Optional<String> serverId() {
                 return Optional.ofNullable(serverId);
             }
 
             /**
-             * Parses a {@code ContentData} from the given JSON object.
+             * Parses a {@link ContentData} from the given JSON object.
+             *
+             * @apiNote
+             * Used by {@link ViolatingMessages#of(JSONObject)} to hydrate
+             * the nested {@code content_data} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<ContentData> of(JSONObject obj) {
                 if (obj == null) {
@@ -1065,10 +1656,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code ContentData} from the given JSON array.
+             * Parses a list of {@link ContentData} entries from the given
+             * JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<ContentData> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -1084,18 +1680,77 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code BaseEnforcementData} object.
+         * Wraps the shared {@code base_enforcement_data} sub-object.
+         *
+         * @apiNote
+         * Carries the standard enforcement scaffolding (timestamps,
+         * appeal state, id, source, optional extra data, optional policy
+         * information) that the violating-message and geo-suspension
+         * buckets share.
          */
         public static final class BaseEnforcementData {
+            /**
+             * The enforcement creation epoch-second.
+             */
             private final Long enforcementCreationTime;
+
+            /**
+             * The appeal creation epoch-second, or {@code null}.
+             */
             private final Long appealCreationTime;
+
+            /**
+             * The appeal state label.
+             */
             private final String appealState;
+
+            /**
+             * The enforcement identifier.
+             */
             private final String enforcementId;
+
+            /**
+             * The violation category label.
+             */
             private final String enforcementViolationCategory;
+
+            /**
+             * The enforcement source label.
+             */
             private final String enforcementSource;
+
+            /**
+             * The optional extra-data sub-object.
+             */
             private final EnforcementExtraData enforcementExtraData;
+
+            /**
+             * The optional policy-information sub-object.
+             */
             private final EnforcementPolicyInformation enforcementPolicyInformation;
 
+            /**
+             * Constructs a base-enforcement-data wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param enforcementCreationTime      the enforcement creation
+             *                                     epoch-second
+             * @param appealCreationTime           the appeal creation
+             *                                     epoch-second, or
+             *                                     {@code null}
+             * @param appealState                  the appeal state label
+             * @param enforcementId                the enforcement identifier
+             * @param enforcementViolationCategory the violation category
+             *                                     label
+             * @param enforcementSource            the enforcement source
+             *                                     label
+             * @param enforcementExtraData         the extra-data sub-object
+             * @param enforcementPolicyInformation the policy-information
+             *                                     sub-object
+             */
             private BaseEnforcementData(Long enforcementCreationTime, Long appealCreationTime, String appealState, String enforcementId, String enforcementViolationCategory, String enforcementSource, EnforcementExtraData enforcementExtraData, EnforcementPolicyInformation enforcementPolicyInformation) {
                 this.enforcementCreationTime = enforcementCreationTime;
                 this.appealCreationTime = appealCreationTime;
@@ -1108,105 +1763,163 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code enforcement_creation_time} field.
+             * Returns the enforcement creation instant.
              *
-             * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @return the creation instant, or empty when the relay omitted
+             *         the field
              */
             public Optional<Instant> enforcementCreationTime() {
                 return Optional.ofNullable(enforcementCreationTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Returns the {@code appeal_creation_time} field.
+             * Returns the appeal creation instant.
              *
-             * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @return the appeal instant, or empty when no appeal has been
+             *         filed
              */
             public Optional<Instant> appealCreationTime() {
                 return Optional.ofNullable(appealCreationTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Returns the {@code appeal_state} field.
+             * Returns the appeal state label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the appeal state, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> appealState() {
                 return Optional.ofNullable(appealState);
             }
 
             /**
-             * Returns the {@code enforcement_id} field.
+             * Returns the enforcement identifier.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the enforcement id, or empty when the relay omitted
+             *         the field
              */
             public Optional<String> enforcementId() {
                 return Optional.ofNullable(enforcementId);
             }
 
             /**
-             * Returns the {@code enforcement_violation_category} field.
+             * Returns the violation category label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the violation category, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> enforcementViolationCategory() {
                 return Optional.ofNullable(enforcementViolationCategory);
             }
 
             /**
-             * Returns the {@code enforcement_source} field.
+             * Returns the enforcement source label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the enforcement source, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> enforcementSource() {
                 return Optional.ofNullable(enforcementSource);
             }
 
             /**
-             * Returns the {@code enforcement_extra_data} field.
+             * Returns the extra-data sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link EnforcementExtraData}, or empty when
+             *         the relay omitted the field
              */
             public Optional<EnforcementExtraData> enforcementExtraData() {
                 return Optional.ofNullable(enforcementExtraData);
             }
 
             /**
-             * Returns the {@code enforcement_policy_information} field.
+             * Returns the policy-information sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link EnforcementPolicyInformation}, or
+             *         empty when the relay omitted the field
              */
             public Optional<EnforcementPolicyInformation> enforcementPolicyInformation() {
                 return Optional.ofNullable(enforcementPolicyInformation);
             }
 
             /**
-             * A parsed {@code EnforcementExtraData} object.
+             * Wraps the {@code enforcement_extra_data} sub-object as
+             * projected for violating-message enforcements.
+             *
+             * @apiNote
+             * For violating messages the extra data carries only the
+             * IP-violation report data.
              */
             public static final class EnforcementExtraData {
+                /**
+                 * The IP-violation report data sub-object.
+                 */
                 private final IpViolationReportData ipViolationReportData;
 
+                /**
+                 * Constructs an extra-data wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param ipViolationReportData the IP-violation report data
+                 *                              sub-object
+                 */
                 private EnforcementExtraData(IpViolationReportData ipViolationReportData) {
                     this.ipViolationReportData = ipViolationReportData;
                 }
 
                 /**
-                 * Returns the {@code ip_violation_report_data} field.
+                 * Returns the IP-violation report data sub-object.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link IpViolationReportData}, or empty
+                 *         when the relay omitted the field
                  */
                 public Optional<IpViolationReportData> ipViolationReportData() {
                     return Optional.ofNullable(ipViolationReportData);
                 }
 
                 /**
-                 * A parsed {@code IpViolationReportData} object.
+                 * Wraps the {@code ip_violation_report_data} sub-object.
+                 *
+                 * @apiNote
+                 * Same shape as
+                 * {@link ProfilePictureDeletions.EnforcementExtraData.IpViolationReportData}.
                  */
                 public static final class IpViolationReportData {
+                    /**
+                     * The Facebook report identifier.
+                     */
                     private final String reportFbid;
+
+                    /**
+                     * The appeal-form URL.
+                     */
                     private final String appealFormUrl;
+
+                    /**
+                     * The reporter contact email.
+                     */
                     private final String reporterEmail;
+
+                    /**
+                     * The reporter contact name.
+                     */
                     private final String reporterName;
 
+                    /**
+                     * Constructs an IP-violation-report-data wrapper from
+                     * the parsed sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param reportFbid    the Facebook report identifier
+                     * @param appealFormUrl the appeal-form URL
+                     * @param reporterEmail the reporter contact email
+                     * @param reporterName  the reporter contact name
+                     */
                     private IpViolationReportData(String reportFbid, String appealFormUrl, String reporterEmail, String reporterName) {
                         this.reportFbid = reportFbid;
                         this.appealFormUrl = appealFormUrl;
@@ -1215,46 +1928,57 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Returns the {@code report_fbid} field.
+                     * Returns the Facebook report identifier.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the report id, or empty when the relay
+                     *         omitted the field
                      */
                     public Optional<String> reportFbid() {
                         return Optional.ofNullable(reportFbid);
                     }
 
                     /**
-                     * Returns the {@code appeal_form_url} field.
+                     * Returns the appeal-form URL.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the URL, or empty when the relay omitted the
+                     *         field
                      */
                     public Optional<String> appealFormUrl() {
                         return Optional.ofNullable(appealFormUrl);
                     }
 
                     /**
-                     * Returns the {@code reporter_email} field.
+                     * Returns the reporter contact email.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the email, or empty when the relay omitted
+                     *         the field
                      */
                     public Optional<String> reporterEmail() {
                         return Optional.ofNullable(reporterEmail);
                     }
 
                     /**
-                     * Returns the {@code reporter_name} field.
+                     * Returns the reporter contact name.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the name, or empty when the relay omitted
+                     *         the field
                      */
                     public Optional<String> reporterName() {
                         return Optional.ofNullable(reporterName);
                     }
 
                     /**
-                     * Parses a {@code IpViolationReportData} from the given JSON object.
+                     * Parses an {@link IpViolationReportData} from the
+                     * given JSON object.
+                     *
+                     * @apiNote
+                     * Used by {@link EnforcementExtraData#of(JSONObject)}
+                     * to hydrate the nested
+                     * {@code ip_violation_report_data} entry.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<IpViolationReportData> of(JSONObject obj) {
                         if (obj == null) {
@@ -1269,10 +1993,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code IpViolationReportData} from the given JSON array.
+                     * Parses a list of {@link IpViolationReportData}
+                     * entries from the given JSON array.
+                     *
+                     * @apiNote
+                     * Provided for symmetry.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<IpViolationReportData> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -1288,10 +2017,17 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a {@code EnforcementExtraData} from the given JSON object.
+                 * Parses an {@link EnforcementExtraData} from the given
+                 * JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link BaseEnforcementData#of(JSONObject)} to
+                 * hydrate the nested {@code enforcement_extra_data} entry
+                 * inside the violating-message bucket.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<EnforcementExtraData> of(JSONObject obj) {
                     if (obj == null) {
@@ -1303,10 +2039,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code EnforcementExtraData} from the given JSON array.
+                 * Parses a list of {@link EnforcementExtraData} entries
+                 * from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<EnforcementExtraData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -1322,15 +2063,51 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code EnforcementPolicyInformation} object.
+             * Wraps the {@code enforcement_policy_information} sub-object.
+             *
+             * @apiNote
+             * Same shape as
+             * {@link ProfilePictureDeletions.EnforcementPolicyInformation}.
              */
             public static final class EnforcementPolicyInformation {
+                /**
+                 * The policy overview text.
+                 */
                 private final String overview;
+
+                /**
+                 * The policy headline text.
+                 */
                 private final String headline;
+
+                /**
+                 * The policy subtitle text.
+                 */
                 private final String subtitle;
+
+                /**
+                 * The policy explanation body.
+                 */
                 private final String explanation;
+
+                /**
+                 * The admin-only disclaimer.
+                 */
                 private final String adminDisclaimer;
 
+                /**
+                 * Constructs a policy-information wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param overview        the policy overview text
+                 * @param headline        the policy headline text
+                 * @param subtitle        the policy subtitle text
+                 * @param explanation     the policy explanation body
+                 * @param adminDisclaimer the admin-only disclaimer
+                 */
                 private EnforcementPolicyInformation(String overview, String headline, String subtitle, String explanation, String adminDisclaimer) {
                     this.overview = overview;
                     this.headline = headline;
@@ -1340,55 +2117,68 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code overview} field.
+                 * Returns the policy overview text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the overview, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> overview() {
                     return Optional.ofNullable(overview);
                 }
 
                 /**
-                 * Returns the {@code headline} field.
+                 * Returns the policy headline text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the headline, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> headline() {
                     return Optional.ofNullable(headline);
                 }
 
                 /**
-                 * Returns the {@code subtitle} field.
+                 * Returns the policy subtitle text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the subtitle, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> subtitle() {
                     return Optional.ofNullable(subtitle);
                 }
 
                 /**
-                 * Returns the {@code explanation} field.
+                 * Returns the policy explanation body.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the explanation, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> explanation() {
                     return Optional.ofNullable(explanation);
                 }
 
                 /**
-                 * Returns the {@code admin_disclaimer} field.
+                 * Returns the admin-only disclaimer.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the disclaimer, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> adminDisclaimer() {
                     return Optional.ofNullable(adminDisclaimer);
                 }
 
                 /**
-                 * Parses a {@code EnforcementPolicyInformation} from the given JSON object.
+                 * Parses an {@link EnforcementPolicyInformation} from the
+                 * given JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link BaseEnforcementData#of(JSONObject)} to
+                 * hydrate the nested
+                 * {@code enforcement_policy_information} entry inside the
+                 * violating-message bucket.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<EnforcementPolicyInformation> of(JSONObject obj) {
                     if (obj == null) {
@@ -1404,10 +2194,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code EnforcementPolicyInformation} from the given JSON array.
+                 * Parses a list of {@link EnforcementPolicyInformation}
+                 * entries from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<EnforcementPolicyInformation> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -1423,10 +2218,16 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code BaseEnforcementData} from the given JSON object.
+             * Parses a {@link BaseEnforcementData} from the given JSON
+             * object.
+             *
+             * @apiNote
+             * Used by {@link ViolatingMessages#of(JSONObject)} to hydrate
+             * the nested {@code base_enforcement_data} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<BaseEnforcementData> of(JSONObject obj) {
                 if (obj == null) {
@@ -1445,10 +2246,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code BaseEnforcementData} from the given JSON array.
+             * Parses a list of {@link BaseEnforcementData} entries from the
+             * given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<BaseEnforcementData> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -1464,10 +2270,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a {@code ViolatingMessages} from the given JSON object.
+         * Parses a {@link ViolatingMessages} from the given JSON object.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate one entry of the {@code violating_messages} array.
          *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @return the parsed entry, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<ViolatingMessages> of(JSONObject obj) {
             if (obj == null) {
@@ -1480,10 +2291,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a list of {@code ViolatingMessages} from the given JSON array.
+         * Parses a list of {@link ViolatingMessages} entries from the given
+         * JSON array.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate the {@code violating_messages} array.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<ViolatingMessages> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -1499,47 +2315,135 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * A parsed {@code Geosuspensions} object.
+     * Wraps one entry of the {@code geosuspensions} bucket.
+     *
+     * @apiNote
+     * Pairs the shared {@link BaseEnforcementData} (with its richer
+     * extra-data carrying enforcing-entity and workflow tags) with the
+     * raw list of ISO 2-letter country codes the suspension applies to.
      */
     public static final class Geosuspensions {
+        /**
+         * The shared enforcement record.
+         */
         private final BaseEnforcementData baseEnforcementData;
+
+        /**
+         * The raw ISO 2-letter country codes the suspension applies to.
+         */
         private final List<String> countryCodes;
 
+        /**
+         * Constructs a geo-suspension wrapper from the parsed sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param baseEnforcementData the shared enforcement record
+         * @param countryCodes        the raw ISO 2-letter country codes
+         */
         private Geosuspensions(BaseEnforcementData baseEnforcementData, List<String> countryCodes) {
             this.baseEnforcementData = baseEnforcementData;
             this.countryCodes = countryCodes;
         }
 
         /**
-         * Returns the {@code base_enforcement_data} field.
+         * Returns the shared enforcement record.
          *
-         * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link BaseEnforcementData}, or empty when the
+         *         relay omitted the field
          */
         public Optional<BaseEnforcementData> baseEnforcementData() {
             return Optional.ofNullable(baseEnforcementData);
         }
 
         /**
-         * Returns the {@code country_codes} field.
-         * @return the list of raw country codes, empty if absent
+         * Returns the raw ISO 2-letter country codes.
+         *
+         * @apiNote
+         * The list carries the codes verbatim; WA Web enriches each entry
+         * via {@code WAWebAsISOCountryCode.asISOCountryCode} plus
+         * {@code WAWebLocaleModules.getCountryData} to produce the
+         * (countryCode, countryName) pairs displayed in the moderation UI.
+         *
+         * @return the country codes, empty when the relay returned none
          */
         public List<String> countryCodes() {
             return countryCodes;
         }
 
         /**
-         * A parsed {@code BaseEnforcementData} object.
+         * Wraps the shared {@code base_enforcement_data} sub-object as
+         * projected for geo-suspension enforcements.
+         *
+         * @apiNote
+         * Geo-suspensions reuse the same scaffolding as violating-message
+         * enforcements but expose a richer {@link EnforcementExtraData}
+         * with enforcing-entity name and workflow/legal-basis tags.
          */
         public static final class BaseEnforcementData {
+            /**
+             * The enforcement creation epoch-second.
+             */
             private final Long enforcementCreationTime;
+
+            /**
+             * The appeal creation epoch-second, or {@code null}.
+             */
             private final Long appealCreationTime;
+
+            /**
+             * The appeal state label.
+             */
             private final String appealState;
+
+            /**
+             * The enforcement identifier.
+             */
             private final String enforcementId;
+
+            /**
+             * The violation category label.
+             */
             private final String enforcementViolationCategory;
+
+            /**
+             * The enforcement source label.
+             */
             private final String enforcementSource;
+
+            /**
+             * The optional extra-data sub-object.
+             */
             private final EnforcementExtraData enforcementExtraData;
+
+            /**
+             * The optional policy-information sub-object.
+             */
             private final EnforcementPolicyInformation enforcementPolicyInformation;
 
+            /**
+             * Constructs a base-enforcement-data wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param enforcementCreationTime      the enforcement creation
+             *                                     epoch-second
+             * @param appealCreationTime           the appeal creation
+             *                                     epoch-second, or
+             *                                     {@code null}
+             * @param appealState                  the appeal state label
+             * @param enforcementId                the enforcement identifier
+             * @param enforcementViolationCategory the violation category
+             *                                     label
+             * @param enforcementSource            the enforcement source
+             *                                     label
+             * @param enforcementExtraData         the extra-data sub-object
+             * @param enforcementPolicyInformation the policy-information
+             *                                     sub-object
+             */
             private BaseEnforcementData(Long enforcementCreationTime, Long appealCreationTime, String appealState, String enforcementId, String enforcementViolationCategory, String enforcementSource, EnforcementExtraData enforcementExtraData, EnforcementPolicyInformation enforcementPolicyInformation) {
                 this.enforcementCreationTime = enforcementCreationTime;
                 this.appealCreationTime = appealCreationTime;
@@ -1552,88 +2456,146 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code enforcement_creation_time} field.
+             * Returns the enforcement creation instant.
              *
-             * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @return the creation instant, or empty when the relay omitted
+             *         the field
              */
             public Optional<Instant> enforcementCreationTime() {
                 return Optional.ofNullable(enforcementCreationTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Returns the {@code appeal_creation_time} field.
+             * Returns the appeal creation instant.
              *
-             * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @return the appeal instant, or empty when no appeal has been
+             *         filed
              */
             public Optional<Instant> appealCreationTime() {
                 return Optional.ofNullable(appealCreationTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Returns the {@code appeal_state} field.
+             * Returns the appeal state label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the appeal state, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> appealState() {
                 return Optional.ofNullable(appealState);
             }
 
             /**
-             * Returns the {@code enforcement_id} field.
+             * Returns the enforcement identifier.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the enforcement id, or empty when the relay omitted
+             *         the field
              */
             public Optional<String> enforcementId() {
                 return Optional.ofNullable(enforcementId);
             }
 
             /**
-             * Returns the {@code enforcement_violation_category} field.
+             * Returns the violation category label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the violation category, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> enforcementViolationCategory() {
                 return Optional.ofNullable(enforcementViolationCategory);
             }
 
             /**
-             * Returns the {@code enforcement_source} field.
+             * Returns the enforcement source label.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the enforcement source, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> enforcementSource() {
                 return Optional.ofNullable(enforcementSource);
             }
 
             /**
-             * Returns the {@code enforcement_extra_data} field.
+             * Returns the extra-data sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link EnforcementExtraData}, or empty when
+             *         the relay omitted the field
              */
             public Optional<EnforcementExtraData> enforcementExtraData() {
                 return Optional.ofNullable(enforcementExtraData);
             }
 
             /**
-             * Returns the {@code enforcement_policy_information} field.
+             * Returns the policy-information sub-object.
              *
-             * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link EnforcementPolicyInformation}, or
+             *         empty when the relay omitted the field
              */
             public Optional<EnforcementPolicyInformation> enforcementPolicyInformation() {
                 return Optional.ofNullable(enforcementPolicyInformation);
             }
 
             /**
-             * A parsed {@code EnforcementExtraData} object.
+             * Wraps the {@code enforcement_extra_data} sub-object as
+             * projected for geo-suspension enforcements.
+             *
+             * @apiNote
+             * Geo-suspension extra data extends the suspension shape with
+             * the enforcing-entity name, the origin workflow tag and the
+             * origin legal-basis tag; the presence of
+             * {@link EnforcementTargetData} flips the type from
+             * {@code GEOSUSPEND} to {@code GEOSUSPEND_INFORM}.
              */
             public static final class EnforcementExtraData {
+                /**
+                 * The IP-violation report data sub-object.
+                 */
                 private final IpViolationReportData ipViolationReportData;
+
+                /**
+                 * The target-message pointer sub-object.
+                 */
                 private final EnforcementTargetData enforcementTargetData;
+
+                /**
+                 * The appeal-form-URL sub-object.
+                 */
                 private final AppealExtraData appealExtraData;
+
+                /**
+                 * The enforcing-entity-name sub-object.
+                 */
                 private final EnforcingEntityData enforcingEntityData;
+
+                /**
+                 * The enforcement origin workflow tag.
+                 */
                 private final String enforcementOriginWorkflow;
+
+                /**
+                 * The enforcement origin legal-basis tag.
+                 */
                 private final String enforcementOriginLegalBasis;
 
+                /**
+                 * Constructs an extra-data wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param ipViolationReportData       the IP-violation report
+                 *                                    data sub-object
+                 * @param enforcementTargetData       the target-message
+                 *                                    pointer sub-object
+                 * @param appealExtraData             the appeal-form-URL
+                 *                                    sub-object
+                 * @param enforcingEntityData         the enforcing-entity-name
+                 *                                    sub-object
+                 * @param enforcementOriginWorkflow   the origin workflow tag
+                 * @param enforcementOriginLegalBasis the origin legal-basis
+                 *                                    tag
+                 */
                 private EnforcementExtraData(IpViolationReportData ipViolationReportData, EnforcementTargetData enforcementTargetData, AppealExtraData appealExtraData, EnforcingEntityData enforcingEntityData, String enforcementOriginWorkflow, String enforcementOriginLegalBasis) {
                     this.ipViolationReportData = ipViolationReportData;
                     this.enforcementTargetData = enforcementTargetData;
@@ -1644,68 +2606,105 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code ip_violation_report_data} field.
+                 * Returns the IP-violation report data sub-object.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link IpViolationReportData}, or empty
+                 *         when the relay omitted the field
                  */
                 public Optional<IpViolationReportData> ipViolationReportData() {
                     return Optional.ofNullable(ipViolationReportData);
                 }
 
                 /**
-                 * Returns the {@code enforcement_target_data} field.
+                 * Returns the target-message pointer sub-object.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link EnforcementTargetData}, or
+                 *         empty when the relay omitted the field
                  */
                 public Optional<EnforcementTargetData> enforcementTargetData() {
                     return Optional.ofNullable(enforcementTargetData);
                 }
 
                 /**
-                 * Returns the {@code appeal_extra_data} field.
+                 * Returns the appeal-form-URL sub-object.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link AppealExtraData}, or empty when
+                 *         the relay omitted the field
                  */
                 public Optional<AppealExtraData> appealExtraData() {
                     return Optional.ofNullable(appealExtraData);
                 }
 
                 /**
-                 * Returns the {@code enforcing_entity_data} field.
+                 * Returns the enforcing-entity-name sub-object.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link EnforcingEntityData}, or empty
+                 *         when the relay omitted the field
                  */
                 public Optional<EnforcingEntityData> enforcingEntityData() {
                     return Optional.ofNullable(enforcingEntityData);
                 }
 
                 /**
-                 * Returns the {@code enforcement_origin_workflow} field.
+                 * Returns the enforcement origin workflow tag.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the workflow tag, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> enforcementOriginWorkflow() {
                     return Optional.ofNullable(enforcementOriginWorkflow);
                 }
 
                 /**
-                 * Returns the {@code enforcement_origin_legal_basis} field.
+                 * Returns the enforcement origin legal-basis tag.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the legal-basis tag, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> enforcementOriginLegalBasis() {
                     return Optional.ofNullable(enforcementOriginLegalBasis);
                 }
 
                 /**
-                 * A parsed {@code IpViolationReportData} object.
+                 * Wraps the {@code ip_violation_report_data} sub-object.
+                 *
+                 * @apiNote
+                 * Same shape as
+                 * {@link ProfilePictureDeletions.EnforcementExtraData.IpViolationReportData}.
                  */
                 public static final class IpViolationReportData {
+                    /**
+                     * The Facebook report identifier.
+                     */
                     private final String reportFbid;
+
+                    /**
+                     * The appeal-form URL.
+                     */
                     private final String appealFormUrl;
+
+                    /**
+                     * The reporter contact email.
+                     */
                     private final String reporterEmail;
+
+                    /**
+                     * The reporter contact name.
+                     */
                     private final String reporterName;
 
+                    /**
+                     * Constructs an IP-violation-report-data wrapper from
+                     * the parsed sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param reportFbid    the Facebook report identifier
+                     * @param appealFormUrl the appeal-form URL
+                     * @param reporterEmail the reporter contact email
+                     * @param reporterName  the reporter contact name
+                     */
                     private IpViolationReportData(String reportFbid, String appealFormUrl, String reporterEmail, String reporterName) {
                         this.reportFbid = reportFbid;
                         this.appealFormUrl = appealFormUrl;
@@ -1714,46 +2713,57 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Returns the {@code report_fbid} field.
+                     * Returns the Facebook report identifier.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the report id, or empty when the relay
+                     *         omitted the field
                      */
                     public Optional<String> reportFbid() {
                         return Optional.ofNullable(reportFbid);
                     }
 
                     /**
-                     * Returns the {@code appeal_form_url} field.
+                     * Returns the appeal-form URL.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the URL, or empty when the relay omitted the
+                     *         field
                      */
                     public Optional<String> appealFormUrl() {
                         return Optional.ofNullable(appealFormUrl);
                     }
 
                     /**
-                     * Returns the {@code reporter_email} field.
+                     * Returns the reporter contact email.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the email, or empty when the relay omitted
+                     *         the field
                      */
                     public Optional<String> reporterEmail() {
                         return Optional.ofNullable(reporterEmail);
                     }
 
                     /**
-                     * Returns the {@code reporter_name} field.
+                     * Returns the reporter contact name.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the name, or empty when the relay omitted
+                     *         the field
                      */
                     public Optional<String> reporterName() {
                         return Optional.ofNullable(reporterName);
                     }
 
                     /**
-                     * Parses a {@code IpViolationReportData} from the given JSON object.
+                     * Parses an {@link IpViolationReportData} from the
+                     * given JSON object.
+                     *
+                     * @apiNote
+                     * Used by {@link EnforcementExtraData#of(JSONObject)}
+                     * to hydrate the nested
+                     * {@code ip_violation_report_data} entry.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<IpViolationReportData> of(JSONObject obj) {
                         if (obj == null) {
@@ -1768,10 +2778,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code IpViolationReportData} from the given JSON array.
+                     * Parses a list of {@link IpViolationReportData}
+                     * entries from the given JSON array.
+                     *
+                     * @apiNote
+                     * Provided for symmetry.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<IpViolationReportData> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -1787,29 +2802,55 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * A parsed {@code EnforcementTargetData} object.
+                 * Wraps the {@code enforcement_target_data} sub-object.
+                 *
+                 * @apiNote
+                 * Same shape as
+                 * {@link Suspensions.EnforcementExtraData.EnforcementTargetData}.
                  */
                 public static final class EnforcementTargetData {
+                    /**
+                     * The server message id of the triggering message.
+                     */
                     private final String serverMsgId;
 
+                    /**
+                     * Constructs a target-data wrapper from the parsed
+                     * sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param serverMsgId the server message id of the
+                     *                    triggering message
+                     */
                     private EnforcementTargetData(String serverMsgId) {
                         this.serverMsgId = serverMsgId;
                     }
 
                     /**
-                     * Returns the {@code server_msg_id} field.
+                     * Returns the server message id of the triggering
+                     * message.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the server message id, or empty when the
+                     *         relay omitted the field
                      */
                     public Optional<String> serverMsgId() {
                         return Optional.ofNullable(serverMsgId);
                     }
 
                     /**
-                     * Parses a {@code EnforcementTargetData} from the given JSON object.
+                     * Parses an {@link EnforcementTargetData} from the
+                     * given JSON object.
+                     *
+                     * @apiNote
+                     * Used by {@link EnforcementExtraData#of(JSONObject)}
+                     * to hydrate the nested
+                     * {@code enforcement_target_data} entry.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<EnforcementTargetData> of(JSONObject obj) {
                         if (obj == null) {
@@ -1821,10 +2862,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code EnforcementTargetData} from the given JSON array.
+                     * Parses a list of {@link EnforcementTargetData}
+                     * entries from the given JSON array.
+                     *
+                     * @apiNote
+                     * Provided for symmetry.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<EnforcementTargetData> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -1840,29 +2886,53 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * A parsed {@code AppealExtraData} object.
+                 * Wraps the {@code appeal_extra_data} sub-object.
+                 *
+                 * @apiNote
+                 * Same shape as
+                 * {@link Suspensions.EnforcementExtraData.AppealExtraData}.
                  */
                 public static final class AppealExtraData {
+                    /**
+                     * The appeal-form URL.
+                     */
                     private final String appealFormUrl;
 
+                    /**
+                     * Constructs an appeal-extra-data wrapper from the
+                     * parsed sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param appealFormUrl the appeal-form URL
+                     */
                     private AppealExtraData(String appealFormUrl) {
                         this.appealFormUrl = appealFormUrl;
                     }
 
                     /**
-                     * Returns the {@code appeal_form_url} field.
+                     * Returns the appeal-form URL.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the URL, or empty when the relay omitted the
+                     *         field
                      */
                     public Optional<String> appealFormUrl() {
                         return Optional.ofNullable(appealFormUrl);
                     }
 
                     /**
-                     * Parses a {@code AppealExtraData} from the given JSON object.
+                     * Parses an {@link AppealExtraData} from the given
+                     * JSON object.
+                     *
+                     * @apiNote
+                     * Used by {@link EnforcementExtraData#of(JSONObject)}
+                     * to hydrate the nested {@code appeal_extra_data}
+                     * entry.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<AppealExtraData> of(JSONObject obj) {
                         if (obj == null) {
@@ -1874,10 +2944,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code AppealExtraData} from the given JSON array.
+                     * Parses a list of {@link AppealExtraData} entries from
+                     * the given JSON array.
+                     *
+                     * @apiNote
+                     * Provided for symmetry.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<AppealExtraData> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -1893,29 +2968,53 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * A parsed {@code EnforcingEntityData} object.
+                 * Wraps the {@code enforcing_entity_data} sub-object.
+                 *
+                 * @apiNote
+                 * Carries the display name of the entity (typically a
+                 * national authority) that requested the suspension.
                  */
                 public static final class EnforcingEntityData {
+                    /**
+                     * The display name of the enforcing entity.
+                     */
                     private final String name;
 
+                    /**
+                     * Constructs an entity-data wrapper from the parsed
+                     * sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param name the display name of the enforcing entity
+                     */
                     private EnforcingEntityData(String name) {
                         this.name = name;
                     }
 
                     /**
-                     * Returns the {@code name} field.
+                     * Returns the display name of the enforcing entity.
                      *
-                     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the name, or empty when the relay omitted
+                     *         the field
                      */
                     public Optional<String> name() {
                         return Optional.ofNullable(name);
                     }
 
                     /**
-                     * Parses a {@code EnforcingEntityData} from the given JSON object.
+                     * Parses an {@link EnforcingEntityData} from the given
+                     * JSON object.
+                     *
+                     * @apiNote
+                     * Used by {@link EnforcementExtraData#of(JSONObject)}
+                     * to hydrate the nested {@code enforcing_entity_data}
+                     * entry.
                      *
                      * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<EnforcingEntityData> of(JSONObject obj) {
                         if (obj == null) {
@@ -1927,10 +3026,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code EnforcingEntityData} from the given JSON array.
+                     * Parses a list of {@link EnforcingEntityData} entries
+                     * from the given JSON array.
+                     *
+                     * @apiNote
+                     * Provided for symmetry.
                      *
                      * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<EnforcingEntityData> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -1946,10 +3050,17 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a {@code EnforcementExtraData} from the given JSON object.
+                 * Parses an {@link EnforcementExtraData} from the given
+                 * JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link BaseEnforcementData#of(JSONObject)} to
+                 * hydrate the nested {@code enforcement_extra_data} entry
+                 * inside the geo-suspension bucket.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<EnforcementExtraData> of(JSONObject obj) {
                     if (obj == null) {
@@ -1966,10 +3077,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code EnforcementExtraData} from the given JSON array.
+                 * Parses a list of {@link EnforcementExtraData} entries
+                 * from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<EnforcementExtraData> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -1985,15 +3101,51 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code EnforcementPolicyInformation} object.
+             * Wraps the {@code enforcement_policy_information} sub-object.
+             *
+             * @apiNote
+             * Same shape as
+             * {@link ProfilePictureDeletions.EnforcementPolicyInformation}.
              */
             public static final class EnforcementPolicyInformation {
+                /**
+                 * The policy overview text.
+                 */
                 private final String overview;
+
+                /**
+                 * The policy headline text.
+                 */
                 private final String headline;
+
+                /**
+                 * The policy subtitle text.
+                 */
                 private final String subtitle;
+
+                /**
+                 * The policy explanation body.
+                 */
                 private final String explanation;
+
+                /**
+                 * The admin-only disclaimer.
+                 */
                 private final String adminDisclaimer;
 
+                /**
+                 * Constructs a policy-information wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param overview        the policy overview text
+                 * @param headline        the policy headline text
+                 * @param subtitle        the policy subtitle text
+                 * @param explanation     the policy explanation body
+                 * @param adminDisclaimer the admin-only disclaimer
+                 */
                 private EnforcementPolicyInformation(String overview, String headline, String subtitle, String explanation, String adminDisclaimer) {
                     this.overview = overview;
                     this.headline = headline;
@@ -2003,55 +3155,68 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code overview} field.
+                 * Returns the policy overview text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the overview, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> overview() {
                     return Optional.ofNullable(overview);
                 }
 
                 /**
-                 * Returns the {@code headline} field.
+                 * Returns the policy headline text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the headline, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> headline() {
                     return Optional.ofNullable(headline);
                 }
 
                 /**
-                 * Returns the {@code subtitle} field.
+                 * Returns the policy subtitle text.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the subtitle, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> subtitle() {
                     return Optional.ofNullable(subtitle);
                 }
 
                 /**
-                 * Returns the {@code explanation} field.
+                 * Returns the policy explanation body.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the explanation, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> explanation() {
                     return Optional.ofNullable(explanation);
                 }
 
                 /**
-                 * Returns the {@code admin_disclaimer} field.
+                 * Returns the admin-only disclaimer.
                  *
-                 * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the disclaimer, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> adminDisclaimer() {
                     return Optional.ofNullable(adminDisclaimer);
                 }
 
                 /**
-                 * Parses a {@code EnforcementPolicyInformation} from the given JSON object.
+                 * Parses an {@link EnforcementPolicyInformation} from the
+                 * given JSON object.
+                 *
+                 * @apiNote
+                 * Used by {@link BaseEnforcementData#of(JSONObject)} to
+                 * hydrate the nested
+                 * {@code enforcement_policy_information} entry inside the
+                 * geo-suspension bucket.
                  *
                  * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<EnforcementPolicyInformation> of(JSONObject obj) {
                     if (obj == null) {
@@ -2067,10 +3232,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code EnforcementPolicyInformation} from the given JSON array.
+                 * Parses a list of {@link EnforcementPolicyInformation}
+                 * entries from the given JSON array.
+                 *
+                 * @apiNote
+                 * Provided for symmetry.
                  *
                  * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<EnforcementPolicyInformation> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -2086,10 +3256,16 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code BaseEnforcementData} from the given JSON object.
+             * Parses a {@link BaseEnforcementData} from the given JSON
+             * object.
+             *
+             * @apiNote
+             * Used by {@link Geosuspensions#of(JSONObject)} to hydrate
+             * the nested {@code base_enforcement_data} entry.
              *
              * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<BaseEnforcementData> of(JSONObject obj) {
                 if (obj == null) {
@@ -2108,10 +3284,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code BaseEnforcementData} from the given JSON array.
+             * Parses a list of {@link BaseEnforcementData} entries from
+             * the given JSON array.
+             *
+             * @apiNote
+             * Provided for symmetry.
              *
              * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<BaseEnforcementData> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -2127,10 +3308,17 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a {@code Geosuspensions} from the given JSON object.
+         * Parses a {@link Geosuspensions} from the given JSON object.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate one entry of the {@code geosuspensions} array; the
+         * embedded {@code country_codes} array is copied as a list of raw
+         * ISO 2-letter strings.
          *
          * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @return the parsed entry, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<Geosuspensions> of(JSONObject obj) {
             if (obj == null) {
@@ -2138,7 +3326,6 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
             }
 
             var baseEnforcementData = BaseEnforcementData.of(obj.getJSONObject("base_enforcement_data")).orElse(null);
-            // Reads country_codes as a list of raw ISO 2-letter strings; WA Web enriches via WAWebAsISOCountryCode/WAWebLocaleModules in UI code
             var countryCodesArr = obj.getJSONArray("country_codes");
             List<String> countryCodes;
             if (countryCodesArr == null) {
@@ -2157,10 +3344,15 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a list of {@code Geosuspensions} from the given JSON array.
+         * Parses a list of {@link Geosuspensions} entries from the given
+         * JSON array.
+         *
+         * @apiNote
+         * Used by {@link FetchNewsletterEnforcementsMexResponse#of(byte[])}
+         * to hydrate the {@code geosuspensions} array.
          *
          * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<Geosuspensions> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -2176,26 +3368,32 @@ public final class FetchNewsletterEnforcementsMexResponse implements MexOperatio
     }
 
     /**
-     * Parses a {@link FetchNewsletterEnforcementsMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
+     *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_channel_enforcements} root
      */
     private static Optional<FetchNewsletterEnforcementsMexResponse> of(byte[] json) {
-        // Parses the raw JSON payload, bailing out if fastjson2 returns null
         var jsonObject = JSON.parseObject(json);
         if (jsonObject == null) {
             return Optional.empty();
         }
 
-        // Descends into the standard GraphQL "data" envelope
         var data = jsonObject.getJSONObject("data");
         if (data == null) {
             return Optional.empty();
         }
 
-        // Extracts the operation-specific root keyed by xwa2_channel_enforcements
         var root = data.getJSONObject("xwa2_channel_enforcements");
         if (root == null) {
             return Optional.empty();

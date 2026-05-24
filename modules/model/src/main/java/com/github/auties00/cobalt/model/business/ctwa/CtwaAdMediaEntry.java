@@ -42,20 +42,6 @@ public final class CtwaAdMediaEntry {
     }
 
     /**
-     * Constructs a new entry from a public constructor for caller use.
-     *
-     * @param id   the media identifier; never {@code null}
-     * @param type the media kind; never {@code null}
-     * @return the new entry
-     * @throws NullPointerException if either argument is {@code null}
-     */
-    public static CtwaAdMediaEntry of(String id, CtwaAdMediaType type) {
-        return new CtwaAdMediaEntry(
-                Objects.requireNonNull(id, "id cannot be null"),
-                Objects.requireNonNull(type, "type cannot be null"));
-    }
-
-    /**
      * Returns the relay-allocated media identifier.
      *
      * @return the identifier; never {@code null} for a parsed entry

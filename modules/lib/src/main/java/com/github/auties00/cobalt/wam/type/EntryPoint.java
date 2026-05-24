@@ -91,5 +91,11 @@ public enum EntryPoint {
     @WamEnumConstant(81) SETTINGS_TAB,
     @WamEnumConstant(82) CONNECTIONS,
     @WamEnumConstant(83) KNOWLEDGE,
-    @WamEnumConstant(84) GDRIVE_VALUE_PROP
+    @WamEnumConstant(84) GDRIVE_VALUE_PROP,
+    @WamEnumConstant(85) BB_SUGGESTED_AUDIENCE_ACTIVE_CHATS,
+    @WamEnumConstant(86) BB_SUGGESTED_AUDIENCE_INACTIVE_CHATS,
+    @WamEnumConstant(87) BB_SUGGESTED_AUDIENCE_YOUR_CONTACTS,
+    @WamEnumConstant(88) BB_SUGGESTED_AUDIENCE_LIST,
+    @WamEnumConstant(89) BB_SHARE_MODAL,
+    @WamEnumConstant(90) BB_FORWARD_MODAL
 }

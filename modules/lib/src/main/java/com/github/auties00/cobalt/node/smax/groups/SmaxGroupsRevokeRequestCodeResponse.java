@@ -15,26 +15,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsRevokeRequestCodeRequest}.
+ * The sealed reply family for a {@link SmaxGroupsRevokeRequestCodeRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsRevokeRequestCodeRPC}.
+ * {@link Success} always wraps the per-participant outcome list returned by the relay; the envelope succeeds even
+ * when individual candidates carry the literal {@code error="404"} marker (signalling no outstanding code), so
+ * callers must walk {@link Success#participants()} to detect partial failures.
  */
 public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperation.Response
         permits SmaxGroupsRevokeRequestCodeResponse.Success, SmaxGroupsRevokeRequestCodeResponse.ClientError, SmaxGroupsRevokeRequestCodeResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsRevokeRequestCodeResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsRevokeRequestCodeResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to
-     *                validate echoed identifiers; never
-     *                {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsRevokeRequestCodeRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound {@link SmaxGroupsRevokeRequestCodeRequest} stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsRevokeRequestCodeRPC",
             exports = "sendRevokeRequestCodeRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -53,32 +58,32 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code Success} reply variant — the relay processed the
-     * revocation and returned a per-participant outcome list.
+     * The reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
+     *
+     * @apiNote The IQ envelope succeeds even when every candidate carries the literal {@code error="404"} marker
+     * (signalling that the candidate had no outstanding code to revoke); callers must walk
+     * {@link #participants()} to detect such partial failures.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsRevokeRequestCodeResponse {
         /**
-         * The optional {@code addressing_mode} echo on the IQ
-         * envelope.
+         * The optional {@code addressing_mode} attribute echoed on the IQ envelope.
          */
         private final String addressingMode;
 
         /**
-         * The per-participant outcome entries.
+         * The per-participant outcome rows projected from the {@code <revoke>} child.
          */
         private final List<RevokeParticipantResult> participants;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success}.
          *
-         * @param addressingMode the optional addressing-mode echo;
-         *                       may be {@code null}
-         * @param participants   the per-participant outcomes; never
+         * @param addressingMode the optional addressing-mode echo ({@code "lid"} or {@code "pn"}); may be
          *                       {@code null}
-         * @throws NullPointerException if {@code participants} is
-         *                              {@code null}
+         * @param participants   the per-participant outcomes; defensively copied
+         * @throws NullPointerException if {@code participants} is {@code null}
          */
         public Success(String addressingMode, List<RevokeParticipantResult> participants) {
             this.addressingMode = addressingMode;
@@ -87,33 +92,36 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the optional addressing-mode echo.
+         * Returns the optional {@code addressing_mode} echo.
          *
-         * @return an {@link Optional} carrying the addressing
-         *         mode, or empty when the relay omitted it
+         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
+         * mode; the field is omitted on legacy groups.
+         *
+         * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
         public Optional<String> addressingMode() {
             return Optional.ofNullable(addressingMode);
         }
 
         /**
-         * Returns the per-participant outcome entries.
+         * Returns the per-participant outcome rows.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable list of outcome rows; never {@code null}
          */
         public List<RevokeParticipantResult> participants() {
             return participants;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseRevokeRequestCodeResponseSuccess}: the IQ must be a
+         * valid {@code type="result"} echo of the request, must carry a {@code <revoke>} child, and every
+         * {@code <participant>} grand-child must satisfy {@link RevokeParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess",
                 exports = "parseRevokeRequestCodeResponseSuccess",
@@ -138,6 +146,12 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             return Optional.of(new Success(addressingMode, participants));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -151,11 +165,21 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
                     && Objects.equals(this.participants, that.participants);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(addressingMode, participants);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsRevokeRequestCodeResponse.Success[addressingMode=" + addressingMode
@@ -163,58 +187,44 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * The per-participant outcome entry produced by the relay
-         * for a single revoked candidate.
+         * The per-participant outcome row produced by the relay for a single revocation candidate.
          *
-         * <p>WhatsApp Web models each entry as the mandatory
-         * {@code jid} attribute plus three optional projections:
-         * the literal {@code error="404"} marker (signalling that
-         * the candidate had no outstanding request to revoke), the
-         * {@code phone_number} echo from the
-         * {@code WASmaxInGroupsPhoneNumberMixin}, and the
-         * {@code username} echo from the
-         * {@code WASmaxInGroupsUsernameAttMixin}. Cobalt surfaces
-         * all three as {@link Optional} accessors.
+         * @apiNote Each row exposes {@link #jid()} (always present), {@link #error()} (the literal
+         * {@code "404"} marker when present, signalling the candidate had no outstanding code to revoke), and
+         * the optional {@link #phoneNumber()} / {@link #username()} echoes.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsPhoneNumberMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsUsernameAttMixin")
         public static final class RevokeParticipantResult {
             /**
-             * The participant JID.
+             * The participant {@link Jid}, always present on every outcome row.
              */
             private final Jid jid;
 
             /**
-             * The optional literal {@code error="404"} marker.
-             * When present, the relay reports that the candidate
-             * had no outstanding membership request to revoke.
+             * The optional literal {@code error="404"} marker echoed by the relay.
              */
             private final String error;
 
             /**
-             * The optional echoed {@code phone_number} attribute.
+             * The optional {@code phone_number} attribute echoed by the relay.
              */
             private final String phoneNumber;
 
             /**
-             * The optional echoed {@code username} attribute.
+             * The optional {@code username} attribute echoed by the relay.
              */
             private final String username;
 
             /**
-             * Constructs a new outcome entry.
+             * Constructs a {@link RevokeParticipantResult} row.
              *
-             * @param jid         the participant JID; never
-             *                    {@code null}
-             * @param error       the optional {@code error="404"}
-             *                    marker; may be {@code null}
-             * @param phoneNumber the optional phone-number echo;
-             *                    may be {@code null}
-             * @param username    the optional username echo; may
-             *                    be {@code null}
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid         the participant {@link Jid}
+             * @param error       the optional literal {@code error="404"} marker; may be {@code null}
+             * @param phoneNumber the optional {@code phone_number} echo; may be {@code null}
+             * @param username    the optional {@code username} echo; may be {@code null}
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public RevokeParticipantResult(Jid jid, String error, String phoneNumber, String username) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -224,55 +234,56 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             }
 
             /**
-             * Returns the participant JID.
+             * Returns the participant {@link Jid}.
              *
-             * @return the JID; never {@code null}
+             * @return the {@link Jid}; never {@code null}
              */
             public Jid jid() {
                 return jid;
             }
 
             /**
-             * Returns the optional {@code error="404"} marker.
+             * Returns the optional literal {@code error="404"} marker.
              *
-             * @return an {@link Optional} carrying the literal
-             *         error code, or empty when the revocation
-             *         succeeded for this candidate
+             * @apiNote The relay surfaces this marker when the candidate had no outstanding code to revoke;
+             * empty when the revocation succeeded.
+             *
+             * @return an {@link Optional} carrying the marker, or empty
              */
             public Optional<String> error() {
                 return Optional.ofNullable(error);
             }
 
             /**
-             * Returns the optional phone-number echo.
+             * Returns the optional {@code phone_number} echo.
              *
-             * @return an {@link Optional} carrying the phone
-             *         number
+             * @return an {@link Optional} carrying the phone number, or empty when the relay omitted it
              */
             public Optional<String> phoneNumber() {
                 return Optional.ofNullable(phoneNumber);
             }
 
             /**
-             * Returns the optional username echo.
+             * Returns the optional {@code username} echo.
              *
-             * @return an {@link Optional} carrying the username
+             * @return an {@link Optional} carrying the username, or empty when the relay omitted it
              */
             public Optional<String> username() {
                 return Optional.ofNullable(username);
             }
 
             /**
-             * Tries to parse an outcome entry from a single
-             * {@code <participant>} child.
+             * Tries to parse an outcome row from a single {@code <participant>} child of the {@code <revoke>}
+             * payload.
              *
-             * @param node the {@code <participant>} child; never
-             *             {@code null}
-             * @return an {@link Optional} carrying the parsed
-             *         entry, or empty when the node shape does
-             *         not match
-             * @throws NullPointerException if {@code node} is
-             *                              {@code null}
+             * @apiNote Matches the WA Web parser
+             * {@code parseRevokeRequestCodeResponseSuccessRevokeParticipant}: the node must be a
+             * {@code <participant>} carrying a {@code jid} attribute, with an optional literal
+             * {@code error="404"} attribute.
+             *
+             * @param node the {@code <participant>} child
+             * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
+             * @throws NullPointerException if {@code node} is {@code null}
              */
             @WhatsAppWebExport(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseSuccess",
                     exports = "parseRevokeRequestCodeResponseSuccessRevokeParticipant",
@@ -292,6 +303,12 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
                 return Optional.of(new RevokeParticipantResult(jid, error, phoneNumber, username));
             }
 
+            /**
+             * Compares this row to {@code obj} for value equality across every field.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is a {@link RevokeParticipantResult} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -307,11 +324,21 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
                         && Objects.equals(this.username, that.username);
             }
 
+            /**
+             * Returns a hash composed of every field.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, error, phoneNumber, username);
             }
 
+            /**
+             * Returns a debug string carrying every field.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsRevokeRequestCodeResponse.Success.RevokeParticipantResult[jid=" + jid
@@ -323,29 +350,26 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected
-     * the request as malformed, unauthorised, or referencing a
-     * non-existent group.
+     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
+     * referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseClientError")
     final class ClientError implements SmaxGroupsRevokeRequestCodeResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -353,7 +377,7 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -362,24 +386,23 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseClientError",
                 exports = "parseRevokeRequestCodeResponseClientError",
@@ -392,6 +415,12 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -404,11 +433,21 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsRevokeRequestCodeResponse.ClientError[errorCode=" + errorCode
@@ -417,29 +456,25 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay
-     * encountered a transient internal failure while processing
-     * the request.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseServerError")
     final class ServerError implements SmaxGroupsRevokeRequestCodeResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -447,7 +482,7 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -456,24 +491,23 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsRevokeRequestCodeResponseServerError",
                 exports = "parseRevokeRequestCodeResponseServerError",
@@ -486,6 +520,12 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -498,11 +538,21 @@ public sealed interface SmaxGroupsRevokeRequestCodeResponse extends SmaxOperatio
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsRevokeRequestCodeResponse.ServerError[errorCode=" + errorCode

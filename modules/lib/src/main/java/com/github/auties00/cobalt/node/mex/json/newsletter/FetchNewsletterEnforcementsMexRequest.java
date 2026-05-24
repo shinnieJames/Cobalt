@@ -19,33 +19,56 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the moderation enforcement history for a newsletter.
+ * Builds the MEX request that fetches the moderation enforcement history
+ * of a newsletter.
  *
- * <p>The enforcement history includes profile picture deletions, account suspensions, violating message takedowns and geographical suspensions applied to the newsletter. Admins use it to audit moderation actions.
+ * @apiNote
+ * Drives the admin moderation surface that lists profile-picture
+ * deletions, account suspensions, violating-message takedowns and
+ * geographical suspensions applied to the newsletter, plus their appeal
+ * state. The {@code locale} variable selects the language for the
+ * human-readable policy text the server attaches to each enforcement.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterEnforcementsJob")
 public final class FetchNewsletterEnforcementsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterEnforcements} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterEnforcementsJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "25987882310910935";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchNewsletterEnforcements
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterEnforcements";
+
+    /**
+     * The locale tag the server uses when localising the policy text
+     * embedded in each enforcement record.
+     */
     private final String locale;
+
+    /**
+     * The newsletter Jid whose enforcement history is being fetched.
+     */
     private final String newsletterId;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request for the enforcement history of the given newsletter
+     * under the given locale.
      *
-     * @param locale the locale
-     * @param newsletterId the newsletter id
+     * @apiNote
+     * Both arguments are written as top-level GraphQL variables; pass
+     * {@code null} for either to skip emitting it (the server then applies
+     * its defaults).
+     *
+     * @param locale       the locale tag for localised policy text
+     * @param newsletterId the newsletter Jid
      */
     public FetchNewsletterEnforcementsMexRequest(String locale, String newsletterId) {
         this.locale = locale;
@@ -53,10 +76,10 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -64,10 +87,10 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -75,11 +98,20 @@ public final class FetchNewsletterEnforcementsMexRequest implements MexOperation
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {locale, newsletter_id}}} payload;
+     * either variable is omitted when its field is {@code null}.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterEnforcementsJob", exports = "mexFetchNewsletterEnforcements",
             adaptation = WhatsAppAdaptation.ADAPTED)

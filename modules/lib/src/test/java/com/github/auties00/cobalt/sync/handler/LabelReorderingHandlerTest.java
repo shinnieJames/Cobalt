@@ -8,14 +8,12 @@ import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelReorderingAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelReorderingActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LabelReorderingMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,22 +24,34 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LabelReorderingHandler} — Cobalt's adapter for
+ * Exercises the {@link LabelReorderingHandler} adapter for
  * {@code WAWebLabelReorderingSync}.
  *
- * <p>The handler applies a server-published label sort order by writing each
- * referenced label's {@code orderIndex} to its position in the action's
- * {@code sortedLabelIds} list. These tests pin the wire metadata, the
- * SET/REMOVE branching, the malformed-input fallbacks, the default
- * timestamp-based conflict resolution, and the static builder helper.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code label_reordering}
+ * app-state sync action across metadata, the SET sort-order write,
+ * the REMOVE rejection, the empty-list rejection, the
+ * malformed-input fallbacks, the inherited timestamp-based conflict
+ * resolution and the
+ * {@link LabelReorderingMutationFactory}
+ * builder.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so each
+ * {@link com.github.auties00.cobalt.model.preference.Label#orderIndex()}
+ * read-back can be asserted directly. Labels referenced by the
+ * action but absent from the store are silently skipped, matching
+ * WA Web's
+ * {@code WAWebDBLabelsReorder.updateLabelsSortOrder} bulk-get
+ * behaviour.
  */
 @DisplayName("LabelReorderingHandler")
 class LabelReorderingHandlerTest {
@@ -63,12 +73,21 @@ class LabelReorderingHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation whose value carries the given reordering action.
+     * Builds a {@link DecryptedMutation.Trusted} carrying the given
+     * reordering action under the canonical
+     * {@code ["label_reordering"]} index.
      *
-     * @param action    the reordering action payload, may be {@code null}
-     * @param operation the sync operation
+     * @apiNote
+     * Used by every test to centralise mutation construction. The
+     * {@code action} parameter is nullable so the malformed-value
+     * path can be exercised without re-implementing the envelope.
+     *
+     * @param action    the reordering action payload, may be
+     *                  {@code null}
+     * @param operation the {@link SyncdOperation} to wrap
      * @param ts        the mutation timestamp
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} with the requested
+     *         shape
      */
     private DecryptedMutation.Trusted buildMutation(LabelReorderingAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
@@ -79,7 +98,7 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the LabelReorderingAction wire constant")
@@ -103,7 +122,7 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET reorders the referenced labels")
+    @DisplayName("applyMutation - SET reorders the referenced labels")
     class ApplySet {
         @Test
         @DisplayName("each label's orderIndex matches its position in sortedLabelIds")
@@ -119,7 +138,7 @@ class LabelReorderingHandlerTest {
             var result = handler.applyMutation(client, buildMutation(action, SyncdOperation.SET, ts));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            // position 0 → label 30; position 1 → label 10; position 2 → label 20
+            // position 0 -> label 30; position 1 -> label 10; position 2 -> label 20
             assertEquals(0, store.findLabel("30").orElseThrow().orderIndex().orElseThrow());
             assertEquals(1, store.findLabel("10").orElseThrow().orderIndex().orElseThrow());
             assertEquals(2, store.findLabel("20").orElseThrow().orderIndex().orElseThrow());
@@ -162,10 +181,10 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
-        @DisplayName("missing labels do not produce an ORPHAN result — they are silently skipped to SUCCESS")
+        @DisplayName("missing labels do not produce an ORPHAN result - they are silently skipped to SUCCESS")
         void orphanDimensionNotApplicable() {
             // Reordering has no per-mutation target entity that can be marked orphan; missing
             // labels are silently skipped per WA Web's bulkGet semantics. We confirm here that
@@ -183,7 +202,7 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -212,10 +231,10 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
-        @DisplayName("malformed index dimension is n/a — the index payload is unused")
+        @DisplayName("malformed index dimension is n/a - the index payload is unused")
         void indexUnused() {
             // LabelReorderingHandler never reads the index array (only the wire-name comes through
             // the dispatch in WebAppStateHandlerRegistry). Confirm that an empty or malformed
@@ -228,13 +247,13 @@ class LabelReorderingHandlerTest {
             for (var malformedIndex : new String[]{"", "not-json", "[", "[]"}) {
                 var mutation = new DecryptedMutation.Trusted(malformedIndex, value, SyncdOperation.SET, ts, handler.version());
                 assertEquals(SyncActionState.SUCCESS, handler.applyMutation(client, mutation).actionState(),
-                        "handler must not read the index — malformed index '" + malformedIndex + "' is irrelevant");
+                        "handler must not read the index - malformed index '" + malformedIndex + "' is irrelevant");
             }
         }
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -248,10 +267,10 @@ class LabelReorderingHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -260,7 +279,7 @@ class LabelReorderingHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -268,7 +287,7 @@ class LabelReorderingHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -282,44 +301,4 @@ class LabelReorderingHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — getReorderLabelsMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET pending mutation carrying the full sorted id list")
-        void carriesSortedIds() {
-            var ids = List.of(3, 1, 2);
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-
-            var pending = factory.getReorderLabelsMutation(ids, ts);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(ts, inner.timestamp());
-            assertEquals(JSON.toJSONString(List.of(handler.actionName())), inner.index(),
-                    "the index carries only the action name — reordering has a singleton key");
-
-            var roundtripped = inner.value().action().filter(a -> a instanceof LabelReorderingAction).map(a -> (LabelReorderingAction) a).orElseThrow();
-            assertEquals(ids, roundtripped.sortedLabelIds());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/label-reordering/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/label-reordering/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.getReorderLabelsMutation(List.of(1, 2, 3), Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

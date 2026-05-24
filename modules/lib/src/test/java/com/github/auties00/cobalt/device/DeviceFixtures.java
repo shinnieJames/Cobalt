@@ -26,22 +26,22 @@ import java.util.Optional;
  * Loads device-package fixtures captured from a live WhatsApp Web session and
  * exposes them to JUnit tests.
  *
- * <p>Fixture provenance:
- * <ul>
- *   <li>JSONL stanza captures are written by the MCP tool
- *       {@code web_live_stanza_dump_to_file} and re-hydrate into Cobalt
- *       {@link Node} instances through {@link #loadEvents(String)} and
- *       {@link #buildNode(JSONObject)}.</li>
- *   <li>{@code .expected.json} oracle outputs are written by
- *       {@code web_live_debug_eval_to_file} and exposed as raw
- *       {@link JSONObject} so individual tests can assert against the
- *       fields they care about.</li>
- * </ul>
+ * @apiNote
+ * Used by every test in {@code com.github.auties00.cobalt.device.*} to access
+ * captured wire data without requiring a live web session. Two fixture
+ * families live under {@code src/test/resources/fixtures/device/}: JSONL
+ * stanza dumps written by the MCP tool {@code web_live_stanza_dump_to_file}
+ * (rehydrated through {@link #loadEvents(String)} and {@link #buildNode}),
+ * and {@code .expected.json} oracle outputs written by
+ * {@code web_live_debug_eval_to_file} (exposed as raw {@link JSONObject} so
+ * individual tests can assert against the fields they care about).
  *
- * <p>Both fixture families live under
- * {@code src/test/resources/fixtures/device/} and are discovered through
- * the classpath, matching the pattern established by
- * {@code com.github.auties00.cobalt.call.transport.relay.Fixtures}.
+ * @implNote
+ * This implementation mirrors the discovery pattern established by
+ * {@code com.github.auties00.cobalt.call.internal.transport.relay.Fixtures}: every
+ * fixture path lives under the {@code FIXTURE_ROOT} classpath prefix, and
+ * missing fixtures are reported via {@link #isAvailable(String)} so tests can
+ * skip cleanly rather than hard-failing when a corpus has not been captured.
  */
 public final class DeviceFixtures {
     /**
@@ -60,8 +60,12 @@ public final class DeviceFixtures {
      * Returns every captured stanza event in the given JSONL fixture, in
      * capture order.
      *
-     * @param topic the fixture topic (e.g. {@code "usync-self"}), without
-     *              the {@code .jsonl} extension
+     * @apiNote
+     * Use when a test needs to iterate over every event in a JSONL dump (for
+     * example, to find both directions of a captured exchange).
+     *
+     * @param topic the fixture topic (e.g. {@code "usync-self"}), without the
+     *              {@code .jsonl} extension
      * @return the list of {@code event} sub-objects, each shaped like the
      *         output of the MCP stanza logger
      * @throws UncheckedIOException if the fixture is missing or malformed
@@ -89,8 +93,15 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Returns the first event in the given fixture whose {@code tag} matches
-     * and whose attributes contain every key/value pair in {@code attrs}.
+     * Returns the first event in the given fixture whose tag and attributes
+     * match.
+     *
+     * @apiNote
+     * Convenience for tests that know exactly which event in a multi-event
+     * dump they want, identified by stanza tag and attribute subset. Throws
+     * with a diagnostic message rather than returning empty so the test
+     * reports clearly when the fixture no longer contains the expected
+     * event.
      *
      * @param topic the fixture topic
      * @param tag   the required stanza tag, or {@code null} to match any
@@ -124,9 +135,10 @@ public final class DeviceFixtures {
      * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a
      * captured event.
      *
-     * <p>The node tree is the recursive plain-JSON shape emitted by
-     * {@code script-sources.ts}: each level carries {@code tag},
-     * {@code attrs}, and {@code content}. Binary leaves are objects with
+     * @apiNote
+     * The node tree is the recursive plain-JSON shape emitted by
+     * {@code script-sources.ts}: each level carries {@code tag}, {@code attrs},
+     * and {@code content}. Binary leaves are objects with
      * {@code kind: "binary"} and a {@code base64} payload; nested children
      * are arrays of the same shape.
      *
@@ -144,8 +156,11 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Recursively reconstructs a {@link Node} from a captured plain-JSON
-     * tree.
+     * Recursively reconstructs a {@link Node} from a captured plain-JSON tree.
+     *
+     * @apiNote
+     * Use when the caller already extracted the {@code {tag, attrs, content}}
+     * object from a parent event and only needs a node assembly.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
@@ -156,9 +171,14 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Returns the expected-output JSON document paired with the given
-     * fixture topic, loaded from {@code <topic>.expected.json} alongside the
-     * stanza capture.
+     * Returns the expected-output JSON document paired with the given fixture
+     * topic.
+     *
+     * @apiNote
+     * Loads {@code <topic>.expected.json} alongside the stanza capture; raw
+     * fastjson document. Use when the test needs to inspect the wrapper itself
+     * (for example, to read the {@code result.value} field of a
+     * {@code web_live_debug_eval_to_file} capture).
      *
      * @param topic the fixture topic
      * @return the parsed expected document
@@ -176,20 +196,20 @@ public final class DeviceFixtures {
 
     /**
      * Returns the live-runtime result payload for an eval-style oracle
-     * fixture, unwrapping the {@code result.value} field and re-parsing it
-     * as JSON.
+     * fixture, unwrapping the {@code result.value} field and re-parsing it as
+     * JSON.
      *
-     * <p>{@code web_live_debug_eval_to_file} captures wrap the evaluation
-     * outcome as
-     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
+     * @apiNote
+     * {@code web_live_debug_eval_to_file} captures wrap the evaluation outcome
+     * as {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
      * The vast majority of oracle invocations stringify their result before
      * returning so the live runtime can deliver it through CDP without
      * structured-clone hazards; this helper undoes that stringification.
      *
      * @param topic the fixture topic
      * @return the parsed inner result document
-     * @throws IllegalStateException if the fixture is malformed or the
-     *                               result is not a {@code string} payload
+     * @throws IllegalStateException if the fixture is malformed or the result
+     *                               is not a {@code string} payload
      */
     public static JSONObject loadOracle(String topic) {
         var outer = loadExpected(topic);
@@ -208,9 +228,11 @@ public final class DeviceFixtures {
     /**
      * Returns whether the given fixture topic exists on the classpath.
      *
-     * <p>Allows tests to skip cleanly when a corpus has not yet been
-     * captured, instead of hard-failing on {@code getResourceAsStream}
-     * returning {@code null}.
+     * @apiNote
+     * Lets tests skip cleanly when a corpus has not yet been captured, instead
+     * of hard-failing on {@code getResourceAsStream} returning {@code null}.
+     * Only checks for the JSONL stanza dump; tests that depend on an
+     * accompanying oracle should check both.
      *
      * @param topic the fixture topic
      * @return {@code true} when {@code <topic>.jsonl} is on the classpath
@@ -221,12 +243,16 @@ public final class DeviceFixtures {
 
     /**
      * Creates an in-memory temporary store pre-configured with the given
-     * self-PN and self-LID. Use as the {@code store} dependency for any
-     * device-package class that takes a {@link WhatsAppStore}.
+     * self-PN and self-LID.
+     *
+     * @apiNote
+     * The standard {@link WhatsAppStore} dependency for any device-package
+     * class that takes a store. Pass {@code selfLid = null} when the test
+     * wants a pre-LID-migration store.
      *
      * @param selfPn  the local user's PN-form bare JID
-     * @param selfLid the local user's LID-form bare JID, or {@code null}
-     *                when the test wants a pre-LID-migration store
+     * @param selfLid the local user's LID-form bare JID, or {@code null} when
+     *                the test wants a pre-LID-migration store
      * @return the configured temporary store
      * @throws UncheckedIOException if the underlying factory cannot create
      *                              the store
@@ -249,6 +275,10 @@ public final class DeviceFixtures {
     /**
      * Opens the named classpath resource.
      *
+     * @apiNote
+     * Internal helper used by every fixture loader; throws with a diagnostic
+     * message so callers report the missing resource path.
+     *
      * @param resourcePath the resource path under {@code src/test/resources/}
      * @return an input stream over the resource bytes
      * @throws IOException if the resource is missing
@@ -262,22 +292,16 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Decodes a binary leaf object into raw bytes.
+     * Flattens a captured attribute value into the string form the
+     * {@link NodeBuilder#attribute(String, String)} setter expects.
      *
-     * @param binary the {@code {kind: "binary", base64: "..."}} object
-     * @return the decoded bytes
-     * @throws IllegalArgumentException if the object is not a binary leaf
-     */
-    /**
-     * Flattens a captured attribute value into the string form the Cobalt
-     * {@code NodeBuilder.attribute(String, String)} setter expects.
-     *
-     * <p>The MCP stanza logger captures WAWap's internal Jid wrappers as
+     * @apiNote
+     * The MCP stanza logger captures WAWap's internal JID wrappers as
      * {@code {"$1": {"type": <int>, "user": <string|null>, "server": <string>}}}.
      * Cobalt's {@link Node} carries those same JIDs as bare strings of the
-     * form {@code user@server} (or just {@code @server} when {@code user}
-     * is {@code null}, mirroring the WA Web {@code S_WHATSAPP_NET}-style
-     * server JIDs). Any other shape is delegated to {@link String#valueOf(Object)}.
+     * form {@code user@server} (or just {@code @server} when {@code user} is
+     * {@code null}, mirroring WA Web's {@code S_WHATSAPP_NET}-style server
+     * JIDs). Any other shape is delegated to {@link String#valueOf(Object)}.
      *
      * @param value the raw captured attribute value
      * @return the string-form value
@@ -292,6 +316,19 @@ public final class DeviceFixtures {
         return String.valueOf(value);
     }
 
+    /**
+     * Decodes a binary leaf object into raw bytes.
+     *
+     * @apiNote
+     * Internal helper used by {@link #buildNode(JSONObject)} and
+     * {@link #applyContent(NodeBuilder, Object)} to recover the binary payload
+     * of a captured {@code {kind: "binary", base64: "..."}} leaf.
+     *
+     * @param binary the {@code {kind: "binary", base64: "..."}} object
+     * @return the decoded bytes
+     * @throws IllegalArgumentException if the object lacks the {@code base64}
+     *                                  field
+     */
     private static byte[] decodeBinary(JSONObject binary) {
         var base64 = binary.getString("base64");
         if (base64 == null) {
@@ -302,6 +339,11 @@ public final class DeviceFixtures {
 
     /**
      * Builds a {@link Node} from a plain-JSON tree.
+     *
+     * @apiNote
+     * Recursive worker shared by {@link #buildNodeFromEvent(JSONObject)} and
+     * {@link #buildNodeFromTree(JSONObject)}; expects the
+     * {@code {tag, attrs, content}} shape.
      *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
@@ -329,8 +371,13 @@ public final class DeviceFixtures {
     }
 
     /**
-     * Applies a {@code content} value (binary leaf, child array, string, or
-     * {@code null}) onto the builder.
+     * Applies a {@code content} value onto the builder.
+     *
+     * @apiNote
+     * Handles the four content shapes the MCP stanza logger emits: a single
+     * binary leaf, a child array (which may interleave binary leaves with
+     * child nodes), a bare string, or {@code null}. Mirrors the dispatching
+     * the live JS logger does on the capture side.
      *
      * @param builder the target builder
      * @param content the JSON-shaped content value
@@ -343,8 +390,8 @@ public final class DeviceFixtures {
                 builder.content(decodeBinary(leaf));
                 return;
             }
-            // Single embedded child node (rare path: the logger sometimes emits a
-            // single child object rather than a one-element array).
+            // The logger occasionally emits a single embedded child node as a bare
+            // object rather than a one-element array.
             builder.content(buildNode(leaf));
             return;
         }
@@ -360,8 +407,6 @@ public final class DeviceFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    // Stringified leaf — treated as a text child node. This is rare
-                    // for device-package fixtures.
                     built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }
@@ -379,9 +424,14 @@ public final class DeviceFixtures {
     /**
      * Returns the parsed expected document for the given topic if available.
      *
+     * @apiNote
+     * Non-throwing variant of {@link #loadExpected(String)}: returns empty
+     * when the fixture is missing so callers can skip cleanly instead of
+     * catching {@link UncheckedIOException}.
+     *
      * @param topic the fixture topic
-     * @return the document, or {@link Optional#empty()} when no expected
-     *         file accompanies the fixture
+     * @return the document, or {@link Optional#empty()} when no expected file
+     *         accompanies the fixture
      */
     public static Optional<JSONObject> findExpected(String topic) {
         var resource = FIXTURE_ROOT + "/" + topic + ".expected.json";

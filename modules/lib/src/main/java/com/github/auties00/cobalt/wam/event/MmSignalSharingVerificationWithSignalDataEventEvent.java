@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.ConsentSource;
 import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.OnePdSignalNotSharedReason;
 import com.github.auties00.cobalt.wam.type.SignalCanceledReason;
@@ -24,6 +25,12 @@ import java.util.OptionalInt;
 @WhatsAppWebModule(moduleName = "WAWebMmSignalSharingVerificationWithSignalDataEventWamEvent")
 @WamEvent(id = 6856, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface MmSignalSharingVerificationWithSignalDataEventEvent extends WamEventSpec {
+    @WamProperty(index = 23, type = WamType.BOOLEAN)
+    Optional<Boolean> accountLinked();
+
+    @WamProperty(index = 24, type = WamType.ENUM)
+    Optional<ConsentSource> consentSource();
+
     @WamProperty(index = 1, type = WamType.STRING)
     Optional<String> entSourceSubplatform();
 

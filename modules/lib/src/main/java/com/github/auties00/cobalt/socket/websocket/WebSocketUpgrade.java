@@ -10,97 +10,105 @@ import java.util.Base64;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Performs the RFC 6455 §1.3 WebSocket upgrade handshake on an
+ * Performs the RFC 6455 section 1.3 WebSocket upgrade handshake on an
  * already-connected {@link Socket}.
  *
- * <p>The request is assembled into a single pre-sized {@code byte[]}
- * using pre-encoded static fragments and {@link System#arraycopy}, so
- * no {@code StringBuilder} or charset-encoder is involved on the hot
- * path. The response is parsed in place inside an 8 KiB scratch buffer
- * (grown on demand) using a sliding 32-bit window to locate the
- * {@code CRLF CRLF} terminator and inline byte-literal checks for the
- * mandatory headers.
+ * @apiNote
+ * Driven by
+ * {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}'s
+ * WebSocket transport after the TLS handshake completes, so the WA
+ * Web bundle's {@code /ws/chat} endpoint can start delivering binary
+ * frames. The leftover {@link ByteBuffer} returned by
+ * {@link #upgrade(Socket, String, String, int, String)} captures any
+ * bytes the server piggybacked on the upgrade response (the first
+ * WebSocket frame's leading bytes) so the caller can feed them through
+ * {@link WebSocketFrameInputStream} before touching the underlying
+ * stream again.
  *
- * <p>If the server piggybacks the first WebSocket frame on the same
- * TCP segment as the upgrade response, the bytes past
- * {@code CRLF CRLF} are returned as a {@link ByteBuffer} so the caller
- * can feed them through {@link WebSocketFrameInputStream} before
- * touching the underlying stream again.
+ * @implNote
+ * This implementation assembles the request into a single pre-sized
+ * {@code byte[]} via {@link System#arraycopy} on pre-encoded static
+ * fragments, so no {@link StringBuilder} or charset encoder runs on
+ * the hot path. The response is parsed in place inside an 8 KiB
+ * scratch buffer (grown on demand up to {@link #MAX_RESPONSE_SIZE})
+ * using a sliding 32-bit window to locate the {@code CRLF CRLF}
+ * terminator and inline byte-literal checks for the mandatory
+ * headers.
  */
 public final class WebSocketUpgrade {
 
     /**
      * The WebSocket protocol GUID used when computing the
      * {@code Sec-WebSocket-Accept} hash as defined by
-     * <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-1.3">RFC 6455 §1.3</a>.
+     * <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-1.3">RFC 6455 section 1.3</a>.
      */
     private static final byte[] WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
             .getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Length of the random Sec-WebSocket-Key in raw bytes before Base64
-     * encoding.
+     * The length of the random {@code Sec-WebSocket-Key} in raw
+     * bytes before Base64 encoding.
      */
     private static final int WEBSOCKET_KEY_BYTES = 16;
 
     /**
-     * Expected HTTP status code for a successful upgrade.
+     * The expected HTTP status code for a successful upgrade.
      */
     private static final int EXPECTED_STATUS_CODE = 101;
 
     /**
-     * Maximum total size of the response headers (including the status
-     * line and the terminating {@code CRLF CRLF}). Sized well above any
-     * realistic upgrade response.
+     * The maximum total size of the response headers (including the
+     * status line and the terminating {@code CRLF CRLF}); sized well
+     * above any realistic upgrade response.
      */
     private static final int MAX_RESPONSE_SIZE = 65536;
 
     /**
-     * Default size of the recyclable response read buffer.
+     * The default size of the recyclable response read buffer.
      */
     private static final int INITIAL_RESPONSE_BUFFER = 8192;
 
     /**
-     * Packed bytes representing {@code "\r\n\r\n"}, used to locate the
-     * end of the response headers with a single sliding 32-bit
-     * comparison.
+     * The packed bytes representing {@code "\r\n\r\n"}, used to
+     * locate the end of the response headers with a single sliding
+     * 32-bit comparison.
      */
     private static final int CRLF_CRLF = 0x0D0A0D0A;
 
     /**
-     * ASCII carriage-return byte.
+     * The ASCII carriage-return byte.
      */
     private static final byte CR = '\r';
 
     /**
-     * ASCII line-feed byte.
+     * The ASCII line-feed byte.
      */
     private static final byte LF = '\n';
 
     /**
-     * ASCII space byte (HTTP optional whitespace).
+     * The ASCII space byte (HTTP optional whitespace).
      */
     private static final byte SP = ' ';
 
     /**
-     * ASCII comma byte (HTTP list separator).
+     * The ASCII comma byte (HTTP list separator).
      */
     private static final byte COMMA = ',';
 
     /**
-     * Pre-encoded HTTP request line prefix: {@code "GET "}.
+     * The pre-encoded HTTP request line prefix: {@code "GET "}.
      */
     private static final byte[] REQ_LINE_PREFIX = "GET ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Pre-encoded HTTP version and Host header prefix:
+     * The pre-encoded HTTP version and Host header prefix:
      * {@code " HTTP/1.1\r\nHost: "}.
      */
     private static final byte[] REQ_HOST_HEADER = " HTTP/1.1\r\nHost: ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Pre-encoded static headers block from the CRLF after Host through
-     * the {@code Sec-WebSocket-Key} value prefix.
+     * The pre-encoded static headers block from the CRLF after Host
+     * through the {@code Sec-WebSocket-Key} value prefix.
      */
     private static final byte[] REQ_STATIC_BLOCK = (
             "\r\nUpgrade: websocket\r\n" +
@@ -110,53 +118,54 @@ public final class WebSocketUpgrade {
     ).getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Pre-encoded Origin header prefix including leading CRLF:
+     * The pre-encoded Origin header prefix including leading CRLF:
      * {@code "\r\nOrigin: https://"}.
      */
     private static final byte[] REQ_ORIGIN = "\r\nOrigin: https://".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Pre-encoded User-Agent header prefix including leading CRLF:
-     * {@code "\r\nUser-Agent: "}.
+     * The pre-encoded User-Agent header prefix including leading
+     * CRLF: {@code "\r\nUser-Agent: "}.
      */
     private static final byte[] REQ_USER_AGENT_PREFIX = "\r\nUser-Agent: ".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Pre-encoded request terminator: {@code "\r\n\r\n"}.
+     * The pre-encoded request terminator: {@code "\r\n\r\n"}.
      */
     private static final byte[] REQ_END = "\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Lowercase ASCII bytes of the {@code Upgrade} header name, used
-     * for case-insensitive comparison.
+     * The lowercase ASCII bytes of the {@code Upgrade} header name,
+     * used for case-insensitive comparison.
      */
     private static final byte[] HEADER_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Lowercase ASCII bytes of the {@code Connection} header name.
+     * The lowercase ASCII bytes of the {@code Connection} header
+     * name.
      */
     private static final byte[] HEADER_CONNECTION = "connection".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Lowercase ASCII bytes of the {@code Sec-WebSocket-Accept}
-     * header name.
+     * The lowercase ASCII bytes of the
+     * {@code Sec-WebSocket-Accept} header name.
      */
     private static final byte[] HEADER_ACCEPT = "sec-websocket-accept".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Lowercase ASCII bytes of the expected {@code Upgrade} header
-     * value ({@code "websocket"}).
+     * The lowercase ASCII bytes of the expected {@code Upgrade}
+     * header value ({@code "websocket"}).
      */
     private static final byte[] VALUE_WEBSOCKET = "websocket".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Lowercase ASCII bytes of the expected token in the
+     * The lowercase ASCII bytes of the expected token in the
      * {@code Connection} header value ({@code "upgrade"}).
      */
     private static final byte[] VALUE_UPGRADE = "upgrade".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * Prevents instantiation of this utility class.
+     * Prevents instantiation of this utility holder.
      */
     private WebSocketUpgrade() {
 
@@ -165,10 +174,16 @@ public final class WebSocketUpgrade {
     /**
      * Performs the WebSocket upgrade handshake on {@code socket}.
      *
+     * @apiNote
+     * Called once per WebSocket transport open, after the TLS
+     * handshake has completed; the returned leftover bytes (if any)
+     * must be fed into {@link WebSocketFrameInputStream} so the
+     * server's piggybacked first frame is not lost.
+     *
      * @param socket    the already-connected (and, for TLS endpoints,
      *                  already-TLS-handshaken) socket
-     * @param path      the WebSocket endpoint path
-     *                  (e.g. {@code "/ws/chat"})
+     * @param path      the WebSocket endpoint path (e.g.
+     *                  {@code "/ws/chat"})
      * @param host      the target host for the {@code Host} and
      *                  {@code Origin} headers
      * @param port      the target port; the {@code Host} header omits
@@ -181,8 +196,8 @@ public final class WebSocketUpgrade {
      * @throws IOException if the request cannot be written, the
      *                     response is truncated, the status code is
      *                     not {@code 101}, a mandatory header is
-     *                     missing or invalid, or the response exceeds
-     *                     {@link #MAX_RESPONSE_SIZE} bytes
+     *                     missing or invalid, or the response
+     *                     exceeds {@link #MAX_RESPONSE_SIZE} bytes
      */
     public static ByteBuffer upgrade(Socket socket, String path, String host, int port, String userAgent) throws IOException {
         var key = createWebSocketKey();
@@ -205,10 +220,12 @@ public final class WebSocketUpgrade {
 
     /**
      * Computes the expected {@code Sec-WebSocket-Accept} value by
-     * hashing the key concatenated with the WebSocket GUID using SHA-1.
+     * hashing the key concatenated with the WebSocket GUID using
+     * SHA-1.
      *
      * @param key the client-generated key as ASCII bytes
-     * @return the expected Base64-encoded accept value as ASCII bytes
+     * @return the expected Base64-encoded accept value as ASCII
+     *         bytes
      * @throws IOException if SHA-1 is not available
      */
     private static byte[] computeExpectedAccept(byte[] key) throws IOException {
@@ -295,10 +312,10 @@ public final class WebSocketUpgrade {
     }
 
     /**
-     * Reads the upgrade response into a growable byte buffer, locates
-     * the {@code CRLF CRLF} terminator via a sliding 32-bit window,
-     * validates the status code and mandatory headers, and returns any
-     * leftover bytes past the terminator.
+     * Reads the upgrade response into a growable byte buffer,
+     * locates the {@code CRLF CRLF} terminator via a sliding 32-bit
+     * window, validates the status code and mandatory headers, and
+     * returns any leftover bytes past the terminator.
      *
      * @param socket         the connected socket
      * @param expectedAccept the expected {@code Sec-WebSocket-Accept}
@@ -315,7 +332,6 @@ public final class WebSocketUpgrade {
         var headerEnd = -1;
         var last4 = 0;
 
-        // Drain the response until CRLF CRLF.
         while (headerEnd < 0) {
             if (filled == buffer.length) {
                 if (buffer.length >= MAX_RESPONSE_SIZE) {
@@ -329,7 +345,6 @@ public final class WebSocketUpgrade {
             if (n < 0) {
                 throw new IOException("Unexpected end of stream while reading WebSocket upgrade response");
             }
-            // Slide the 32-bit window across the newly-read bytes.
             for (var i = filled; i < filled + n; i++) {
                 last4 = (last4 << 8) | (buffer[i] & 0xFF);
                 if (last4 == CRLF_CRLF) {
@@ -363,7 +378,6 @@ public final class WebSocketUpgrade {
      *                     status code is not {@code 101}
      */
     private static void validateStatusLine(byte[] buffer, int headerEnd) throws IOException {
-        // Find the end of the status line (the first CRLF).
         var lineEnd = indexOfCrlf(buffer, 0, headerEnd);
         if (lineEnd < 0) {
             throw new IOException("Malformed WebSocket upgrade response: no status line");
@@ -374,7 +388,6 @@ public final class WebSocketUpgrade {
         if (buffer[0] != 'H' || buffer[1] != 'T' || buffer[2] != 'T' || buffer[3] != 'P' || buffer[4] != '/') {
             throw new IOException("Malformed WebSocket upgrade status line: " + previewLine(buffer, 0, lineEnd));
         }
-        // Skip the version (HTTP/X[.Y]).
         var pos = 5;
         if (!isDigit(buffer[pos])) {
             throw new IOException("Malformed WebSocket upgrade status line: " + previewLine(buffer, 0, lineEnd));
@@ -410,8 +423,7 @@ public final class WebSocketUpgrade {
     /**
      * Walks the header block line by line and validates the three
      * mandatory headers: {@code Upgrade: websocket},
-     * {@code Connection: upgrade}, and {@code Sec-WebSocket-Accept:
-     * <expectedAccept>}.
+     * {@code Connection: upgrade} and {@code Sec-WebSocket-Accept}.
      *
      * @param buffer         the response buffer
      * @param headerEnd      the offset (exclusive) of the end of the
@@ -421,7 +433,6 @@ public final class WebSocketUpgrade {
      *                     invalid
      */
     private static void validateHeaders(byte[] buffer, int headerEnd, byte[] expectedAccept) throws IOException {
-        // Skip the status line.
         var pos = indexOfCrlf(buffer, 0, headerEnd) + 2;
 
         var foundUpgrade = false;
@@ -466,8 +477,8 @@ public final class WebSocketUpgrade {
     }
 
     /**
-     * Returns the index of the next CRLF starting at {@code from}, or
-     * {@code -1} if none exists before {@code limit}.
+     * Returns the index of the next CRLF starting at {@code from},
+     * or {@code -1} if none exists before {@code limit}.
      *
      * @param buffer the byte array to scan
      * @param from   the inclusive start offset
@@ -614,7 +625,7 @@ public final class WebSocketUpgrade {
                 }
             }
             if (pos < end) {
-                pos++; // skip the comma
+                pos++;
             }
         }
         return false;

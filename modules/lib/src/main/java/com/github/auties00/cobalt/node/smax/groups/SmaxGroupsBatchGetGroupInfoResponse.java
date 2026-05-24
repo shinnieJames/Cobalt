@@ -16,23 +16,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsBatchGetGroupInfoRequest}.
+ * The sealed reply family for a {@link SmaxGroupsBatchGetGroupInfoRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's
+ * {@code Success}/{@code ClientError}/{@code ServerError} cases. The success branch wraps a heterogeneous
+ * {@code <groups>} list: each child is either a full {@code group_info}, a truncated {@code group_info}, a
+ * {@code group_forbidden} marker, or a {@code group_not_exist} marker. {@code WAWebGroupQueryJob} dispatches on
+ * the child's shape to populate the chat database accordingly.
  */
 public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperation.Response
         permits SmaxGroupsBatchGetGroupInfoResponse.Success, SmaxGroupsBatchGetGroupInfoResponse.ClientError, SmaxGroupsBatchGetGroupInfoResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsBatchGetGroupInfoResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsBatchGetGroupInfoResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsBatchGetGroupInfoRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound {@link SmaxGroupsBatchGetGroupInfoRequest} stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsBatchGetGroupInfoRPC",
@@ -52,34 +60,31 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code Success} reply variant — carries a {@code <groups>}
-     * wrapper with one {@code <group/>} child per requested group.
+     * The reply variant carrying a {@code <groups>} wrapper with one {@code <group/>} child per requested group.
      *
-     * <p>Each {@code <group/>} child is one of four sub-shapes
-     * (full {@code group_info}, truncated {@code group_info},
-     * {@code group_forbidden} marker, or {@code group_not_exist}
-     * marker); callers dispatch on the child's structure via
-     * standard {@link Node} accessors. The wrapper is exposed as an
-     * unmodifiable {@link List} of raw {@link Node}s, mirroring the
-     * precedent from
-     * {@link SmaxGroupsGetParticipatingGroupsResponse.Success}.
+     * @apiNote Each {@code <group/>} child takes one of four sub-shapes (full {@code group_info}, truncated
+     * {@code group_info}, {@code group_forbidden}, {@code group_not_exist}); callers dispatch on the child's
+     * structure via standard {@link Node} accessors. Cobalt exposes the wrapper as an unmodifiable {@link List}
+     * of raw {@link Node}s rather than projecting the four sub-shapes into a typed disjunction, mirroring the
+     * shape exposed by {@link SmaxGroupsGetParticipatingGroupsResponse.Success}.
+     *
+     * @implNote Cobalt does not yet model the four sub-shapes as a typed alternation. Callers that need to
+     * branch on the shape should inspect the {@code <group/>} child's description and attributes directly; the
+     * upstream WA Web dispatcher in {@code WAWebGroupQueryJob} performs the same inspection.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupInfoOrTruncatedGroupInfoOrGroupForbiddenOrGroupNotExistMixinGroup")
     final class Success implements SmaxGroupsBatchGetGroupInfoResponse {
         /**
-         * The list of {@code <group/>} children carried by the
-         * {@code <groups>} wrapper.
+         * The {@code <group/>} children carried by the {@code <groups>} wrapper.
          */
         private final List<Node> groups;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success}.
          *
-         * @param groups the per-group reply nodes; never
-         *               {@code null}
-         * @throws NullPointerException if {@code groups} is
-         *                              {@code null}
+         * @param groups the per-group reply nodes; defensively copied
+         * @throws NullPointerException if {@code groups} is {@code null}
          */
         public Success(List<Node> groups) {
             Objects.requireNonNull(groups, "groups cannot be null");
@@ -87,24 +92,23 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the list of per-group reply nodes.
+         * Returns the per-group reply nodes.
          *
-         * @return an unmodifiable list of {@code <group/>} nodes;
-         *         never {@code null}
+         * @return an unmodifiable list of {@code <group/>} {@link Node}s; never {@code null}
          */
         public List<Node> groups() {
             return groups;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseBatchGetGroupInfoResponseSuccess}: the IQ must be a
+         * valid {@code type="result"} echo of the request and must carry a non-empty {@code <groups>} wrapper.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseSuccess",
                 exports = "parseBatchGetGroupInfoResponseSuccess",
@@ -124,6 +128,12 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return Optional.of(new Success(groups));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality on {@link #groups()}.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with the same group list
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -136,11 +146,21 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return Objects.equals(this.groups, that.groups);
         }
 
+        /**
+         * Returns a hash derived from {@link #groups()}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(groups);
         }
 
+        /**
+         * Returns a debug string carrying {@link #groups()}.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsBatchGetGroupInfoResponse.Success[groups=" + groups + ']';
@@ -148,27 +168,25 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * request as malformed or unauthorised.
+     * The reply variant emitted when the relay rejected the request as malformed or unauthorised.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseClientError")
     final class ClientError implements SmaxGroupsBatchGetGroupInfoResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -176,7 +194,7 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -185,24 +203,23 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseClientError",
                 exports = "parseBatchGetGroupInfoResponseClientError",
@@ -215,6 +232,12 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -227,11 +250,21 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsBatchGetGroupInfoResponse.ClientError[errorCode=" + errorCode
@@ -240,27 +273,25 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered
-     * a transient internal failure while processing the request.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseServerError")
     final class ServerError implements SmaxGroupsBatchGetGroupInfoResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -268,7 +299,7 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -277,24 +308,23 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsBatchGetGroupInfoResponseServerError",
                 exports = "parseBatchGetGroupInfoResponseServerError",
@@ -307,6 +337,12 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -319,11 +355,21 @@ public sealed interface SmaxGroupsBatchGetGroupInfoResponse extends SmaxOperatio
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsBatchGetGroupInfoResponse.ServerError[errorCode=" + errorCode

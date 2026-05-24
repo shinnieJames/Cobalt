@@ -66,5 +66,7 @@ public enum NotificationTypeEnum {
     @WamEnumConstant(57) NEWSLETTER_MILESTONE_UPDATE_QUIZ_RESPONSES,
     @WamEnumConstant(58) NEWSLETTER_MILESTONE_UPDATE_QUESTION_RESPONSES,
     @WamEnumConstant(59) CALL_TRANSFER,
-    @WamEnumConstant(60) AI_MESSAGE
+    @WamEnumConstant(60) AI_MESSAGE,
+    @WamEnumConstant(61) PIN_MESSAGE,
+    @WamEnumConstant(62) ADMIN_GROUP_JOIN_REQUEST
 }

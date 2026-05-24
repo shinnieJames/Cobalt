@@ -12,43 +12,57 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound notification — the relay's "your group list is stale"
- * hint carrying the affected group JIDs.
+ * The inbound {@code <notification type="w:gp2">} stanza that signals one or more groups' metadata has gone stale on
+ * the client and must be re-queried.
+ *
+ * @apiNote Drives the {@code WAWebHandleGroupsDirtyNotification.handleGroupsDirtyNotificationJob} flow: WA Web pushes
+ * this notification when group-server-side caches invalidate (group renames, ownership transfers, etc.); the client
+ * must re-query the affected groups via the {@code queryAndUpdateGroupsMetadataByJids} job and then ack the
+ * notification via {@link SmaxGroupsGroupsDirtyNotificationAcknowledgement}. The relay caps the affected-group list
+ * at 10000 entries server-side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupsDirtyNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsServerNotificationMixin")
 public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOperation.Response {
     /**
-     * The affected group JIDs (1..10000 entries per WA Web).
+     * The list of stale group {@link Jid}s carried by the inbound notification.
      */
     private final List<Jid> dirtyGroups;
 
     /**
-     * Constructs a new inbound projection.
+     * Constructs a {@link SmaxGroupsGroupsDirtyNotificationResponse} projection.
      *
-     * @param dirtyGroups the list of stale-group JIDs; never
-     *                    {@code null} (defaults to empty)
+     * @apiNote {@code null} normalises to {@link List#of()} for callers that want to construct an empty notification
+     * directly.
+     *
+     * @param dirtyGroups the list of stale group {@link Jid}s; may be {@code null}
      */
     public SmaxGroupsGroupsDirtyNotificationResponse(List<Jid> dirtyGroups) {
         this.dirtyGroups = List.copyOf(Objects.requireNonNullElse(dirtyGroups, List.of()));
     }
 
     /**
-     * Returns the list of affected group JIDs.
+     * Returns the list of stale group {@link Jid}s.
      *
-     * @return an unmodifiable list; never {@code null}
+     * @return an unmodifiable list of dirty group JIDs; never {@code null}
      */
     public List<Jid> dirtyGroups() {
         return dirtyGroups;
     }
 
     /**
-     * Tries to parse an {@link SmaxGroupsGroupsDirtyNotificationResponse} projection from the given
-     * {@code <notification/>} stanza.
+     * Tries to parse a {@link SmaxGroupsGroupsDirtyNotificationResponse} from the given {@code <notification/>} stanza.
+     *
+     * @apiNote Matches when the notification carries {@code type="w:gp2"}, a {@code from="g.us"} domain, and a
+     * {@code <groups_dirty>} child holding one or more {@code <group jid="..."/>} entries.
+     *
+     * @implNote WA Web's {@code parseGroupsDirtyNotificationRequest} bounds the dirty-group list to {@code [1, 10000]}
+     * and throws on out-of-range counts; Cobalt mirrors the matching shape but accepts zero entries so callers can
+     * detect an empty payload without exception handling.
      *
      * @param node the inbound notification stanza
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza doesn't match the expected shape
+     * @return an {@link Optional} carrying the parsed projection, or empty when the stanza shape does not match
+     * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInGroupsGroupsDirtyNotificationRequest",
             exports = "parseGroupsDirtyNotificationRequest",
@@ -61,7 +75,6 @@ public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOper
         if (!node.hasAttribute("type", "w:gp2")) {
             return Optional.empty();
         }
-        // The from attribute domain must equal the group server
         var from = node.getAttributeAsJid("from").orElse(null);
         if (from == null || !"g.us".equals(from.server().toString())) {
             return Optional.empty();
@@ -77,6 +90,13 @@ public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOper
         return Optional.of(new SmaxGroupsGroupsDirtyNotificationResponse(groups));
     }
 
+    /**
+     * Compares this notification to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGroupsDirtyNotificationResponse} with identical
+     *         fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -89,11 +109,21 @@ public final class SmaxGroupsGroupsDirtyNotificationResponse implements SmaxOper
         return Objects.equals(this.dirtyGroups, that.dirtyGroups);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(dirtyGroups);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGroupsDirtyNotificationResponse[dirtyGroups=" + dirtyGroups + ']';

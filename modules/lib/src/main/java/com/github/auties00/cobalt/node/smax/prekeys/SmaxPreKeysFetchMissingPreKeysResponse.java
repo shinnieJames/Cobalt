@@ -17,19 +17,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxPreKeysFetchMissingPreKeysRequest}.
+ * Sealed family of inbound reply variants produced by the relay in response
+ * to a {@link SmaxPreKeysFetchMissingPreKeysRequest}.
+ *
+ * @apiNote
+ * Mirrors WA Web's {@code WASmaxPreKeysFetchMissingPreKeysRPC} dispatch:
+ * {@link Success} (per-device bundles attached), {@link ClientError}
+ * (outer-request malformed), and {@link ServerError} (transient
+ * server-side failure). The {@link Success} branch may still carry
+ * {@link Success.UserError} entries for individual addressees the relay
+ * could not serve.
  */
 public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOperation.Response
         permits SmaxPreKeysFetchMissingPreKeysResponse.Success, SmaxPreKeysFetchMissingPreKeysResponse.ClientError, SmaxPreKeysFetchMissingPreKeysResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxPreKeysFetchMissingPreKeysResponse} variant in priority order.
+     * Tries each {@link SmaxPreKeysFetchMissingPreKeysResponse} variant
+     * in priority order and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza. Never {@code null}
-     * @param request the original outbound stanza. Never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         on no-match
+     * @apiNote
+     * Mirrors WA Web's success-first dispatcher short-circuit; an empty
+     * result indicates a protocol violation.
+     *
+     * @implNote
+     * This implementation tries {@link Success}, then {@link ClientError},
+     * then {@link ServerError}.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or
+     *         {@link Optional#empty()} on no-match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPreKeysFetchMissingPreKeysRPC",
@@ -49,34 +67,46 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
     }
 
     /**
-     * The {@code Success} reply variant. The relay produced a
-     * {@code <list>} carrying one {@code <user>} entry per requested
-     * user, each entry carrying one {@code <device>} per requested
-     * device.
+     * The {@code Success} reply variant.
+     *
+     * @apiNote
+     * Wraps the {@code <list>} carrying one {@code <user>} child per
+     * addressee; each {@link UserEntry} is either a
+     * {@link UserDeviceBundle} carrying device-level pre-key projections
+     * or a {@link UserError} when the relay rejected the per-user fetch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysIQResultResponseMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysResponsePaddingMixin")
     final class Success implements SmaxPreKeysFetchMissingPreKeysResponse {
         /**
-         * The list of per-user projections.
+         * The per-user entries in the order the relay produced them.
          */
         private final List<UserEntry> users;
 
         /**
          * Constructs a successful reply.
          *
-         * @param users the per-user entries. Never {@code null}
-         *              (defaults to empty)
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after envelope validation; the
+         * list is defensively copied.
+         *
+         * @param users the per-user entries; defaults to an empty list
+         *              when {@code null}
          */
         public Success(List<UserEntry> users) {
             this.users = List.copyOf(Objects.requireNonNullElse(users, List.of()));
         }
 
         /**
-         * Returns the list of per-user projections.
+         * Returns the list of per-user entries.
          *
-         * @return an unmodifiable list. Never {@code null}
+         * @apiNote
+         * Each element is either a {@link UserDeviceBundle} or a
+         * {@link UserError}; switch on the sealed disjunction in the
+         * consumer.
+         *
+         * @return an unmodifiable {@link List} of {@link UserEntry}
          */
         public List<UserEntry> users() {
             return users;
@@ -85,6 +115,17 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         /**
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope fails
+         * validation, when no {@code <list>} child is present, or when
+         * any {@code <user>} grandchild fails per-user parsing.
+         *
+         * @implNote
+         * This implementation walks the {@code <list>} child once,
+         * collecting per-user entries via {@link UserEntry#of(Node)};
+         * any failed entry aborts the whole parse so the dispatcher
+         * falls through to the error branches.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -113,6 +154,12 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return Optional.of(new Success(entries));
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation compares the {@link #users} list.
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -125,39 +172,67 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return Objects.equals(this.users, that.users);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation hashes the {@link #users} list.
+         */
         @Override
         public int hashCode() {
             return Objects.hash(users);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation mirrors the record-like rendering used
+         * across the {@code Smax*} response family.
+         */
         @Override
         public String toString() {
             return "SmaxPreKeysFetchMissingPreKeysResponse.Success[users=" + users + ']';
         }
 
         /**
-         * Sealed disjunction of the two per-user reply shapes. Either a
-         * {@link UserDeviceBundle} carrying device-level pre-key
+         * Sealed disjunction of the two per-user reply shapes.
+         *
+         * @apiNote
+         * Either a {@link UserDeviceBundle} carrying per-device pre-key
          * projections, or a {@link UserError} when the relay rejected
          * the per-user fetch.
          */
         public sealed interface UserEntry permits UserDeviceBundle, UserError {
 
             /**
-             * Returns the per-user JID echoed by the relay.
+             * Returns the per-user {@link Jid} echoed by the relay.
              *
-             * @return the JID. Never {@code null}
+             * @apiNote
+             * Common to both variants so callers can correlate the entry
+             * with the original request without down-casting.
+             *
+             * @return the per-user {@link Jid}
              */
             Jid userJid();
 
             /**
              * Tries to parse a {@link UserEntry} from the given
-             * {@code <user/>} grandchild.
+             * {@code <user>} grandchild.
              *
-             * @param userNode the {@code <user/>} grandchild. Never
-             *                 {@code null}
-             * @return an {@link Optional} carrying the parsed entry, or
-             *         empty on no-match
+             * @apiNote
+             * Returns {@link Optional#empty()} when the node matches
+             * neither the success nor the error shape.
+             *
+             * @implNote
+             * This implementation tries {@link UserDeviceBundle} first
+             * then {@link UserError}, matching the WA Web parser's
+             * priority.
+             *
+             * @param userNode the {@code <user>} grandchild
+             * @return an {@link Optional} carrying the parsed entry
+             * @throws NullPointerException if {@code userNode} is
+             *                              {@code null}
              */
             static Optional<UserEntry> of(Node userNode) {
                 Objects.requireNonNull(userNode, "userNode cannot be null");
@@ -170,28 +245,36 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         }
 
         /**
-         * The successful per-user projection. Carries one
-         * {@link DeviceKeyBundle} per device the relay was able to
-         * resolve.
+         * The successful per-user projection.
+         *
+         * @apiNote
+         * Carries one {@link DeviceKeyBundle} per device the relay was
+         * able to resolve; mirrors WA Web's
+         * {@code FetchMissingPreKeysUserSuccess} branch.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserSuccessMixin")
         public static final class UserDeviceBundle implements UserEntry {
             /**
-             * The per-user JID echoed by the relay.
+             * The per-user {@link Jid} echoed by the relay.
              */
             private final Jid userJid;
 
             /**
-             * The per-device bundle projections (1..100 per WA Web).
+             * The per-device bundle projections (one to one hundred per
+             * the WA Web {@code REPEATED_CHILD(1, 100)} schema).
              */
             private final List<DeviceKeyBundle> devices;
 
             /**
              * Constructs a per-user projection.
              *
-             * @param userJid the user JID. Never {@code null}
-             * @param devices the per-device bundles. Never {@code null}
-             *                (defaults to empty)
+             * @apiNote
+             * Used by {@link #of(Node)} after every device grandchild
+             * passes parsing.
+             *
+             * @param userJid the user {@link Jid}
+             * @param devices the per-device bundles; defaults to an
+             *                empty list when {@code null}
              * @throws NullPointerException if {@code userJid} is
              *                              {@code null}
              */
@@ -201,9 +284,7 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             }
 
             /**
-             * Returns the per-user JID echoed by the relay.
-             *
-             * @return the JID. Never {@code null}
+             * {@inheritDoc}
              */
             @Override
             public Jid userJid() {
@@ -213,7 +294,12 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the per-device bundle projections.
              *
-             * @return an unmodifiable list. Never {@code null}
+             * @apiNote
+             * Each entry feeds Cobalt's Signal session re-establishment
+             * for one device of the addressee user.
+             *
+             * @return an unmodifiable {@link List} of
+             *         {@link DeviceKeyBundle}
              */
             public List<DeviceKeyBundle> devices() {
                 return devices;
@@ -221,11 +307,26 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Tries to parse a {@link UserDeviceBundle} from the given
-             * {@code <user/>} grandchild.
+             * {@code <user>} grandchild.
              *
-             * @param userNode the {@code <user/>} grandchild
-             * @return an {@link Optional} carrying the parsed
-             *         projection, or empty on no-match
+             * @apiNote
+             * Returns {@link Optional#empty()} when any device
+             * grandchild fails parsing or when the user node contains no
+             * devices (which violates the {@code REPEATED_CHILD(1, 100)}
+             * minimum and lets the consumer fall through to the
+             * {@link UserError} branch).
+             *
+             * @implNote
+             * This implementation walks every {@code <device>}
+             * grandchild via {@link DeviceKeyBundle#of(Node)}; an empty
+             * collected list is rejected so the dispatcher can try the
+             * {@link UserError} shape instead.
+             *
+             * @param userNode the {@code <user>} grandchild
+             * @return an {@link Optional} carrying the projection, or
+             *         empty on no-match
+             * @throws NullPointerException if {@code userNode} is
+             *                              {@code null}
              */
             @WhatsAppWebExport(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserSuccessMixin",
                     exports = "parseFetchMissingPreKeysUserSuccessMixin",
@@ -248,14 +349,17 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                     devicesList.add(device);
                 }
                 if (devicesList.isEmpty()) {
-                    // The mixin requires at least one device per user
-                    // (REPEATED_CHILD min=1). Surface as parse-fail so
-                    // the UserError branch can be tried.
                     return Optional.empty();
                 }
                 return Optional.of(new UserDeviceBundle(jid, devicesList));
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation compares the JID and the devices list.
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -269,11 +373,25 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                         && Objects.equals(this.devices, that.devices);
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation hashes both fields via
+             * {@link Objects#hash(Object...)}.
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(userJid, devices);
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation mirrors the record-like rendering used
+             * across the {@code Smax*} response family.
+             */
             @Override
             public String toString() {
                 return "SmaxPreKeysFetchMissingPreKeysResponse.Success.UserDeviceBundle[userJid=" + userJid
@@ -282,9 +400,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         }
 
         /**
-         * The per-device pre-key bundle projection. Carries every
-         * piece of cryptographic material needed to seed a Signal
-         * session for one device of a target user.
+         * The per-device pre-key bundle projection.
+         *
+         * @apiNote
+         * Carries every piece of cryptographic material needed to seed a
+         * Signal session for one device of a target user; mirrors the
+         * {@link SmaxPreKeysFetchKeyBundlesResponse.Success.UserKeyBundle}
+         * shape but keyed on device id rather than on the user JID.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserSuccessMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysRegistrationIDMixin")
@@ -295,7 +417,7 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysDeviceIdentityMixin")
         public static final class DeviceKeyBundle {
             /**
-             * The numeric device id ({@code 0..99}).
+             * The numeric device id in the {@code [0, 99]} range.
              */
             private final int deviceId;
 
@@ -316,7 +438,8 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             private final byte[] registrationId;
 
             /**
-             * The optional 1-byte key-type marker (literal {@code [5]}).
+             * The optional 1-byte key-type marker (literal {@code [5]}
+             * for Curve25519).
              */
             private final byte[] keyType;
 
@@ -326,12 +449,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             private final byte[] identityKey;
 
             /**
-             * The optional unsigned pre-key.
+             * The optional unsigned pre-key projection.
              */
             private final SmaxPreKeysFetchKeyBundlesResponse.Success.UserKeyBundle.PreKey preKey;
 
             /**
-             * The signed pre-key.
+             * The signed pre-key projection (always present in a
+             * successful bundle).
              */
             private final SmaxPreKeysFetchKeyBundlesResponse.Success.UserKeyBundle.SignedPreKey signedPreKey;
 
@@ -343,22 +467,19 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Constructs a device-key-bundle projection.
              *
+             * @apiNote
+             * Used by {@link #of(Node)} after the {@code <device>}
+             * grandchild passes every per-field check.
+             *
              * @param deviceId       the device id
-             * @param timestamp      the optional relay timestamp. May be
-             *                       {@code null}
+             * @param timestamp      the optional relay timestamp
              * @param cloudApi       whether the cloud-api marker was set
-             * @param registrationId the 4-byte registration id. Never
-             *                       {@code null}
-             * @param keyType        the optional 1-byte key-type marker;
-             *                       may be {@code null}
-             * @param identityKey    the 32-byte identity key. Never
-             *                       {@code null}
-             * @param preKey         the optional pre-key. May be
-             *                       {@code null}
-             * @param signedPreKey   the signed pre-key. Never
-             *                       {@code null}
-             * @param deviceIdentity the optional device-identity bytes;
-             *                       may be {@code null}
+             * @param registrationId the 4-byte registration id
+             * @param keyType        the optional 1-byte key-type marker
+             * @param identityKey    the 32-byte identity key
+             * @param preKey         the optional pre-key
+             * @param signedPreKey   the signed pre-key
+             * @param deviceIdentity the optional device-identity bytes
              * @throws NullPointerException if any non-optional argument
              *                              is {@code null}
              */
@@ -385,6 +506,9 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the numeric device id.
              *
+             * @apiNote
+             * Identifies the device-list slot in the addressee account.
+             *
              * @return the device id
              */
             public int deviceId() {
@@ -393,6 +517,9 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Returns the optional relay timestamp.
+             *
+             * @apiNote
+             * Surfaced for audit and replay-window enforcement.
              *
              * @return an {@link Optional} carrying the timestamp
              */
@@ -403,6 +530,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns whether the cloud-api marker was set.
              *
+             * @apiNote
+             * Lets callers route Cloud-API bundles through any custom
+             * handling distinct from regular user accounts.
+             *
              * @return {@code true} when the marker was present
              */
             public boolean cloudApi() {
@@ -412,7 +543,11 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the 4-byte registration id.
              *
-             * @return the registration bytes. Never {@code null}
+             * @apiNote
+             * Decoded as an unsigned big-endian integer by the Signal
+             * layer.
+             *
+             * @return the raw bytes
              */
             public byte[] registrationId() {
                 return registrationId;
@@ -420,6 +555,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Returns the optional 1-byte key-type marker.
+             *
+             * @apiNote
+             * Always {@code [5]} (Curve25519) when present; absent on
+             * legacy bundles.
              *
              * @return an {@link Optional} carrying the marker
              */
@@ -430,7 +569,11 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the 32-byte identity key.
              *
-             * @return the identity key bytes. Never {@code null}
+             * @apiNote
+             * Feeds the Signal session as the addressee device's
+             * long-term public identity.
+             *
+             * @return the raw bytes
              */
             public byte[] identityKey() {
                 return identityKey;
@@ -438,6 +581,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Returns the optional pre-key.
+             *
+             * @apiNote
+             * Cobalt's Signal layer falls back to the signed pre-key
+             * when this is empty.
              *
              * @return an {@link Optional} carrying the pre-key
              */
@@ -448,7 +595,11 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the signed pre-key.
              *
-             * @return the signed pre-key. Never {@code null}
+             * @apiNote
+             * Always present in a successful bundle; callers can
+             * dereference without an {@link Optional}.
+             *
+             * @return the signed pre-key
              */
             public SmaxPreKeysFetchKeyBundlesResponse.Success.UserKeyBundle.SignedPreKey signedPreKey() {
                 return signedPreKey;
@@ -456,6 +607,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Returns the optional device-identity attestation bytes.
+             *
+             * @apiNote
+             * Present only when the original request set
+             * {@code hasUserReasonIdentity=true}.
              *
              * @return an {@link Optional} carrying the bytes
              */
@@ -465,11 +620,24 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Tries to parse a {@link DeviceKeyBundle} from the given
-             * {@code <device/>} element.
+             * {@code <device>} element.
              *
-             * @param deviceNode the {@code <device/>} element
+             * @apiNote
+             * Returns {@link Optional#empty()} for any malformed sub-tree
+             * (wrong length, missing required child, out-of-range id,
+             * etc.).
+             *
+             * @implNote
+             * This implementation enforces the WA Web length and range
+             * contracts on each field: 4 bytes for registration id,
+             * 1 byte for key type, 32 bytes for identity key, device id
+             * within {@code [0, 99]}.
+             *
+             * @param deviceNode the {@code <device>} element
              * @return an {@link Optional} carrying the parsed bundle, or
              *         empty on no-match
+             * @throws NullPointerException if {@code deviceNode} is
+             *                              {@code null}
              */
             @WhatsAppWebExport(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserSuccessMixin",
                     exports = "parseFetchMissingPreKeysUserSuccessDevice",
@@ -547,6 +715,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                         deviceIdentityBytes));
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation compares every carried field; byte
+             * arrays go through {@link Arrays#equals(byte[], byte[])}.
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -567,6 +742,15 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                         && Arrays.equals(this.deviceIdentity, that.deviceIdentity);
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation rolls the scalar fields through
+             * {@link Objects#hash(Object...)} and combines them with
+             * {@link Arrays#hashCode(byte[])} for the byte-array
+             * fields.
+             */
             @Override
             public int hashCode() {
                 var result = Objects.hash(deviceId, timestamp, cloudApi, preKey, signedPreKey);
@@ -577,6 +761,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                 return result;
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation renders byte arrays as a length-only
+             * summary to avoid leaking key material into logs.
+             */
             @Override
             public String toString() {
                 return "SmaxPreKeysFetchMissingPreKeysResponse.Success.DeviceKeyBundle[deviceId=" + deviceId
@@ -592,19 +783,24 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         }
 
         /**
-         * The per-user error projection. Surfaces a relay-side
-         * rejection for a single addressee.
+         * The per-user error projection.
+         *
+         * @apiNote
+         * Surfaces a relay-side rejection for a single addressee; mirrors
+         * WA Web's
+         * {@code FetchMissingPreKeysUserError}/{@code FetchMissingPreKeysUserErrorFallback}
+         * disjunction.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserErrorMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserErrorFallbackMixin")
         public static final class UserError implements UserEntry {
             /**
-             * The per-user JID echoed by the relay.
+             * The per-user {@link Jid} echoed by the relay.
              */
             private final Jid userJid;
 
             /**
-             * The numeric error code.
+             * The numeric error code in the {@code [500, 599]} range.
              */
             private final int errorCode;
 
@@ -616,10 +812,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Constructs a per-user error projection.
              *
-             * @param userJid   the per-user JID. Never {@code null}
+             * @apiNote
+             * Used by {@link #of(Node)} after the {@code <error>} child
+             * passes its code-range check.
+             *
+             * @param userJid   the per-user {@link Jid}
              * @param errorCode the numeric error code
-             * @param errorText the human-readable text. Never
-             *                  {@code null}
+             * @param errorText the human-readable text
              * @throws NullPointerException if {@code userJid} or
              *                              {@code errorText} is
              *                              {@code null}
@@ -631,9 +830,7 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             }
 
             /**
-             * Returns the per-user JID echoed by the relay.
-             *
-             * @return the JID. Never {@code null}
+             * {@inheritDoc}
              */
             @Override
             public Jid userJid() {
@@ -642,6 +839,9 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Returns the numeric error code.
+             *
+             * @apiNote
+             * Always in the {@code [500, 599]} range.
              *
              * @return the error code
              */
@@ -652,7 +852,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             /**
              * Returns the human-readable error text.
              *
-             * @return the error text. Never {@code null}
+             * @apiNote
+             * Useful for logging alongside the numeric code.
+             *
+             * @return the text
              */
             public String errorText() {
                 return errorText;
@@ -660,11 +863,23 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
             /**
              * Tries to parse a {@link UserError} from the given
-             * {@code <user/>} grandchild.
+             * {@code <user>} grandchild.
              *
-             * @param userNode the {@code <user/>} grandchild
-             * @return an {@link Optional} carrying the parsed error, or
-             *         empty on no-match
+             * @apiNote
+             * Returns {@link Optional#empty()} when the grandchild does
+             * not match the per-user error shape; called as the fallback
+             * after {@link UserDeviceBundle#of(Node)} declines.
+             *
+             * @implNote
+             * This implementation accepts the literal {@code 500} and
+             * the {@code [501, 599]} fallback range surfaced by
+             * {@code WASmaxInPreKeysFetchMissingPreKeysUserErrorFallbackMixin},
+             * collapsing the two WA Web disjunction branches.
+             *
+             * @param userNode the {@code <user>} grandchild
+             * @return an {@link Optional} carrying the parsed error
+             * @throws NullPointerException if {@code userNode} is
+             *                              {@code null}
              */
             @WhatsAppWebExport(moduleName = "WASmaxInPreKeysFetchMissingPreKeysUserErrorMixin",
                     exports = "parseFetchMissingPreKeysUserErrorMixin",
@@ -693,6 +908,13 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                 return Optional.of(new UserError(jid, code, text));
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation compares the JID, the code, and the
+             * text.
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -707,11 +929,25 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
                         && Objects.equals(this.errorText, that.errorText);
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation hashes all three fields via
+             * {@link Objects#hash(Object...)}.
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(userJid, errorCode, errorText);
             }
 
+            /**
+             * {@inheritDoc}
+             *
+             * @implNote
+             * This implementation mirrors the record-like rendering used
+             * across the {@code Smax*} response family.
+             */
             @Override
             public String toString() {
                 return "SmaxPreKeysFetchMissingPreKeysResponse.Success.UserError[userJid=" + userJid
@@ -722,9 +958,12 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * outer request as malformed, unauthorised, or referencing no valid
-     * JIDs.
+     * The {@code ClientError} reply variant.
+     *
+     * @apiNote
+     * The relay rejected the outer request as malformed, unauthorised,
+     * or referencing no valid JIDs; the entire RPC failed and no
+     * per-user data is available.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysResponseRequestError")
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysRequestErrorsFetch")
@@ -740,11 +979,15 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply.
+         *
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after the
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * envelope check succeeds.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text. May be
-         *                  {@code null}
+         * @param errorText the optional text
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -753,6 +996,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Below {@code 500}; embedders typically map the code into a
+         * client-facing exception.
          *
          * @return the error code
          */
@@ -763,7 +1010,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
+         * @apiNote
+         * Useful for logging and as the exception message.
+         *
+         * @return an {@link Optional} carrying the text
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -773,10 +1023,18 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
          * Tries to parse a {@link ClientError} variant from the given
          * inbound stanza.
          *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the stanza is not a
+         * well-formed client-error envelope.
+         *
+         * @implNote
+         * This implementation delegates the envelope and code-range
+         * checks to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPreKeysFetchMissingPreKeysResponseRequestError",
                 exports = "parseFetchMissingPreKeysResponseRequestError",
@@ -789,6 +1047,12 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation compares both the code and the text.
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -801,11 +1065,25 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation hashes both fields via
+         * {@link Objects#hash(Object...)}.
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation mirrors the record-like rendering used
+         * across the {@code Smax*} response family.
+         */
         @Override
         public String toString() {
             return "SmaxPreKeysFetchMissingPreKeysResponse.ClientError[errorCode=" + errorCode
@@ -814,8 +1092,11 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure while processing the request.
+     * The {@code ServerError} reply variant.
+     *
+     * @apiNote
+     * The relay encountered a transient internal failure; embedders
+     * should typically retry with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysFetchMissingPreKeysResponseServerError")
     @WhatsAppWebModule(moduleName = "WASmaxInPreKeysServerErrors")
@@ -831,11 +1112,15 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error reply.
+         *
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after the
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
+         * envelope check succeeds.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text. May be
-         *                  {@code null}
+         * @param errorText the optional text
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -844,6 +1129,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * In the {@code [500, ...]} range; embedders typically retry the
+         * request with backoff.
          *
          * @return the error code
          */
@@ -854,7 +1143,10 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
+         * @apiNote
+         * Useful for logging and as the exception message.
+         *
+         * @return an {@link Optional} carrying the text
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
@@ -864,10 +1156,18 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
          * Tries to parse a {@link ServerError} variant from the given
          * inbound stanza.
          *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the stanza is not a
+         * well-formed server-error envelope.
+         *
+         * @implNote
+         * This implementation delegates the envelope and code-range
+         * checks to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on no-match
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPreKeysFetchMissingPreKeysResponseServerError",
                 exports = "parseFetchMissingPreKeysResponseServerError",
@@ -880,6 +1180,12 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation compares both the code and the text.
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -892,11 +1198,25 @@ public sealed interface SmaxPreKeysFetchMissingPreKeysResponse extends SmaxOpera
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation hashes both fields via
+         * {@link Objects#hash(Object...)}.
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation mirrors the record-like rendering used
+         * across the {@code Smax*} response family.
+         */
         @Override
         public String toString() {
             return "SmaxPreKeysFetchMissingPreKeysResponse.ServerError[errorCode=" + errorCode

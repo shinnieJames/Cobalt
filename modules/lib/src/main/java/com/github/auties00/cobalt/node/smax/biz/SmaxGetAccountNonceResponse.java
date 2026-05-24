@@ -12,24 +12,54 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGetAccountNonceRequest}.
+ * The sealed family of inbound reply variants produced by the relay
+ * in response to a {@link SmaxGetAccountNonceRequest}.
+ *
+ * @apiNote
+ * Each variant projects a distinct outcome of the SMB
+ * business-linking nonce bridge: {@link Success} carries the issued
+ * nonce that the CTWA ad-creation flow forwards to Meta's ads
+ * backend, {@link ClientError} carries the documented {@code 400}
+ * bad-request or {@code 475} notice-required rejections, and
+ * {@link ServerError} carries a transient {@code 5xx} relay
+ * failure.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code WASmaxBizLinkingGetAccountNonceRPC.sendGetAccountNonceRPC}
+ * by trying each variant in priority order via {@link #of} and
+ * returning the first successful parse.
  */
 public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Response
         permits SmaxGetAccountNonceResponse.Success, SmaxGetAccountNonceResponse.ClientError, SmaxGetAccountNonceResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetAccountNonceResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Tries each {@link SmaxGetAccountNonceResponse} variant in
+     * priority order and returns the first that parses cleanly.
+     *
+     * @apiNote
+     * Invoked by the smax reply pump after dispatching a
+     * {@link SmaxGetAccountNonceRequest}; the priority order matches
+     * WA Web's {@code parsing} dispatch table so that a malformed
+     * {@code Success} stanza falls through to {@link ClientError}
+     * rather than masking an error.
+     *
+     * @implNote
+     * This implementation invokes {@link Success#of(Node, Node)}
+     * first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
+     * shape returns {@link Optional#empty()}, matching WA Web's
+     * {@code errorMessageRpcParsing} failure fallthrough.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
+     * @param request the original outbound stanza, used to validate
      *                echoed identifiers; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant
      *         matched the stanza shape
-     * @throws NullPointerException if either argument is {@code null}
+     * @throws NullPointerException if either argument is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizLinkingGetAccountNonceRPC",
             exports = "sendGetAccountNonceRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -48,14 +78,22 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The {@code Success} reply variant. The relay issued an
-     * account-nonce.
+     * The {@code Success} reply variant carrying the freshly-issued
+     * account-binding nonce.
+     *
+     * @apiNote
+     * Projected by {@link SmaxGetAccountNonceResponse#of(Node, Node)}
+     * when the relay returns the documented {@code <detail><nonce>}
+     * tree; the nonce is the value consumed by
+     * {@code WAWebQueryLinkedAccountNonceJob.queryNonce} as
+     * {@code detailNonceElementValue}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseSuccess")
     final class Success implements SmaxGetAccountNonceResponse {
         /**
          * The element-content of the {@code <nonce>} child of
-         * {@code <detail>}. The freshly-issued account-binding nonce.
+         * {@code <detail>}; the freshly-issued account-binding
+         * nonce.
          */
         private final String nonce;
 
@@ -68,6 +106,11 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
 
         /**
          * Constructs a new successful reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code <detail><nonce>} tree has been validated; clients
+         * normally read the value back through {@link #nonce()}.
          *
          * @param nonce     the issued nonce; never {@code null}
          * @param requestId the optional request-id echo; may be
@@ -83,6 +126,11 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         /**
          * Returns the issued nonce.
          *
+         * @apiNote
+         * Use as the {@code detailNonceElementValue} parameter when
+         * forwarding the CTWA ad-creation handshake to Meta's ads
+         * backend.
+         *
          * @return the nonce; never {@code null}
          */
         public String nonce() {
@@ -92,8 +140,15 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         /**
          * Returns the optional request-id echo.
          *
-         * @return an {@link Optional} carrying the id, or empty when
-         *         the relay omitted the {@code <request>} grandchild
+         * @apiNote
+         * Empty unless the relay returned a
+         * {@code <request><id/></request>} grandchild; callers that
+         * pipeline multiple nonce requests can use it to correlate
+         * the reply with the original.
+         *
+         * @return an {@link Optional} carrying the id, or empty
+         *         when the relay omitted the {@code <request>}
+         *         grandchild
          */
         public Optional<String> requestId() {
             return Optional.ofNullable(requestId);
@@ -103,11 +158,27 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
          *
+         * @apiNote
+         * Returns empty when the stanza is not an IQ result for the
+         * original request, when the {@code <detail>} child is
+         * absent, when the {@code <nonce>} grandchild is missing,
+         * or when the optional {@code <request>} grandchild is
+         * present but its inner {@code <id/>} is malformed.
+         *
+         * @implNote
+         * This implementation enforces the
+         * {@code SmaxIqResultResponseMixin} envelope check first,
+         * then extracts the {@code <detail><nonce>} content as a
+         * string; if the optional {@code <request>} grandchild is
+         * present its {@code <id>} content must also resolve, and
+         * any malformed sub-tree causes a fall-through to
+         * {@link Optional#empty()} rather than an exception.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseSuccess",
                 exports = "parseGetAccountNonceResponseSuccess",
@@ -148,6 +219,9 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
             return Optional.of(new Success(nonce, requestId));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -161,11 +235,17 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
                     && Objects.equals(this.requestId, that.requestId);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(nonce, requestId);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetAccountNonceResponse.Success[nonce=" + nonce
@@ -174,24 +254,30 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request with a {@code 4xx} error code.
+     * The {@code ClientError} reply variant carrying a
+     * documented {@code 4xx} rejection.
      *
-     * <p>Carries the parsed {@code (code, text)} pair plus the
-     * optional {@code tos_version} that only the {@code 475}
-     * {@code notice-required} sub-variant surfaces.
+     * @apiNote
+     * Projects the two documented sub-variants of the
+     * business-linking nonce bridge: {@code (400, "bad-request")}
+     * for malformed payloads and {@code (475, "notice-required")}
+     * when the calling business has not yet acknowledged a required
+     * ToS update; the latter carries a {@code tos_version} surfaced
+     * via {@link #tosVersion()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingAccountNonceErrors")
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingIQErrorNoticeRequiredMixin")
     final class ClientError implements SmaxGetAccountNonceResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code; one of {@code 400} or
+         * {@code 475}.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text, when the relay supplied
+         * one.
          */
         private final String errorText;
 
@@ -205,11 +291,15 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         /**
          * Constructs a new client-error reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the documented
+         * {@code (code, text)} pair has been validated.
+         *
          * @param errorCode  the numeric error code
-         * @param errorText  the optional human-readable text; may be
-         *                   {@code null}
-         * @param tosVersion the optional {@code tos_version}; may be
-         *                   {@code null} when the error is not
+         * @param errorText  the optional human-readable text; may
+         *                   be {@code null}
+         * @param tosVersion the optional {@code tos_version}; may
+         *                   be {@code null} when the error is not
          *                   {@code notice-required}
          */
         public ClientError(int errorCode, String errorText, Integer tosVersion) {
@@ -221,6 +311,10 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * One of {@code 400} or {@code 475}; callers branch on the
+         * code to distinguish bad-request from notice-required.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -230,6 +324,10 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         /**
          * Returns the optional human-readable error text.
          *
+         * @apiNote
+         * Suitable for surfacing in diagnostic logs; not a stable
+         * identifier for programmatic branching.
+         *
          * @return an {@link Optional} carrying the error text, or
          *         empty when the relay omitted it
          */
@@ -238,34 +336,42 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Returns the optional {@code tos_version}, present only on
-         * the {@code (475, "notice-required")} sub-variant.
+         * Returns the optional {@code tos_version}.
          *
-         * @return an {@link Optional} carrying the version, or empty
-         *         when the error is not {@code notice-required}
+         * @apiNote
+         * Present only on the {@code (475, "notice-required")}
+         * sub-variant; callers show the matching ToS-update prompt
+         * to the user and re-issue the nonce request once the
+         * acknowledgement has been recorded.
+         *
+         * @return an {@link Optional} carrying the version, or
+         *         empty when the error is not
+         *         {@code notice-required}
          */
         public Optional<Integer> tosVersion() {
             return Optional.ofNullable(tosVersion);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the
+         * given inbound stanza.
          *
-         * <p>Validates the {@code <iq>} envelope and extracts the
-         * {@code (code, text)} pair via the shared 4xx envelope
-         * helper, then validates the literal pair against the
-         * documented disjunction
+         * @implNote
+         * This implementation routes the {@code <iq>}/{@code <error>}
+         * extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)},
+         * then validates the resulting {@code (code, text)} pair
+         * against the documented disjunction
          * ({@code (400, "bad-request")} or
-         * {@code (475, "notice-required")}). For the
-         * {@code notice-required} arm the {@code <error/>} child's
-         * {@code tos_version} attribute is projected through the
-         * {@code [1, 65535]} range check before being surfaced.
+         * {@code (475, "notice-required")}); the notice-required
+         * arm additionally projects the {@code tos_version}
+         * attribute on the {@code <error/>} child through the
+         * {@code [1, 65535]} range check before surfacing it.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
          *         client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseError",
@@ -284,13 +390,10 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
             }
             var code = envelope.code();
             var text = envelope.text();
-            // Validate the (code, text) pair against the documented disjunction.
             Integer tosVersion = null;
             if (code == 400 && "bad-request".equals(text)) {
-                // IQErrorBadRequestMixin: text="bad-request", code=400.
+                // IQErrorBadRequestMixin literal pair.
             } else if (code == 475 && "notice-required".equals(text)) {
-                // IQErrorNoticeRequiredMixin: text="notice-required", code=475,
-                // plus tos_version in [1, 65535] on the <error/> child.
                 var errorChild = node.getChild("error").orElse(null);
                 if (errorChild == null) {
                     return Optional.empty();
@@ -305,12 +408,14 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
                 }
                 tosVersion = tosValue;
             } else {
-                // Unknown (code, text) pair; not a documented BizLinking variant.
                 return Optional.empty();
             }
             return Optional.of(new ClientError(code, text, tosVersion));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -325,11 +430,17 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
                     && Objects.equals(this.tosVersion, that.tosVersion);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText, tosVersion);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetAccountNonceResponse.ClientError[errorCode=" + errorCode
@@ -339,9 +450,13 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure ({@code 5xx}) while processing the
-     * request.
+     * The {@code ServerError} reply variant carrying a transient
+     * {@code 5xx} relay failure.
+     *
+     * @apiNote
+     * Indicates the relay could not complete the nonce issuance for
+     * an internal reason; the caller can re-issue the request with
+     * backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizLinkingAccountNonceErrors")
@@ -353,12 +468,17 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text, when the relay supplied
+         * one.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code 5xx} envelope has been validated.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -389,13 +509,22 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the
+         * given inbound stanza.
+         *
+         * @implNote
+         * This implementation delegates the {@code 5xx} range check
+         * to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)},
+         * which enforces the {@code IQErrorInternalServerErrorMixin}
+         * envelope semantics; any other {@code (code, text)} pair
+         * yields {@link Optional#empty()} and falls through to
+         * the orchestrator's unrecognised-variant fallback.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
          *         server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizLinkingGetAccountNonceResponseError",
@@ -414,6 +543,9 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -426,11 +558,17 @@ public sealed interface SmaxGetAccountNonceResponse extends SmaxOperation.Respon
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetAccountNonceResponse.ServerError[errorCode=" + errorCode

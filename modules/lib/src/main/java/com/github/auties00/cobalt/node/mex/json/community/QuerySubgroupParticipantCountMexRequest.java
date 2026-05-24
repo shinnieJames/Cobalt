@@ -11,26 +11,45 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the current participant count for one or more subgroups inside a
- * community.
+ * Outbound MEX request that fetches the current participant count for one
+ * or more subgroups inside a community.
  *
- * <p>This query is used to keep participant counts fresh without reloading
- * full subgroup metadata. Only the subgroup id and total participant count
- * are returned. It is typically issued on demand when displaying or sorting
- * subgroups in the community panel.
+ * @apiNote Drives the community-panel participant-count refresh path:
+ * fetches only the {@code id} and {@code total_participants_count} fields
+ * rather than reloading full subgroup metadata. Surfaced from
+ * {@code WAWebQueryAndUpdateSubgroupParticipantCountAction} via
+ * {@code WAWebMexQuerySubgroupParticipantCountJob.mexQuerySubgroupParticipantCountJob}
+ * (called with {@code query_context="INTERACTIVE"}) typically when the user
+ * scrolls or sorts the community subgroup list.
+ *
+ * @implNote This implementation accepts the GraphQL {@code input} variable
+ * as a single opaque pre-serialised JSON string rather than modelling its
+ * inner shape ({@code group_jid}, {@code query_context},
+ * {@code sub_group_jid_hint}). Callers serialise the input themselves and
+ * pass the resulting JSON; the field is dropped from the wire payload when
+ * {@code null}.
  */
 public final class QuerySubgroupParticipantCountMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebMexQuerySubgroupParticipantCountJobQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexQuerySubgroupParticipantCountJobQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexQuerySubgroupParticipantCountJobQuery.graphql}. The
+     * relay maps this id to its persisted operation; the GraphQL text is
+     * never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexQuerySubgroupParticipantCountJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "24079399904996141";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexQuerySubgroupParticipantCountJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -39,8 +58,13 @@ public final class QuerySubgroupParticipantCountMexRequest implements MexOperati
     private final String input;
 
     /**
-     * Constructs a new request carrying the serialised list of subgroup ids
-     * to query.
+     * Constructs a new request carrying the serialised input payload.
+     *
+     * @apiNote The WA Web {@code input} variable is a nested object of the
+     * shape {@code {"group_jid": "...", "query_context": "...",
+     * "sub_group_jid_hint": "..."}}. Callers serialise this themselves and
+     * pass the resulting JSON string; passing {@code null} omits the field
+     * entirely from the wire payload.
      *
      * @param input the serialised input variable, may be {@code null} to
      *              omit
@@ -50,9 +74,7 @@ public final class QuerySubgroupParticipantCountMexRequest implements MexOperati
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -60,9 +82,7 @@ public final class QuerySubgroupParticipantCountMexRequest implements MexOperati
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -70,8 +90,14 @@ public final class QuerySubgroupParticipantCountMexRequest implements MexOperati
     }
 
     /**
-     * Serialises the GraphQL variables and wraps them in a {@code w:mex} IQ
-     * stanza.
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter} and only emits the {@code input} field
+     * when the constructor argument is non-null, matching the WA Web
+     * pattern that omits undefined GraphQL variables. The wrapped envelope
+     * is built through
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      *
      * @return the IQ {@link NodeBuilder} ready to be built and dispatched
      */

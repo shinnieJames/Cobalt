@@ -14,32 +14,61 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing AI-thread-delete sync mutations.
+ * Builds outgoing app-state mutations that delete an AI thread on a Meta-AI bot chat.
  *
- * <p>The factory is the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.AiThreadDeleteHandler}.
+ * @apiNote
+ * Drives the Meta-AI bot UI's "delete thread" affordance: when the local user
+ * removes a thread from a bot chat, the resulting {@link SyncPendingMutation}
+ * is pushed through {@link com.github.auties00.cobalt.sync.WebAppStateService}
+ * so every linked device drops the same thread from its bulk thread-metadata
+ * store. The factory is the outgoing-mutation counterpart of
+ * {@link AiThreadDeleteHandler}; the handler resolves the inbound mutation by
+ * invoking {@code WAWebThreadMetadataBulkJob.bulkDeleteThreads}.
+ *
+ * @implNote
+ * This implementation gates only on the bot/thread identifiers; the WA Web
+ * {@code applyMutations} branch additionally checks
+ * {@code WAWebBotBaseGating.isBotEnabled()} and
+ * {@code isAiChatThreadsInfraEnabled()}, but those gates are receive-side
+ * only and Cobalt callers are expected to skip the factory call when the
+ * surface is gated off.
  */
 public final class AiThreadDeleteMutationFactory {
     /**
-     * Constructs an AI-thread-delete mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; instantiation is cheap and a single instance
+     * may be shared across the lifetime of the client.
      */
     public AiThreadDeleteMutationFactory() {
 
     }
 
     /**
-     * Builds a pending outgoing mutation that deletes an AI thread across
-     * linked devices.
+     * Returns a {@link SyncPendingMutation} that deletes the given AI thread from the bot chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadDeleteSync}: emits a SET
-     * mutation at {@code ["ai_thread_delete", botJid, threadId]} in the
-     * REGULAR_HIGH collection with {@code version = 7}. The action has no
-     * dedicated sub-message payload, so the index alone identifies the thread.
+     * @apiNote
+     * Call this when the user removes an AI thread; the returned mutation
+     * must be enqueued via
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
+     * to fan it out to linked devices. The mutation index follows
+     * {@snippet :
+     *     ["ai_thread_delete", chatJid.toString(), threadId]
+     * }
+     * and the action carries no sub-message because the index alone identifies the thread.
      *
-     * @param chatJid  the bot JID owning the thread
-     * @param threadId the AI thread identifier
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
+     * @implNote
+     * This implementation emits the {@link DecryptedMutation.Trusted} variant
+     * with {@link SyncdOperation#SET}; WA Web's
+     * {@code WAWebAiThreadDeleteSync.buildMutation} delegates to
+     * {@code WAWebSyncdActionUtils.buildPendingMutation} with the same
+     * collection, version, and operation values that
+     * {@link AiThreadDeleteHandler#ACTION_VERSION} pins.
+     *
+     * @param chatJid  the bot {@link Jid} owning the thread
+     * @param threadId the thread identifier as exposed by the bot
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadDeleteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getAiThreadDeleteMutation(Jid chatJid, String threadId) {
@@ -47,7 +76,7 @@ public final class AiThreadDeleteMutationFactory {
         var value = new SyncActionValueBuilder()
                 .timestamp(timestamp)
                 .build();
-        var index = JSON.toJSONString(List.of(AiThreadDeleteHandler.ACTION_NAME, chatJid.toString(), threadId)); // ["ai_thread_delete", chatJid, threadId]
+        var index = JSON.toJSONString(List.of(AiThreadDeleteHandler.ACTION_NAME, chatJid.toString(), threadId));
         var mutation = new DecryptedMutation.Trusted(
                 index,
                 value,

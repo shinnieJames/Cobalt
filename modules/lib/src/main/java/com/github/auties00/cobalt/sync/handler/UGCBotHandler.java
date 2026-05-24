@@ -6,53 +6,48 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.UGCBotAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles UGC (user-generated-content) bot sync actions.
+ * Persists the user-generated-content bot definition carried by a
+ * {@code ugc_bot} mutation so it survives until WhatsApp Web ships a real
+ * consumer.
  *
- * <p>This handler processes incoming mutations carrying a
- * {@code SyncActionValue.UGCBot} payload. The action is identified by the
- * {@code "ugc_bot"} action name and stored in the {@code REGULAR_HIGH} sync
- * collection.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * would route incoming {@code ugc_bot} mutations here if the server ever
+ * emits one. The handler captures the raw protobuf {@code definition}
+ * bytes into
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUserCreatedBotDefinition(byte[])}
+ * so downstream code can pick them up once the matching WA Web sync
+ * module ships.
  *
- * <p>{@code SyncActionValue$UGCBot} is declared in
- * {@code WAWebProtobufSyncAction.pb} as field {@code 43} (action name
- * {@code "ugc_bot"}) and routed to {@code REGULAR_HIGH} by the
- * {@code getCollectionForAction} switch in the same module. The protobuf
- * schema is {@code {definition: [1, BYTES]}}.
- *
- * <p>Despite being declared in the protobuf and assigned to a sync collection,
- * WhatsApp Web does <strong>not</strong> ship a dedicated {@code WAWeb*Sync}
- * module that consumes {@code ugc_bot} mutations: there is no
- * {@code WAWebUGCBotSync} (or similar) module exporting a singleton handler
- * with {@code getAction()/getVersion()/applyMutations()}. Searches across the
- * full WA Web bundle confirm that the only producers/consumers of the
- * {@code UGC_BOT} symbol are the protobuf module itself, deeplink parsing
- * ({@code WAWebApi}, {@code WAWebApiParse}, {@code WAWebExecApiCmd}) and the
- * unrelated bot-profile collection ({@code WAWebBotProfileCollection}).
- *
- * <p>This handler is therefore a forward-looking placeholder so that Cobalt's
- * sync action dispatcher can ingest {@code ugc_bot} payloads without crashing
- * if the server starts emitting them. The implementation simply persists the
- * raw {@code definition} bytes into {@link com.github.auties00.cobalt.store.WhatsAppStore}
- * via {@code setUserCreatedBotDefinition} so that downstream code can pick them up
- * once WhatsApp Web ships a real handler.
+ * @implNote
+ * This implementation is forward-looking. The {@code UGC_BOT} protobuf is
+ * declared in {@code WAWebProtobufSyncAction.pb} at action index 43 with
+ * action name {@code "ugc_bot"} and is routed to {@code REGULAR_HIGH} by
+ * the {@code getCollectionForAction} switch, but the current WA Web
+ * bundle ships no {@code WAWebUGCBotSync} module: the only consumers of
+ * the {@code UGC_BOT} symbol are the protobuf module itself, the
+ * deeplink parser ({@code WAWebApi}, {@code WAWebExecApiCmd}), and an
+ * unrelated bot-profile collection. Cobalt's handler ingests the
+ * mutation today so the wire payload is not lost when the server starts
+ * emitting it.
  */
 public final class UGCBotHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     public UGCBotHandler() {
 
     }
 
     /**
-     * Returns the action name for UGC bot actions.
-     *
-     * <p>Per {@code WAWebProtobufSyncAction.pb}, action index {@code 43}
-     * ({@code UGC_BOT}) maps to the action name {@code "ugc_bot"} via the
-     * {@code getMutationProps} switch.
-     * @return the action name {@code "ugc_bot"}
+     * {@inheritDoc}
      */
     @Override
     public String actionName() {
@@ -60,12 +55,13 @@ public final class UGCBotHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for UGC bot actions.
+     * {@inheritDoc}
      *
-     * <p>Per {@code WAWebProtobufSyncAction.pb}'s {@code getCollectionForAction}
-     * switch, the {@code UGC_BOT} action belongs to the {@code REGULAR_HIGH}
-     * collection: {@code e===c.UGC_BOT||e===c.STATUS_PRIVACY?u.REGULAR_HIGH}.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR_HIGH} as
+     * declared by the {@code e===c.UGC_BOT||e===c.STATUS_PRIVACY?u.REGULAR_HIGH}
+     * branch in WA Web's {@code WAWebProtobufSyncAction.pb}
+     * {@code getCollectionForAction} resolver.
      */
     @Override
     public SyncPatchType collectionName() {
@@ -73,14 +69,12 @@ public final class UGCBotHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for UGC bot actions.
+     * {@inheritDoc}
      *
-     * <p>WhatsApp Web does not ship a {@code WAWebUGCBotSync} module, so no
-     * {@code getVersion()} value is published for this action. Cobalt defaults
-     * to {@code 1} (the lowest valid mutation version) so that incoming
-     * mutations are not version-gated out before reaching this placeholder
-     * handler.
-     * @return the version number {@code 1}
+     * @implNote
+     * This implementation returns {@code 1}, the lowest valid mutation
+     * version, because WA Web ships no {@code WAWebUGCBotSync} module
+     * and therefore exposes no {@code getVersion()} value to copy.
      */
     @Override
     public int version() {
@@ -88,25 +82,16 @@ public final class UGCBotHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a UGC bot mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Because WhatsApp Web does not ship a real handler for this action,
-     * Cobalt implements a minimal placeholder that mirrors the conventions of
-     * sibling handlers:
-     * <ol>
-     *   <li>{@code REMOVE} (and any non-{@code SET}) operations return
-     *       {@link MutationApplicationResult#unsupported()}.</li>
-     *   <li>The mutation value must contain a {@link UGCBotAction} with a
-     *       non-empty {@code definition} byte string; otherwise the result is
-     *       {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>The raw {@code definition} bytes are stored on the
-     *       {@link com.github.auties00.cobalt.store.WhatsAppStore} via
-     *       {@code setUserCreatedBotDefinition} so they can be picked up by future
-     *       code paths.</li>
-     * </ol>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation follows the canonical
+     * {@code SET}-only-single-payload shape of sibling handlers because
+     * WA Web ships no concrete handler to mirror: non-{@code SET}
+     * operations are unsupported, a missing
+     * {@link UGCBotAction#definition()} is malformed, and the raw
+     * definition bytes are persisted via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUserCreatedBotDefinition(byte[])}.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

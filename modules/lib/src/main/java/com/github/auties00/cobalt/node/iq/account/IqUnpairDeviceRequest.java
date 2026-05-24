@@ -9,31 +9,47 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="md" type="set">} stanza variant — wraps
- * the {@code <remove-companion-device jid reason/>} payload.
+ * Outbound {@code <iq xmlns="md" type="set">} stanza requesting that the relay forget the
+ * pairing record for a companion device.
+ *
+ * @apiNote
+ * Used by the logout pipeline ({@code WAWebSocketModel.sendCurrentLogout}) to tear down the
+ * server-side multi-device record before the local socket is closed, and by any caller that
+ * wants to unpair a specific secondary device while remaining connected. The relay echoes
+ * back the {@code <remove-companion-device>} payload with a {@code <iq type="result">}
+ * envelope on success.
  */
 @WhatsAppWebModule(moduleName = "WAWebUnpairDeviceJob")
 public final class IqUnpairDeviceRequest implements IqOperation.Request {
     /**
-     * The companion-device JID being unpaired. Routed verbatim into the
-     * {@code <remove-companion-device>} child's {@code jid} attribute.
+     * Companion-device JID being unpaired.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code <remove-companion-device jid=...>} attribute. WA Web
+     * fills this with {@code WAWebCommsWapMd.DEVICE_JID(getMeDevicePnOrThrow_DO_NOT_USE())}
+     * for the self-logout path; Cobalt accepts any JID so a primary client may unpair an
+     * arbitrary companion.
      */
     private final Jid deviceJid;
 
     /**
-     * The free-form caller-supplied unpair reason. Routed verbatim into
-     * the {@code <remove-companion-device>} child's {@code reason}
-     * attribute and surfaced server-side for telemetry.
+     * Free-form caller-supplied reason string.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code <remove-companion-device reason=...>} attribute and
+     * surfaced server-side as telemetry; the relay does not validate the contents.
      */
     private final String reason;
 
     /**
      * Constructs a new unpair-device request.
      *
-     * @param deviceJid the companion-device JID to unpair; never
-     *                  {@code null}
-     * @param reason    the caller-supplied free-form reason string;
-     *                  never {@code null}
+     * @apiNote
+     * Both arguments are routed verbatim into the outbound stanza; no client-side validation
+     * other than the {@code null} check is performed.
+     *
+     * @param deviceJid the companion-device JID to unpair
+     * @param reason the caller-supplied free-form reason string
      * @throws NullPointerException if either argument is {@code null}
      */
     public IqUnpairDeviceRequest(Jid deviceJid, String reason) {
@@ -44,7 +60,7 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     /**
      * Returns the companion-device JID being unpaired.
      *
-     * @return the device JID; never {@code null}
+     * @return the device JID, never {@code null}
      */
     public Jid deviceJid() {
         return deviceJid;
@@ -53,29 +69,32 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
     /**
      * Returns the free-form unpair reason.
      *
-     * @return the reason string; never {@code null}
+     * @return the reason string, never {@code null}
      */
     public String reason() {
         return reason;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
+     * @apiNote
+     * Produces a {@code <iq xmlns="md" type="set">} envelope addressed to
+     * {@link Jid#userServer()} and wrapping a single {@code <remove-companion-device>} child
+     * carrying {@code jid} and {@code reason} attributes.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
      *         {@code <remove-companion-device>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUnpairDeviceJob",
             exports = "unpairDevice", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebUnpairDeviceJob: wap("remove-companion-device", {jid, reason})
         var removePayload = new NodeBuilder()
                 .description("remove-companion-device")
                 .attribute("jid", deviceJid)
                 .attribute("reason", reason)
                 .build();
-        // WAWebUnpairDeviceJob: wap("iq", {to:S_WHATSAPP_NET, type:"set", id, xmlns:"md"}, ...)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "md")
@@ -84,6 +103,9 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
                 .content(removePayload);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -97,11 +119,17 @@ public final class IqUnpairDeviceRequest implements IqOperation.Request {
                 && Objects.equals(this.reason, that.reason);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(deviceJid, reason);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqUnpairDeviceRequest[deviceJid=" + deviceJid

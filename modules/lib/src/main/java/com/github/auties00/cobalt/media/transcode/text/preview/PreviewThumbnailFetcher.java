@@ -1,0 +1,205 @@
+package com.github.auties00.cobalt.media.transcode.text.preview;
+
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+
+/**
+ * The inline-thumbnail downloader shared by every preview source
+ * (group picture, business product image, page favicon).
+ *
+ * @apiNote
+ * Mirrors {@code WAWebMediaDataUtils.getResizedThumbData} at the
+ * download seam: fetches the URL, caps the response size to defend
+ * against hostile servers, and re-encodes the bytes as a small JPEG so
+ * the result fits the inline-thumbnail slot on
+ * {@code ExtendedTextMessage}.
+ *
+ * @implNote
+ * This implementation resizes via {@link ImageIO} +
+ * {@link BufferedImage} when the optional {@code java.desktop} module
+ * is on the runtime path and falls back to the source bytes when it
+ * is not. The Cobalt module is declared
+ * {@code requires static java.desktop} so the build still succeeds on
+ * minimal runtimes.
+ */
+@WhatsAppWebModule(moduleName = "WAWebMediaDataUtils")
+public final class PreviewThumbnailFetcher {
+    /**
+     * The maximum response size accepted by
+     * {@link #download(HttpClient, URI, Duration)}.
+     *
+     * @apiNote
+     * Larger responses are dropped because the inline JPEG slot is
+     * meant for a small preview and an attacker-controlled server must
+     * not be able to allocate hundreds of megabytes through the
+     * preview pipeline.
+     */
+    private static final int MAX_BYTES = 5 * 1024 * 1024;
+
+    /**
+     * The target side length, in pixels, of the resized JPEG
+     * thumbnail.
+     *
+     * @apiNote
+     * Matches WA Web's {@code WAWebBizLinkPreviewCatalogUtils} /
+     * {@code WAWebLinkPreviewGroupUtils} sizing parameter
+     * ({@code {width: 100, height: 100, ...}}).
+     */
+    private static final int TARGET_SIZE = 100;
+
+    /**
+     * The JPEG quality applied to the re-encoded thumbnail.
+     *
+     * @apiNote
+     * Matches the {@code imageFormatOptions: .75} parameter WA Web
+     * passes when computing the preview thumbnail.
+     */
+    private static final float JPEG_QUALITY = 0.75f;
+
+    /**
+     * The hidden constructor of the utility class.
+     *
+     * @throws UnsupportedOperationException always
+     */
+    private PreviewThumbnailFetcher() {
+        throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
+    }
+
+    /**
+     * Fetches {@code uri} via {@code httpClient} and returns the
+     * resized JPEG bytes, capped at {@link #MAX_BYTES}.
+     *
+     * @apiNote
+     * Used by every per-source resolver
+     * ({@link CatalogPreviewResolver},
+     * {@link GroupInvitePreviewResolver},
+     * {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline}'s og-image branch) so the
+     * size cap and resize logic are not duplicated. Returns
+     * {@code null} on any failure (non-2xx response, empty body,
+     * oversized payload, transport error) so the caller can fall back
+     * to a minimal preview without inspecting the cause.
+     *
+     * @param httpClient the HTTP client to issue the GET on
+     * @param uri        the image URI
+     * @param timeout    the per-request timeout
+     * @return the resized JPEG bytes, the source bytes when resize was
+     *         unavailable, or {@code null} on failure
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaDataUtils", exports = "getResizedThumbData",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static byte[] download(HttpClient httpClient, URI uri, Duration timeout) {
+        if (httpClient == null || uri == null) {
+            return null;
+        }
+        try {
+            var request = HttpRequest.newBuilder(uri)
+                    .timeout(timeout != null ? timeout : Duration.ofSeconds(15))
+                    .GET()
+                    .build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() / 100 != 2) {
+                return null;
+            }
+            var body = response.body();
+            if (body == null || body.length == 0 || body.length > MAX_BYTES) {
+                return null;
+            }
+            var resized = tryResize(body);
+            return resized != null ? resized : body;
+        } catch (Exception _) {
+            return null;
+        }
+    }
+
+    /**
+     * Decodes {@code source} as an image and re-encodes it as a square
+     * {@link #TARGET_SIZE} JPEG at {@link #JPEG_QUALITY}.
+     *
+     * @apiNote
+     * Mirrors the JS canvas-based resize step inside
+     * {@code WAWebMediaDataUtils.getResizedThumbData}; aspect ratio is
+     * preserved by computing the scale factor from the smaller side.
+     *
+     * @implNote
+     * This implementation returns {@code null} when
+     * {@code java.desktop} is unavailable at runtime (the module is
+     * declared {@code requires static java.desktop} so the JVM may run
+     * without it) or when the source bytes are not a recognised image
+     * format. The caller falls back to the source bytes in that case.
+     *
+     * @param source the source bytes
+     * @return the resized JPEG bytes, or {@code null} when the resize
+     *         failed
+     */
+    @WhatsAppWebExport(moduleName = "WAWebMediaDataUtils", exports = "getResizedThumbData",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static byte[] tryResize(byte[] source) {
+        try {
+            var sourceImage = ImageIO.read(new ByteArrayInputStream(source));
+            if (sourceImage == null) {
+                return null;
+            }
+            var width = sourceImage.getWidth();
+            var height = sourceImage.getHeight();
+            if (width <= 0 || height <= 0) {
+                return null;
+            }
+            var scale = Math.min((double) TARGET_SIZE / width, (double) TARGET_SIZE / height);
+            var targetWidth = Math.max(1, (int) Math.round(width * scale));
+            var targetHeight = Math.max(1, (int) Math.round(height * scale));
+            var resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = null;
+            try {
+                graphics = resized.createGraphics();
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
+                        RenderingHints.VALUE_RENDER_QUALITY);
+                graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                graphics.drawImage(sourceImage, 0, 0, targetWidth, targetHeight, null);
+            } finally {
+                if (graphics != null) {
+                    graphics.dispose();
+                }
+            }
+            var output = new ByteArrayOutputStream();
+            var writers = ImageIO.getImageWritersByFormatName("jpeg");
+            if (!writers.hasNext()) {
+                return null;
+            }
+            var writer = writers.next();
+            try (var stream = ImageIO.createImageOutputStream(output)) {
+                writer.setOutput(stream);
+                var params = writer.getDefaultWriteParam();
+                if (params.canWriteCompressed()) {
+                    params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                    params.setCompressionType("JPEG");
+                    params.setCompressionQuality(JPEG_QUALITY);
+                }
+                writer.write(null, new IIOImage(resized, null, null), params);
+            } finally {
+                writer.dispose();
+            }
+            return output.toByteArray();
+        } catch (NoClassDefFoundError | RuntimeException | IOException _) {
+            return null;
+        }
+    }
+}

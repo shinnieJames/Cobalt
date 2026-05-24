@@ -9,44 +9,60 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Holds the reporting token metadata parsed from the {@code <reporting>} child of an
- * incoming message stanza.
+ * The reporting-token metadata extracted from the {@code <reporting>} child
+ * of an incoming {@code <message>} stanza by
+ * {@link MessageReceiveStanzaParser}.
  *
- * <p>Reporting tokens let the content moderation system cryptographically verify that
- * a reported message was actually received by the reporter. The token and tag are
- * stored alongside the message so they remain available when the user reports it later.
+ * @apiNote
+ * The reporting token is the cryptographic receipt that lets the WhatsApp
+ * abuse-reporting pipeline prove that a reported message was actually
+ * received by the reporter, without forcing the reporter to upload the
+ * plaintext at report time. Cobalt stores {@link #reportingToken()},
+ * {@link #reportingTag()}, {@link #version()}, and the stanza
+ * {@link #stanzaTs()} alongside the message so they remain available even if
+ * the user reports the message hours or days later. Both byte fields can be
+ * missing; WA Web's {@code WAWebMessagingGatingUtils.isReportingTokenReceivingEnabled}
+ * gate decides whether the server attaches them at all.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveReportingInfo {
     /**
-     * Stanza timestamp captured alongside the reporting token for correlation with
-     * the original message.
+     * The stanza timestamp captured at the same moment as the reporting
+     * token, so a later report can prove the token was bound to this
+     * specific message.
      */
     private final Instant stanzaTs;
 
     /**
-     * Reporting token bytes from the {@code <reporting_token>} child.
+     * The raw bytes of the {@code <reporting_token>} child's content region.
      */
     private final byte[] reportingToken;
 
     /**
-     * Reporting token version from the {@code v} attribute of the token child.
+     * The {@code v} attribute on the {@code <reporting_token>} child,
+     * identifying the token-format version.
      */
     private final int version;
 
     /**
-     * Reporting tag bytes from the {@code <reporting_tag>} child, acting as an
-     * authenticator for the reporting token.
+     * The raw bytes of the {@code <reporting_tag>} child's content region,
+     * acting as the integrity tag that authenticates
+     * {@link #reportingToken()}.
      */
     private final byte[] reportingTag;
 
     /**
-     * Constructs a new reporting info record.
+     * Constructs a populated record from the values extracted by
+     * {@link MessageReceiveStanzaParser}.
      *
-     * @param stanzaTs       the stanza timestamp, never {@code null}
-     * @param reportingToken the reporting token bytes, or {@code null}
-     * @param version        the reporting token version
-     * @param reportingTag   the reporting tag bytes, or {@code null}
+     * @apiNote
+     * Not intended for direct use outside the parser; callers consume
+     * existing instances via {@link MessageReceiveStanza#reportingInfo()}.
+     *
+     * @param stanzaTs       the stanza timestamp
+     * @param reportingToken the token bytes, or {@code null} when absent
+     * @param version        the token-format version
+     * @param reportingTag   the tag bytes, or {@code null} when absent
      * @throws NullPointerException if {@code stanzaTs} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
@@ -64,25 +80,40 @@ public final class MessageReceiveReportingInfo {
     }
 
     /**
-     * Returns the stanza timestamp preserved for reporting correlation.
+     * Returns the stanza timestamp captured with the token.
      *
-     * @return the timestamp, never {@code null}
+     * @apiNote
+     * Stored alongside the token so a later report can be matched to this
+     * specific delivery rather than to any other instance of the same
+     * message id.
+     *
+     * @return the stanza timestamp
      */
     public Instant stanzaTs() {
         return stanzaTs;
     }
 
     /**
-     * Returns the reporting token bytes, when present.
+     * Returns the reporting-token bytes, when present.
      *
-     * @return an {@link Optional} wrapping the reporting token bytes
+     * @apiNote
+     * Forwarded verbatim to the abuse-reporting RPC when the user reports
+     * the message; pair with {@link #version()} so the server can pick the
+     * matching verification routine.
+     *
+     * @return an {@link Optional} wrapping the token bytes
      */
     public Optional<byte[]> reportingToken() {
         return Optional.ofNullable(reportingToken);
     }
 
     /**
-     * Returns the reporting token version.
+     * Returns the token-format version.
+     *
+     * @apiNote
+     * Parsed from the {@code v} attribute of the {@code <reporting_token>}
+     * child; defaults to {@code 0} when the attribute is absent. The server
+     * uses this to dispatch the appropriate token-verification routine.
      *
      * @return the version number
      */
@@ -91,9 +122,13 @@ public final class MessageReceiveReportingInfo {
     }
 
     /**
-     * Returns the reporting tag bytes, when present.
+     * Returns the reporting-tag bytes, when present.
      *
-     * @return an {@link Optional} wrapping the reporting tag bytes
+     * @apiNote
+     * The integrity tag that authenticates the reporting token; sent
+     * alongside the token to the abuse-reporting RPC.
+     *
+     * @return an {@link Optional} wrapping the tag bytes
      */
     public Optional<byte[]> reportingTag() {
         return Optional.ofNullable(reportingTag);

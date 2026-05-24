@@ -5,38 +5,77 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Sealed disjunction over the v3-payments-ToS payload variants.
- * either a BR-consumer (FBPAY) shape or a UPI-consumer shape. Both
- * variants carry one or more {@code <additional_notice notice=...>}
- * children whose enum values describe the surface-specific notices
- * that must accompany the ToS acceptance.
+ * The payments-jurisdiction half of a
+ * {@link SmaxAccountSetPaymentsTOSv3Request} payload: either the
+ * Brazilian-FBPAY consumer or the Indian-UPI consumer.
+ *
+ * @apiNote
+ * Used by callers preparing an
+ * {@code <iq xmlns="urn:xmpp:whatsapp:account">} ToS-v3 acceptance.
+ * Pick {@link BrConsumer} when accepting Brazilian payment terms (the
+ * surface that {@code WAWebPaymentsTosJob.acceptBRPayTos} drives), or
+ * {@link UpiConsumer} when accepting Indian payment terms. The shared
+ * structure (a 1..10 list of {@code <additional_notice notice=...>}
+ * children) is identical between variants; only the allowed notice
+ * literals differ.
+ *
+ * @implNote
+ * This implementation models the WA Web {@code mixinGroup} disjunction
+ * as a sealed interface with two final implementations; each variant
+ * is constructed directly with a list of pre-validated notice
+ * literals rather than going through a smax-mixin builder.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetPaymentsTOSv3BRConsumerOrSetPaymentsTOSv3UPIConsumerPaymentsTOSv3MixinGroup")
 public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxAccountSetPaymentsTOSv3ConsumerVariant.BrConsumer, SmaxAccountSetPaymentsTOSv3ConsumerVariant.UpiConsumer {
 
     /**
-     * The BR-consumer (FBPAY) variant.
+     * The Brazilian-FBPAY consumer variant of a ToS-v3 acceptance.
+     *
+     * @apiNote
+     * Pick this variant when accepting Brazilian payment terms;
+     * {@link SmaxAccountSetPaymentsTOSv3Request#toNode()} stamps
+     * {@code service="FBPAY"} onto the outbound
+     * {@code <accept_pay/>} element. Acceptable notice literals are
+     * the four entries enforced by {@link SmaxAccountSetPaymentsTOSv3Response.Success}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetPaymentsTOSv3BRConsumerPaymentsTOSv3Mixin")
     final class BrConsumer implements SmaxAccountSetPaymentsTOSv3ConsumerVariant {
         /**
-         * The 1..10 BR-consumer notice enum literals. One of
-         * {@code "br_p2p_consent"},
+         * The 1..10 Brazilian-FBPAY notice literals to attach as
+         * {@code <additional_notice notice=...>} children.
+         *
+         * @apiNote
+         * Each entry must be one of {@code "br_p2p_consent"},
          * {@code "br_pay_privacy_policy"}, {@code "br_pay_tos"},
-         * {@code "br_pay_wa_tos"}.
+         * {@code "br_pay_wa_tos"}; the constructor validates the
+         * list bounds but not the literals (the relay rejects
+         * unknown entries on receipt).
          */
         private final List<String> additionalNotices;
 
         /**
-         * Constructs a new BR-consumer variant.
+         * Constructs a Brazilian-FBPAY variant carrying a
+         * pre-validated notice list.
          *
-         * @param additionalNotices the notice list (1..10 entries);
-         *                          never {@code null}, never empty
-         * @throws NullPointerException     if
-         *                                  {@code additionalNotices}
+         * @apiNote
+         * Use this when assembling a
+         * {@link SmaxAccountSetPaymentsTOSv3Request} payload to
+         * accept Brazilian payment terms.
+         *
+         * @implNote
+         * This implementation defensively copies via
+         * {@link List#copyOf(java.util.Collection)} so callers can
+         * mutate the input list after construction without affecting
+         * the variant.
+         *
+         * @param additionalNotices the notice literals; must contain
+         *                          between {@code 1} and {@code 10}
+         *                          entries
+         * @throws NullPointerException     if {@code additionalNotices}
          *                                  is {@code null}
-         * @throws IllegalArgumentException if the list is empty or
-         *                                  has more than 10 entries
+         * @throws IllegalArgumentException if {@code additionalNotices}
+         *                                  is empty or exceeds {@code 10}
+         *                                  entries
          */
         public BrConsumer(List<String> additionalNotices) {
             Objects.requireNonNull(additionalNotices, "additionalNotices cannot be null");
@@ -47,15 +86,33 @@ public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxA
         }
 
         /**
-         * Returns the notice list.
+         * Returns the Brazilian-FBPAY notice literals carried by this
+         * variant.
          *
-         * @return an unmodifiable list of notice enum literals;
+         * @apiNote
+         * Read by {@link SmaxAccountSetPaymentsTOSv3Request#toNode()}
+         * when fanning the entries into
+         * {@code <additional_notice/>} children.
+         *
+         * @return an unmodifiable list of {@code 1..10} literals;
          *         never {@code null}
          */
         public List<String> additionalNotices() {
             return additionalNotices;
         }
 
+        /**
+         * Compares this variant to another for value equality on the
+         * notice list.
+         *
+         * @apiNote
+         * Two {@link BrConsumer} instances are equal iff their notice
+         * lists are equal element-wise.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link BrConsumer} with the same notice list
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -68,11 +125,26 @@ public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxA
             return Objects.equals(this.additionalNotices, that.additionalNotices);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(additionalNotices);
         }
 
+        /**
+         * Returns a debug-friendly representation listing the notice
+         * literals.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the
+         * public contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxAccountSetPaymentsTOSv3ConsumerVariant.BrConsumer[additionalNotices=" + additionalNotices + ']';
@@ -80,26 +152,52 @@ public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxA
     }
 
     /**
-     * The UPI-consumer (Indian payments) variant.
+     * The Indian-UPI consumer variant of a ToS-v3 acceptance.
+     *
+     * @apiNote
+     * Pick this variant when accepting Indian UPI payment terms;
+     * {@link SmaxAccountSetPaymentsTOSv3Request#toNode()} stamps
+     * {@code service="UPI"} onto the outbound
+     * {@code <accept_pay/>} element. Acceptable notice literals are
+     * the two entries enforced by {@link SmaxAccountSetPaymentsTOSv3Response.Success}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetPaymentsTOSv3UPIConsumerPaymentsTOSv3Mixin")
     final class UpiConsumer implements SmaxAccountSetPaymentsTOSv3ConsumerVariant {
         /**
-         * The 1..10 UPI-consumer notice enum literals. One of
-         * {@code "pay_tos_v3"}, {@code "upi_pay_privacy_policy"}.
+         * The 1..10 Indian-UPI notice literals to attach as
+         * {@code <additional_notice notice=...>} children.
+         *
+         * @apiNote
+         * Each entry must be one of {@code "pay_tos_v3"} or
+         * {@code "upi_pay_privacy_policy"}; the constructor
+         * validates the list bounds but not the literals (the relay
+         * rejects unknown entries on receipt).
          */
         private final List<String> additionalNotices;
 
         /**
-         * Constructs a new UPI-consumer variant.
+         * Constructs an Indian-UPI variant carrying a pre-validated
+         * notice list.
          *
-         * @param additionalNotices the notice list (1..10 entries);
-         *                          never {@code null}, never empty
-         * @throws NullPointerException     if
-         *                                  {@code additionalNotices}
+         * @apiNote
+         * Use this when assembling a
+         * {@link SmaxAccountSetPaymentsTOSv3Request} payload to
+         * accept Indian UPI payment terms.
+         *
+         * @implNote
+         * This implementation defensively copies via
+         * {@link List#copyOf(java.util.Collection)} so callers can
+         * mutate the input list after construction without affecting
+         * the variant.
+         *
+         * @param additionalNotices the notice literals; must contain
+         *                          between {@code 1} and {@code 10}
+         *                          entries
+         * @throws NullPointerException     if {@code additionalNotices}
          *                                  is {@code null}
-         * @throws IllegalArgumentException if the list is empty or
-         *                                  has more than 10 entries
+         * @throws IllegalArgumentException if {@code additionalNotices}
+         *                                  is empty or exceeds {@code 10}
+         *                                  entries
          */
         public UpiConsumer(List<String> additionalNotices) {
             Objects.requireNonNull(additionalNotices, "additionalNotices cannot be null");
@@ -110,15 +208,33 @@ public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxA
         }
 
         /**
-         * Returns the notice list.
+         * Returns the Indian-UPI notice literals carried by this
+         * variant.
          *
-         * @return an unmodifiable list of notice enum literals;
+         * @apiNote
+         * Read by {@link SmaxAccountSetPaymentsTOSv3Request#toNode()}
+         * when fanning the entries into
+         * {@code <additional_notice/>} children.
+         *
+         * @return an unmodifiable list of {@code 1..10} literals;
          *         never {@code null}
          */
         public List<String> additionalNotices() {
             return additionalNotices;
         }
 
+        /**
+         * Compares this variant to another for value equality on the
+         * notice list.
+         *
+         * @apiNote
+         * Two {@link UpiConsumer} instances are equal iff their notice
+         * lists are equal element-wise.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link UpiConsumer} with the same notice list
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -131,11 +247,26 @@ public sealed interface SmaxAccountSetPaymentsTOSv3ConsumerVariant permits SmaxA
             return Objects.equals(this.additionalNotices, that.additionalNotices);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(additionalNotices);
         }
 
+        /**
+         * Returns a debug-friendly representation listing the notice
+         * literals.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the
+         * public contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxAccountSetPaymentsTOSv3ConsumerVariant.UpiConsumer[additionalNotices=" + additionalNotices + ']';

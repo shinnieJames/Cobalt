@@ -14,5 +14,7 @@ public enum ListAction {
     @WamEnumConstant(4) RENAME,
     @WamEnumConstant(5) UPDATE_MEMBERS,
     @WamEnumConstant(6) MUTE,
-    @WamEnumConstant(7) UNMUTE
+    @WamEnumConstant(7) UNMUTE,
+    @WamEnumConstant(8) HIDE,
+    @WamEnumConstant(9) UNHIDE
 }

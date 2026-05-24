@@ -13,24 +13,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the bare {@code <ack/>} payload
- * in the canonical {@code <iq xmlns="w:g2" type="set" to="<groupJid>">}
- * envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that marks a group chat as not-spam.
+ *
+ * @apiNote Drives the "report as not spam" affordance on the group safety panel:
+ * {@code WAWebConversationSpamUtils.acknowledgeGroupAsNotSpam} and {@code WAWebSendNotSpamJob} both invoke this
+ * RPC fire-and-forget when the local user dismisses the spam warning. Send one IQ per group; the relay does not
+ * batch.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsAcknowledgeGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Request {
     /**
-     * The group JID to acknowledge. Routed verbatim into the IQ's
-     * {@code to} attribute.
+     * The group {@link Jid} being acknowledged.
      */
     private final Jid groupJid;
 
     /**
-     * Constructs a request for the given group.
+     * Constructs an acknowledgement request for the given group.
      *
-     * @param groupJid the group to acknowledge; never {@code null}
+     * @param groupJid the group {@link Jid}
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsAcknowledgeGroupRequest(Jid groupJid) {
@@ -38,19 +40,27 @@ public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Re
     }
 
     /**
-     * Returns the group being acknowledged.
+     * Returns the group {@link Jid} being acknowledged.
      *
-     * @return the group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <ack/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <ack/>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the bare {@code <ack/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsAcknowledgeGroupRequest",
@@ -67,6 +77,12 @@ public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Re
                 .content(ackNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality on {@link #groupJid()}.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsAcknowledgeGroupRequest} with the same group
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -79,11 +95,21 @@ public final class SmaxGroupsAcknowledgeGroupRequest implements SmaxOperation.Re
         return Objects.equals(this.groupJid, that.groupJid);
     }
 
+    /**
+     * Returns a hash derived from {@link #groupJid()}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid);
     }
 
+    /**
+     * Returns a debug string carrying {@link #groupJid()}.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsAcknowledgeGroupRequest[groupJid=" + groupJid + ']';

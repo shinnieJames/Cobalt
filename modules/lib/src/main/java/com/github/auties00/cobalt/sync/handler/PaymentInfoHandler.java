@@ -9,34 +9,70 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentInfoAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles payment info sync actions.
+ * Applies the {@code payment_info} app-state action that distributes the
+ * order-details Customer Payment Instructions (CPI) string to linked
+ * SMB devices.
  *
- * <p>Per WhatsApp Web {@code WAWebPaymentInfoSync}, this handler processes
- * the {@code "payment_info"} sync action in the {@code RegularLow} collection
- * at version {@code 7}. The handler is restricted to SMB (Small/Medium
- * Business) platforms with the
- * {@code order_details_payment_instructions_sync_enabled} AB prop enabled,
- * and only {@code SET} operations are supported.
+ * @apiNote
+ * Drives the WhatsApp SMB order-details payment instructions surface:
+ * the CPI string is the formatted block of payment instructions a
+ * business attaches to outgoing order details so the buyer can
+ * complete payment out of band. Gated on SMB platform AND
+ * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED};
+ * non-SMB or AB-prop-disabled accounts surface every mutation as
+ * {@link MutationApplicationResult#unsupported()}. The mutation index
+ * is the singleton {@snippet :
+ *     ["payment_info"]
+ * }
  *
- * <p>On {@code SET}, validates that {@code paymentInfoAction.cpi} is a
- * non-{@code null} string and persists the CPI info to the store via
- * {@code setPaymentInstructionCpi}.
- *
- * <p>Index format: {@code ["payment_info"]}
+ * @implNote
+ * This implementation mirrors the WA Web
+ * {@code WAWebPaymentInfoSync.applyMutations} gating order
+ * exactly: SMB platform check first, AB-prop check second, then
+ * {@link SyncdOperation#SET}, then a missing or non-string
+ * {@code paymentInfoAction.cpi} surfaces as
+ * {@link SyncdIndexUtils#malformedActionValue(String)}. The
+ * {@code WAWebBackendApi.frontendFireAndForget("setCPIInfo")} ->
+ * {@code WAWebPaymentInfoSyncBridgeApi.setCPIInfo} ->
+ * {@code WAWebPaymentInfo.PaymentInfo.setCPIInfo} chain (which
+ * diff-checks against the current value, calls
+ * {@code WAWebUserPrefsPaymentInfo.setCPIInfo} and emits
+ * {@code CPI_INFO_CHANGE_EVENT}) is collapsed into a single
+ * {@code WhatsAppStore.setPaymentInstructionCpi} call: there is no
+ * UI consumer to dispatch the change event to, and the diff check is
+ * a UI-render optimisation with no behavioural side effect. The
+ * per-batch {@code WALogger.WARN} counters are dropped.
  */
 @WhatsAppWebModule(moduleName = "WAWebPaymentInfoSync")
 public final class PaymentInfoHandler implements WebAppStateActionHandler {
     /**
      * The AB-props service consulted before applying any mutation.
+     *
+     * @apiNote
+     * Internal collaborator injected at construction; never accessed
+     * outside {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Creates a new {@code PaymentInfoHandler}.
+     * Constructs the payment-info sync handler bound to the given
+     * AB-props service.
+     *
+     * @apiNote
+     * Used by the sync handler registry; the AB-props service is
+     * consulted on every mutation to honour the
+     * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED}
+     * gate.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code WAWebPaymentInfoSync}
+     * constructor: it sets {@code collectionName = RegularLow} on the
+     * prototype and inherits from {@code AccountSyncdActionBase}.
      *
      * @param abPropsService the AB-props service consulted on every
      *                       mutation
@@ -47,8 +83,7 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for payment info mutations.
-     * @return the action name {@code "payment_info"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -57,8 +92,7 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the collection name for payment info mutations.
-     * @return {@link SyncPatchType#REGULAR_LOW}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -67,8 +101,7 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for payment info mutations.
-     * @return {@code 7}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -77,50 +110,30 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single payment info mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebPaymentInfoSync.applyMutations}:
+     * @implNote
+     * This implementation gates each mutation on, in order:
      * <ol>
-     *   <li>If the platform is not SMB ({@code isSMB() !== true}), returns
-     *       {@code Unsupported} (WA Web logs a WARN
-     *       {@code "payment info sync: operation not supported, app is not SMB"}
-     *       and returns {@code Unsupported} for the entire batch).</li>
-     *   <li>If the AB prop
-     *       {@code order_details_payment_instructions_sync_enabled} is not
-     *       {@code true}, returns {@code Unsupported} (WA Web logs a WARN
-     *       {@code "payment info sync: unsupported, ABProp not passed"}
-     *       and returns {@code Unsupported} for the entire batch).</li>
-     *   <li>If the operation is not {@code "set"}, returns {@code Unsupported}
-     *       (WA Web increments the {@code r} counter and at end of batch logs
-     *       {@code "payment info sync: <r> operations not supported"}).</li>
-     *   <li>If {@code mutation.value.paymentInfoAction?.cpi} is not a
-     *       {@code string}, returns {@code Malformed} via
-     *       {@code WAWebSyncdIndexUtils.malformedActionValue(collectionName)}
-     *       (WA Web increments the {@code a} counter and at end of batch
-     *       logs {@code "cpi payment info sync: <a> malformed mutations"}).</li>
-     *   <li>Otherwise calls
-     *       {@code WAWebBackendApi.frontendFireAndForget("setCPIInfo", {cpiInfo: i})}
-     *       which routes via {@code WAWebPaymentInfoSyncBridgeApi.setCPIInfo}
-     *       to {@code WAWebPaymentInfo.PaymentInfo.setCPIInfo} which diffs
-     *       against the current value, calls
-     *       {@code WAWebUserPrefsPaymentInfo.setCPIInfo(n)}, and triggers
-     *       the {@code CPI_INFO_CHANGE_EVENT}. Returns {@code Success}.</li>
+     *   <li>{@link ClientPlatformType#IOS_BUSINESS} or
+     *       {@link ClientPlatformType#ANDROID_BUSINESS} (mirroring WA
+     *       Web's {@code WAWebMobilePlatforms.isSMB} which checks
+     *       {@code SMBA == "smba"} and {@code SMBI == "smbi"});</li>
+     *   <li>{@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED};</li>
+     *   <li>{@link SyncdOperation#SET};</li>
+     *   <li>a non-{@code null} {@link PaymentInfoAction#cpi()} string.</li>
      * </ol>
-     *
-     * <p>WA Web's {@code WALogger.WARN} calls for the unsupported/malformed
-     * batch counters and the SMB/ABProp gate failures are intentionally
-     * omitted in Cobalt; the return semantics are preserved exactly. The
-     * diff-against-current and event-emission logic in
-     * {@code WAWebPaymentInfo.setCPIInfo} is collapsed into the single
-     * store setter {@link com.github.auties00.cobalt.store.WhatsAppStore#setPaymentInstructionCpi(String)}.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * Failures at the first three layers surface as
+     * {@link MutationApplicationResult#unsupported()}; a missing CPI
+     * string surfaces as
+     * {@link SyncdIndexUtils#malformedActionValue(String)}. On success
+     * the resolved CPI string is written via
+     * {@code WhatsAppStore.setPaymentInstructionCpi}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPaymentInfoSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        var platform = client.store().device().platform(); // ADAPTED: WAWebMobilePlatforms.isSMB — checks c === u.SMBA || c === u.SMBI where SMBA = "smba" (ANDROID_BUSINESS) and SMBI = "smbi" (IOS_BUSINESS)
+        var platform = client.store().device().platform();
         if (platform != ClientPlatformType.IOS_BUSINESS && platform != ClientPlatformType.ANDROID_BUSINESS) {
             return MutationApplicationResult.unsupported();
         }
@@ -142,7 +155,7 @@ public final class PaymentInfoHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        client.store().setPaymentInstructionCpi(cpi); // ADAPTED: WAWebBackendApi.frontendFireAndForget("setCPIInfo") -> WAWebPaymentInfoSyncBridgeApi.setCPIInfo -> WAWebPaymentInfo.setCPIInfo -> WAWebUserPrefsPaymentInfo.setCPIInfo collapsed into WhatsAppStore.setPaymentInstructionCpi
+        client.store().setPaymentInstructionCpi(cpi);
         return MutationApplicationResult.success();
     }
 }

@@ -5,33 +5,24 @@ import com.github.auties00.cobalt.node.usync.result.UsyncProtocolError;
 import com.github.auties00.cobalt.node.usync.result.UsyncProtocolResponse;
 
 /**
- * Sealed sum type for the value a USync per-user, per-protocol parser returns.
+ * Sealed sum type of the value a per-user, per-protocol parser returns.
  *
- * <p>Splits into two permits. {@link UsyncProtocolResponse} covers every
- * protocol-specific success variant (the eleven concrete success types under
- * {@link com.github.auties00.cobalt.node.usync.result}) and is itself a sealed
- * interface so callers can switch over the response branch without re-handling
- * errors. {@link UsyncProtocolError} represents the shared "the relay returned
- * an error for this user/protocol pair" variant.
+ * @apiNote
+ * Pattern-match at either level. Switching first on
+ * {@link UsyncProtocolResponse} vs {@link UsyncProtocolError} lets callers
+ * route success and error branches separately; switching directly on the
+ * concrete success permits (e.g. {@code ContactResult}, {@code DeviceResult})
+ * lets call sites that only care about one protocol drop into the typed
+ * payload without an intermediate cast.
  *
- * <p>Callers can pattern-match at either level.
- *
- * <pre>{@code
- * // Branch on success vs error first, then narrow on success
- * switch (result) {
- *     case UsyncProtocolError e    -> handleError(e);
- *     case UsyncProtocolResponse r -> handleResponse(r);
- * }
- *
- * // Or skip straight to a specific protocol
- * switch (result) {
- *     case ContactResult c      -> handleContact(c);
- *     case DeviceResult d       -> handleDevices(d);
- *     case UsyncProtocolError e -> handleError(e);
- *     default                   -> { /* other protocols * / }
- * }
- * }</pre>
+ * @implNote
+ * This implementation is the Cobalt counterpart of the dynamically-shaped
+ * objects returned by each parser in {@code WAWebUsync*}: the JS code uses
+ * the presence of an {@code errorCode} key to discriminate errors, while
+ * Cobalt uses the sealed-interface permits to make the discrimination
+ * compile-time exhaustive.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public sealed interface UsyncProtocolResult permits UsyncProtocolResponse, UsyncProtocolError {
+
 }

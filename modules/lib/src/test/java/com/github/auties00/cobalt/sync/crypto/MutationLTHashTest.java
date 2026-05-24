@@ -16,25 +16,46 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MutationLTHash} — Cobalt's adapter for
- * {@code WACryptoLtHash.LtHash16} (the LT-Hash backing app-state anti-tampering).
+ * Exercises the LT-Hash accumulator in {@link MutationLTHash} against the
+ * algebraic contract WA Web relies on for anti-tampering.
  *
- * <p>LT-Hash is a set-homomorphic accumulator: ordering of {@code add}/{@code subtract}
- * operations is irrelevant, and {@code add(X) + subtract(X)} is the identity. The
- * tests here pin down the four algebraic properties (commutativity, associativity,
- * group inverse, deterministic) plus the wire-level invariants (empty hash is
- * 128 zero bytes, HKDF expansion happens with the WA Web info string, hash length
- * is always 128 bytes).
+ * @apiNote
+ * Covers {@link MutationLTHash}, which wraps {@code WACryptoLtHash.LtHash16}.
+ * The matrix pins down four algebraic properties (commutativity, associativity,
+ * group inverse, determinism) plus the wire-level invariants (empty hash is
+ * 128 zero bytes, HKDF expansion uses the captured info string, hash buffers
+ * are always 128 bytes).
+ *
+ * @implNote
+ * Three synthetic value MACs ({@link #A}, {@link #B}, {@link #C}) drive the
+ * algebraic tests; the parity test additionally consumes WA-Web-captured
+ * value MACs from {@code crypto/lt-hash.expected} when the fixture is
+ * present.
  */
 @DisplayName("MutationLTHash")
 class MutationLTHashTest {
     /**
-     * Three deterministic value MACs used across the algebraic property tests.
+     * The first synthetic value MAC used in algebraic property tests.
      */
     private static final byte[] A = filled(32, 0x11);
+
+    /**
+     * The second synthetic value MAC used in algebraic property tests.
+     */
     private static final byte[] B = filled(32, 0x22);
+
+    /**
+     * The third synthetic value MAC used in algebraic property tests.
+     */
     private static final byte[] C = filled(32, 0x33);
 
+    /**
+     * Builds a byte array filled with a single byte value.
+     *
+     * @param length the array length
+     * @param value  the fill value, truncated to a byte
+     * @return a freshly allocated array
+     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;
@@ -108,7 +129,7 @@ class MutationLTHashTest {
     }
 
     @Nested
-    @DisplayName("commutativity — order of adds does not matter")
+    @DisplayName("commutativity - order of adds does not matter")
     class Commutativity {
         @Test
         @DisplayName("add(EMPTY, [A, B]) == add(EMPTY, [B, A])")
@@ -136,7 +157,7 @@ class MutationLTHashTest {
     }
 
     @Nested
-    @DisplayName("associativity — split-and-merge equivalence")
+    @DisplayName("associativity - split-and-merge equivalence")
     class Associativity {
         @Test
         @DisplayName("add(add(EMPTY, [A]), [B]) == add(EMPTY, [A, B])")
@@ -150,7 +171,7 @@ class MutationLTHashTest {
     }
 
     @Nested
-    @DisplayName("group inverse — add then subtract is identity")
+    @DisplayName("group inverse - add then subtract is identity")
     class GroupInverse {
         @Test
         @DisplayName("subtract(add(EMPTY, [A]), [A]) == EMPTY")
@@ -166,7 +187,7 @@ class MutationLTHashTest {
             var added = MutationLTHash.add(MutationLTHash.EMPTY_HASH, List.of(A, B, C));
             var removed = MutationLTHash.subtract(added, List.of(C, B, A));
             assertArrayEquals(MutationLTHash.EMPTY_HASH, removed,
-                    "subtract order is irrelevant — group is abelian");
+                    "subtract order is irrelevant; group is abelian");
         }
 
         @Test
@@ -180,7 +201,7 @@ class MutationLTHashTest {
     }
 
     @Nested
-    @DisplayName("subtractThenAdd — batched mixed operation")
+    @DisplayName("subtractThenAdd - batched mixed operation")
     class SubtractThenAdd {
         @Test
         @DisplayName("returns both the intermediate subtract result and the final hash")
@@ -190,15 +211,15 @@ class MutationLTHashTest {
             assertNotNull(result.subtractResult(), "intermediate must be present");
             assertNotNull(result.ltHash(), "final must be present");
 
-            // Intermediate: initial − A = add(EMPTY, [B])
+            // Intermediate: initial minus A equals add(EMPTY, [B])
             var onlyB = MutationLTHash.add(MutationLTHash.EMPTY_HASH, List.of(B));
             assertArrayEquals(onlyB, result.subtractResult(),
-                    "subtractResult must equal initial − toRemove");
+                    "subtractResult must equal initial minus toRemove");
 
             // Final: intermediate + C = add(EMPTY, [B, C])
             var bc = MutationLTHash.add(MutationLTHash.EMPTY_HASH, List.of(B, C));
             assertArrayEquals(bc, result.ltHash(),
-                    "ltHash must equal (initial − toRemove) + toAdd");
+                    "ltHash must equal (initial minus toRemove) plus toAdd");
         }
 
         @Test
@@ -223,7 +244,7 @@ class MutationLTHashTest {
     }
 
     @Nested
-    @DisplayName("copy — defensive clone")
+    @DisplayName("copy - defensive clone")
     class Copy {
         @Test
         @DisplayName("copy of null is null")
@@ -240,8 +261,10 @@ class MutationLTHashTest {
             assertFalse(original == clone, "clone must be a distinct instance");
 
             // Mutating the clone must not affect the original
+            var originalByte0Before = original[0];
             clone[0] = (byte) 0xFF;
-            assertEquals(0x00, original[0] & 0xFF);
+            assertEquals(originalByte0Before, original[0],
+                    "mutating the clone must not change the original");
         }
     }
 

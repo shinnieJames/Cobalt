@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.message.send;
 
 import com.github.auties00.cobalt.model.message.system.ProtocolMessage;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -15,27 +16,30 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for the {@link ProtocolMessage.Type} enum, which the
- * orchestrator uses to drive {@code edit} attribute, recipient device
- * filter, and target-sender selection for protocol messages.
+ * Pins the {@link ProtocolMessage.Type} enum's protobuf-index contract,
+ * which drives the {@code edit}, {@code decrypt-fail}, and target-sender
+ * selection branches across the send pipeline.
  *
- * <p>The full per-subtype dispatch behaviour (edit attribute propagation,
- * decrypt-fail attribute, recipient device list) lives inside the
- * package-private {@link UserMessageSender} / {@link GroupMessageSender} /
- * {@link PeerMessageSender} senders and is exercised indirectly by the
- * live-corpus oracle tests against captured wire stanzas. This class
- * focuses on the parts that can be verified without the full DI graph:
+ * @apiNote
+ * Asserts that every enum value carries a unique non-negative index, that
+ * the well-known indices documented by WA Web's
+ * {@code Message$ProtocolMessage$Type} are present, and that every value
+ * round-trips through {@code index()}. The full per-subtype dispatch
+ * behaviour (edit-attribute resolution, decrypt-fail attribute, recipient
+ * device list) lives inside the package-private senders and is covered by
+ * the live-corpus oracle tests.
  *
- * <ul>
- *   <li>Every enum value carries a unique non-negative protobuf index.</li>
- *   <li>The well-known indices documented by WA Web's
- *       {@code Message$ProtocolMessage$Type} enum are present.</li>
- *   <li>Every value round-trips through {@code index()}.</li>
- * </ul>
+ * @implNote
+ * This implementation exercises the enum directly rather than the
+ * dispatch end-to-end so the cells are independent of the full DI graph
+ * that the orchestrator's constructor wires up.
  */
 @DisplayName("ProtocolMessage.Type dispatch")
 class ProtocolMessageDispatchTest {
 
+    /**
+     * Asserts that every value carries a non-blank enum name.
+     */
     @ParameterizedTest(name = "{0} has non-null name")
     @EnumSource(ProtocolMessage.Type.class)
     @DisplayName("every value carries a stable enum name (regression guard)")
@@ -44,7 +48,10 @@ class ProtocolMessageDispatchTest {
         assertFalse(type.name().isBlank());
     }
 
-    @org.junit.jupiter.api.Test
+    /**
+     * Asserts that every protobuf index is non-negative and unique.
+     */
+    @Test
     @DisplayName("every value has a unique protobuf index")
     void indicesAreUnique() {
         var values = ProtocolMessage.Type.values();
@@ -59,12 +66,14 @@ class ProtocolMessageDispatchTest {
                 "every value must contribute a distinct index");
     }
 
-    @org.junit.jupiter.api.Test
+    /**
+     * Asserts that the well-known WA Web protobuf indices are present.
+     */
+    @Test
     @DisplayName("well-known WA Web protobuf indices are present")
     void wellKnownIndicesPresent() {
-        // From WA Web's Message$ProtocolMessage$Type — pinning the wire
-        // numbers Cobalt depends on for round-trip parity. If these drift
-        // we'll silently fail to round-trip protocol messages.
+        // Pinned against WA Web's Message$ProtocolMessage$Type so drift
+        // surfaces as a test failure rather than silent round-trip loss.
         assertEquals(0, ProtocolMessage.Type.REVOKE.index(),
                 "REVOKE must be 0 (the default-on-protobuf-wire value)");
         assertEquals(3, ProtocolMessage.Type.EPHEMERAL_SETTING.index());
@@ -72,22 +81,29 @@ class ProtocolMessageDispatchTest {
         assertEquals(6, ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE.index());
         assertEquals(7, ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST.index());
         assertEquals(14, ProtocolMessage.Type.MESSAGE_EDIT.index(),
-                "MESSAGE_EDIT must be 14 — the wire stanza's edit=1 marker comes from this branch");
+                "MESSAGE_EDIT must be 14; the wire stanza's edit=1 marker comes from this branch");
     }
 
-    @org.junit.jupiter.api.Test
+    /**
+     * Asserts a lower bound on the enum value count, guarding against a
+     * regression that drops a chunk of values.
+     */
+    @Test
     @DisplayName("count of values matches the WA Web wire enum (at least 20 documented subtypes)")
     void valueCountLowerBound() {
         var values = ProtocolMessage.Type.values();
-        // WA Web's Message$ProtocolMessage$Type has 31 subtypes per the test
-        // plan. Use a lower bound so future additions don't break this
-        // assertion, but a regression that removes a chunk of values does.
+        // 20 is a deliberate lower bound: WA Web's wire enum has 31 subtypes
+        // but new additions should not break the test.
         assertTrue(values.length >= 20,
                 "ProtocolMessage.Type must enumerate at least 20 subtypes, got " + values.length);
     }
 
-    @org.junit.jupiter.api.Test
-    @DisplayName("enum values resolve back via index() — each yields a distinct value")
+    /**
+     * Asserts that every value round-trips through {@code index()} into a
+     * distinct enum value.
+     */
+    @Test
+    @DisplayName("enum values resolve back via index() so each yields a distinct value")
     void everyValueRoundTripsViaIndex() {
         var values = ProtocolMessage.Type.values();
         var indices = Arrays.stream(values).map(t -> t.index()).toArray();
@@ -96,10 +112,13 @@ class ProtocolMessageDispatchTest {
                 "every protobuf index must map back to a unique enum value");
     }
 
-    @org.junit.jupiter.api.Test
+    /**
+     * Asserts that REVOKE and MESSAGE_EDIT are distinct values.
+     */
+    @Test
     @DisplayName("REVOKE and MESSAGE_EDIT are distinct values (used for edit=7 vs edit=1 on wire)")
     void revokeAndEditAreDistinct() {
         assertNotEquals(ProtocolMessage.Type.REVOKE, ProtocolMessage.Type.MESSAGE_EDIT,
-                "REVOKE and MESSAGE_EDIT must not collide — they drive different wire edit attributes");
+                "REVOKE and MESSAGE_EDIT must not collide; they drive different wire edit attributes");
     }
 }

@@ -11,24 +11,37 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Creates a new newsletter owned by the authenticated user.
+ * Builds the MEX request that creates a new newsletter owned by the
+ * authenticated user.
  *
- * <p>This mutation registers a new newsletter channel with the provided name,
- * description and picture metadata. On success the server returns the
- * fully-hydrated newsletter metadata including the generated id, initial
- * state, thread metadata and viewer role.
+ * @apiNote
+ * Drives the newsletter-creation form: the caller supplies the display name,
+ * description and uploaded picture payload, and the relay assigns the new
+ * newsletter Jid plus initial thread and viewer metadata. The response is
+ * parsed by {@link CreateNewsletterMexResponse} and used to seed the local
+ * newsletter store entry.
+ *
+ * @implNote
+ * This implementation always emits the {@code name}, {@code description} and
+ * {@code picture} fields even when their backing strings are {@code null},
+ * mirroring WA Web's {@code mexCreateNewsletter} which passes the literal
+ * arguments without null-skipping.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateNewsletterJob")
 public final class CreateNewsletterMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the {@code CreateNewsletter} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexCreateNewsletterJobMutation.graphql} on the WhatsApp
+     * relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "25149874324715067";
 
     /**
      * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this mutation.
+     * for this mutation.
      */
     public static final String OPERATION_NAME = "mexCreateNewsletter";
 
@@ -43,17 +56,22 @@ public final class CreateNewsletterMexRequest implements MexOperation.Request.Js
     private final String description;
 
     /**
-     * The base64 or direct-path encoded picture payload.
+     * The picture payload (base64 thumbnail or direct-path string) chosen
+     * for the newsletter avatar.
      */
     private final String picture;
 
     /**
      * Constructs a new request with the given mutation variables.
      *
-     * @param name        the newsletter display name, may be {@code null}
-     * @param description the newsletter description, may be {@code null}
-     * @param picture     the base64 or direct-path encoded picture payload,
-     *                    may be {@code null}
+     * @apiNote
+     * Any of the three string fields may be {@code null}; the resulting
+     * GraphQL request always emits them, so {@code null} arrives as a JSON
+     * {@code null} literal at the relay.
+     *
+     * @param name        the newsletter display name
+     * @param description the newsletter description
+     * @param picture     the base64 thumbnail or direct-path picture string
      */
     public CreateNewsletterMexRequest(String name, String description, String picture) {
         this.name = name;
@@ -62,10 +80,10 @@ public final class CreateNewsletterMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -73,10 +91,10 @@ public final class CreateNewsletterMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -84,14 +102,22 @@ public final class CreateNewsletterMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Builds the IQ stanza that dispatches this mutation to the WhatsApp
-     * relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * <p>The variables are wrapped under an {@code input} sub-object as
-     * {@code {input: {name, description, picture}}}.
+     * @apiNote
+     * Produces the {@code {variables: {input: {name, description, picture}}}}
+     * payload consumed by the persisted-query identified by
+     * {@link #QUERY_ID}; the three scalars are wrapped under a single
+     * {@code input} object that mirrors the GraphQL input type schema.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateNewsletterJob", exports = "mexCreateNewsletter",
             adaptation = WhatsAppAdaptation.ADAPTED)

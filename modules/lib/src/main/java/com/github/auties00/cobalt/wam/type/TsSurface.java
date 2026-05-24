@@ -240,5 +240,7 @@ public enum TsSurface {
     @WamEnumConstant(231) ABOUT_WHATSAPP_BUSINESS,
     @WamEnumConstant(232) SEND_CONTACTS,
     @WamEnumConstant(233) FOA_BIZ_PROFILE,
-    @WamEnumConstant(234) META_AI_NEW_CHAT
+    @WamEnumConstant(234) META_AI_NEW_CHAT,
+    @WamEnumConstant(235) MANAGE_STORAGE_GALLERY,
+    @WamEnumConstant(236) STATUS_PRIVACY_PARTICIPANT_PICKER
 }

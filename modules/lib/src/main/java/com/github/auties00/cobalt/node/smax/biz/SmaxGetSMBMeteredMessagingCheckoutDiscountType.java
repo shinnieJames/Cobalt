@@ -17,35 +17,69 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Documented {@code type} enum carried by the
- * {@code <discount/>} grandchildren of {@code <discounts/>}.
+ * The {@code type} enum carried by the {@code <discount/>}
+ * grandchildren of the {@code <discounts/>} child in the SMB
+ * metered-messaging checkout success reply.
+ *
+ * @apiNote
+ * Surfaced as the typed projection of each discount line on the
+ * checkout quote returned by
+ * {@code WAWebGetSMBMeteredMessagingCheckoutJob}; callers branch
+ * on {@link #FREEMSG} to render a free-message count and on
+ * {@link #PERCENTAGE} to render a percentage-off marker.
+ *
+ * @implNote
+ * This implementation accepts only the case-insensitive literals
+ * surfaced by
+ * {@code WASmaxInSmbMeteredMessagingAccountEnums.ENUM_FREEMSG_PERCENTAGE}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountEnums")
 public enum SmaxGetSMBMeteredMessagingCheckoutDiscountType {
     /**
-     * The discount is delivered as a number of free messages.
+     * Free-message discount line.
+     *
+     * @apiNote
+     * The discount is delivered as a number of free messages
+     * granted to the campaign.
      */
     FREEMSG,
     /**
-     * The discount is a percentage off the per-message rate.
+     * Percentage-off discount line.
+     *
+     * @apiNote
+     * The discount is a percentage off the per-message rate
+     * surfaced via the sibling {@code percentage} attribute.
      */
     PERCENTAGE;
 
     /**
-     * Tries to parse a wire-form attribute string.
+     * Resolves a wire-form attribute string into the matching enum
+     * constant.
+     *
+     * @apiNote
+     * Invoked while parsing the {@code <discount type>} attribute
+     * on each entry of the cost-discounts list in the metered
+     * messaging checkout success reply.
+     *
+     * @implNote
+     * This implementation matches the wire literals directly because the
+     * {@code free_msg} value carries an underscore that {@link String#toUpperCase}
+     * preserves, so a naive {@link #valueOf(String)} dispatch on the
+     * upper-cased form would never match the {@link #FREEMSG} constant.
      *
      * @param value the attribute value; may be {@code null}
      * @return an {@link Optional} carrying the matching enum
-     *         constant, or empty
+     *         constant, or empty when the value is {@code null} or
+     *         does not match a documented literal
      */
     public static Optional<SmaxGetSMBMeteredMessagingCheckoutDiscountType> of(String value) {
         if (value == null) {
             return Optional.empty();
         }
-        try {
-            return Optional.of(SmaxGetSMBMeteredMessagingCheckoutDiscountType.valueOf(value.toUpperCase(Locale.ROOT)));
-        } catch (IllegalArgumentException e) {
-            return Optional.empty();
-        }
+        return switch (value) {
+            case "free_msg" -> Optional.of(FREEMSG);
+            case "percentage" -> Optional.of(PERCENTAGE);
+            default -> Optional.empty();
+        };
     }
 }

@@ -102,26 +102,6 @@ public final class SignedAttributionCredential {
     }
 
     /**
-     * Constructs a new {@code SignedAttributionCredential} carrying
-     * the relay-issued payload.
-     *
-     * @param signTimestamp    the server-side issue time, in seconds
-     *                         since the Unix epoch
-     * @param signedCredential the server-signed credential bytes
-     * @param acsPublicKey     the ACS public key bytes
-     * @param dleqProofC       the DLEQ proof {@code c} component
-     * @param dleqProofS       the DLEQ proof {@code s} component
-     * @param projectName      the project identifier echo
-     * @return a new {@code SignedAttributionCredential}
-     */
-    public static SignedAttributionCredential of(long signTimestamp, byte[] signedCredential,
-                                                  byte[] acsPublicKey, byte[] dleqProofC,
-                                                  byte[] dleqProofS, String projectName) {
-        return new SignedAttributionCredential(signTimestamp, signedCredential, acsPublicKey,
-                dleqProofC, dleqProofS, projectName);
-    }
-
-    /**
      * Returns the server-side issue time, in seconds since the Unix
      * epoch.
      *

@@ -6,64 +6,45 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.device.StatusPostOptInNotificationPreferencesAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles {@link StatusPostOptInNotificationPreferencesAction} sync mutations
- * ({@code "status_post_opt_in_notification_preferences_action"}).
+ * Mirrors the user's opt-in choice for status-post notifications across
+ * linked devices.
  *
- * <p>Each mutation carries a single {@code enabled} boolean flag that controls
- * whether the linked WhatsApp account has opted in to receive notifications for
- * status posts. The flag is persisted on the local {@code WhatsAppStore} via
- * {@code setStatusPostOptInNotificationPreferencesEnabled}. Only {@code SET}
- * operations are accepted; any other operation maps to
- * {@link MutationApplicationResult#unsupported()} and a missing or wrong-typed
- * value maps to {@link MutationApplicationResult#malformed()}.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * would route incoming
+ * {@code "status_post_opt_in_notification_preferences_action"} mutations
+ * here if the server ever emits one. The handler persists the boolean
+ * opt-in flag on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so notification
+ * delivery for status posts respects the user's last choice.
  *
- * <p><b>NO_WA_BASIS:</b> The
- * {@code SyncActionValue.StatusPostOptInNotificationPreferencesAction} protobuf
- * is defined in {@code WAWebProtobufSyncAction.pb} (exported as
- * {@code SyncActionValue$StatusPostOptInNotificationPreferencesActionSpec}) at
- * top-level field index {@code 71} of {@code SyncActionValue}, with one optional
- * field ({@code enabled: bool} at index {@code 1}). The same module's
- * action-name table maps the numeric id {@code 71} to the string
- * {@code "status_post_opt_in_notification_preferences_action"}, and the
- * collection-name resolver explicitly maps
- * {@code STATUS_POST_OPT_IN_NOTIFICATION_PREFERENCES_ACTION -> REGULAR_HIGH}.
- * However, the current WA Web snapshot does <em>not</em> ship a corresponding
- * sync handler module (no {@code WAWebStatusPostOptInNotificationPreferencesSync}
- * or similarly-named module). The action is also absent from
- * {@code WAWebCollectionHandlerActions.ActionHandlers}, the registry of 60+
- * sync handlers consumed by
- * {@code WAWebSyncdGetActionHandler.setActionHandlers}. Consequently WA Web
- * would never dispatch any incoming mutation with this action via
- * {@code WAWebSyncdGetActionHandler.getActionHandler("status_post_opt_in_notification_preferences_action")}
- * (the lookup would return {@code undefined} and the mutation would be
- * skipped). The string literal
- * {@code "status_post_opt_in_notification_preferences_action"} is only present
- * inside {@code WAWebProtobufSyncAction.pb} as the protobuf field name; no
- * other WA Web module references it.
- *
- * <p>The Cobalt handler is a forward-looking implementation: it follows the
- * Cobalt sync handler conventions used by every other registered handler
- * (singleton, {@code applyMutation} producing a typed
- * {@link MutationApplicationResult}, eager store update on {@code SET}). The
- * shape of the handler — only-{@code SET}, single-boolean payload, single
- * store setter — is inferred directly from the protobuf shape (one optional
- * boolean field) and from sibling boolean-flag handlers such as
- * {@code PrivacySettingChannelsPersonalisedRecommendationHandler} and
- * {@code DisableLinkPreviewsHandler} which follow the same
- * {@code single-boolean -> single store setter} pattern. Every behavioural
- * step here is Cobalt-inferred until WA Web ships the matching sync module.
+ * @implNote
+ * This implementation is forward-looking. The
+ * {@code SyncActionValue.StatusPostOptInNotificationPreferencesAction}
+ * protobuf is declared in {@code WAWebProtobufSyncAction.pb} (field 71,
+ * collection {@code REGULAR_HIGH}, single optional {@code enabled: bool}
+ * at index 1), but the current WA Web snapshot does not ship a
+ * {@code WAWebStatusPostOptInNotificationPreferencesSync} module and the
+ * action is absent from
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web's
+ * dispatcher would currently {@code skip} any incoming mutation.
  */
 public final class StatusPostOptInNotificationPreferencesHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of
-     * {@code StatusPostOptInNotificationPreferencesHandler}.
+     * The singleton instance held by the sync registry.
      */
     public static final StatusPostOptInNotificationPreferencesHandler INSTANCE =
             new StatusPostOptInNotificationPreferencesHandler();
 
     /**
-     * Private constructor that enforces the singleton pattern.
+     * Constructs the singleton.
+     *
+     * @apiNote
+     * Callers obtain the handler via {@link #INSTANCE}; the constructor
+     * is private so the registry cannot accidentally instantiate it
+     * twice.
      */
     private StatusPostOptInNotificationPreferencesHandler() {
 
@@ -71,9 +52,6 @@ public final class StatusPostOptInNotificationPreferencesHandler implements WebA
 
     /**
      * {@inheritDoc}
-     * @return the canonical
-     *         {@code "status_post_opt_in_notification_preferences_action"}
-     *         string
      */
     @Override
     public String actionName() {
@@ -83,10 +61,11 @@ public final class StatusPostOptInNotificationPreferencesHandler implements WebA
     /**
      * {@inheritDoc}
      *
-     * <p>Returns {@link SyncPatchType#REGULAR_HIGH}, matching the
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR_HIGH} as
+     * inferred from {@code WAWebProtobufSyncAction.pb}'s
      * {@code STATUS_POST_OPT_IN_NOTIFICATION_PREFERENCES_ACTION -> REGULAR_HIGH}
-     * mapping declared in {@code WAWebProtobufSyncAction.pb}.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * collection-router branch.
      */
     @Override
     public SyncPatchType collectionName() {
@@ -95,7 +74,6 @@ public final class StatusPostOptInNotificationPreferencesHandler implements WebA
 
     /**
      * {@inheritDoc}
-     * @return the integer version constant declared on the action class
      */
     @Override
     public int version() {
@@ -103,33 +81,18 @@ public final class StatusPostOptInNotificationPreferencesHandler implements WebA
     }
 
     /**
-     * Applies a status post opt-in notification preferences mutation and
-     * returns the detailed outcome.
+     * {@inheritDoc}
      *
-     * <p>The processing pipeline is:
-     * <ol>
-     *   <li>If the operation is not {@link SyncdOperation#SET}, return
-     *       {@link MutationApplicationResult#unsupported()}. Only {@code SET}
-     *       mutations are accepted; the action carries a single boolean
-     *       opt-in flag and there is no semantic for {@code REMOVE}.</li>
-     *   <li>Resolve the mutation value to a
-     *       {@link StatusPostOptInNotificationPreferencesAction}; if the value
-     *       is missing or of the wrong type, return
-     *       {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>Persist the resolved opt-in boolean on the store via
-     *       {@code WhatsAppStore.setStatusPostOptInNotificationPreferencesEnabled}
-     *       and return {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>The store accessors
-     * {@code statusPostOptInNotificationPreferencesEnabled()} and
-     * {@code setStatusPostOptInNotificationPreferencesEnabled(...)} already
-     * exist on {@code WhatsAppStore} / {@code AbstractWhatsAppStore}; this
-     * handler is the sole writer.
-     * @param client   the {@link WhatsAppClient} instance linked to the
-     *                 mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation follows the canonical single-boolean-payload
+     * shape used by sibling handlers (e.g. {@code DisableLinkPreviewsHandler}):
+     * {@link SyncdOperation#SET} only, the value must decode to a
+     * {@link StatusPostOptInNotificationPreferencesAction}, and the
+     * {@code enabled} field is written to
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setStatusPostOptInNotificationPreferencesEnabled(boolean)}.
+     * The shape is Cobalt-inferred from the protobuf schema and a sibling
+     * handler because WA Web ships no concrete sync module for this
+     * action.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

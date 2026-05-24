@@ -11,41 +11,73 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.time.Instant;
 
 /**
- * Handles mute chat sync actions.
+ * Applies the {@code mute} app-state sync action that mutes or unmutes a
+ * chat across the user's linked devices.
  *
- * <p>This handler processes incoming mutations that mute or unmute chats,
- * applying the {@code muteEndTimestamp} (and, for groups, the optional
- * {@code muteEveryoneMentionEndTimestamp}) to the chat row in the store.
+ * @apiNote
+ * Drives the chat-list "Mute notifications" affordance: when the primary
+ * device mutes or unmutes a conversation the resulting timestamp fans
+ * out across the {@link SyncPatchType#REGULAR_HIGH} collection. For
+ * group chats the action also carries an optional
+ * {@code muteEveryoneMentionEndTimestamp} that gates @-everyone alerts
+ * separately. The mutation index keys each entry by the chat JID,
+ * formatted as
+ * {@snippet :
+ *     ["mute", chatJid]
+ * }
  *
- * <p>The action is identified by the {@code "mute"} action name in
- * {@code SyncActionValue.muteAction}. The mutation index format is
- * {@code ["mute", chatJid]}.
- *
- * <p>Per WhatsApp Web, this handler extends {@code ChatSyncdActionBase},
- * which shares the {@code chatJidIndex = 1} convention and supplies the
- * default per-chat sync scaffolding. In Cobalt, that inheritance is
- * flattened because each handler implements {@link WebAppStateActionHandler}
- * directly.
+ * @implNote
+ * This implementation flattens WA Web's
+ * {@code WAWebMuteChatSync.applyMutations} into a single per-mutation
+ * call: WA Web's per-batch
+ * {@code malformedActionValue}/{@code Unsupported} counters are
+ * dropped (Cobalt's per-mutation interface returns each result
+ * directly), and the {@code muteCollectionAdd} frontend dispatch is
+ * omitted because Cobalt has no UI consumer. The
+ * {@code mentionAllMuteExpiration} branch is gated on
+ * {@link ABProp#ENABLE_MENTION_EVERYONE_RECEIVER_WEB} exactly as in
+ * WA Web; mutation-time exceptions surface as
+ * {@link MutationApplicationResult#failed()} to mirror WA's
+ * try/catch wrapper.
  */
 @WhatsAppWebModule(moduleName = "WAWebMuteChatSync")
 public final class MuteChatHandler implements WebAppStateActionHandler {
     /**
-     * The AB-props service consulted for the mention-everyone gates on
-     * both the receive and send paths.
+     * The AB-props service consulted for the
+     * {@link ABProp#ENABLE_MENTION_EVERYONE_RECEIVER_WEB} gate on every
+     * group mute mutation.
+     *
+     * @apiNote
+     * Internal collaborator injected at construction; never accessed
+     * outside {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs a mute-chat handler bound to the given AB-props service.
      *
+     * @apiNote
+     * Used by the sync handler registry; the AB-props service is consulted
+     * on every group mute mutation to decide whether to honour
+     * {@code muteEveryoneMentionEndTimestamp}.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code WAWebMuteChatSync}
+     * constructor: it sets {@code chatJidIndex = 1} and
+     * {@code collectionName = RegularHigh} on the prototype and inherits
+     * from {@code ChatSyncdActionBase}. Cobalt holds the chat-jid index
+     * convention as a per-handler constant inside
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * and surfaces the collection via {@link #collectionName()}.
+     *
      * @param abPropsService the AB-props service consulted on every
-     *                       mute mutation
+     *                       group mute mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MuteChatHandler(ABPropsService abPropsService) {
@@ -53,8 +85,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for mute chat actions.
-     * @return the action name {@code "mute"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -63,11 +94,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for mute chat actions.
-     *
-     * <p>Per WhatsApp Web, the mute handler's {@code collectionName} is set to
-     * {@code WASyncdConst.CollectionName.RegularHigh} in the constructor.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -76,8 +103,7 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for mute chat actions.
-     * @return the version number {@code 2}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -86,43 +112,26 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a mute chat mutation and returns the detailed outcome.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebMuteChatSync.applyMutations}, for each
-     * mutation with {@code operation === "set"}:
-     * <ol>
-     *   <li>Extracts the chat JID from {@code indexParts[1]}</li>
-     *   <li>Validates the JID is a valid WID via {@code WAWebWid.isWid}</li>
-     *   <li>Extracts {@code muteAction.muted} and
-     *       {@code muteAction.muteEndTimestamp}; returns
-     *       {@code malformedActionValue} when {@code muted} is {@code true}
-     *       but the end timestamp is missing</li>
-     *   <li>Resolves the chat via
-     *       {@code WAWebSyncdGetChat.resolveChatForMutationIndex}</li>
-     *   <li>Computes the mute expiration in seconds: past timestamps collapse
-     *       to {@code 0}, future timestamps are converted via
-     *       {@code Math.floor(ms / 1000)}</li>
-     *   <li>For groups only, when the
-     *       {@code enable_mention_everyone_receiver_web} AB prop is enabled,
-     *       applies the same conversion to
-     *       {@code muteEveryoneMentionEndTimestamp} and stores the
-     *       {@code mentionAllMuteExpiration} alongside the regular mute
-     *       expiration</li>
-     *   <li>Merges {@code {muteExpiration, mentionAllMuteExpiration?}} into
-     *       the chat row via {@code getChatTable().merge}</li>
-     *   <li>Emits a {@code muteCollectionAdd} backend event (intentionally
-     *       skipped in Cobalt because there is no frontend consumer)</li>
-     * </ol>
-     *
-     * <p>Non-{@code SET} operations return {@code Unsupported}. Exceptions are
-     * caught and return {@code Failed} to match WA Web's per-mutation recovery.
-     *
-     * <p>Telemetry (the {@code WALogger.WARN} calls that emit the malformed
-     * and unsupported counts at the end of the batch) is intentionally
-     * omitted in Cobalt because WAM events are not forwarded.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation mirrors the WA Web per-mutation arm of
+     * {@code WAWebMuteChatSync.applyMutations}: a missing
+     * {@code muteEndTimestamp} alongside {@code muted == true} is
+     * rejected as {@link MutationApplicationResult#malformed()}, the
+     * resolved chat must exist in
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} (otherwise
+     * {@link MutationApplicationResult#orphan(String, String)} with
+     * {@code modelType="Chat"}), and timestamps are clamped per WA Web
+     * via {@code muteEndMillis > 0 && muteEndMillis < now ? 0 : ms / 1000}.
+     * For group/community chats with
+     * {@link ABProp#ENABLE_MENTION_EVERYONE_RECEIVER_WEB} enabled, the
+     * mention-everyone expiration is computed with the same
+     * past/future/zero clamping and persisted via
+     * {@code store.setMentionEveryoneMuteExpiration}. The
+     * {@code muteCollectionAdd} frontend fire-and-forget is dropped:
+     * Cobalt has no UI consumer; mutation-time exceptions are caught
+     * and reported as {@link MutationApplicationResult#failed()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMuteChatSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -141,14 +150,12 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
-            // ADAPTED: Cobalt's MuteAction.muted() coalesces null to false per Cobalt nullable-Boolean
-            // conventions; the (d && m == null) check — muted=true with missing timestamp — is preserved.
             if (action.muted() && action.muteEndTimestamp().isEmpty()) {
                 return SyncdIndexUtils.malformedActionValue(collectionName().name());
             }
 
             var chatJid = Jid.of(chatJidString);
-            if (chatJid == null) { // ADAPTED: Jid.of returns null for null input; WA Web uses isWid() validation
+            if (chatJid == null) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
@@ -163,12 +170,6 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
                     : muteEndMillis / 1000;
             chat.get().setMute(ChatMute.mutedUntil(muteEndSeconds));
 
-            //   var h = maybeNumberOrThrowIfTooLarge(c?.muteEveryoneMentionEndTimestamp);
-            //   var y;
-            //   h != null && getABPropConfigValue("enable_mention_everyone_receiver_web") && (
-            //     h > unixTimeMs() ? y = Math.floor(h / 1e3) : h > 0 ? y = 0 : y = h
-            //   );
-            //   isGroup(createWid(_)) && y != null && (C.mentionAllMuteExpiration = y)
             if (chatJid.hasGroupOrCommunityServer()
                     && abPropsService.getBool(ABProp.ENABLE_MENTION_EVERYONE_RECEIVER_WEB)) {
                 action.muteEveryoneMentionEndTimestamp().ifPresent(mentionTs -> {
@@ -185,7 +186,6 @@ public final class MuteChatHandler implements WebAppStateActionHandler {
                 });
             }
 
-            // SKIPPED: Cobalt has no frontend consumer for UI collection updates.
             return MutationApplicationResult.success();
         } catch (Exception e) {
             return MutationApplicationResult.failed();

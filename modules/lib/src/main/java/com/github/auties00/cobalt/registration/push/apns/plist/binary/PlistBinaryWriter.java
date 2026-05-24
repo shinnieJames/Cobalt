@@ -15,38 +15,58 @@ import java.util.IdentityHashMap;
 import java.util.List;
 
 /**
- * Multi-pass exact-allocation writer for Apple's {@code bplist00}
- * binary format.
+ * A multi-pass exact-allocation writer for Apple's {@code bplist00}
+ * binary property-list format.
  *
- * <p>The writer first walks the tree to enumerate every object
- * (synthesizing a {@link PlistStringValue} per dictionary key, since
- * keys live in the object table just like values). It then sizes
+ * @apiNote
+ * Consumed indirectly via
+ * {@link com.github.auties00.cobalt.registration.push.apns.plist.Plist#writeBinary(PlistValue)}.
+ * Emits the same on-wire shape Apple's parsers ({@code CFBinaryPList.c})
+ * accept: an 8-byte magic header, an object table laid out in DFS
+ * order, an offset table whose entry width depends on the location
+ * of the offset table itself, and a 32-byte trailer pointing at the
+ * top object.
+ *
+ * @implNote
+ * This implementation walks the tree once to enumerate every object
+ * (synthesising a {@link PlistStringValue} per dictionary key, since
+ * dict keys live in the object table just like values), then sizes
  * each object given the now-known reference width, computes per-
  * object offsets, sums them to locate the offset table, derives the
- * offset width, and finally allocates a {@code byte[]} of the exact
- * total size and fills it in place. Header, object table, offset
- * table, trailer.
- *
- * <p>No object deduplication is performed: equal-but-distinct
- * values get separate slots. Apple's parsers accept this.
- *
- * <p>Callers normally route through the
- * {@code Plist} facade. This class is the implementation.
+ * offset width, allocates a single {@code byte[]} of the exact total
+ * size, and fills it in place. No object deduplication is performed;
+ * equal-but-distinct values get separate slots, which Apple's
+ * parsers accept.
  */
 public final class PlistBinaryWriter {
     /**
-     * Length of the trailer that closes a binary plist.
+     * The length in bytes of the trailer that closes a binary plist.
      */
     private static final int TRAILER_SIZE = 32;
 
     /**
-     * Hidden constructor. The class is a stateless namespace.
+     * Hidden constructor.
+     *
+     * @apiNote
+     * Prevents instantiation; the class is a stateless namespace.
      */
     private PlistBinaryWriter() {
     }
 
     /**
-     * Serializes {@code root} as a {@code bplist00} binary plist.
+     * Serialises a value tree as a {@code bplist00} binary plist.
+     *
+     * @apiNote
+     * The single public entry point; drives the four-step pipeline
+     * (collect, size, encode, trailer-fill) end to end.
+     *
+     * @implNote
+     * This implementation computes the offset table location
+     * {@code offsetTableOffset = MAGIC.length + sum(sizeOf(object))}
+     * and derives {@code offsetSize} from that; this is the same
+     * sequence Apple's own writer follows and is required because
+     * the trailer's offset-width field must be picked after the
+     * object payload is sized.
      *
      * @param root the root value
      * @return the binary plist bytes
@@ -59,7 +79,7 @@ public final class PlistBinaryWriter {
 
         var offsets = new int[numObjects];
         var objectTableSize = 0;
-        for (int i = 0; i < numObjects; i++) {
+        for (var i = 0; i < numObjects; i++) {
             offsets[i] = PlistBinaryParser.MAGIC.length + objectTableSize;
             objectTableSize += sizeOf(ctx.objects.get(i), refSize);
         }
@@ -73,11 +93,11 @@ public final class PlistBinaryWriter {
         System.arraycopy(PlistBinaryParser.MAGIC, 0, out, 0, PlistBinaryParser.MAGIC.length);
 
         var pos = PlistBinaryParser.MAGIC.length;
-        for (int i = 0; i < numObjects; i++) {
+        for (var i = 0; i < numObjects; i++) {
             pos = encodeObject(out, pos, ctx.objects.get(i), refSize, ctx);
         }
 
-        for (int i = 0; i < numObjects; i++) {
+        for (var i = 0; i < numObjects; i++) {
             writeBigEndian(out, offsetTableOffset + i * offsetSize, offsets[i], offsetSize);
         }
 
@@ -91,10 +111,17 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Returns the encoded byte length of {@code v} given the
-     * already-decided {@code refSize}. For containers this is the
-     * marker (plus an extended-length suffix when the count is
-     * {@code >= 15}) plus {@code refSize} bytes per child reference.
+     * Returns the encoded byte length of a value.
+     *
+     * @apiNote
+     * Used by {@link #write(PlistValue)} to lay out the object table
+     * before any encode call runs.
+     *
+     * @implNote
+     * This implementation accounts for the marker byte, any
+     * extended-length suffix (when the count is at least
+     * {@code 0xF}), and either the scalar payload or
+     * {@code refSize} bytes per child reference for containers.
      *
      * @param v       the value
      * @param refSize the inter-object reference width
@@ -118,14 +145,27 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Encodes one object at {@code pos}.
+     * Encodes one object into the destination buffer.
+     *
+     * @apiNote
+     * Dispatches on the sealed {@link PlistValue} hierarchy and
+     * writes the marker byte plus the scalar payload (for primitives)
+     * or the reference array (for containers).
+     *
+     * @implNote
+     * This implementation reads child indices through
+     * {@code ctx.indices}; for dictionaries it additionally
+     * resolves the synthesised key {@link PlistStringValue}s via
+     * {@code ctx.dictKeys} so the on-disk N-keys / N-values layout
+     * stays consistent with the entry iteration order chosen by
+     * {@link Context#collect(PlistValue)}.
      *
      * @param out     the destination buffer
      * @param pos     the current write position
      * @param v       the object to encode
      * @param refSize the inter-object reference width
-     * @param ctx     the collection context (for resolving child
-     *                references)
+     * @param ctx     the collection context resolving child
+     *                references
      * @return the position after the object
      */
     private static int encodeObject(byte[] out, int pos, PlistValue v, int refSize, Context ctx) {
@@ -161,12 +201,12 @@ public final class PlistBinaryWriter {
                 var charCount = value.length();
                 if (isAscii(value)) {
                     pos = writeMarkerWithLength(out, pos, 0x50, charCount);
-                    for (int i = 0; i < charCount; i++) {
+                    for (var i = 0; i < charCount; i++) {
                         out[pos++] = (byte) value.charAt(i);
                     }
                 } else {
                     pos = writeMarkerWithLength(out, pos, 0x60, charCount);
-                    for (int i = 0; i < charCount; i++) {
+                    for (var i = 0; i < charCount; i++) {
                         var c = value.charAt(i);
                         out[pos++] = (byte) (c >> 8);
                         out[pos++] = (byte) c;
@@ -199,16 +239,21 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Writes a container/data/string marker. Combining the high
-     * nibble of the marker base ({@code 0x4n}, {@code 0x5n}, …)
-     * with the inline count when {@code count < 15}, or with the
-     * extension nibble {@code 0xF} followed by an integer marker
-     * carrying the actual count otherwise.
+     * Writes a marker byte with either an inline or an extended
+     * count.
+     *
+     * @apiNote
+     * Used for every container, data, and string marker. When
+     * {@code count} is below 15 the count is encoded in the low
+     * nibble of the marker byte itself; otherwise the marker carries
+     * the extension nibble {@code 0xF} and is followed by an integer
+     * marker whose payload is the actual count.
      *
      * @param out        the destination buffer
      * @param pos        the current write position
-     * @param markerBase the high nibble (e.g.
-     *                   {@code 0x40} for data)
+     * @param markerBase the high nibble of the marker
+     *                   (e.g. {@code 0x40} for data, {@code 0xA0} for
+     *                   array)
      * @param count      the count to encode
      * @return the position after the marker
      */
@@ -225,10 +270,13 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Returns the smallest power-of-two byte width that holds
-     * {@code value}. Negative values always require 8 bytes (signed
-     * two's complement). Non-negative values use 1, 2, 4, or 8
-     * unsigned per Apple's spec.
+     * Returns the smallest power-of-two byte width that holds an
+     * integer value.
+     *
+     * @apiNote
+     * Negative values always require 8 bytes because Apple's spec
+     * encodes 8-byte integers as signed two's complement;
+     * non-negative values use 1, 2, 4, or 8 bytes unsigned.
      *
      * @param value the integer value
      * @return the width in bytes (1, 2, 4, or 8)
@@ -250,10 +298,14 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Returns the size of the extended-length suffix for a count
-     * that does not fit in the marker's low nibble. One byte for
-     * the integer marker plus the integer's own bytes. Returns
-     * {@code 0} when the count is inline.
+     * Returns the byte length of the extended-length suffix for a
+     * count.
+     *
+     * @apiNote
+     * Used by {@link #sizeOf(PlistValue, int)} to size container
+     * markers. Returns zero when the count fits in the marker's low
+     * nibble; otherwise one byte for the integer marker plus the
+     * integer's own bytes.
      *
      * @param count the count
      * @return the suffix size in bytes
@@ -267,8 +319,12 @@ public final class PlistBinaryWriter {
 
     /**
      * Returns the smallest power-of-two byte width sufficient to
-     * encode {@code maxValue} unsigned. Used to pick {@code refSize}
-     * and {@code offsetSize} for the trailer.
+     * encode a value unsigned.
+     *
+     * @apiNote
+     * Used to pick the reference width (sized to the largest object
+     * index) and the offset width (sized to the offset table
+     * location).
      *
      * @param maxValue the largest value to be stored
      * @return the width in bytes (1, 2, 4, or 8)
@@ -290,14 +346,20 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Returns {@code true} if every character in {@code s} is in
-     * the ASCII range.
+     * Reports whether every character of a string is in the ASCII
+     * range.
+     *
+     * @apiNote
+     * Used to choose between the {@code 0x5n} (ASCII, 1 byte per
+     * code unit) and {@code 0x6n} (UTF-16BE, 2 bytes per code unit)
+     * string markers.
      *
      * @param s the string
-     * @return whether the string is ASCII-only
+     * @return {@code true} if every character is below
+     *         {@code U+0080}
      */
     private static boolean isAscii(String s) {
-        for (int i = 0; i < s.length(); i++) {
+        for (var i = 0; i < s.length(); i++) {
             if (s.charAt(i) >= 0x80) {
                 return false;
             }
@@ -306,8 +368,11 @@ public final class PlistBinaryWriter {
     }
 
     /**
-     * Writes {@code value} as {@code byteCount} big-endian bytes at
-     * {@code pos}.
+     * Writes a value as a fixed-width big-endian integer.
+     *
+     * @apiNote
+     * Used for every multi-byte field the format emits (offsets,
+     * references, scalar integers, the trailer fields).
      *
      * @param out       the destination buffer
      * @param pos       the start offset
@@ -315,39 +380,69 @@ public final class PlistBinaryWriter {
      * @param byteCount the byte width from 1 to 8
      */
     private static void writeBigEndian(byte[] out, int pos, long value, int byteCount) {
-        for (int i = byteCount - 1; i >= 0; i--) {
+        for (var i = byteCount - 1; i >= 0; i--) {
             out[pos + i] = (byte) (value & 0xFF);
             value >>>= 8;
         }
     }
 
     /**
-     * Tree-collection state shared between the sizing and encoding
-     * passes. Every object's index in the object table, and for
-     * each dictionary the synthesized key strings (since dict keys
-     * are themselves objects in the table).
+     * The tree-walk state shared between the sizing and the
+     * encoding passes.
+     *
+     * @apiNote
+     * Holds the DFS-ordered object table, the identity-keyed index
+     * map used to resolve child references, and the synthesised key
+     * {@link PlistStringValue}s for each dictionary (since dict
+     * keys are themselves objects in the table).
+     *
+     * @implNote
+     * This implementation uses {@link IdentityHashMap} so two equal
+     * but distinct values get separate slots; Apple's parsers accept
+     * this and the alternative (value-equality keying) would require
+     * the writer to track which slot a future caller will choose.
      */
     private static final class Context {
         /**
-         * Object table in DFS order. Root is at index 0.
+         * The object table in DFS order; the root is at index 0.
          */
         private final List<PlistValue> objects = new ArrayList<>();
 
         /**
-         * Index of each collected object. Identity-keyed so equal
-         * but distinct values do not get deduplicated.
+         * The identity-keyed index of each collected object.
+         *
+         * @apiNote
+         * Identity-keyed so equal-but-distinct values do not get
+         * deduplicated.
          */
         private final IdentityHashMap<PlistValue, Integer> indices = new IdentityHashMap<>();
 
         /**
-         * For each dictionary, the synthesized {@link PlistStringValue}
-         * objects for its keys, in entry order.
+         * The synthesised key {@link PlistStringValue}s for each
+         * dictionary, in entry order.
+         *
+         * @apiNote
+         * Dictionary keys are themselves objects in the table; the
+         * writer materialises one {@link PlistStringValue} per key
+         * so the encode pass can emit a uniform "N keys followed by
+         * N values" reference layout.
          */
         private final IdentityHashMap<PlistDictionaryValue, List<PlistStringValue>> dictKeys = new IdentityHashMap<>();
 
         /**
-         * Recursively assigns an object-table index to {@code v} and
-         * its descendants.
+         * Assigns an object-table index to a value and recursively
+         * collects its descendants.
+         *
+         * @apiNote
+         * Called by {@link #write(PlistValue)} on the root before
+         * any sizing or encoding runs.
+         *
+         * @implNote
+         * This implementation guards against re-collection of the
+         * same instance via the {@link #indices} lookup, walks
+         * arrays by item index, and walks dictionaries by entry
+         * order, synthesising one key string per entry into
+         * {@link #dictKeys} along the way.
          *
          * @param v the value
          * @return the assigned index

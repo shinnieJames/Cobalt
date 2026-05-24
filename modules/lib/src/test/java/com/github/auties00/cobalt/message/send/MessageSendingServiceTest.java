@@ -3,8 +3,11 @@ package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.StubDeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
+import com.github.auties00.cobalt.media.transcode.MediaTranscoderService;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
+import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -21,26 +24,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link MessageSendingService}, mirroring
- * {@code WAWebSendMsgJob.encryptAndSendMsg}.
+ * Exercises {@link MessageSendingService}'s error and validation branches
+ * for the {@code WAWebSendMsgJob.encryptAndSendMsg} contract.
  *
- * <p>The orchestrator dispatches a fully-prepared {@link com.github.auties00.cobalt.model.message.MessageInfo}
- * by the parent JID's server type. Cells:
+ * @apiNote
+ * Covers the cross-shape rejection cells: a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
+ * targeting a newsletter JID and a
+ * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo}
+ * targeting a non-newsletter JID both raise
+ * {@link WhatsAppMessageException.Send.InvalidRecipient}; a missing
+ * {@code messageId} or {@code parentJid} on the key raises
+ * {@link IllegalArgumentException};
+ * {@link MessageSendingService#sendKeyDistribution(Jid, MessageKey)}
+ * rejects non-group JIDs with the same {@code InvalidRecipient}; null
+ * arguments raise {@link NullPointerException}.
  *
- * <ul>
- *   <li>{@code ChatMessageInfo} + newsletter JID → {@link WhatsAppMessageException.Send.InvalidRecipient}
- *       (mismatch).</li>
- *   <li>{@code NewsletterMessageInfo} + non-newsletter JID → {@link WhatsAppMessageException.Send.InvalidRecipient}.</li>
- *   <li>Missing {@code messageId} on the key → {@link IllegalArgumentException}.</li>
- *   <li>Missing {@code parentJid} on the key → {@link IllegalArgumentException}.</li>
- *   <li>{@link MessageSendingService#sendKeyDistribution(Jid, MessageKey)}
- *       rejects non-group JIDs with {@code InvalidRecipient}.</li>
- *   <li>Null {@code chatJid} on {@code send(Jid, MessageContainer)} throws NPE.</li>
- * </ul>
- *
- * <p>The successful happy-path dispatch by sender kind is covered by the
- * per-sender tests (UserMessageSenderTest / GroupMessageSenderTest / etc.)
- * and indirectly by the live-corpus oracle tests.
+ * @implNote
+ * The successful dispatch-by-sender-kind path is exercised by the
+ * per-sender test families and by the live-corpus oracle; this class only
+ * covers the validation cells that need a real but minimal DI graph.
  */
 @DisplayName("MessageSendingService")
 class MessageSendingServiceTest {
@@ -51,8 +53,12 @@ class MessageSendingServiceTest {
     private static final Jid GROUP = Jid.of("120363023250764418@g.us");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
+    /**
+     * Asserts that a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
+     * with a newsletter parent JID is rejected as an invalid recipient.
+     */
     @Test
-    @DisplayName("send(MessageInfo): ChatMessageInfo with a newsletter parent JID → InvalidRecipient")
+    @DisplayName("send(MessageInfo): ChatMessageInfo with a newsletter parent JID -> InvalidRecipient")
     void chatMessageInfoToNewsletterFails() {
         var service = buildService();
         var info = new ChatMessageInfoBuilder()
@@ -69,8 +75,12 @@ class MessageSendingServiceTest {
                 "ChatMessageInfo to a newsletter JID is an unsupported combination");
     }
 
+    /**
+     * Asserts that a {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo}
+     * with a non-newsletter parent JID is rejected as an invalid recipient.
+     */
     @Test
-    @DisplayName("send(MessageInfo): NewsletterMessageInfo with a non-newsletter parent JID → InvalidRecipient")
+    @DisplayName("send(MessageInfo): NewsletterMessageInfo with a non-newsletter parent JID -> InvalidRecipient")
     void newsletterMessageInfoToChatFails() {
         var service = buildService();
         var info = new NewsletterMessageInfoBuilder()
@@ -88,6 +98,10 @@ class MessageSendingServiceTest {
                 "NewsletterMessageInfo to a non-newsletter JID is an unsupported combination");
     }
 
+    /**
+     * Asserts that a missing message id on the key fails fast with
+     * {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("send(MessageInfo): missing messageId on the key throws IllegalArgumentException")
     void missingMessageIdThrows() {
@@ -102,6 +116,10 @@ class MessageSendingServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.send(info));
     }
 
+    /**
+     * Asserts that a missing parent JID on the key fails fast with
+     * {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("send(MessageInfo): missing parentJid on the key throws IllegalArgumentException")
     void missingParentJidThrows() {
@@ -116,6 +134,9 @@ class MessageSendingServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.send(info));
     }
 
+    /**
+     * Asserts that {@code sendKeyDistribution} rejects non-group JIDs.
+     */
     @Test
     @DisplayName("sendKeyDistribution: non-group JID throws InvalidRecipient")
     void sendKeyDistributionNonGroup() {
@@ -129,6 +150,9 @@ class MessageSendingServiceTest {
                 () -> service.sendKeyDistribution(PEER_PN, key));
     }
 
+    /**
+     * Asserts that {@code sendKeyDistribution} rejects a key without an id.
+     */
     @Test
     @DisplayName("sendKeyDistribution: key without id throws IllegalArgumentException")
     void sendKeyDistributionMissingId() {
@@ -141,6 +165,10 @@ class MessageSendingServiceTest {
                 () -> service.sendKeyDistribution(GROUP, key));
     }
 
+    /**
+     * Asserts that null arguments to
+     * {@code send(Jid, MessageContainer)} fail fast.
+     */
     @Test
     @DisplayName("send(Jid, MessageContainer): null arguments throw NullPointerException")
     void sendNullArgs() {
@@ -151,6 +179,9 @@ class MessageSendingServiceTest {
                 () -> service.send(PEER_PN, null));
     }
 
+    /**
+     * Asserts that a null argument to {@code send(MessageInfo)} fails fast.
+     */
     @Test
     @DisplayName("send(MessageInfo): null arg throws NullPointerException")
     void sendInfoNullArg() {
@@ -158,6 +189,9 @@ class MessageSendingServiceTest {
         assertThrows(NullPointerException.class, () -> service.send(null));
     }
 
+    /**
+     * Asserts that null arguments to {@code sendPeer} fail fast.
+     */
     @Test
     @DisplayName("sendPeer: null arguments throw NullPointerException")
     void sendPeerNullArgs() {
@@ -177,10 +211,18 @@ class MessageSendingServiceTest {
     }
 
     /**
-     * Builds a fully-wired {@link MessageSendingService} backed by a
-     * temporary store, the test client, and a stub device service.
+     * Builds a fully-wired {@link MessageSendingService} backed by stubbed
+     * dependencies.
      *
-     * @return the service
+     * @apiNote
+     * Shared factory used by every cell; the service is wired with a
+     * temporary {@link com.github.auties00.cobalt.store.WhatsAppStore},
+     * the {@link TestWhatsAppClient}, and
+     * a {@link StubDeviceService} so the
+     * validation cells can exercise the public surface without touching
+     * the wire.
+     *
+     * @return the configured {@link MessageSendingService}
      */
     private static MessageSendingService buildService() {
         var store = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -191,7 +233,9 @@ class MessageSendingServiceTest {
                 new SignalSessionCipher(store),
                 new SignalGroupCipher(store));
         var wam = new DefaultWamService(client, client.abPropsService());
+        var migration = new LidMigrationService(client, client.abPropsService(), wam);
         return new MessageSendingService(client, encryption,
-                StubDeviceService.create(), client.abPropsService(), wam);
+                StubDeviceService.create(), migration, client.abPropsService(), wam,
+                new MediaTranscoderService(client, client.abPropsService(), TestMediaConnectionService.create()));
     }
 }

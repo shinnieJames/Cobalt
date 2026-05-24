@@ -37,6 +37,9 @@ public interface QuickReplyEvent extends WamEventSpec {
     @WamProperty(index = 16, type = WamType.ENUM)
     Optional<LastMessageDirection> lastMessageDirection();
 
+    @WamProperty(index = 20, type = WamType.STRING)
+    Optional<String> listIds();
+
     @WamProperty(index = 17, type = WamType.INTEGER)
     OptionalInt messageDepth();
 

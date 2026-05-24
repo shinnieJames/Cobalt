@@ -12,20 +12,40 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxMessagePublishNewsletterRequest}.
+ * The reply produced by the relay for a
+ * {@link SmaxMessagePublishNewsletterRequest}; either a {@link Success}
+ * acknowledging the publish or a {@link Negative} carrying the
+ * rejection code and optional retry backoff.
+ *
+ * @apiNote
+ * Returned by the smax send pipeline that
+ * {@code WASmaxMessagePublishNewsletterRPC.sendNewsletterRPC} drives.
+ * The success arm hands callers the relay-assigned server-id of a
+ * brand-new post or the response-server-id of a question-response;
+ * the negative arm carries enough information for callers to
+ * schedule a retry per the {@code backoff} hint.
  */
 public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperation.Response
         permits SmaxMessagePublishNewsletterResponse.Success, SmaxMessagePublishNewsletterResponse.Negative {
 
     /**
-     * Tries each {@link SmaxMessagePublishNewsletterResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Resolves an inbound ack into the first matching response
+     * variant in negative-then-success priority.
      *
-     * @param node    the inbound ack stanza received from the
-     *                relay; never {@code null}
-     * @param request the original outbound stanza. Used to validate
-     *                echoed identifiers; never {@code null}
+     * @apiNote
+     * Called by the smax send pipeline after dispatching a
+     * {@link SmaxMessagePublishNewsletterRequest}. The negative arm
+     * is tried first because it is distinguished by the presence of
+     * an {@code error} attribute; success acks omit it.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web priority order in
+     * {@code sendNewsletterRPC}: try negative first, then fall
+     * through to success.
+     *
+     * @param node    the inbound ack stanza; never {@code null}
+     * @param request the originating outbound message stanza; never
+     *                {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant
      *         matched
@@ -44,13 +64,23 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
     }
 
     /**
-     * Validates the {@code <ack/>} envelope of a publish reply by
-     * cross-checking {@code from}/{@code id}/{@code class="message"}
-     * against the request.
+     * Validates the {@code <ack class="message">} envelope by
+     * cross-checking the description, class, id, from, and
+     * timestamp attributes against the originating request.
+     *
+     * @apiNote
+     * Used internally by {@link Success#of(Node, Node)} and
+     * {@link Negative#of(Node, Node)} to gate further parsing; a
+     * failed envelope short-circuits before any payload inspection.
+     *
+     * @implNote
+     * This implementation lets the {@code from} echo check succeed
+     * when the request lacked a {@code to} attribute, mirroring WA
+     * Web's {@code parseAckMixin}.
      *
      * @param reply   the inbound ack stanza
-     * @param request the original outbound message
-     * @return {@code true} when the envelope echo-checks pass
+     * @param request the originating outbound message stanza
+     * @return {@code true} when the envelope passes every echo check
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMessagePublishAckMixin",
             exports = "parseAckMixin", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -80,28 +110,34 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
     }
 
     /**
-     * The {@code Success} reply variant. The relay accepted the
-     * publish.
+     * The positive reply variant carrying the assigned server-id (or
+     * response-server-id for question-response publishes) and the
+     * ack timestamp.
+     *
+     * @apiNote
+     * Surfaced to callers when the relay landed the publish; the
+     * {@link #variantName()} discriminator tells them whether the
+     * variant carries a {@link #serverId()} (brand-new post) or a
+     * {@link #responseServerId()} (question-response).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInMessagePublishNewsletterResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInMessagePublishNewsletterQuestionResponseOrNewsletterMessageAckMixinGroup")
     final class Success implements SmaxMessagePublishNewsletterResponse {
         /**
-         * The success-disjunction variant name. Either
+         * The disjunction variant name; either
          * {@code "QuestionResponseAck"} or {@code "MessageAck"}.
          */
         private final String variantName;
 
         /**
-         * The optional server-id assigned by the relay (only on
-         * {@code MessageAck} when the publish carried a
-         * brand-new-message client-id).
+         * The optional relay-assigned message server-id; set only on
+         * {@code "MessageAck"} brand-new-post publishes.
          */
         private final Long serverId;
 
         /**
-         * The optional response-server-id assigned by the relay
-         * (only on {@code QuestionResponseAck}).
+         * The optional relay-assigned response server-id; set only on
+         * {@code "QuestionResponseAck"} publishes.
          */
         private final String responseServerId;
 
@@ -111,12 +147,14 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         private final long timestamp;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply.
          *
-         * @param variantName      the disjunction variant name;
-         *                         never {@code null}
-         * @param serverId         the optional server-id; may be
-         *                         {@code null}
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
+         *
+         * @param variantName      the variant name; never {@code null}
+         * @param serverId         the optional message server-id;
+         *                         may be {@code null}
          * @param responseServerId the optional response server-id;
          *                         may be {@code null}
          * @param timestamp        the unix-second timestamp
@@ -133,6 +171,11 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         /**
          * Returns the disjunction variant name.
          *
+         * @apiNote
+         * Lets callers branch on a single field rather than checking
+         * which of {@link #serverId()} or {@link #responseServerId()}
+         * is present.
+         *
          * @return the name; never {@code null}
          */
         public String variantName() {
@@ -140,29 +183,37 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         }
 
         /**
-         * Returns the optional server-id (set on {@code MessageAck}
-         * variants for brand-new-message publishes).
+         * Returns the optional relay-assigned message server-id.
          *
-         * @return an {@link Optional} carrying the server-id, or
-         *         empty when omitted
+         * @apiNote
+         * Present only on {@code "MessageAck"} variants for brand-new
+         * posts; the relay uses it as the stable key for the newly
+         * landed message.
+         *
+         * @return an {@link Optional} carrying the id, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<Long> serverId() {
             return Optional.ofNullable(serverId);
         }
 
         /**
-         * Returns the optional response-server-id (set on
-         * {@code QuestionResponseAck} variants).
+         * Returns the optional relay-assigned response server-id.
          *
-         * @return an {@link Optional} carrying the
-         *         response-server-id, or empty when omitted
+         * @apiNote
+         * Present only on {@code "QuestionResponseAck"} variants;
+         * the relay uses it to correlate the response back to its
+         * originating question.
+         *
+         * @return an {@link Optional} carrying the id, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<String> responseServerId() {
             return Optional.ofNullable(responseServerId);
         }
 
         /**
-         * Returns the unix-second timestamp.
+         * Returns the unix-second timestamp of the ack.
          *
          * @return the timestamp
          */
@@ -171,14 +222,26 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses a {@code Success} reply from the given inbound
+         * stanza cross-checked against the originating request.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} for any deviation from the
+         * documented success schema (missing or malformed ack
+         * envelope, out-of-range server-id, negative timestamp).
+         *
+         * @implNote
+         * This implementation reads the
+         * {@code response_server_id} attribute first; a present value
+         * pins the variant to {@code "QuestionResponseAck"} and
+         * leaves {@code serverId} unset. Otherwise the parser pins
+         * {@code "MessageAck"}, optionally reading the
+         * {@code server_id} attribute under the WA Web range bound
+         * ({@code 99..2147476647}).
          *
          * @param node    the inbound ack stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @param request the originating outbound message stanza
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInMessagePublishNewsletterResponseSuccess",
                 exports = "parseNewsletterResponseSuccess",
@@ -207,6 +270,13 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
             return Optional.of(new Success("MessageAck", serverId, null, timestamp));
         }
 
+        /**
+         * Compares this success reply to another for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success}
+         *         with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -222,11 +292,26 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
                     && Objects.equals(this.responseServerId, that.responseServerId);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(variantName, serverId, responseServerId, timestamp);
         }
 
+        /**
+         * Returns a debug-friendly representation of this success
+         * reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxMessagePublishNewsletterResponse.Success[variantName=" + variantName
@@ -237,9 +322,13 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
     }
 
     /**
-     * The {@code Negative} reply variant. The relay rejected the
-     * publish with an application-level error code, optionally
-     * carrying a retry backoff.
+     * The negative reply variant carrying the relay's rejection code
+     * and optional application-error / retry-backoff hints.
+     *
+     * @apiNote
+     * Surfaced when the relay rejected the publish. Callers can
+     * schedule a retry per the {@link #backoff()} value (bounded to
+     * {@code 0..86400} seconds) when set.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInMessagePublishNewsletterResponseNegative")
     @WhatsAppWebModule(moduleName = "WASmaxInMessagePublishNegativeAckMixin")
@@ -247,8 +336,8 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
     @WhatsAppWebModule(moduleName = "WASmaxInMessagePublishMessageNackRetryAttributesMixin")
     final class Negative implements SmaxMessagePublishNewsletterResponse {
         /**
-         * The relay-supplied error code carried as the
-         * {@code error} attribute on the ack.
+         * The relay-supplied error code carried as the {@code error}
+         * attribute on the ack.
          */
         private final String errorCode;
 
@@ -258,7 +347,8 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         private final Integer applicationError;
 
         /**
-         * The optional retry backoff in seconds (0..86400).
+         * The optional retry-backoff hint in seconds; bounded to
+         * {@code 0..86400}.
          */
         private final Integer backoff;
 
@@ -268,13 +358,16 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         private final long timestamp;
 
         /**
-         * Constructs a new negative reply.
+         * Constructs a negative reply.
+         *
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
          *
          * @param errorCode        the error code; never {@code null}
          * @param applicationError the optional application error;
          *                         may be {@code null}
-         * @param backoff          the optional retry backoff in
-         *                         seconds; may be {@code null}
+         * @param backoff          the optional retry backoff; may be
+         *                         {@code null}
          * @param timestamp        the unix-second timestamp
          * @throws NullPointerException if {@code errorCode} is
          *                              {@code null}
@@ -298,25 +391,29 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         /**
          * Returns the optional application-level error integer.
          *
-         * @return an {@link Optional} carrying the error, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the error, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<Integer> applicationError() {
             return Optional.ofNullable(applicationError);
         }
 
         /**
-         * Returns the optional retry backoff in seconds.
+         * Returns the optional retry-backoff hint in seconds.
          *
-         * @return an {@link Optional} carrying the backoff, or empty
-         *         when omitted
+         * @apiNote
+         * Bounded to {@code 0..86400}; callers may schedule a retry
+         * after this many seconds.
+         *
+         * @return an {@link Optional} carrying the backoff, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<Integer> backoff() {
             return Optional.ofNullable(backoff);
         }
 
         /**
-         * Returns the unix-second timestamp.
+         * Returns the unix-second timestamp of the ack.
          *
          * @return the timestamp
          */
@@ -325,14 +422,24 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
         }
 
         /**
-         * Tries to parse a {@link Negative} variant from the given
-         * inbound stanza.
+         * Parses a {@code Negative} reply from the given inbound
+         * stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} for any deviation from the
+         * documented negative-ack schema (missing or malformed
+         * envelope, missing {@code error} attribute, negative
+         * timestamp or application-error, out-of-range backoff).
+         *
+         * @implNote
+         * This implementation enforces the WA Web range bounds on
+         * application-error ({@code >= 0}) and backoff
+         * ({@code 0..86400}) inline rather than going through a
+         * separate validator.
          *
          * @param node    the inbound ack stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         negative-ack schema
+         * @param request the originating outbound message stanza
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInMessagePublishNewsletterResponseNegative",
                 exports = "parseNewsletterResponseNegative",
@@ -370,6 +477,13 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
             return Optional.of(new Negative(errorCode, applicationError, backoff, timestamp));
         }
 
+        /**
+         * Compares this negative reply to another for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a {@link Negative}
+         *         with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -385,11 +499,26 @@ public sealed interface SmaxMessagePublishNewsletterResponse extends SmaxOperati
                     && Objects.equals(this.backoff, that.backoff);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, applicationError, backoff, timestamp);
         }
 
+        /**
+         * Returns a debug-friendly representation of this negative
+         * reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxMessagePublishNewsletterResponse.Negative[errorCode=" + errorCode

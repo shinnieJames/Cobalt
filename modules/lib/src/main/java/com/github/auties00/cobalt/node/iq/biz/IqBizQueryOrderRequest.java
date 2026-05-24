@@ -13,50 +13,53 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that
- * fetches the typed detail of a single business order, identified by id
- * and authenticated via a merchant-supplied token.
+ * The typed outbound {@code <iq xmlns="fb:thrift_iq" type="get">} stanza that fetches the typed detail of a single business order.
+ *
+ * @apiNote
+ * Use this request to materialise the order-details surface for a buyer who taps a merchant order receipt; the SMB profile and chat-order rails consume the matching {@link IqBizQueryOrderResponse} to render line items, subtotal, tax and total, alongside thumbnails sized to the requested {@code width} and {@code height}. The {@code token} is the merchant-supplied authentication token attached to the order; the optional direct-connection blob lets the relay route the query directly to the merchant when that path is enabled.
+ *
+ * @implNote
+ * This implementation targets the deprecated WAP path of {@code WAWebBizQueryOrderJob}; WA Web routes through a GraphQL query first when {@code graphQLForGetOrderInfoEnabled} is set and only falls back to this stanza shape when the GraphQL path is disabled. Cobalt ships only the wire-level WAP envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public final class IqBizQueryOrderRequest implements IqOperation.Request {
     /**
-     * The order id to fetch.
+     * The order identifier routed verbatim into the {@code <order id/>} attribute.
      */
     private final String orderId;
 
     /**
-     * The requested image width (in pixels).
+     * The requested thumbnail width in pixels, emitted as the {@code <width/>} child content.
      */
     private final int width;
 
     /**
-     * The requested image height (in pixels).
+     * The requested thumbnail height in pixels, emitted as the {@code <height/>} child content.
      */
     private final int height;
 
     /**
-     * The merchant-issued order authentication token.
+     * The merchant-issued order authentication token emitted as the {@code <token/>} child content.
      */
     private final String token;
 
     /**
-     * The optional direct-connection encrypted info blob.
+     * The optional direct-connection encrypted info blob emitted as the {@code <direct_connection_encrypted_info/>} child content.
      */
     private final String directConnectionEncryptedInfo;
 
     /**
-     * Constructs a request.
+     * Constructs a typed request.
      *
-     * @param orderId                       the order id; never
-     *                                      {@code null}
-     * @param width                         the requested image width
-     * @param height                        the requested image height
-     * @param token                         the order auth token; never
-     *                                      {@code null}
-     * @param directConnectionEncryptedInfo the optional direct-connection
-     *                                      blob; may be {@code null}
-     * @throws NullPointerException if {@code orderId} or {@code token}
-     *                              is {@code null}
+     * @apiNote
+     * Call this constructor when the order id and merchant token are already in hand; both arguments are mandatory because the relay rejects stanzas without an order target and without an authentication token. Pass {@code null} for {@code directConnectionEncryptedInfo} when the direct-merchant routing path is not in use.
+     *
+     * @param orderId                       the order identifier; never {@code null}
+     * @param width                         the requested thumbnail width in pixels
+     * @param height                        the requested thumbnail height in pixels
+     * @param token                         the merchant-issued authentication token; never {@code null}
+     * @param directConnectionEncryptedInfo the direct-connection routing blob; may be {@code null}
+     * @throws NullPointerException if {@code orderId} or {@code token} is {@code null}
      */
     public IqBizQueryOrderRequest(String orderId, int width, int height, String token,
                    String directConnectionEncryptedInfo) {
@@ -68,34 +71,46 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the order id.
+     * Returns the order identifier.
      *
-     * @return the id; never {@code null}
+     * @apiNote
+     * Use this getter to read back the order target that the stanza will name; the value is the same opaque id returned by the merchant order pipeline and consumed by {@link IqBizQueryOrderResponse.Success}.
+     *
+     * @return the order identifier; never {@code null}
      */
     public String orderId() {
         return orderId;
     }
 
     /**
-     * Returns the requested image width.
+     * Returns the requested thumbnail width.
      *
-     * @return the width
+     * @apiNote
+     * Use this getter to read back the pixel width that the relay will use when sizing product thumbnails carried in the success reply.
+     *
+     * @return the width in pixels
      */
     public int width() {
         return width;
     }
 
     /**
-     * Returns the requested image height.
+     * Returns the requested thumbnail height.
      *
-     * @return the height
+     * @apiNote
+     * Use this getter to read back the pixel height that the relay will use when sizing product thumbnails carried in the success reply.
+     *
+     * @return the height in pixels
      */
     public int height() {
         return height;
     }
 
     /**
-     * Returns the order auth token.
+     * Returns the merchant-issued authentication token.
+     *
+     * @apiNote
+     * Use this getter to read back the authentication token that the relay verifies before serving the order detail; the value is opaque and unique to the merchant-order pair.
      *
      * @return the token; never {@code null}
      */
@@ -104,7 +119,10 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the direct-connection blob, when supplied.
+     * Returns the optional direct-connection routing blob.
+     *
+     * @apiNote
+     * Use this getter to read back the encrypted routing payload that lets the relay forward the query directly to the merchant when direct-connection routing is enabled; the value is absent when classical relay routing applies.
      *
      * @return an {@link Optional} carrying the blob
      */
@@ -113,9 +131,10 @@ public final class IqBizQueryOrderRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by the legacy fallback branch of {@code WAWebBizQueryOrderJob.queryOrder}: the {@code <order op="get" id/>} wrapper carries the {@code <image_dimensions>} pair, the {@code <token/>} child and, when supplied, the {@code <direct_connection_encrypted_info/>} child.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJob",

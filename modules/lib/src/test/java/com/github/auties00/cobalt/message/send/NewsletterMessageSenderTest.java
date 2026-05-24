@@ -21,14 +21,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link NewsletterMessageSender}, mirroring the SMAX plaintext
- * newsletter publish path
- * ({@code WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage}).
+ * Exercises {@link NewsletterMessageSender}'s SMAX plaintext publish
+ * shape against the
+ * {@code WAWebNewsletterSendMessageQueryJob.querySendNewsletterMessage}
+ * contract.
  *
- * <p>Newsletters do not use the Signal envelope — the payload travels in
- * clear inside a {@code <plaintext>} child. The sender stamps the outer
- * {@code <message to="…@newsletter">} attributes and dispatches via the
- * client.
+ * @apiNote
+ * Newsletters bypass the Signal envelope; the payload travels in clear
+ * inside a {@code <plaintext>} child of the outer {@code <message>}. The
+ * tests assert the outer attributes ({@code id}, {@code to}, {@code type},
+ * optional {@code media_id}) and that no {@code <enc>} or
+ * {@code <participants>} children leak through from the chat send path.
+ *
+ * @implNote
+ * This implementation drives the sender through a captured
+ * {@link TestWhatsAppClient} that
+ * records the first emitted stanza into an {@link AtomicReference} and
+ * returns a synthetic success ack.
  */
 @DisplayName("NewsletterMessageSender")
 class NewsletterMessageSenderTest {
@@ -36,8 +45,13 @@ class NewsletterMessageSenderTest {
     private static final Jid SELF = Jid.of("12025550100@s.whatsapp.net");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
+    /**
+     * Asserts that an ExtendedTextMessage emits a
+     * {@code <message type="text">} with a single {@code <plaintext>}
+     * child and no Signal envelope.
+     */
     @Test
-    @DisplayName("send: ExtendedTextMessage → <message type=\"text\"> with <plaintext> child")
+    @DisplayName("send: ExtendedTextMessage -> <message type=\"text\"> with <plaintext> child")
     void textMessage() {
         var capturedStanza = new AtomicReference<Node>();
         var props = TestABPropsService.builder().build();
@@ -87,7 +101,6 @@ class NewsletterMessageSenderTest {
         assertTrue(plaintext.toContentBytes().orElseThrow().length > 0,
                 "plaintext payload must be non-empty");
 
-        // Sanity on the ack parse — newsletter acks carry server_id.
         assertTrue(ack.isSuccess());
     }
 }

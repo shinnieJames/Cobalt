@@ -14,17 +14,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The sealed reply family for a {@link SmaxGroupsMembershipRequestsActionRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
+ * cases: {@link Success} carries the per-participant approval and rejection outcomes that feed back into the admin
+ * "Pending requests" UI, the two error variants surface the relay's reason codes. The
+ * {@code WAWebGroupMembershipRequestsActionJob.membershipApprovalRequestAction} caller in WA Web folds the outcomes
+ * into per-participant {@code {wid, username, error, phoneNumber}} records.
  */
 public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxOperation.Response
         permits SmaxGroupsMembershipRequestsActionResponse.Success, SmaxGroupsMembershipRequestsActionResponse.ClientError, SmaxGroupsMembershipRequestsActionResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsMembershipRequestsActionResponse} variant in priority order.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsMembershipRequestsActionResponse} variant in priority
+     * order and returns the first that parses cleanly.
+     *
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsMembershipRequestsActionRPC}:
+     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound request
-     * @return an {@link Optional} carrying the parsed variant
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsMembershipRequestsActionRPC",
@@ -44,9 +58,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
     }
 
     /**
-     * The {@code Success} reply variant — the relay processed the
-     * action and returned the per-participant outcomes split into
-     * approved / rejected lists.
+     * The reply variant emitted when the relay processed the action and returned per-participant outcomes split into
+     * approved and rejected lists.
+     *
+     * @apiNote Surfaces as the {@code MembershipRequestsActionResponseSuccess} case in
+     * {@code WAWebGroupMembershipRequestsActionJob}; the admin UI iterates {@link #approveParticipants()} and
+     * {@link #rejectParticipants()} and folds each entry into the per-participant record exposed to the React layer.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
@@ -57,27 +74,24 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         private final String addressingMode;
 
         /**
-         * The per-participant approval outcomes; may be empty when
-         * the request didn't carry an {@code <approve>} list or the
-         * relay produced an empty list.
+         * The per-participant approval outcomes.
          */
         private final List<ApproveParticipantResult> approveParticipants;
 
         /**
-         * The per-participant rejection outcomes; may be empty
-         * symmetrically.
+         * The per-participant rejection outcomes.
          */
         private final List<RejectParticipantResult> rejectParticipants;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success} reply.
          *
-         * @param addressingMode      the optional addressing-mode
-         *                            echo
-         * @param approveParticipants the per-participant approval
-         *                            outcomes; never {@code null}
-         * @param rejectParticipants  the per-participant rejection
-         *                            outcomes; never {@code null}
+         * @apiNote Either outcome list may be empty when the matching {@code <approve>}/{@code <reject>} container is
+         * absent on the envelope; {@code null} normalises to {@link List#of()}.
+         *
+         * @param addressingMode      the optional addressing-mode echo; may be {@code null}
+         * @param approveParticipants the per-participant approval outcomes; may be {@code null}
+         * @param rejectParticipants  the per-participant rejection outcomes; may be {@code null}
          */
         public Success(String addressingMode,
                        List<ApproveParticipantResult> approveParticipants,
@@ -92,7 +106,7 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         /**
          * Returns the optional addressing-mode echo.
          *
-         * @return an {@link Optional} carrying the addressing mode
+         * @return an {@link Optional} carrying the addressing-mode token, or empty when the relay omitted it
          */
         public Optional<String> addressingMode() {
             return Optional.ofNullable(addressingMode);
@@ -101,7 +115,7 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         /**
          * Returns the per-participant approval outcomes.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable list of {@link ApproveParticipantResult}; never {@code null}
          */
         public List<ApproveParticipantResult> approveParticipants() {
             return approveParticipants;
@@ -110,18 +124,22 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         /**
          * Returns the per-participant rejection outcomes.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable list of {@link RejectParticipantResult}; never {@code null}
          */
         public List<RejectParticipantResult> rejectParticipants() {
             return rejectParticipants;
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches when the IQ is a {@code type="result"} envelope echoing the request's {@code id} and
+         * {@code to} attributes and carrying a {@code <membership_requests_action>} child.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
+         * @throws NullPointerException if either argument is {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseSuccess",
                 exports = "parseMembershipRequestsActionResponseSuccess",
@@ -173,6 +191,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             return Optional.of(new Success(addressingMode, approveParticipants, rejectParticipants));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -187,11 +211,21 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
                     && Objects.equals(this.rejectParticipants, that.rejectParticipants);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(addressingMode, approveParticipants, rejectParticipants);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsMembershipRequestsActionResponse.Success[addressingMode=" + addressingMode
@@ -200,33 +234,30 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * The per-participant approval outcome — surfaces the
-         * approved JID and the optional identity-mixin payload
-         * carried by the relay.
+         * Per-participant approval outcome.
+         *
+         * @apiNote Surfaces the approved JID and a flag indicating whether the relay supplied the optional
+         * {@code <identity/>} mixin payload (used by WA Web to recover the participant's username and phone number).
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsIdentityMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsActionAcceptParticipantMixins")
         public static final class ApproveParticipantResult {
             /**
-             * The approved participant JID.
+             * The approved participant {@link Jid}.
              */
             private final Jid jid;
 
             /**
-             * Whether the relay supplied an identity-mixin payload
-             * for this participant.
+             * Whether the relay supplied an {@code <identity/>} payload for this participant.
              */
             private final boolean hasIdentityPayload;
 
             /**
-             * Constructs a new approval-outcome entry.
+             * Constructs an approval-outcome entry.
              *
-             * @param jid                the participant JID; never
-             *                           {@code null}
-             * @param hasIdentityPayload whether the relay carried
-             *                           the identity mixin
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid                the participant {@link Jid}; never {@code null}
+             * @param hasIdentityPayload whether the {@code <identity/>} mixin was present
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public ApproveParticipantResult(Jid jid, boolean hasIdentityPayload) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -234,30 +265,31 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             }
 
             /**
-             * Returns the approved participant JID.
+             * Returns the approved participant {@link Jid}.
              *
-             * @return the JID; never {@code null}
+             * @return the participant JID; never {@code null}
              */
             public Jid jid() {
                 return jid;
             }
 
             /**
-             * Returns whether the entry carried an identity-mixin
-             * payload.
+             * Returns whether the entry carried an {@code <identity/>} payload.
              *
-             * @return {@code true} when the {@code <identity/>}
-             *         child was present
+             * @return {@code true} when the mixin was present
              */
             public boolean hasIdentityPayload() {
                 return hasIdentityPayload;
             }
 
             /**
-             * Tries to parse an approval-outcome entry.
+             * Tries to parse an {@link ApproveParticipantResult} from the given {@code <participant/>} child.
              *
-             * @param node the {@code <participant>} child
-             * @return an {@link Optional} carrying the parsed entry
+             * @apiNote Matches when the child carries the {@code jid} attribute; the {@code <identity/>} grandchild
+             * is optional.
+             *
+             * @param node the {@code <participant/>} child
+             * @return an {@link Optional} carrying the parsed outcome, or empty when the child does not match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseSuccess",
                     exports = "parseMembershipRequestsActionResponseSuccessMembershipRequestsActionApproveParticipant",
@@ -275,6 +307,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
                 return Optional.of(new ApproveParticipantResult(jid, hasIdentity));
             }
 
+            /**
+             * Compares this outcome to {@code obj} for value equality across both fields.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is an {@link ApproveParticipantResult} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -288,11 +326,21 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
                         && Objects.equals(this.jid, that.jid);
             }
 
+            /**
+             * Returns a hash composed of both fields.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, hasIdentityPayload);
             }
 
+            /**
+             * Returns a debug string carrying both fields.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsMembershipRequestsActionResponse.Success.ApproveParticipantResult[jid=" + jid
@@ -301,30 +349,30 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * The per-participant rejection outcome — surfaces the
-         * rejected JID and the optional identity-mixin presence.
+         * Per-participant rejection outcome.
+         *
+         * @apiNote Surfaces the rejected JID and a flag indicating whether the relay supplied the optional
+         * {@code <identity/>} mixin payload; the field shape mirrors {@link ApproveParticipantResult} so admin UIs
+         * can use one rendering path for both outcomes.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsActionRejectParticipantMixins")
         public static final class RejectParticipantResult {
             /**
-             * The rejected participant JID.
+             * The rejected participant {@link Jid}.
              */
             private final Jid jid;
 
             /**
-             * Whether the entry carried an identity-mixin payload.
+             * Whether the relay supplied an {@code <identity/>} payload for this participant.
              */
             private final boolean hasIdentityPayload;
 
             /**
-             * Constructs a new rejection-outcome entry.
+             * Constructs a rejection-outcome entry.
              *
-             * @param jid                the participant JID; never
-             *                           {@code null}
-             * @param hasIdentityPayload whether the identity mixin
-             *                           was present
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid                the participant {@link Jid}; never {@code null}
+             * @param hasIdentityPayload whether the {@code <identity/>} mixin was present
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public RejectParticipantResult(Jid jid, boolean hasIdentityPayload) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -332,30 +380,31 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             }
 
             /**
-             * Returns the rejected participant JID.
+             * Returns the rejected participant {@link Jid}.
              *
-             * @return the JID; never {@code null}
+             * @return the participant JID; never {@code null}
              */
             public Jid jid() {
                 return jid;
             }
 
             /**
-             * Returns whether the entry carried an identity-mixin
-             * payload.
+             * Returns whether the entry carried an {@code <identity/>} payload.
              *
-             * @return {@code true} when the {@code <identity/>}
-             *         child was present
+             * @return {@code true} when the mixin was present
              */
             public boolean hasIdentityPayload() {
                 return hasIdentityPayload;
             }
 
             /**
-             * Tries to parse a rejection-outcome entry.
+             * Tries to parse a {@link RejectParticipantResult} from the given {@code <participant/>} child.
              *
-             * @param node the {@code <participant>} child
-             * @return an {@link Optional} carrying the parsed entry
+             * @apiNote Matches when the child carries the {@code jid} attribute; the {@code <identity/>} grandchild
+             * is optional.
+             *
+             * @param node the {@code <participant/>} child
+             * @return an {@link Optional} carrying the parsed outcome, or empty when the child does not match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseSuccess",
                     exports = "parseMembershipRequestsActionResponseSuccessMembershipRequestsActionRejectParticipant",
@@ -373,6 +422,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
                 return Optional.of(new RejectParticipantResult(jid, hasIdentity));
             }
 
+            /**
+             * Compares this outcome to {@code obj} for value equality across both fields.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is a {@link RejectParticipantResult} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -386,11 +441,21 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
                         && Objects.equals(this.jid, that.jid);
             }
 
+            /**
+             * Returns a hash composed of both fields.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, hasIdentityPayload);
             }
 
+            /**
+             * Returns a debug string carrying both fields.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsMembershipRequestsActionResponse.Success.RejectParticipantResult[jid=" + jid
@@ -400,25 +465,29 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The reply variant emitted when the relay rejected the approve/reject action as malformed or unauthorised.
+     *
+     * @apiNote Surfaces as the {@code MembershipRequestsActionResponseClientError} case in
+     * {@code WAWebGroupMembershipRequestsActionJob}, which logs the {@link #errorCode()} as the HTTP-style status
+     * passed back to the admin "Pending requests" UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseClientError")
     final class ClientError implements SmaxGroupsMembershipRequestsActionResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
-         * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorCode the numeric error code
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -426,7 +495,7 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -435,20 +504,23 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseClientError",
                 exports = "parseMembershipRequestsActionResponseClientError",
@@ -461,6 +533,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -473,11 +551,21 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsMembershipRequestsActionResponse.ClientError[errorCode=" + errorCode
@@ -486,25 +574,29 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The reply variant emitted on transient relay-side failure.
+     *
+     * @apiNote Surfaces as the {@code MembershipRequestsActionResponseServerError} case in
+     * {@code WAWebGroupMembershipRequestsActionJob}, where it is logged at the same severity as {@link ClientError}
+     * but typically signals retry-eligible relay outages rather than caller error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseServerError")
     final class ServerError implements SmaxGroupsMembershipRequestsActionResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
-         * @param errorCode the error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorCode the numeric error code
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -512,7 +604,7 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -521,20 +613,23 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsMembershipRequestsActionResponseServerError",
                 exports = "parseMembershipRequestsActionResponseServerError",
@@ -547,6 +642,12 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -559,11 +660,21 @@ public sealed interface SmaxGroupsMembershipRequestsActionResponse extends SmaxO
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsMembershipRequestsActionResponse.ServerError[errorCode=" + errorCode

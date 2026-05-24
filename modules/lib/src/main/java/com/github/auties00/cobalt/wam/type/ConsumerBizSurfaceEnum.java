@@ -13,5 +13,8 @@ public enum ConsumerBizSurfaceEnum {
     @WamEnumConstant(2) CONTACT_CARD,
     @WamEnumConstant(3) SHARE_DIALOG,
     @WamEnumConstant(4) CHAT_HEADER,
-    @WamEnumConstant(5) FMX_CARD
+    @WamEnumConstant(5) FMX_CARD,
+    @WamEnumConstant(6) BLOCKED_COMPOSER,
+    @WamEnumConstant(7) OFFBOARDED_BOTTOM_SHEET,
+    @WamEnumConstant(8) CHAT_THREAD
 }

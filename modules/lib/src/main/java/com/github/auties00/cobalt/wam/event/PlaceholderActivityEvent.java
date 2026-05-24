@@ -17,6 +17,7 @@ import com.github.auties00.cobalt.wam.type.PlaceholderChatType;
 import com.github.auties00.cobalt.wam.type.PlaceholderPopulationType;
 import com.github.auties00.cobalt.wam.type.PlaceholderReasonType;
 import com.github.auties00.cobalt.wam.type.PlaceholderType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
@@ -88,6 +89,9 @@ public interface PlaceholderActivityEvent extends WamEventSpec {
 
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<PlaceholderType> placeholderTypeInd();
+
+    @WamProperty(index = 25, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

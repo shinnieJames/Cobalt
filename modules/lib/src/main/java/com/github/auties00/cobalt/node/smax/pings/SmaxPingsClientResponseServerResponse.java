@@ -12,48 +12,64 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Inbound {@code <iq type="result">} reply produced by the relay in response
- * to a SMAX client ping ({@code WASmaxOutPingsClientRequest.makeClientRequest},
- * an {@code <iq xmlns="w:p" type="get">} stanza emitted by the keep-alive
- * pump).
+ * The inbound {@code <iq type="result">} reply to a
+ * {@link SmaxPingsClientRequest}.
  *
- * <p>The reply carries no body — only the standard envelope attributes:
- * {@code from}, {@code type="result"}, an {@code id} that echoes the request,
- * and a server-stamped {@code t} timestamp. Cobalt models it as a single
- * record-style projection because WA Web's parser produces only one shape
- * (success-only, no error variants).
+ * @apiNote
+ * Surfaces the relay's keep-alive reply so the local stream-stall
+ * detector can confirm that the most recent ping landed; the only
+ * payload-bearing field is the server-stamped {@link #timestamp()}
+ * which embedders use to estimate clock skew. WA Web's parser produces
+ * only this one shape (success-only, no error variants), so the
+ * response type is modelled as a single record-style projection rather
+ * than a sealed family.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInPingsClientResponseServerResponse")
 @WhatsAppWebModule(moduleName = "WASmaxInPingsEnums")
 public final class SmaxPingsClientResponseServerResponse implements SmaxOperation.Response {
     /**
-     * The relay JID that produced the reply. WA Web validates this against
-     * {@code DOMAINJID_USERJID} — either a server-only domain JID
-     * ({@code s.whatsapp.net} / {@code g.us} / {@code call}) or any standard
-     * user-server JID ({@code s.whatsapp.net} / {@code c.us}).
+     * The relay JID that produced the reply.
+     *
+     * @implNote
+     * This implementation accepts any JID that
+     * {@link #isDomainOrUserJid(Jid)} considers valid (server-only
+     * {@code s.whatsapp.net} / {@code g.us} / {@code call} or any
+     * standard user-server JID); the WA Web parser uses the same
+     * {@code DOMAINJID_USERJID} validator.
      */
     private final Jid from;
 
     /**
-     * The literal {@code "result"} type tag. Always equal to {@code "result"}
-     * when the parser succeeded.
+     * The literal {@code "result"} type tag.
+     *
+     * @implNote
+     * This implementation always stores the literal {@code "result"}
+     * after a successful parse; the field is preserved rather than
+     * elided so the projection can be debug-printed without losing
+     * the wire-format hint.
      */
     private final String type;
 
     /**
-     * The relay-stamped server timestamp, in seconds since the Unix epoch.
+     * The relay-stamped server timestamp, in seconds since the Unix
+     * epoch.
      */
     private final long timestamp;
 
     /**
      * Constructs a new server-response projection.
      *
-     * @param from      the relay JID. Never {@code null}
-     * @param type      the literal {@code "result"} type tag. Never
-     *                  {@code null}
+     * @apiNote
+     * Used by {@link #of(Node, Node)} after the envelope shape has
+     * been validated; embedders typically do not instantiate this
+     * directly.
+     *
+     * @param from the relay JID; never {@code null}
+     * @param type the literal {@code "result"} type tag; never
+     *             {@code null}
      * @param timestamp the relay-stamped server timestamp, in seconds
-     * @throws NullPointerException if either {@code from} or {@code type}
-     *                              is {@code null}
+     * @throws NullPointerException if either {@code from} or
+     *                              {@code type} is {@code null}
      */
     public SmaxPingsClientResponseServerResponse(Jid from, String type, long timestamp) {
         this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -64,7 +80,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     /**
      * Returns the relay JID.
      *
-     * @return the relay JID. Never {@code null}
+     * @return the relay JID; never {@code null}
      */
     public Jid from() {
         return from;
@@ -73,7 +89,7 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     /**
      * Returns the literal {@code "result"} type tag.
      *
-     * @return the type tag. Never {@code null}
+     * @return the type tag; never {@code null}
      */
     public String type() {
         return type;
@@ -89,23 +105,24 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     }
 
     /**
-     * Tries to parse a {@link SmaxPingsClientResponseServerResponse} from
-     * the given inbound stanza, cross-checked against the original
+     * Parses a {@link SmaxPingsClientResponseServerResponse} from the
+     * given inbound stanza, cross-checked against the original
      * outbound request.
      *
-     * <p>Returns {@link Optional#empty()} when any of the WA Web parser's
-     * preconditions fail: the reply must be an {@code <iq>}, must carry a
-     * {@code from} JID that satisfies the {@code DOMAINJID_USERJID}
-     * predicate, must have {@code type="result"}, must echo the request's
-     * {@code id} attribute, and must carry a non-negative integer
-     * {@code t} attribute.
+     * @apiNote
+     * Returns {@link Optional#empty()} when any of the WA Web parser's
+     * preconditions fail: the reply must be an {@code <iq>}, must
+     * carry a {@code from} JID that satisfies the
+     * {@code DOMAINJID_USERJID} predicate, must have
+     * {@code type="result"}, must echo the request's {@code id}, and
+     * must carry a non-negative integer {@code t}.
      *
-     * @param node    the inbound IQ stanza. Never {@code null}
-     * @param request the original outbound request. Used to cross-check
-     *                the echoed {@code id}. Never {@code null}
+     * @param node the inbound IQ stanza; never {@code null}
+     * @param request the original outbound request used to cross-check
+     *                the echoed {@code id}; never {@code null}
      * @return an {@link Optional} carrying the parsed projection, or
-     *         {@link Optional#empty()} when the stanza did not satisfy
-     *         the parser's preconditions
+     *         empty when the stanza did not satisfy the parser's
+     *         preconditions
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInPingsClientResponseServerResponse",
@@ -114,11 +131,9 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
     public static Optional<SmaxPingsClientResponseServerResponse> of(Node node, Node request) {
         Objects.requireNonNull(node, "node cannot be null");
         Objects.requireNonNull(request, "request cannot be null");
-        // WASmaxParseUtils.assertTag(reply, "iq")
         if (!node.hasDescription("iq")) {
             return Optional.empty();
         }
-        // WASmaxParseJid.attrJidEnum(reply, "from", DOMAINJID_USERJID)
         var from = node.getAttributeAsJid("from").orElse(null);
         if (from == null) {
             return Optional.empty();
@@ -126,53 +141,65 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
         if (!isDomainOrUserJid(from)) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.literal(attrString, reply, "type", "result")
         if (!node.hasAttribute("type", "result")) {
             return Optional.empty();
         }
-        // WASmaxParseReference.attrStringFromReference(request, ["id"])
         var requestId = request.getAttributeAsString("id").orElse(null);
         if (requestId == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.literal(attrString, reply, "id", requestId)
         if (!node.hasAttribute("id", requestId)) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.attrInt(reply, "t")
         var timestamp = node.getAttributeAsLong("t");
         if (timestamp.isEmpty()) {
             return Optional.empty();
         }
-        // WAResultOrError.makeResult({from, type, t})
         return Optional.of(new SmaxPingsClientResponseServerResponse(from, "result", timestamp.getAsLong()));
     }
 
     /**
-     * Returns whether the given JID matches the
-     * {@code WASmaxInPingsEnums.DOMAINJID_USERJID} descriptor — accepted
-     * when it is either a server-only JID for the bare WhatsApp / group /
-     * call domains or a regular user-server JID.
+     * Returns whether the given JID matches WA Web's
+     * {@code DOMAINJID_USERJID} descriptor.
      *
-     * @param jid the JID to validate. Never {@code null}
+     * @apiNote
+     * Accepts the JID when it is either a server-only JID for the
+     * bare WhatsApp ({@code s.whatsapp.net}), group ({@code g.us}),
+     * or call ({@code call}) domains, or any standard user-server JID
+     * ({@code s.whatsapp.net} / {@code c.us}).
+     *
+     * @implNote
+     * This implementation inlines the disjunction of
+     * {@code WAJids.validateDomainJid} and
+     * {@code WAJids.validateUserJid} that WA Web's
+     * {@code WASmaxInPingsEnums.DOMAINJID_USERJID} validator object
+     * composes; the validator-list shape is collapsed into a single
+     * boolean check because the parser only needs the truth value.
+     *
+     * @param jid the JID to validate; never {@code null}
      * @return {@code true} when the JID satisfies the
-     *         {@code DOMAINJID_USERJID} predicate; {@code false}
-     *         otherwise
+     *         {@code DOMAINJID_USERJID} predicate
      */
     @WhatsAppWebExport(moduleName = "WASmaxInPingsEnums",
             exports = "DOMAINJID_USERJID",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static boolean isDomainOrUserJid(Jid jid) {
-        // WAJids.validateDomainJid: accepts s.whatsapp.net | g.us | call as bare server JIDs
         if (jid.isServerJid(JidServer.user())
                 || jid.isServerJid(JidServer.groupOrCommunity())
                 || jid.isServerJid(JidServer.call())) {
             return true;
         }
-        // WAJids.validateUserJid: accepts any standard user-domain JID (s.whatsapp.net | c.us)
         return jid.hasUserServer();
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxPingsClientResponseServerResponse} with equal
+     * {@code from}, {@code type}, and {@code timestamp}.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when all three fields match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -187,11 +214,23 @@ public final class SmaxPingsClientResponseServerResponse implements SmaxOperatio
                 && Objects.equals(this.type, that.type);
     }
 
+    /**
+     * Returns a hash code derived from {@code from}, {@code type},
+     * and {@code timestamp}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(from, type, timestamp);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this
+     * projection.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxPingsClientResponseServerResponse[from=" + from

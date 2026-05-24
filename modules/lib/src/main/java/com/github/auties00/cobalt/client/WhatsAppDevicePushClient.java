@@ -158,8 +158,8 @@ public interface WhatsAppDevicePushClient extends AutoCloseable {
      * <p>Implementations should return the empty string when push is
      * unavailable (Huawei-style or sideloaded Android, simulator or
      * jailbroken iOS), in which case the {@code push_token} field is
-     * still emitted but with an empty value — which the server
-     * tolerates as a low-trust signal.
+     * still emitted but with an empty value, which the server tolerates
+     * as a low-trust signal.
      *
      * @return the push device token, or empty string when push is
      *         unavailable; never {@code null}
@@ -198,7 +198,7 @@ public interface WhatsAppDevicePushClient extends AutoCloseable {
      * has wired a push listener.
      *
      * <p>Implementations should return the empty string when no push
-     * verification is in flight — the server treats an empty
+     * verification is in flight; the server treats an empty
      * {@code push_code} the same as the field being absent.
      *
      * @return the push-delivered verification code, or empty string

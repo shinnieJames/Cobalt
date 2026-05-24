@@ -13,59 +13,80 @@ import java.util.Map;
 import java.util.function.LongSupplier;
 
 /**
- * Manages rotating pseudonymous identifiers for WAM private
- * statistics.
+ * Holds the eight rotating pseudonymous identifiers that tag every WAM
+ * private-channel event.
  *
- * <p>Private-channel events are correlated using random hex
- * identifiers that rotate on a configurable schedule. This prevents
- * the server from building long-term user profiles while still
- * allowing correlation within each rotation window.
+ * <p>The set of rotation groups, their hash integers, and their
+ * rotation periods are declared by {@link WhatsAppWebModule WAWebWamGlobals}
+ * as the {@code PrivateStatsAllIds} export, and consumed by
+ * {@link WhatsAppWebModule WAWebWamPrivateStats} which keeps each
+ * group's current identifier in memory and rotates it when the period
+ * elapses.
  *
- * <p>Eight rotation groups are defined by WhatsApp. Each group has a
- * key name, a hash integer (written as the {@code psId} global on
- * the wire), and a rotation period in days:
+ * <p>The eight groups defined by WhatsApp Web are listed below; each
+ * is keyed by its hash integer (written into the {@code psId} global
+ * on the wire) and carries a rotation period in days, or {@code -1}
+ * when the identifier never rotates:
+ *
  * <ul>
- * <li>{@code DefaultPsId} (113760892), never rotates</li>
- * <li>{@code IdTtlDaily} (248614979), rotates every day</li>
- * <li>{@code IdTtlWeekly} (42196056), rotates every 7 days</li>
- * <li>{@code IdTtlMonthly} (191000728), rotates every 30 days</li>
- * <li>{@code IdTtl90Days} (37887164), rotates every 90 days</li>
- * <li>{@code GroupExitExperienceId} (152546501), rotates every 30
- *     days</li>
- * <li>{@code GroupSafetyCheckId} (216763284), rotates every 30
- *     days</li>
- * <li>{@code IdPreMetrics} (56300709), never rotates</li>
+ *   <li>{@code DefaultPsId} (113760892), never rotates</li>
+ *   <li>{@code IdTtlDaily} (248614979), rotates every 1 day</li>
+ *   <li>{@code IdTtlWeekly} (42196056), rotates every 7 days</li>
+ *   <li>{@code IdTtlMonthly} (191000728), rotates every 30 days</li>
+ *   <li>{@code IdTtl90Days} (37887164), rotates every 90 days</li>
+ *   <li>{@code GroupExitExperienceId} (152546501), rotates every 30 days</li>
+ *   <li>{@code GroupSafetyCheckId} (216763284), rotates every 30 days</li>
+ *   <li>{@code IdPreMetrics} (56300709), never rotates</li>
  * </ul>
  *
- * <p>This class is not thread-safe. All calls must be made from the
- * single WAM flush thread.
+ * @implNote
+ * This implementation is not thread-safe and is expected to be touched
+ * only by the single WAM flush thread, mirroring WA Web's
+ * {@code WAWebWamPrivateStats}-internal mutability. WA Web persists
+ * the {@code (value, creationTs)} of every group to {@code WAWebWamStorage}
+ * (IndexedDB-backed) so identifiers survive a page reload; Cobalt
+ * keeps everything in a {@link LinkedHashMap} and regenerates fresh
+ * values on every restart.
  */
 @WhatsAppWebModule(moduleName = "WAWebWamPrivateStats")
 @WhatsAppWebModule(moduleName = "WAWebWamGlobals")
 public final class WamPrivateStatsId {
     /**
-     * Number of seconds in one day.
+     * The number of seconds in a UTC day.
+     *
+     * @implNote
+     * This implementation matches the {@code WATimeUtils.DAY_SECONDS}
+     * constant that drives WA Web's rotation arithmetic.
      */
     private static final long DAY_SECONDS = 86_400L;
 
     /**
-     * Map from hash integer to the current rotation entry. Insertion
-     * order is preserved for deterministic iteration.
+     * The map from each group's wire-level hash integer to its current
+     * rotation entry, kept in insertion order so iteration is
+     * deterministic.
      */
     private final Map<Integer, Entry> entries;
 
     /**
-     * Wall-clock supplier returning Unix epoch seconds. Bound to the
-     * system clock in the public constructor; a controlled supplier
-     * is injected by behavioural tests through the package-private
-     * constructor.
+     * The supplier delivering the current Unix epoch in seconds.
+     *
+     * @implNote
+     * This implementation injects the supplier so behavioural tests
+     * can drive period-boundary crossings deterministically. The
+     * public constructor wires it to {@link Instant#now()}.
      */
     private final LongSupplier nowEpochSec;
 
     /**
-     * Constructs a new {@code WamPrivateStatsId} instance and
-     * initialises all eight rotation groups with fresh random
-     * identifiers.
+     * Constructs a fresh {@code WamPrivateStatsId} that reads the
+     * current epoch from the system clock.
+     *
+     * @apiNote
+     * The eight rotation groups defined by {@link WhatsAppWebModule WAWebWamGlobals}
+     * are initialised on construction, each with a freshly generated
+     * 32-character hexadecimal identifier. Cobalt does not persist
+     * identifiers, so every {@code WhatsAppClient} restart begins a
+     * new rotation window for every group.
      */
     @WhatsAppWebExport(moduleName = "WAWebWamGlobals", exports = "PrivateStatsAllIds", adaptation = WhatsAppAdaptation.DIRECT)
     public WamPrivateStatsId() {
@@ -73,15 +94,16 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Constructs a {@code WamPrivateStatsId} with the given
-     * wall-clock supplier.
+     * Constructs a fresh {@code WamPrivateStatsId} that reads the
+     * current epoch from the supplied clock.
      *
-     * <p>Package-private hook used by behavioural tests to drive
-     * rotation deterministically. The default public constructor
-     * binds {@code nowEpochSec} to {@code Instant.now().getEpochSecond()}.
+     * @apiNote
+     * Package-private; intended only for the behavioural test in this
+     * sub-package that needs to step the clock across period
+     * boundaries.
      *
-     * @param nowEpochSec a supplier returning the current Unix
-     *                    epoch in seconds
+     * @param nowEpochSec the wall-clock supplier returning Unix epoch
+     *                    seconds
      */
     WamPrivateStatsId(LongSupplier nowEpochSec) {
         this.nowEpochSec = nowEpochSec;
@@ -97,18 +119,27 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Rotates any identifiers whose rotation period has elapsed and
-     * returns metadata for each rotation group whose value was
-     * regenerated.
+     * Rotates every group whose period has elapsed since its last
+     * regeneration and returns the descriptors of the groups that
+     * rotated.
      *
-     * <p>Used by the WAM pipeline to emit a {@code PsIdUpdateEvent}
-     * with action {@code ROTATED} for each regenerated entry,
-     * mirroring the per-rotation {@code logPsIdUpdate} calls in
-     * {@code WAWebWamPrivateStats}'s internal rotate function.
+     * @apiNote
+     * Called by the WAM flush loop before draining the per-group
+     * buffers. The caller emits a {@code PsIdUpdateEvent} with action
+     * {@code ROTATED} for every returned descriptor, mirroring the
+     * per-rotation {@code logPsIdUpdate} calls in
+     * {@link WhatsAppWebModule WAWebWamPrivateStats}.
      *
-     * @return the list of rotation group descriptors (hash integer
-     *         and rotation period in days) that were regenerated,
-     *         possibly empty
+     * @implNote
+     * This implementation runs the rotation inline on the caller
+     * thread. WA Web schedules it asynchronously through a Promise
+     * loop guarded by a {@code Semaphore} and a server-side
+     * {@code WAWebWamStorage.updatePsMeta}; Cobalt does not persist
+     * the rotation state, so the storage round-trip is skipped.
+     *
+     * @return the rotation descriptors for every group whose
+     *         identifier was regenerated by this call, possibly empty
+     * @see RotationInfo
      */
     @WhatsAppWebExport(moduleName = "WAWebWamPrivateStats", exports = "maybeRotatePsIds", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<RotationInfo> rotateAndReportChanges() {
@@ -116,17 +147,22 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Returns a snapshot of every rotation group descriptor currently
-     * held (hash integer and rotation period in days).
+     * Returns a snapshot of every rotation group currently held.
      *
-     * <p>Used at WAM service initialization to emit a
+     * @apiNote
+     * Called at WAM service initialisation to emit a
      * {@code PsIdUpdateEvent} with action {@code CREATED} for each
-     * entry, mirroring the per-new-entry {@code logPsIdUpdate} calls
-     * in {@code WAWebWamPrivateStats.initPrivateStats}. Because
-     * Cobalt does not persist PS IDs across sessions, every entry is
-     * treated as freshly created on startup.
+     * descriptor, mirroring the per-new-entry {@code logPsIdUpdate}
+     * calls in {@link WhatsAppWebModule WAWebWamPrivateStats}
+     * {@code .initPrivateStats}.
      *
-     * @return an unmodifiable list of rotation group descriptors
+     * @implNote
+     * This implementation always treats every entry as freshly created
+     * because Cobalt does not persist {@code WAWebWamStorage}; WA Web
+     * filters this list down to the subset of groups absent from the
+     * persisted {@code getPsMeta} response.
+     *
+     * @return an unmodifiable list of {@link RotationInfo} descriptors
      */
     @WhatsAppWebExport(moduleName = "WAWebWamPrivateStats", exports = "initPrivateStats", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<RotationInfo> snapshotAll() {
@@ -138,11 +174,18 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Performs the in-place rotation of entries whose period has
-     * elapsed and returns metadata for those that were regenerated.
+     * Performs the in-place rotation pass and returns the descriptors
+     * for every regenerated entry.
      *
-     * @return the list of rotation descriptors for entries that were
-     *         regenerated in this call
+     * @implNote
+     * This implementation iterates the {@link LinkedHashMap} in
+     * insertion order, applies {@link #shouldRotate} as the
+     * period-boundary test, and replaces each elapsed entry with a
+     * fresh {@link DataUtils#randomHex} value carrying the new
+     * creation timestamp.
+     *
+     * @return the rotation descriptors for entries regenerated by
+     *         this pass
      */
     private List<RotationInfo> rotate() {
         var now = nowEpochSec.getAsLong();
@@ -150,7 +193,6 @@ public final class WamPrivateStatsId {
         for (var mapEntry : entries.entrySet()) {
             var entry = mapEntry.getValue();
             if (shouldRotate(entry, now)) {
-                // WAWebWamPrivateStats: m[e].value=o("WARandomHex").randomHex(16) (32 uppercase hex chars)
                 var value = DataUtils.randomHex(16);
                 var newEntry = new Entry(entry.key, entry.keyHashInt, entry.rotationDays, value, now);
                 mapEntry.setValue(newEntry);
@@ -161,12 +203,26 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Returns the current identifier value for the given hash
-     * integer.
+     * Returns the current 32-character hexadecimal identifier for the
+     * group identified by the given wire-level hash integer.
      *
-     * @param keyHashInt the rotation group hash integer
-     * @return the current hex identifier, or {@code "none"} when the
-     *         hash integer is unknown
+     * @apiNote
+     * Called when assembling a private-channel WAM event so the
+     * {@code psId} field carries the current rotation value. An
+     * unknown hash collapses to the {@code "none"} sentinel that WA
+     * Web also uses for the {@code "regular"} channel.
+     *
+     * @implNote
+     * This implementation diverges from {@link WhatsAppWebModule WAWebWamPrivateStats}
+     * {@code .getLatestPrivateStatsIdValueFromKey}, which throws when
+     * the map has no entry for the given hash; Cobalt returns the
+     * {@code "none"} sentinel so callers may treat unknown groups as
+     * untagged rather than fatal.
+     *
+     * @param keyHashInt the wire-level hash integer of the rotation
+     *                   group
+     * @return the current hexadecimal identifier, or {@code "none"}
+     *         when the hash is unknown
      */
     @WhatsAppWebExport(moduleName = "WAWebWamPrivateStats", exports = "getLatestPrivateStatsIdValueFromKey", adaptation = WhatsAppAdaptation.ADAPTED)
     public String getValueForHash(int keyHashInt) {
@@ -175,16 +231,25 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Returns the key name for the given hash integer.
+     * Returns the human-readable key name for the group identified by
+     * the given wire-level hash integer.
      *
-     * <p>The key name is used as the beaconing buffer key for
-     * private-channel events, giving each rotation group its own
-     * independent beaconing track.
+     * @apiNote
+     * Called when selecting the beaconing-buffer key for a
+     * private-channel event so each rotation group accumulates onto
+     * its own independent buffer.
      *
-     * @param keyHashInt the rotation group hash integer
-     * @return the key name, for example {@code "DefaultPsId"}, or
-     *         {@code "unknown_<hash>"} when the hash integer is
-     *         unknown
+     * @implNote
+     * This implementation mirrors {@link WhatsAppWebModule WAWebWamPrivateStats}
+     * {@code .getPrivateStatsKeyFromInt} for known and zero hashes,
+     * and returns an {@code "unknown_<hash>"} sentinel for unknown
+     * non-zero hashes; WA Web returns {@code undefined} in that case.
+     *
+     * @param keyHashInt the wire-level hash integer of the rotation
+     *                   group
+     * @return the key name (for example {@code "DefaultPsId"}),
+     *         {@code "none"} for the zero sentinel, or
+     *         {@code "unknown_<hash>"} for an unknown non-zero hash
      */
     @WhatsAppWebExport(moduleName = "WAWebWamPrivateStats", exports = "getPrivateStatsKeyFromInt", adaptation = WhatsAppAdaptation.ADAPTED)
     public String getKeyNameForHash(int keyHashInt) {
@@ -196,17 +261,23 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Inserts a fresh rotation group keyed by its hash integer with a
-     * newly-generated 32-character hex identifier.
+     * Inserts a new rotation group keyed by its wire-level hash
+     * integer with a freshly generated identifier.
      *
-     * @param key          the human-readable key name
-     * @param keyHashInt   the hash integer used as the wire-level
-     *                     {@code psId} key
+     * @implNote
+     * This implementation replicates the per-row logic of WA Web's
+     * {@code WAWebWamPrivateStats.initPrivateStats} when no persisted
+     * value exists for the group: generate a fresh
+     * {@link DataUtils#randomHex} value, stamp it with the current
+     * epoch, and store the resulting {@link Entry}.
+     *
+     * @param key          the human-readable key name (for example
+     *                     {@code "DefaultPsId"})
+     * @param keyHashInt   the wire-level hash integer
      * @param rotationDays the rotation period in days, or {@code -1}
-     *                     when the entry never rotates
+     *                     when the group never rotates
      */
     private void addEntry(String key, int keyHashInt, int rotationDays) {
-        // WAWebWamPrivateStats: m[e].value=o("WARandomHex").randomHex(16) (32 uppercase hex chars)
         var value = DataUtils.randomHex(16);
         var epoch = nowEpochSec.getAsLong();
         var entry = new Entry(key, keyHashInt, rotationDays, value, epoch);
@@ -214,14 +285,21 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Returns whether the given entry should rotate at the supplied
-     * wall-clock instant.
+     * Returns whether the given entry has crossed a period boundary
+     * since its current value was generated.
      *
-     * @param entry       the rotation group entry
-     * @param nowEpochSec the current Unix epoch seconds
-     * @return {@code true} when the entry has a positive rotation
-     *         period and its creation timestamp predates the current
-     *         period boundary
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebWamPrivateStats}-internal {@code R} helper:
+     * {@code -1} or missing creation timestamps never rotate, and
+     * positive periods rotate when the entry's creation epoch is
+     * earlier than the start of the current period window
+     * ({@code floor(now / periodSeconds) * periodSeconds}).
+     *
+     * @param entry       the rotation group entry to test
+     * @param nowEpochSec the current epoch in seconds
+     * @return {@code true} when the entry must rotate, {@code false}
+     *         otherwise
      */
     private static boolean shouldRotate(Entry entry, long nowEpochSec) {
         if (entry.rotationDays <= 0) {
@@ -233,33 +311,45 @@ public final class WamPrivateStatsId {
     }
 
     /**
-     * Descriptor exposed to the WAM pipeline for a rotation group that
-     * is reported as created or rotated.
+     * The descriptor reported to the WAM pipeline for a rotation
+     * group that has just been created or rotated.
      *
-     * @param keyHashInt   the rotation group hash integer, used as the
-     *                     {@code psIdKey} on the emitted
-     *                     {@code PsIdUpdateEvent}
-     * @param rotationDays the rotation period in days, used as the
-     *                     {@code psIdRotationFrequence} on the emitted
-     *                     {@code PsIdUpdateEvent}
+     * @apiNote
+     * Consumed by the WAM service to populate the {@code psIdKey} and
+     * {@code psIdRotationFrequence} fields of the
+     * {@code PsIdUpdateEvent} emitted for every rotation transition,
+     * matching the shape WA Web feeds into {@code logPsIdUpdate}.
+     *
+     * @param keyHashInt   the wire-level hash integer for the rotation
+     *                     group, used as {@code psIdKey}
+     * @param rotationDays the rotation period in days, used as
+     *                     {@code psIdRotationFrequence}
      */
     public record RotationInfo(int keyHashInt, int rotationDays) {
 
     }
 
     /**
-     * A single rotation group entry, holding the current identifier
-     * value and the timestamp at which it was generated.
+     * A single rotation group entry binding the human-readable key,
+     * the wire-level hash integer, the rotation period, the current
+     * identifier value, and the epoch at which it was generated.
      *
-     * @param key              Human-readable key name, for example {@code "DefaultPsId"}.
-     * @param keyHashInt       Hash integer key, written into the on-wire {@code psId}
-     *                         global.
-     * @param rotationDays     Rotation period in days, or {@code -1} when the entry
-     *                         never rotates.
-     * @param value            The 32-character hex identifier currently assigned to this
-     *                         entry.
-     * @param creationEpochSec Unix epoch seconds at which {@link #value()} was generated,
-     *                         used to detect period boundaries.
+     * @apiNote
+     * Internal to {@link WamPrivateStatsId}; callers receive only the
+     * sanitised {@link RotationInfo} projection.
+     *
+     * @param key              the human-readable key name (for example
+     *                         {@code "DefaultPsId"})
+     * @param keyHashInt       the wire-level hash integer written into
+     *                         the {@code psId} global
+     * @param rotationDays     the rotation period in days, or
+     *                         {@code -1} when the group never rotates
+     * @param value            the 32-character hexadecimal identifier
+     *                         currently assigned to this group
+     * @param creationEpochSec the Unix epoch in seconds at which
+     *                         {@link #value()} was generated; used by
+     *                         {@link #shouldRotate} to detect period
+     *                         boundary crossings
      */
     private record Entry(String key, int keyHashInt, int rotationDays, String value, long creationEpochSec) {
 

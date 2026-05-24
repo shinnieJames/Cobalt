@@ -13,58 +13,53 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles CTWA per-customer data sharing sync actions.
+ * Tracks per-customer Click-To-WhatsApp Ads data-sharing consent from {@code ctwaPerCustomerDataSharing} sync mutations.
  *
- * <p>Per WhatsApp Web {@code WAWebCtwaPerCustomerDataSharingSync}, this handler
- * processes mutations for the {@code "ctwa_per_customer_data_sharing"} sync action.
- * SET and REMOVE operations are supported. On SET, validates that
- * {@code indexParts[1]} (accountLid) is non-{@code null} and that the
- * {@code ctwaPerCustomerDataSharingAction} is present with a non-{@code null}
- * {@code isCtwaPerCustomerDataSharingEnabled} field. On REMOVE, the stored
- * data sharing preference is cleared.
+ * @apiNote
+ * Drives the SMB CTWA per-customer data-sharing consent surface where
+ * a business owner toggles, per business-account LID, whether
+ * customer-level CTWA telemetry may be shared with third-party
+ * partners. When the toggle changes on another device, the server
+ * replays the resulting {@link CtwaPerCustomerDataSharingAction} here.
+ * Cobalt embedders read the flag through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findCtwaDataSharing(String)}.
  *
- * <p>Index format: {@code ["ctwaPerCustomerDataSharing", accountLid]}
- *
- * <p>WA Web uses a per-accountLid IDB table ({@code data-sharing-3pd-lid-v2})
- * and an in-memory collection to store per-customer data sharing preferences.
- * Cobalt mirrors that schema by storing one entry per account LID raw string
- * on the store via {@code WhatsAppStore.putCtwaDataSharing(CtwaDataSharingPreference)}
- * and {@code WhatsAppStore.removeCtwaDataSharing(String)}.
+ * @implNote
+ * This implementation drops two WA Web side effects: the
+ * {@code maybeGeneratePerCustomerDataSharingSystemMessage} and
+ * {@code updateDataSharing3pdLidInCollection} /
+ * {@code removeDataSharing3pdLidFromCollection} fire-and-forget
+ * frontend events because Cobalt has no browser frontend bridge or
+ * UI system-message pipeline. The per-LID IDB row maps to a single
+ * per-LID {@link com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreference}
+ * keyed by raw LID string in the unified store.
  */
 @WhatsAppWebModule(moduleName = "WAWebCtwaPerCustomerDataSharingSync")
 public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates the singleton handler instance.
+     * Constructs the singleton CTWA-per-customer-data-sharing handler.
+     *
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public CtwaPerCustomerDataSharingHandler() {
     }
 
-    /**
-     * Returns the action name for CTWA per-customer data sharing.
-     * @return the action name string
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return CtwaPerCustomerDataSharingAction.ACTION_NAME;
     }
 
-    /**
-     * Returns the collection name for CTWA per-customer data sharing.
-     * @return the sync patch type
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return CtwaPerCustomerDataSharingAction.COLLECTION_NAME;
     }
 
-    /**
-     * Returns the mutation format version for this handler.
-     * @return the version number
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -72,37 +67,36 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
     }
 
     /**
-     * Applies a CTWA per-customer data sharing mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebCtwaPerCustomerDataSharingSync.applyMutations}:
-     * <ul>
-     *   <li><b>SET</b>: validates that {@code indexParts[1]} (accountLid) is present;
-     *       extracts the {@code ctwaPerCustomerDataSharingAction} from the value and
-     *       validates that {@code isCtwaPerCustomerDataSharingEnabled} is non-{@code null};
-     *       stores the enabled flag via {@code $CtwaPerCustomerDataSharingSync$p_1}
-     *       (which calls {@code createOrReplace} on the data-sharing-3pd-lid-v2 table
-     *       and {@code updateDataSharing3pdLidInCollection} on the frontend), then
-     *       fires {@code maybeGeneratePerCustomerDataSharingSystemMessage}.</li>
-     *   <li><b>REMOVE</b>: removes the entry via {@code $CtwaPerCustomerDataSharingSync$p_2}
-     *       (which calls {@code remove} on the table and
-     *       {@code removeDataSharing3pdLidFromCollection} on the frontend).</li>
-     *   <li><b>default</b>: returns unsupported.</li>
-     * </ul>
+     * @apiNote
+     * For SET mutations, validates that {@code indexParts[1]}
+     * (the account LID raw string) is present and that the value
+     * carries a {@link CtwaPerCustomerDataSharingAction}, then
+     * upserts a
+     * {@link com.github.auties00.cobalt.model.business.ctwa.CtwaDataSharingPreference}
+     * keyed by that LID. For REMOVE mutations, drops the entry by
+     * LID. Returns
+     * {@link MutationApplicationResult#unsupported()} for other
+     * operations.
      *
-     * <p>WA Web wraps each mutation in a try/catch that returns
-     * {@code SyncActionState.Failed} on error. Per Cobalt's error model,
-     * exceptions propagate instead of being caught inline.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation reads the
+     * {@link CtwaPerCustomerDataSharingAction#isCtwaPerCustomerDataSharingEnabled()}
+     * field which coalesces a missing wire field to {@code false};
+     * WA Web treats a missing flag as malformed and emits
+     * {@link SyncdIndexUtils#malformedActionValue(String)}. The
+     * Cobalt model accessor is lossy on the boolean wire field so
+     * the malformed branch on null-flag is unreachable here. The
+     * REMOVE branch passes a possibly-null account LID through to
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#removeCtwaDataSharing(String)},
+     * matching WA Web's IDB-no-op semantic when the index slot is
+     * missing.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebCtwaPerCustomerDataSharingSync.applyMutations reads `var u=n[1]` once, then dispatches.
-        // n[1] is `undefined` (i.e. null in Java) when the slot is absent — REMOVE happily treats undefined
-        // as a no-op on IDB, SET returns malformed. Mirror by extracting with a size guard.
         var accountLid = indexArray.size() > 1 ? indexArray.getString(1) : null;
 
         switch (mutation.operation()) {
@@ -111,23 +105,12 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
                     return SyncdIndexUtils.malformedActionValue(collectionName().name());
                 }
 
-                // var c = s.ctwaPerCustomerDataSharingAction; if ((c == null ? void 0 : c.isCtwaPerCustomerDataSharingEnabled) == null) ...
-                // When the value or action payload is missing, WA Web falls through this branch and returns malformed.
                 if (!(mutation.value().action().orElse(null) instanceof CtwaPerCustomerDataSharingAction action)) {
                     return SyncdIndexUtils.malformedActionValue(collectionName().name());
                 }
 
-                // ADAPTED: WA Web checks (c?.isCtwaPerCustomerDataSharingEnabled == null) and returns malformed.
-                // Cobalt's public accessor coalesces the nullable Boolean field to false per nullable boolean
-                // accessor convention; the raw field is package-private and outside this module's ownership,
-                // so null vs false cannot be distinguished here without mutating the model. The practical
-                // effect is that a deliberately null flag is treated as `false` rather than malformed.
                 var enabled = action.isCtwaPerCustomerDataSharingEnabled();
 
-                // WA Web calls createOrReplace({lidRawString: u, dataSharing3pdEnabled: d}) on
-                // the data-sharing-3pd-lid-v2 IDB table and updateDataSharing3pdLidInCollection
-                // on the frontend. Cobalt mirrors the per-LID schema by writing into the per-LID
-                // map keyed by accountLid on the unified store.
                 client.store().putCtwaDataSharing(new CtwaDataSharingPreferenceBuilder()
                         .accountLid(accountLid)
                         .enabled(enabled)
@@ -136,10 +119,6 @@ public final class CtwaPerCustomerDataSharingHandler implements WebAppStateActio
                 return MutationApplicationResult.success();
             }
             case REMOVE -> {
-                // WA Web calls remove(t) on the data-sharing-3pd-lid-v2 table and
-                // removeDataSharing3pdLidFromCollection on the frontend. WA Web does not validate
-                // accountLid on REMOVE — a null key is a no-op on IDB. Cobalt's store removal
-                // treats null as a no-op too, preserving Success semantics.
                 client.store().removeCtwaDataSharing(accountLid);
 
                 return MutationApplicationResult.success();

@@ -13,6 +13,7 @@ import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
 import com.github.auties00.cobalt.wam.type.RetryRejectReason;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -52,4 +53,7 @@ public interface E2eRetryRejectEvent extends WamEventSpec {
 
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<DeviceType> senderDeviceType();
+
+    @WamProperty(index = 12, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 }

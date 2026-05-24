@@ -4,7 +4,7 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayloadBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.DefaultWamService;
 import org.junit.jupiter.api.DisplayName;
@@ -20,15 +20,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for the {@link LidMigrationService} state machine.
  *
- * <p>The state machine has six WA-Web-defined values
+ * @apiNote
+ * Pins the transition contract for every entry point
+ * ({@link LidMigrationService#initialize()},
+ * {@link LidMigrationService#enableMigration()},
+ * {@link LidMigrationService#disableMigration()},
+ * {@link LidMigrationService#processProtocolMessage},
+ * {@link LidMigrationService#reset()}) plus the timeout-future
+ * lifecycle. The state machine has six WA-Web-defined values
  * ({@link LidMigrationState#WAITING_PROP}..{@link LidMigrationState#COMPLETE})
- * plus three Cobalt-only terminal values ({@link LidMigrationState#NOT_STARTED},
- * {@link LidMigrationState#FAILED}, {@link LidMigrationState#DISABLED}).
- * These tests pin every entry-point's transition contract and the
- * timeout-future lifecycle.
+ * plus three Cobalt-only terminal values
+ * ({@link LidMigrationState#NOT_STARTED},
+ * {@link LidMigrationState#FAILED},
+ * {@link LidMigrationState#DISABLED}).
  *
- * <p>State is observed through the package-private
- * {@link LidMigrationService#state()} accessor.
+ * @implNote
+ * State is observed through the package-private
+ * {@link LidMigrationService#state()} accessor, exposed as a test
+ * seam so the production API does not need to leak the
+ * {@code LidMigrationState} enum.
  */
 @DisplayName("LidMigrationService state machine")
 class LidMigrationServiceStateMachineTest {
@@ -36,8 +46,22 @@ class LidMigrationServiceStateMachineTest {
     private static final Jid SELF_PN = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid SELF_LID = Jid.of("83116928594056@lid");
 
+    /**
+     * Bundles the test client, the AB-props seed, and the service
+     * under test.
+     *
+     * @param client  the test client harness
+     * @param props   the AB-props seed
+     * @param service the service under test
+     */
     private record Harness(TestWhatsAppClient client, TestABPropsService props, LidMigrationService service) {}
 
+    /**
+     * Builds a fresh harness wired with the supplied AB props.
+     *
+     * @param props the AB-props seed
+     * @return a fresh {@link Harness}
+     */
     private static Harness build(TestABPropsService props) {
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create().withStore(store);
@@ -46,12 +70,20 @@ class LidMigrationServiceStateMachineTest {
         return new Harness(client, props, service);
     }
 
+    /**
+     * Builds a fresh harness with the default
+     * {@link TestABPropsService} (timeout 300s,
+     * log-out-on-mismatch and compatible both {@code true}).
+     *
+     * @return a fresh {@link Harness}
+     */
     private static Harness build() {
-        // Default props: timeout=300s, log_out_on_mismatch=true, compatible=true.
-        // Override per test as needed.
         return build(TestABPropsService.builder().build());
     }
 
+    /**
+     * Verifies that initial state is NOT_STARTED.
+     */
     @Test
     @DisplayName("initial state is NOT_STARTED")
     void initialState() {
@@ -60,14 +92,20 @@ class LidMigrationServiceStateMachineTest {
         assertFalse(h.service.isLidMigrated());
     }
 
+    /**
+     * Verifies that initialize advances NOT_STARTED -> WAITING_PROP.
+     */
     @Test
-    @DisplayName("initialize advances NOT_STARTED → WAITING_PROP")
+    @DisplayName("initialize advances NOT_STARTED -> WAITING_PROP")
     void initializeFromNotStarted() {
         var h = build();
         h.service.initialize();
         assertEquals(LidMigrationState.WAITING_PROP, h.service.state());
     }
 
+    /**
+     * Verifies that initialize is idempotent: already-WAITING_PROP stays WAITING_PROP.
+     */
     @Test
     @DisplayName("initialize is idempotent: already-WAITING_PROP stays WAITING_PROP")
     void initializeIdempotent() {
@@ -77,6 +115,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.WAITING_PROP, h.service.state());
     }
 
+    /**
+     * Verifies that initialize is a no-op from non-NOT_STARTED states.
+     */
     @Test
     @DisplayName("initialize is a no-op from non-NOT_STARTED states")
     void initializeNoOpAfterAdvance() {
@@ -91,8 +132,11 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.WAITING_MAPPINGS, h.service.state());
     }
 
+    /**
+     * Verifies that enableMigration advances WAITING_PROP -> WAITING_MAPPINGS.
+     */
     @Test
-    @DisplayName("enableMigration advances WAITING_PROP → WAITING_MAPPINGS")
+    @DisplayName("enableMigration advances WAITING_PROP -> WAITING_MAPPINGS")
     void enableMigrationFromWaitingProp() {
         var props = TestABPropsService.builder()
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_PEER_SYNC_TIMEOUT_IN_SECONDS, 0L)
@@ -103,6 +147,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.WAITING_MAPPINGS, h.service.state());
     }
 
+    /**
+     * Verifies that enableMigration is a no-op from NOT_STARTED (initialize was never called).
+     */
     @Test
     @DisplayName("enableMigration is a no-op from NOT_STARTED (initialize was never called)")
     void enableMigrationNoOpBeforeInitialize() {
@@ -114,6 +161,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.NOT_STARTED, h.service.state());
     }
 
+    /**
+     * Verifies that enableMigration with timeout=0 does not arm a timeout (manual sleep would not fire).
+     */
     @Test
     @DisplayName("enableMigration with timeout=0 does not arm a timeout (manual sleep would not fire)")
     void enableMigrationTimeoutZeroSkipsScheduling() {
@@ -123,11 +173,14 @@ class LidMigrationServiceStateMachineTest {
         var h = build(props);
         h.service.initialize();
         h.service.enableMigration();
-        // State remains WAITING_MAPPINGS — no timeout fires.
+        // State remains WAITING_MAPPINGS; no timeout fires.
         assertEquals(LidMigrationState.WAITING_MAPPINGS, h.service.state());
         assertTrue(h.client.failures().isEmpty(), "no failure expected without timeout");
     }
 
+    /**
+     * Verifies that enableMigration with timeout>0 + waiting longer than timeout fires FAILED.
+     */
     @Test
     @DisplayName("enableMigration with timeout>0 + waiting longer than timeout fires FAILED")
     void enableMigrationTimeoutFiresFailure() throws InterruptedException {
@@ -146,9 +199,12 @@ class LidMigrationServiceStateMachineTest {
         var failures = h.client.failures();
         assertEquals(1, failures.size(), "exactly one failure surfaced through the error handler");
         assertInstanceOf(WhatsAppLidMigrationException.FailedToParseMappings.class, failures.getFirst(),
-                "timeout surfaces as FailedToParseMappings (matches Cobalt's deliberate choice — WA Web uses PeerMappingsNotReceived but Cobalt re-uses the parse-failed branch)");
+                "timeout surfaces as FailedToParseMappings (matches Cobalt's deliberate choice; WA Web uses PeerMappingsNotReceived but Cobalt re-uses the parse-failed branch)");
     }
 
+    /**
+     * Verifies that enableMigration timeout does not fire when payload arrives in time.
+     */
     @Test
     @DisplayName("enableMigration timeout does not fire when payload arrives in time")
     void enableMigrationTimeoutCancelledByPayload() throws InterruptedException {
@@ -169,14 +225,17 @@ class LidMigrationServiceStateMachineTest {
         // Wait past the original timeout window.
         Thread.sleep(1500);
 
-        // State must NOT be FAILED — the timeout future was cancelled when the payload arrived.
+        // State must NOT be FAILED; the timeout future was cancelled when the payload arrived.
         assertFalse(h.service.state() == LidMigrationState.FAILED,
                 "payload arriving before timeout cancels the future");
         assertTrue(h.client.failures().isEmpty(), "no failure expected when payload arrives in time");
     }
 
+    /**
+     * Verifies that disableMigration advances WAITING_PROP -> DISABLED.
+     */
     @Test
-    @DisplayName("disableMigration advances WAITING_PROP → DISABLED")
+    @DisplayName("disableMigration advances WAITING_PROP -> DISABLED")
     void disableMigrationFromWaitingProp() {
         var h = build();
         h.service.initialize();
@@ -185,6 +244,9 @@ class LidMigrationServiceStateMachineTest {
         assertTrue(h.service.state().isTerminal());
     }
 
+    /**
+     * Verifies that disableMigration is a no-op from NOT_STARTED.
+     */
     @Test
     @DisplayName("disableMigration is a no-op from NOT_STARTED")
     void disableMigrationNoOpFromNotStarted() {
@@ -194,6 +256,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.NOT_STARTED, h.service.state());
     }
 
+    /**
+     * Verifies that reset returns non-terminal states to NOT_STARTED.
+     */
     @Test
     @DisplayName("reset returns non-terminal states to NOT_STARTED")
     void resetFromWaitingProp() {
@@ -203,6 +268,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.NOT_STARTED, h.service.state());
     }
 
+    /**
+     * Verifies that reset preserves COMPLETE.
+     */
     @Test
     @DisplayName("reset preserves COMPLETE")
     void resetPreservesComplete() {
@@ -213,7 +281,7 @@ class LidMigrationServiceStateMachineTest {
         var h = build(props);
         h.service.initialize();
         h.service.enableMigration();
-        // Empty payload → state goes READY → auto-start → COMPLETE.
+        // Empty payload -> state goes READY -> auto-start -> COMPLETE.
         var payload = new LIDMigrationMappingSyncPayloadBuilder()
                 .pnToLidMappings(List.of())
                 .build();
@@ -225,6 +293,9 @@ class LidMigrationServiceStateMachineTest {
                 "terminal COMPLETE is preserved across reset");
     }
 
+    /**
+     * Verifies that reset preserves DISABLED.
+     */
     @Test
     @DisplayName("reset preserves DISABLED")
     void resetPreservesDisabled() {
@@ -235,6 +306,9 @@ class LidMigrationServiceStateMachineTest {
         assertEquals(LidMigrationState.DISABLED, h.service.state());
     }
 
+    /**
+     * Verifies that reset preserves FAILED.
+     */
     @Test
     @DisplayName("reset preserves FAILED")
     void resetPreservesFailed() throws InterruptedException {
@@ -252,6 +326,9 @@ class LidMigrationServiceStateMachineTest {
                 "terminal FAILED is preserved across reset");
     }
 
+    /**
+     * Verifies that isLidMigrated is true only in COMPLETE.
+     */
     @Test
     @DisplayName("isLidMigrated is true only in COMPLETE")
     void isLidMigratedOnlyInComplete() {
@@ -276,6 +353,9 @@ class LidMigrationServiceStateMachineTest {
         assertTrue(h.service.isLidMigrated(), "COMPLETE after auto-start over empty mappings");
     }
 
+    /**
+     * Verifies that isSyncdSessionMigrated is constantly false.
+     */
     @Test
     @DisplayName("isSyncdSessionMigrated is constantly false")
     void isSyncdSessionMigratedConstant() {
@@ -285,6 +365,9 @@ class LidMigrationServiceStateMachineTest {
         assertFalse(h.service.isSyncdSessionMigrated());
     }
 
+    /**
+     * Verifies that shouldCreatePnChat is constantly false.
+     */
     @Test
     @DisplayName("shouldCreatePnChat is constantly false")
     void shouldCreatePnChatConstant() {
@@ -292,6 +375,9 @@ class LidMigrationServiceStateMachineTest {
         assertFalse(h.service.shouldCreatePnChat());
     }
 
+    /**
+     * Verifies that hasStateDiscrepancy is constantly false.
+     */
     @Test
     @DisplayName("hasStateDiscrepancy is constantly false")
     void hasStateDiscrepancyConstant() {

@@ -3,10 +3,9 @@ package com.github.auties00.cobalt.client;
 import com.github.auties00.cobalt.call.ActiveCall;
 import com.github.auties00.cobalt.call.CallOptions;
 import com.github.auties00.cobalt.call.IncomingCall;
-import com.github.auties00.cobalt.call.signaling.CallEndReason;
+import com.github.auties00.cobalt.call.CallEndReason;
 import com.github.auties00.cobalt.exception.WhatsAppException;
-import com.github.auties00.cobalt.media.MediaConnection;
-import com.github.auties00.cobalt.message.send.ack.AckResult;
+import com.github.auties00.cobalt.media.MediaConnectionService;
 import com.github.auties00.cobalt.model.bot.profile.BotDirectory;
 import com.github.auties00.cobalt.model.bot.profile.BotProfile;
 import com.github.auties00.cobalt.model.business.BusinessDataSharingConsent;
@@ -34,6 +33,7 @@ import com.github.auties00.cobalt.model.business.profile.BusinessProfile;
 import com.github.auties00.cobalt.model.call.CallLink;
 import com.github.auties00.cobalt.model.call.CallLinkCreate;
 import com.github.auties00.cobalt.model.call.CallLinkMedia;
+import com.github.auties00.cobalt.model.call.CallLog;
 import com.github.auties00.cobalt.model.chat.*;
 import com.github.auties00.cobalt.model.chat.community.*;
 import com.github.auties00.cobalt.model.chat.group.*;
@@ -43,6 +43,7 @@ import com.github.auties00.cobalt.model.federated.*;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.jid.JidProvider;
 import com.github.auties00.cobalt.model.jid.LidChange;
+import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageInfo;
 import com.github.auties00.cobalt.model.message.MessageKey;
@@ -52,6 +53,7 @@ import com.github.auties00.cobalt.model.payment.BrazilCustomPaymentMethodCreate;
 import com.github.auties00.cobalt.model.payment.PaymentsTosV3ConsumerVariant;
 import com.github.auties00.cobalt.model.preference.*;
 import com.github.auties00.cobalt.model.privacy.*;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.model.reporting.*;
 import com.github.auties00.cobalt.model.setting.*;
 import com.github.auties00.cobalt.model.setting.notice.UserNoticeBundle;
@@ -64,6 +66,9 @@ import com.github.auties00.cobalt.model.sync.AppStateSyncCollection;
 import com.github.auties00.cobalt.model.sync.AppStateSyncResult;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.model.sync.action.media.RecentEmojiWeight;
+import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethod;
+import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -76,7 +81,9 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -98,12 +105,12 @@ import java.util.function.Function;
  *       was last given;</li>
  *   <li>{@link #sendNode(NodeBuilder)} delegates to a caller-supplied
  *       {@link Function} so tests can return canned IQ responses;</li>
- *   <li>{@link #handleFailure(com.github.auties00.cobalt.exception.WhatsAppException)}
+ *   <li>{@link #handleFailure(WhatsAppException)}
  *       records the exception into a list observable via
  *       {@link #failures()};</li>
  *   <li>{@link #queryChatMetadata(JidProvider)} returns from a map of
  *       presets installed via
- *       {@link #withChatMetadata(JidProvider, com.github.auties00.cobalt.model.chat.ChatMetadata)}.</li>
+ *       {@link #withChatMetadata(JidProvider, ChatMetadata)}.</li>
  * </ul>
  *
  * <p>Add more wired overrides here when a new test needs them.
@@ -114,8 +121,8 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     private Function<NodeBuilder, Node> sendNodeHandler = node -> {
         throw new UnsupportedOperationException("TestWhatsAppClient.sendNode: no handler configured");
     };
-    private final List<com.github.auties00.cobalt.exception.WhatsAppException> failures = new ArrayList<>();
-    private final Map<JidProvider, com.github.auties00.cobalt.model.chat.ChatMetadata> chatMetadata = new HashMap<>();
+    private final List<WhatsAppException> failures = new ArrayList<>();
+    private final Map<JidProvider, ChatMetadata> chatMetadata = new HashMap<>();
     private Boolean isConnected;
 
     /** Returns a new test client with no preset state. */
@@ -135,8 +142,8 @@ public final class TestWhatsAppClient implements WhatsAppClient {
         return this;
     }
 
-    /** Installs a canned {@link com.github.auties00.cobalt.model.chat.ChatMetadata} for the given JID. */
-    public TestWhatsAppClient withChatMetadata(JidProvider jid, com.github.auties00.cobalt.model.chat.ChatMetadata metadata) {
+    /** Installs a canned {@link ChatMetadata} for the given JID. */
+    public TestWhatsAppClient withChatMetadata(JidProvider jid, ChatMetadata metadata) {
         this.chatMetadata.put(jid, metadata);
         return this;
     }
@@ -161,7 +168,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     /** Returns every exception passed to {@link #handleFailure} in order. */
-    public List<com.github.auties00.cobalt.exception.WhatsAppException> failures() {
+    public List<WhatsAppException> failures() {
         return Collections.unmodifiableList(failures);
     }
 
@@ -175,7 +182,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
      *
      * <p>Kept as a public method on the test harness so tests can grab the
      * service and pass it explicitly to constructor-DI consumers. Not part
-     * of the {@link WhatsAppClient} interface — production code always
+     * of the {@link WhatsAppClient} interface; production code always
      * receives the AB-props service via constructor injection.
      *
      * @return the installed AB-props service
@@ -183,7 +190,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     public ABPropsService abPropsService() {
         if (abPropsService == null) {
             throw new UnsupportedOperationException(
-                    "TestWhatsAppClient: abPropsService is not configured — call withAbPropsService(..) first");
+                    "TestWhatsAppClient: abPropsService is not configured; call withAbPropsService(..) first");
         }
         return abPropsService;
     }
@@ -268,14 +275,14 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public SequencedCollection<Jid> queryLinkedDevices() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryLinkedDevices(..) is not stubbed");
+    public void refreshLinkedDevices() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshLinkedDevices(..) is not stubbed");
     }
 
     @Override
     public boolean isConnected() {
         if (isConnected == null) {
-            throw new UnsupportedOperationException("TestWhatsAppClient: isConnected(..) is not stubbed — call withIsConnected(..) first");
+            throw new UnsupportedOperationException("TestWhatsAppClient: isConnected(..) is not stubbed; call withIsConnected(..) first");
         }
         return isConnected;
     }
@@ -329,7 +336,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
 
     @Override
     public Optional<BusinessProfile> queryBusinessProfile(JidProvider contact) {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryBusinessProfile(..) is not stubbed");
+        return Optional.empty();
     }
 
     @Override
@@ -488,12 +495,12 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult sendScheduledCall(JidProvider chatProvider, String title, Instant scheduledAt, boolean video) {
+    public void sendScheduledCall(JidProvider chatProvider, String title, Instant scheduledAt, boolean video) {
         throw new UnsupportedOperationException("TestWhatsAppClient: sendScheduledCall(..) is not stubbed");
     }
 
     @Override
-    public AckResult cancelScheduledCall(MessageKey creationKey) {
+    public void cancelScheduledCall(MessageKey creationKey) {
         throw new UnsupportedOperationException("TestWhatsAppClient: cancelScheduledCall(..) is not stubbed");
     }
 
@@ -503,13 +510,13 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public SequencedCollection<Newsletter> queryNewsletters() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryNewsletters(..) is not stubbed");
+    public void refreshNewsletters() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshNewsletters(..) is not stubbed");
     }
 
     @Override
-    public SequencedCollection<Chat> queryGroups() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryGroups(..) is not stubbed");
+    public void refreshGroups() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshGroups(..) is not stubbed");
     }
 
     @Override
@@ -573,7 +580,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult sendPeerMessage(JidProvider chatJidProvider, ChatMessageInfo response) {
+    public void sendPeerMessage(JidProvider chatJidProvider, ChatMessageInfo response) {
         throw new UnsupportedOperationException("TestWhatsAppClient: sendPeerMessage(..) is not stubbed");
     }
 
@@ -878,6 +885,11 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
+    public List<BusinessCatalog> queryBusinessCollections(JidProvider businessJidProvider, int limit, int itemLimit) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryBusinessCollections(..) is not stubbed");
+    }
+
+    @Override
     public BusinessPostcodeVerification verifyBusinessPostcode(JidProvider businessJidProvider, String directConnectionEncryptedInfo) {
         throw new UnsupportedOperationException("TestWhatsAppClient: verifyBusinessPostcode(..) is not stubbed");
     }
@@ -893,8 +905,8 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public SequencedCollection<Jid> queryBlockList() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryBlockList(..) is not stubbed");
+    public void refreshBlockList() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshBlockList(..) is not stubbed");
     }
 
     @Override
@@ -908,18 +920,13 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public BlockListResult queryBlockList(String itemDhash) {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryBlockList(..) is not stubbed");
+    public void refreshOptOutList(String category) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshOptOutList(..) is not stubbed");
     }
 
     @Override
-    public OptOutListResult queryOptOutList(String itemDhash, String iqCategory) {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryOptOutList(..) is not stubbed");
-    }
-
-    @Override
-    public ContactBlacklistResult queryContactBlacklist(String categoryName, ContactBlacklistAddressingMode addressingMode) {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryContactBlacklist(..) is not stubbed");
+    public void refreshContactBlacklist(String category, ContactBlacklistAddressingMode addressingMode) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshContactBlacklist(..) is not stubbed");
     }
 
     @Override
@@ -983,22 +990,22 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult sendMessage(JidProvider jidProvider, MessageContainer container) {
+    public void sendMessage(JidProvider jidProvider, MessageContainer container) {
         throw new UnsupportedOperationException("TestWhatsAppClient: sendMessage(..) is not stubbed");
     }
 
     @Override
-    public AckResult sendMessage(MessageInfo messageInfo) {
+    public void sendMessage(MessageInfo messageInfo) {
         throw new UnsupportedOperationException("TestWhatsAppClient: sendMessage(..) is not stubbed");
     }
 
     @Override
-    public AckResult editMessage(MessageKey originalKey, MessageContainer newContent) {
+    public void editMessage(MessageKey originalKey, MessageContainer newContent) {
         throw new UnsupportedOperationException("TestWhatsAppClient: editMessage(..) is not stubbed");
     }
 
     @Override
-    public AckResult deleteMessage(MessageKey key, boolean everyone) {
+    public void deleteMessage(MessageKey key, boolean everyone) {
         throw new UnsupportedOperationException("TestWhatsAppClient: deleteMessage(..) is not stubbed");
     }
 
@@ -1008,7 +1015,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult deleteStatus(String statusId) {
+    public void deleteStatus(String statusId) {
         throw new UnsupportedOperationException("TestWhatsAppClient: deleteStatus(..) is not stubbed");
     }
 
@@ -1018,8 +1025,8 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public StatusPrivacySetting queryStatusPrivacy() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryStatusPrivacy(..) is not stubbed");
+    public void refreshStatusPrivacy() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshStatusPrivacy(..) is not stubbed");
     }
 
     @Override
@@ -1028,7 +1035,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult forwardMessage(MessageKey sourceKey, JidProvider destinationProvider) {
+    public void forwardMessage(MessageKey sourceKey, JidProvider destinationProvider) {
         throw new UnsupportedOperationException("TestWhatsAppClient: forwardMessage(..) is not stubbed");
     }
 
@@ -1038,12 +1045,12 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult addReaction(MessageKey messageKey, String emoji) {
+    public void addReaction(MessageKey messageKey, String emoji) {
         throw new UnsupportedOperationException("TestWhatsAppClient: addReaction(..) is not stubbed");
     }
 
     @Override
-    public AckResult removeReaction(MessageKey messageKey) {
+    public void removeReaction(MessageKey messageKey) {
         throw new UnsupportedOperationException("TestWhatsAppClient: removeReaction(..) is not stubbed");
     }
 
@@ -1208,8 +1215,8 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AccountDisappearingMode queryDisappearingMode() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryDisappearingMode(..) is not stubbed");
+    public void refreshDisappearingMode() {
+        throw new UnsupportedOperationException("TestWhatsAppClient: refreshDisappearingMode(..) is not stubbed");
     }
 
     @Override
@@ -1288,7 +1295,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public Optional<String> queryUserUsername(JidProvider userJidProvider) {
+    public Optional<UserUsername> queryUserUsername(JidProvider userJidProvider) {
         throw new UnsupportedOperationException("TestWhatsAppClient: queryUserUsername(..) is not stubbed");
     }
 
@@ -1443,12 +1450,12 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult votePoll(MessageKey pollKey, List<String> selectedOptions) {
+    public void votePoll(MessageKey pollKey, List<String> selectedOptions) {
         throw new UnsupportedOperationException("TestWhatsAppClient: votePoll(..) is not stubbed");
     }
 
     @Override
-    public AckResult closePoll(MessageKey pollKey) {
+    public void closePoll(MessageKey pollKey) {
         throw new UnsupportedOperationException("TestWhatsAppClient: closePoll(..) is not stubbed");
     }
 
@@ -1493,12 +1500,12 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public AckResult pinMessage(MessageKey msgKey) {
+    public void pinMessage(MessageKey msgKey) {
         throw new UnsupportedOperationException("TestWhatsAppClient: pinMessage(..) is not stubbed");
     }
 
     @Override
-    public AckResult unpinMessage(MessageKey msgKey) {
+    public void unpinMessage(MessageKey msgKey) {
         throw new UnsupportedOperationException("TestWhatsAppClient: unpinMessage(..) is not stubbed");
     }
 
@@ -1638,8 +1645,18 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public MediaConnection queryMediaConns() {
-        throw new UnsupportedOperationException("TestWhatsAppClient: queryMediaConns(..) is not stubbed");
+    public boolean uploadMedia(MediaProvider provider, InputStream inputStream) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: uploadMedia(..) is not stubbed");
+    }
+
+    @Override
+    public boolean uploadMedia(MediaProvider provider, Path source) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: uploadMedia(Path) is not stubbed");
+    }
+
+    @Override
+    public InputStream downloadMedia(MediaProvider provider) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: downloadMedia(..) is not stubbed");
     }
 
     @Override
@@ -1658,7 +1675,7 @@ public final class TestWhatsAppClient implements WhatsAppClient {
     }
 
     @Override
-    public Map<Jid, IdentityKey> queryIdentityKeys(List<? extends JidProvider> deviceJidsProvider) {
+    public List<IdentityKey> queryIdentityKeys(List<? extends JidProvider> deviceJidsProvider) {
         throw new UnsupportedOperationException("TestWhatsAppClient: queryIdentityKeys(..) is not stubbed");
     }
 
@@ -2202,5 +2219,98 @@ public final class TestWhatsAppClient implements WhatsAppClient {
         throw new UnsupportedOperationException("TestWhatsAppClient: createEnterpriseAuthenticatedCustomer(..) is not stubbed");
     }
 
+    @Override
+    public String queryAbPropString(ABProp prop) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryAbPropString(..) is not stubbed");
+    }
 
+    @Override
+    public boolean queryAbPropBool(ABProp prop) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryAbPropBool(..) is not stubbed");
+    }
+
+    @Override
+    public int queryAbPropInt(ABProp prop) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryAbPropInt(..) is not stubbed");
+    }
+
+    @Override
+    public long queryAbPropLong(ABProp prop) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryAbPropLong(..) is not stubbed");
+    }
+
+    @Override
+    public double queryAbPropDouble(ABProp prop) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: queryAbPropDouble(..) is not stubbed");
+    }
+
+    @Override
+    public void editWebBetaEnrollment(boolean enrolled) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editWebBetaEnrollment(..) is not stubbed");
+    }
+
+    @Override
+    public void editAlwaysRelayCalls(boolean enabled) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editAlwaysRelayCalls(..) is not stubbed");
+    }
+
+    @Override
+    public void editAiPrivateProcessing(boolean enabled) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editAiPrivateProcessing(..) is not stubbed");
+    }
+
+    @Override
+    public void editAutomatedDetections(boolean enabled) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editAutomatedDetections(..) is not stubbed");
+    }
+
+    @Override
+    public void dismissOnboardingHint(String hintId) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: dismissOnboardingHint(..) is not stubbed");
+    }
+
+    @Override
+    public void restoreOnboardingHint(String hintId) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: restoreOnboardingHint(..) is not stubbed");
+    }
+
+    @Override
+    public void disableInteractiveMessageButton(String buttonId) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: disableInteractiveMessageButton(..) is not stubbed");
+    }
+
+    @Override
+    public void editRecentEmojiUsage(List<RecentEmojiWeight> usage) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editRecentEmojiUsage(..) is not stubbed");
+    }
+
+    @Override
+    public void editContact(ContactEdit edit) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editContact(..) is not stubbed");
+    }
+
+    @Override
+    public void deleteContact(JidProvider contact) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: deleteContact(..) is not stubbed");
+    }
+
+    @Override
+    public void addCallLog(CallLog entry) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: addCallLog(..) is not stubbed");
+    }
+
+    @Override
+    public void editAdvertiserDataSharing(Jid customer, boolean enabled) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editAdvertiserDataSharing(..) is not stubbed");
+    }
+
+    @Override
+    public void editCustomPaymentMethods(List<CustomPaymentMethod> methods) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editCustomPaymentMethods(..) is not stubbed");
+    }
+
+    @Override
+    public void editPaymentTos(PaymentTosAction.PaymentNotice notice, boolean accepted) {
+        throw new UnsupportedOperationException("TestWhatsAppClient: editPaymentTos(..) is not stubbed");
+    }
 }

@@ -38,3 +38,6 @@ desktop.ini
 
 # Testing
 .test/
+
+# Claude Code local settings
+.claude/settings.local.json

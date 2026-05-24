@@ -15,17 +15,32 @@ import java.util.List;
 /**
  * Builds outgoing pin-chat sync mutations.
  *
- * <p>Mirrors the {@code getPinMutation} export of WhatsApp Web's
- * {@code WAWebPinChatSync} module. The factory is the outgoing-mutation
- * counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.PinChatHandler} — the handler
- * keeps the inbound {@code applyMutation} pipeline while this class produces
- * the {@link SyncPendingMutation} values dispatched by
- * {@link com.github.auties00.cobalt.client.WhatsAppClient}.
+ * @apiNote
+ * Drives the chat-list pin gesture and the newsletter pin toggle in the
+ * Newsletters surface; consumed on receiving devices by
+ * {@link com.github.auties00.cobalt.sync.handler.PinChatHandler} which
+ * applies the pin update to the chat table and, when locked, runs the
+ * 4-chat-limit eviction. Also used internally by
+ * {@link LockChatMutationFactory} and {@link ArchiveChatMutationFactory}
+ * to attach a companion unpin when an archive or lock takes effect.
+ *
+ * @implNote
+ * This implementation mirrors {@code WAWebPinChatSync.getPinMutation}.
+ * Receiver-side conflict resolution and the
+ * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} telemetry emitted on
+ * unpinning the 4th chat are handler-side concerns and do not surface
+ * here.
  */
 public final class PinChatMutationFactory {
     /**
      * Constructs a pin-chat mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public pin setter and into
+     * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
+     * The factory keeps no state, so a single instance is sufficient per
+     * client.
      */
     public PinChatMutationFactory() {
 
@@ -34,20 +49,27 @@ public final class PinChatMutationFactory {
     /**
      * Builds a pending mutation that pins or unpins a chat or newsletter.
      *
-     * <p>Per WhatsApp Web {@code WAWebPinChatSync.getPinMutation}: constructs a
-     * {@code pinAction} value, computes the chat-jid mutation index via
-     * {@code WAWebSyncdGetChat.getChatJidMutationIndexForChat}, and delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with the
-     * {@code RegularLow} collection, the action version, the {@code SET}
-     * operation, the timestamp, and the {@code Pin} action.
+     * @apiNote
+     * Invoked from the public pin setter on
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient} and from
+     * {@link LockChatMutationFactory#getMutationsForLock(Instant, boolean, Jid, com.github.auties00.cobalt.model.sync.SyncActionMessageRange)}.
+     * Newsletters are supported on the same builder because WA Web's
+     * {@code applyMutation} routes them through the same
+     * {@code applyUpdates} call after detecting
+     * {@code wid.isNewsletter()}.
      *
-     * <p>In Cobalt, the chat-jid mutation index is computed as
-     * {@code chatJid.toString()} directly because Cobalt does not maintain the
-     * LID-migration accountLid lookup that {@code getChatJidMutationIndexForChat}
-     * performs in WA Web.
+     * @implNote
+     * This implementation passes the supplied {@code chatJid} verbatim
+     * into the index. WA Web's {@code getChatJidMutationIndexForChat}
+     * would swap a PN for its paired LID under LID1x1 migration, which
+     * Cobalt does not maintain at this layer. The mutation is routed
+     * through the {@code RegularLow} collection alongside the other
+     * chat-scoped sync actions and uses {@code SET} as the operation.
      *
-     * @param timestamp the mutation timestamp
-     * @param pinned    whether the chat should be pinned ({@code true}) or unpinned ({@code false})
+     * @param timestamp the mutation timestamp recorded on both the outer
+     *                  mutation and the inner {@code SyncActionValue}
+     * @param pinned    {@code true} to pin the chat, {@code false} to
+     *                  unpin
      * @param chatJid   the JID of the chat or newsletter
      * @return the pending mutation for the pin action
      */
@@ -59,8 +81,6 @@ public final class PinChatMutationFactory {
                 .timestamp(timestamp)
                 .pinAction(pinAction)
                 .build();
-        // ADAPTED: Cobalt does not implement the LID 1:1 migration accountLid path,
-        // so the chat-jid mutation index resolves to the JID's canonical string form.
         var index = JSON.toJSONString(List.of(PinAction.ACTION_NAME, chatJid.toString()));
         var mutation = new DecryptedMutation.Trusted(
                 index,

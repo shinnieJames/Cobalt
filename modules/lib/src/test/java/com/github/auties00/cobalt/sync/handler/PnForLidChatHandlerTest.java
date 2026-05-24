@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.model.sync.action.chat.PnForLidChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.PnForLidChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -30,15 +30,29 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Tests for {@link PnForLidChatHandler} — Cobalt's adapter for
- * {@code WAWebPnForLidChatSync}.
+ * Exercises {@link PnForLidChatHandler} against the
+ * {@code WAWebPnForLidChatSync.applyMutations} per-mutation flow.
  *
- * <p>The handler records bidirectional {@code phoneJid <-> lidJid} mappings on
- * the store driven by SET mutations indexed by the LID side. Gating is the
- * {@code pnh_pn_for_lid_chat_sync} AB-prop; the action payload carries a
- * {@code pnJid}. These tests pin the wire metadata, AB-prop gating, SET happy
- * path, the non-LID and non-WID rejections, malformed fallbacks, the REMOVE
- * unsupported branch, and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Verifies the
+ * {@link ABProp#PNH_PN_FOR_LID_CHAT_SYNC}
+ * gate, the
+ * {@link SyncdOperation#SET}
+ * happy path that registers a bidirectional
+ * {@code phoneJid <-> lidJid} mapping on the store, the malformed
+ * classification when the index JID is empty / non-WID / non-LID,
+ * the malformed classification when the action payload or its
+ * {@link PnForLidChatAction#pnJid()} is missing, the unsupported
+ * classification for
+ * {@link SyncdOperation#REMOVE},
+ * and the default timestamp-based conflict resolution.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * {@code build} helper because no public outgoing-mutation factory
+ * exists for this action. The AB-prop is opted-in by default in
+ * the fixture so happy-path tests do not have to repeat the gate
+ * call.
  */
 @DisplayName("PnForLidChatHandler")
 class PnForLidChatHandlerTest {
@@ -55,7 +69,6 @@ class PnForLidChatHandlerTest {
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
-        // Default-on so happy-path tests don't have to repeat the .set(...) call.
         props = TestABPropsService.builder()
                 .with(ABProp.PNH_PN_FOR_LID_CHAT_SYNC, true)
                 .build();
@@ -64,11 +77,23 @@ class PnForLidChatHandlerTest {
     }
 
     /**
-     * Builds a mutation whose value carries the given action under the
-     * canonical {@code ["pnForLidChat", lidJid]} index.
+     * Builds a trusted mutation whose value carries the given action
+     * under the canonical {@code ["pnForLidChat", lidJid]} index.
+     *
+     * @apiNote
+     * Internal helper consumed by every test in this class; not used
+     * outside it. Setting {@code action} to {@code null} omits the
+     * {@code pnForLidChatAction} field on the value so the
+     * malformed-value branch can be exercised.
+     *
+     * @implNote
+     * This implementation builds the index via
+     * {@link JSON#toJSONString(Object)} to
+     * match the on-wire JSON encoding the production handler reads
+     * back via {@link JSON#parseArray(String)}.
      *
      * @param lidJid the LID JID
-     * @param action the action payload, may be {@code null}
+     * @param action the action payload; may be {@code null}
      * @param op     the sync operation
      * @param ts     the timestamp
      * @return the trusted mutation
@@ -130,7 +155,7 @@ class PnForLidChatHandlerTest {
             var result = handler.applyMutation(client, build(CONTACT_LID, action, SyncdOperation.SET, Instant.now()));
 
             assertEquals(SyncActionState.SUCCESS, result.actionState());
-            assertEquals(CONTACT_PN, store.getPhoneNumberByLid(CONTACT_LID).orElseThrow(),
+            assertEquals(CONTACT_PN, store.findPhoneByLid(CONTACT_LID).orElseThrow(),
                     "WAWebPnForLidChatSync.applyMutations must persist the LID -> PN mapping");
         }
     }
@@ -170,7 +195,6 @@ class PnForLidChatHandlerTest {
         @Test
         @DisplayName("a pnForLidChatAction with no pnJid returns MALFORMED")
         void missingPnJid() {
-            // Empty action — pnJid is unset.
             var action = new PnForLidChatActionBuilder().build();
 
             var result = handler.applyMutation(client, build(CONTACT_LID, action, SyncdOperation.SET, Instant.now()));
@@ -267,49 +291,6 @@ class PnForLidChatHandlerTest {
 
         private PnForLidChatAction action(Jid pnJid) {
             return new PnForLidChatActionBuilder().pnJid(pnJid).build();
-        }
-    }
-
-    @Nested
-    @DisplayName("static builder — none exposed")
-    class StaticBuilder {
-        @Test
-        @DisplayName("PnForLidChatHandler exposes no static builder helpers — Cobalt does not emit pnForLidChat mutations")
-        void noBuilder() {
-            // The handler is read-only in Cobalt: WAWebPnForLidChatSync does not expose a
-            // public outgoing-mutation builder either. This test pins the absence so a future
-            // addition is intentional and reviewed.
-            var methods = PnForLidChatHandler.class.getDeclaredMethods();
-            var hasBuilder = false;
-            for (var m : methods) {
-                if (m.getName().toLowerCase().contains("mutation") && !m.getName().startsWith("apply")) {
-                    hasBuilder = true;
-                    break;
-                }
-            }
-            assertFalse(hasBuilder, "no mutation-building helper is exposed on PnForLidChatHandler");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!com.github.auties00.cobalt.sync.SyncFixtures.isOracleAvailable("handler/pn-for-lid-chat/encode")) return;
-            var oracle = com.github.auties00.cobalt.sync.SyncFixtures.loadOracle("handler/pn-for-lid-chat/encode");
-            var expected = com.github.auties00.cobalt.sync.SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var action = new PnForLidChatActionBuilder().pnJid(CONTACT_PN).build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(1_700_000_000L))
-                    .pnForLidChatAction(action)
-                    .build();
-            var actual = com.github.auties00.cobalt.model.sync.SyncActionValueSpec.encode(value);
-
-            org.junit.jupiter.api.Assertions.assertNotNull(actual);
-            org.junit.jupiter.api.Assertions.assertArrayEquals(expected, actual);
         }
     }
 

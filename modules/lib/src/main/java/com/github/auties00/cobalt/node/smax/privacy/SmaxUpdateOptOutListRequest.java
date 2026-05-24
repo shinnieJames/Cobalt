@@ -11,58 +11,53 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps a single {@code <item>} child
- * carrying the marketing-message opt-out parameters in the canonical
- * {@code <iq xmlns="optoutlist" type="set">} envelope addressed at
- * {@code s.whatsapp.net}. Three of the eight item attributes
- * ({@code jid}, {@code category}, {@code action}) are mandatory; the
- * remaining five ({@code dhash}, {@code reason}, {@code entry_point},
- * {@code signup_id}, {@code duration}) are optional and are emitted
- * only when supplied. The {@code id} attribute is generated downstream
- * by {@code WhatsAppClient.sendNode} via the same path used by every
- * other SMAX request — Cobalt does not call {@code WAWap.generateId}
- * inline because dispatch ownership is centralised on the client.
+ * The outbound {@code <iq xmlns="optoutlist" type="set">} stanza applying a marketing-message opt-out action.
+ *
+ * @apiNote
+ * Drives the marketing-messages user-controls flows; the WA Web caller is
+ * {@code WAWebOptOutUserJob.optOutUser}, {@code optInUser}, and {@code signupUser}, which all funnel through
+ * {@code WASmaxBlocklistsUpdateOptOutListRPC.sendUpdateOptOutListRPC}. The three mandatory attributes
+ * ({@code jid}, {@code category}, {@code action}) identify the target business and the action being applied;
+ * the five optional attributes pass the cache digest, opt-out reason, entry-point, signup id, and duration.
+ *
+ * @implNote
+ * This implementation centralises {@code generateId()} on the client dispatcher, so {@link #toNode()} omits the
+ * {@code id} attribute; every other SMAX request in the package follows the same convention.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateOptOutListRequest")
 public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request {
     /**
-     * The target business JID being opted in or out of marketing
-     * messages.
+     * The target business JID being opted in or out of marketing messages.
      */
     private final Jid itemJid;
 
     /**
-     * The category string scoping the opt-out (e.g. one of the
-     * marketing-messages user-controls categories).
+     * The marketing-messages category that scopes the opt-out.
      */
     private final String itemCategory;
 
     /**
-     * The action string ({@code "in"}/{@code "out"}/{@code "signup"}
-     * etc., per the WA Web user-controls flows).
+     * The action string mapped onto the wire ({@code "block"}, {@code "unblock"}, or {@code "signup"}).
      */
     private final String itemAction;
 
     /**
-     * The optional client-side digest of the cached opt-out list.
+     * The cached digest of the opt-out list, or {@code null} to skip the cache-match shortcut.
      */
     private final String itemDhash;
 
     /**
-     * The optional reason marker. Surfaced through the marketing
-     * messages user-controls reasons enum.
+     * The optional marketing-messages reason marker.
      */
     private final String itemReason;
 
     /**
-     * The optional entry-point marker. The user-controls entry-point
-     * enum.
+     * The optional marketing-messages entry-point marker.
      */
     private final String itemEntryPoint;
 
     /**
-     * The optional signup id. Set when the action originates from
-     * a marketing-message signup.
+     * The optional signup id for the {@code "signup"} action.
      */
     private final String itemSignupId;
 
@@ -72,22 +67,23 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     private final Integer itemDuration;
 
     /**
-     * Constructs a new request.
+     * Constructs an update-opt-out request with every optional field.
      *
-     * @param itemJid        the target business JID; never
-     *                       {@code null}
-     * @param itemCategory   the category string; never {@code null}
+     * @apiNote
+     * The caller derives {@code itemAction} from the high-level operation: {@code "block"} for
+     * {@code WAWebOptOutUserJob.optOutUser}, {@code "unblock"} for {@code optInUser}, {@code "signup"} for
+     * {@code signupUser}. Pass {@code null} for any optional field whose value is unknown.
+     *
+     * @param itemJid        the target business JID; never {@code null}
+     * @param itemCategory   the marketing category; never {@code null}
      * @param itemAction     the action string; never {@code null}
-     * @param itemDhash      the optional cached digest; may be
-     *                       {@code null}
-     * @param itemReason     the optional reason; may be {@code null}
-     * @param itemEntryPoint the optional entry-point; may be
-     *                       {@code null}
-     * @param itemSignupId   the optional signup id; may be
-     *                       {@code null}
-     * @param itemDuration   the optional duration; may be {@code null}
-     * @throws NullPointerException if {@code itemJid}, {@code itemCategory},
-     *                              or {@code itemAction} is {@code null}
+     * @param itemDhash      the cached digest; may be {@code null}
+     * @param itemReason     the reason marker; may be {@code null}
+     * @param itemEntryPoint the entry-point marker; may be {@code null}
+     * @param itemSignupId   the signup id; may be {@code null}
+     * @param itemDuration   the opt-out duration in seconds; may be {@code null}
+     * @throws NullPointerException if {@code itemJid}, {@code itemCategory}, or {@code itemAction} is
+     *                              {@code null}
      */
     public SmaxUpdateOptOutListRequest(Jid itemJid, String itemCategory, String itemAction,
                    String itemDhash, String itemReason, String itemEntryPoint,
@@ -112,7 +108,7 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the category string.
+     * Returns the marketing category.
      *
      * @return the category; never {@code null}
      */
@@ -130,57 +126,58 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional cached digest.
+     * Returns the cached digest when set.
      *
-     * @return an {@link Optional} carrying the digest, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
     public Optional<String> itemDhash() {
         return Optional.ofNullable(itemDhash);
     }
 
     /**
-     * Returns the optional reason marker.
+     * Returns the reason marker when set.
      *
-     * @return an {@link Optional} carrying the reason, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the reason, or empty when no reason was supplied
      */
     public Optional<String> itemReason() {
         return Optional.ofNullable(itemReason);
     }
 
     /**
-     * Returns the optional entry-point marker.
+     * Returns the entry-point marker when set.
      *
-     * @return an {@link Optional} carrying the entry-point, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the entry-point, or empty when no entry-point was supplied
      */
     public Optional<String> itemEntryPoint() {
         return Optional.ofNullable(itemEntryPoint);
     }
 
     /**
-     * Returns the optional signup id.
+     * Returns the signup id when set.
      *
-     * @return an {@link Optional} carrying the signup id, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the signup id, or empty when no signup id was supplied
      */
     public Optional<String> itemSignupId() {
         return Optional.ofNullable(itemSignupId);
     }
 
     /**
-     * Returns the optional opt-out duration.
+     * Returns the opt-out duration when set.
      *
-     * @return an {@link Optional} carrying the duration in seconds,
-     *         or empty when omitted
+     * @return an {@link Optional} carrying the duration in seconds, or empty when no duration was supplied
      */
     public Optional<Integer> itemDuration() {
         return Optional.ofNullable(itemDuration);
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Builds the outbound {@code <iq>} stanza ready for dispatch.
+     *
+     * @apiNote
+     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="optoutlist"} and
+     * {@code type="set"}; the inner {@code <item>} child always carries the three mandatory attributes
+     * (target JID, category, action), and the five optional attributes are added only when their fields are
+     * set. The {@code id} attribute is filled in downstream.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -188,43 +185,26 @@ public final class SmaxUpdateOptOutListRequest implements SmaxOperation.Request 
     @WhatsAppWebExport(moduleName = "WASmaxOutBlocklistsUpdateOptOutListRequest",
             exports = "makeUpdateOptOutListRequest", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WASmaxOutBlocklistsUpdateBlockListRequest.makeUpdateOptOutListRequest:
-        // smax("item", { jid: USER_JID(r), category: CUSTOM_STRING(a), action: CUSTOM_STRING(i),
-        //                dhash: OPTIONAL(CUSTOM_STRING, l), reason: OPTIONAL(CUSTOM_STRING, s),
-        //                entry_point: OPTIONAL(CUSTOM_STRING, u), signup_id: OPTIONAL(CUSTOM_STRING, c),
-        //                duration: OPTIONAL(INT, d) })
-        // USER_JID is a thin wrapper over WAWap.JID, and Cobalt's
-        // NodeBuilder.attribute(String, JidProvider) emits the wap-encoded JID directly.
         var itemBuilder = new NodeBuilder()
                 .description("item")
                 .attribute("jid", itemJid)
                 .attribute("category", itemCategory)
                 .attribute("action", itemAction);
         if (itemDhash != null) {
-            // dhash: OPTIONAL(CUSTOM_STRING, l)
             itemBuilder.attribute("dhash", itemDhash);
         }
         if (itemReason != null) {
-            // reason: OPTIONAL(CUSTOM_STRING, s)
             itemBuilder.attribute("reason", itemReason);
         }
         if (itemEntryPoint != null) {
-            // entry_point: OPTIONAL(CUSTOM_STRING, u)
             itemBuilder.attribute("entry_point", itemEntryPoint);
         }
         if (itemSignupId != null) {
-            // signup_id: OPTIONAL(CUSTOM_STRING, c)
             itemBuilder.attribute("signup_id", itemSignupId);
         }
         if (itemDuration != null) {
-            // duration: OPTIONAL(INT, d) — WAWap.INT serialises the integer as a numeric attribute;
-            // NodeBuilder.attribute(String, int) forwards through the same Number coercion path.
             itemBuilder.attribute("duration", itemDuration.intValue());
         }
-        // WASmaxOutBlocklistsUpdateBlockListRequest.makeUpdateOptOutListRequest:
-        // smax("iq", { to: S_WHATSAPP_NET, xmlns: "optoutlist", type: "set", id: generateId() }, <item .../>)
-        // The id attribute is generated downstream by WhatsAppClient.sendNode — Cobalt centralises
-        // generateId() on the client so every SMAX request omits it from toNode().
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "optoutlist")

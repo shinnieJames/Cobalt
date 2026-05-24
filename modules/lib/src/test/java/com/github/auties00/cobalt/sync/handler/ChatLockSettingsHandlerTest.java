@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ChatLockSettingsHandler} â€” Cobalt's adapter for
+ * Tests for {@link ChatLockSettingsHandler} - Cobalt's adapter for
  * {@code WAWebChatLockSettingsSync}.
  */
 @DisplayName("ChatLockSettingsHandler")
@@ -75,7 +75,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the ChatLockSettings wire constant")
@@ -100,7 +100,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET with hideLockedChats=true and no secret code persists the setting")
@@ -126,7 +126,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("chat lock is a global setting; no per-entity orphan path")
@@ -137,7 +137,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -213,7 +213,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the handler ignores the index shape (global setting)")
@@ -231,7 +231,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -243,10 +243,10 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutation(false, null, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, null, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -255,7 +255,7 @@ class ChatLockSettingsHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutation(false, null, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, null, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -265,7 +265,7 @@ class ChatLockSettingsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” accumulates last pending and writes once")
+    @DisplayName("applyMutationBatch - accumulates last pending and writes once")
     class ApplyBatchOverride {
         @Test
         @DisplayName("an empty batch produces an empty result list and does not touch the store")
@@ -282,7 +282,7 @@ class ChatLockSettingsHandlerTest {
                     .key("iterations")
                     .value(new TransformerArgUserPasswordValueBuilder().asUnsignedInteger(100_000).build())
                     .build();
-            // missing salt â†’ secret invalid
+            // missing salt -> secret invalid
             var badSecret = new UserPasswordBuilder()
                     .encoding(UserPassword.Encoding.UTF8)
                     .transformer(UserPassword.Transformer.PBKDF2_HMAC_SHA512)
@@ -347,20 +347,4 @@ class ChatLockSettingsHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("ChatLockSettingsHandler does not expose a get*Mutation helper (the chat-lock outbound path is wired elsewhere)")
-        void noStaticBuilders() {
-            // Sentinel: this @Nested block confirms the static-builder dimension is n/a for this handler.
-            var methods = ChatLockSettingsHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on ChatLockSettingsHandler: " + method.getName());
-                }
-            }
-        }
-    }
 }

@@ -15,44 +15,54 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that asks the relay for the union of participants across a
+ * community's sub-groups.
+ *
+ * @apiNote Drives the {@code WAWebGroupGetCommunityParticipantsJob.getCommunityParticipants} flow used by both the
+ * community member-list page and the share-VCard surface ({@code WAWebFrontendVcardUtils}); pass the community parent
+ * group {@link Jid} and dispatch through the matching {@link SmaxGroupsGetLinkedGroupsParticipantsResponse} parser.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetLinkedGroupsParticipantsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQGetRequestMixin")
 public final class SmaxGroupsGetLinkedGroupsParticipantsRequest implements SmaxOperation.Request {
     /**
-     * The community parent group whose sub-group participant union
-     * is being queried.
+     * The community parent group {@link Jid} surfaced on the IQ's {@code to} attribute.
      */
     private final Jid groupJid;
 
     /**
      * Constructs a request for the given community parent group.
      *
-     * @param groupJid the community parent group JID; never
-     *                 {@code null}
-     * @throws NullPointerException if {@code groupJid} is
-     *                              {@code null}
+     * @apiNote Pass only a community parent JID; the relay rejects requests targeting non-parent groups.
+     *
+     * @param groupJid the community parent group {@link Jid}; never {@code null}
+     * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetLinkedGroupsParticipantsRequest(Jid groupJid) {
         this.groupJid = Objects.requireNonNull(groupJid, "groupJid cannot be null");
     }
 
     /**
-     * Returns the community parent group JID.
+     * Returns the community parent group {@link Jid}.
      *
-     * @return the JID; never {@code null}
+     * @return the parent group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         {@code <linked_groups_participants/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="get">
+     *         <linked_groups_participants/>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <linked_groups_participants/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetLinkedGroupsParticipantsRequest",
@@ -70,6 +80,13 @@ public final class SmaxGroupsGetLinkedGroupsParticipantsRequest implements SmaxO
                 .content(payload);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetLinkedGroupsParticipantsRequest} with identical
+     *         fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -82,11 +99,21 @@ public final class SmaxGroupsGetLinkedGroupsParticipantsRequest implements SmaxO
         return Objects.equals(this.groupJid, that.groupJid);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetLinkedGroupsParticipantsRequest[groupJid=" + groupJid + ']';

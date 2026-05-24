@@ -8,25 +8,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Single {@code <native_action/>} entry from the
- * {@code native_actions_mixin} grandchild. Describes a per-platform
- * deep-link target.
+ * A single {@code <native_action/>} entry under the CTWA banner-suggestion
+ * {@link SmaxBannerSuggestionNativeActionsMixin native-actions mixin},
+ * describing one platform's deep-link target.
+ *
+ * @apiNote
+ * Each entry is keyed by a {@link #platform()} string (one of
+ * {@code "web"}, {@code "ios"}, {@code "android"}); WA Web's
+ * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion} picks the
+ * {@code "web"} entry and uses {@link #localLink()} as the banner CTA's
+ * navigation target. {@link #minAppVersion()} gates rendering when the
+ * client app is too old for the deep link.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionNativeActionsMixinMixin")
 public final class SmaxBannerSuggestionNativeAction {
     /**
-     * The {@code platform} attribute (e.g. {@code "ios"},
-     * {@code "android"}).
+     * The mandatory {@code platform} attribute (for example {@code "web"},
+     * {@code "ios"}, {@code "android"}).
      */
     private final String platform;
 
     /**
-     * The {@code min_app_version} attribute.
+     * The mandatory {@code min_app_version} attribute.
      */
     private final String minAppVersion;
 
     /**
-     * The {@code local_link} attribute.
+     * The mandatory {@code local_link} attribute (deep-link URL).
      */
     private final String localLink;
 
@@ -36,18 +44,20 @@ public final class SmaxBannerSuggestionNativeAction {
     private final String universalLink;
 
     /**
-     * Constructs a new native-action entry.
+     * Constructs an entry from already-validated wire values.
      *
-     * @param platform      the platform; never {@code null}
-     * @param minAppVersion the minimum app version; never
-     *                      {@code null}
-     * @param localLink     the local link; never {@code null}
-     * @param universalLink the optional universal link; may be
-     *                      {@code null}
+     * @apiNote
+     * Cobalt callers normally obtain an entry by parsing a node via
+     * {@link #of(Node)}; this constructor is exposed for tests and for
+     * hand-built fixtures.
+     *
+     * @param platform      the platform identifier; never {@code null}
+     * @param minAppVersion the minimum client version; never {@code null}
+     * @param localLink     the deep-link URL; never {@code null}
+     * @param universalLink the optional universal-link URL; may be {@code null}
      * @throws NullPointerException if any of {@code platform},
-     *                              {@code minAppVersion} or
-     *                              {@code localLink} is
-     *                              {@code null}
+     *                              {@code minAppVersion}, or
+     *                              {@code localLink} is {@code null}
      */
     public SmaxBannerSuggestionNativeAction(String platform, String minAppVersion,
                         String localLink, String universalLink) {
@@ -60,46 +70,72 @@ public final class SmaxBannerSuggestionNativeAction {
     /**
      * Returns the platform identifier.
      *
-     * @return the platform; never {@code null}
+     * @apiNote
+     * Used by consumers to filter for the entry matching their runtime
+     * (WA Web filters for {@code "web"}).
+     *
+     * @return the platform identifier; never {@code null}
      */
     public String platform() {
         return platform;
     }
 
     /**
-     * Returns the minimum app version.
+     * Returns the minimum client version.
      *
-     * @return the version; never {@code null}
+     * @apiNote
+     * WA Web compares this against its sanitised client version via
+     * {@code WAWebUpdaterVersion.Version} and skips rendering when the
+     * client is too old; the value uses the same dotted-component
+     * format as the sanitised version string.
+     *
+     * @return the version string; never {@code null}
      */
     public String minAppVersion() {
         return minAppVersion;
     }
 
     /**
-     * Returns the local link.
+     * Returns the deep-link URL.
      *
-     * @return the link; never {@code null}
+     * @apiNote
+     * Used as the navigation target when the entry matches the client
+     * platform; WA Web routes it through
+     * {@code WAWebApiParse.parseAPICmd} to support both API-style deep
+     * links ({@code "MANAGE_ADS"}, etc.) and bare HTTPS URLs.
+     *
+     * @return the local link; never {@code null}
      */
     public String localLink() {
         return localLink;
     }
 
     /**
-     * Returns the optional universal link.
+     * Returns the optional universal-link URL.
      *
-     * @return an {@link Optional} carrying the link, or empty
+     * @apiNote
+     * Cross-platform deep link kept as a fallback alongside
+     * {@link #localLink()}; not consumed by the WA Web banner pipeline
+     * today.
+     *
+     * @return an {@link Optional} carrying the universal link, or empty
+     *         when the relay omitted the attribute
      */
     public Optional<String> universalLink() {
         return Optional.ofNullable(universalLink);
     }
 
     /**
-     * Tries to parse the entry from the given node.
+     * Parses the entry from a {@code <native_action/>} node.
      *
-     * @param node the {@code <native_action/>} node
-     * @return an {@link Optional} carrying the parsed entry, or
-     *         empty when the node does not match the documented
-     *         schema
+     * @apiNote
+     * Returns empty when the node tag is wrong or any of the three
+     * mandatory attributes is missing. The optional
+     * {@code universal_link} attribute may legally be absent.
+     *
+     * @param node the candidate {@code <native_action/>} node; never {@code null}
+     * @return an {@link Optional} carrying the parsed entry, or empty when
+     *         parsing fails
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaActionNativeActionsMixinMixin",
@@ -107,30 +143,34 @@ public final class SmaxBannerSuggestionNativeAction {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public static Optional<SmaxBannerSuggestionNativeAction> of(Node node) {
         Objects.requireNonNull(node, "node cannot be null");
-        // WASmaxParseUtils.assertTag(e, "native_action")
         if (!node.hasDescription("native_action")) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.attrString(e, "platform")
         var platform = node.getAttributeAsString("platform").orElse(null);
         if (platform == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.attrString(e, "min_app_version")
         var minAppVersion = node.getAttributeAsString("min_app_version").orElse(null);
         if (minAppVersion == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.attrString(e, "local_link")
         var localLink = node.getAttributeAsString("local_link").orElse(null);
         if (localLink == null) {
             return Optional.empty();
         }
-        // WASmaxParseUtils.optional(WASmaxParseUtils.attrString, e, "universal_link")
         var universalLink = node.getAttributeAsString("universal_link").orElse(null);
         return Optional.of(new SmaxBannerSuggestionNativeAction(platform, minAppVersion, localLink, universalLink));
     }
 
+    /**
+     * Compares this entry to {@code obj} for structural equality on all
+     * four slots.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionNativeAction}
+     *         with matching {@link #platform()}, {@link #minAppVersion()},
+     *         {@link #localLink()}, and {@link #universalLink()}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -146,11 +186,21 @@ public final class SmaxBannerSuggestionNativeAction {
                 && Objects.equals(this.universalLink, that.universalLink);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash of all four slots
+     */
     @Override
     public int hashCode() {
         return Objects.hash(platform, minAppVersion, localLink, universalLink);
     }
 
+    /**
+     * Returns a debug-friendly rendering naming all four slots.
+     *
+     * @return a record-style string with the four slot values
+     */
     @Override
     public String toString() {
         return "SmaxBannerSuggestionNativeAction[platform=" + platform

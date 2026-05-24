@@ -11,32 +11,50 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the disjunctive
- * {@link SmaxStatusPublishPostNewsletterStatusPayload} children inside a
- * {@code <status to=NEWSLETTER_JID>} envelope.
+ * The outbound {@code <status to=NEWSLETTER_JID>} stanza builder for
+ * publishing a newsletter status; carries either a brand-new status
+ * or a status-reaction keyed by the target's server-id.
+ *
+ * @apiNote
+ * Used by callers driving the WA Web
+ * {@code WAWebNewsletterSendStatusQueryJob} and
+ * {@code WAWebNewsletterRevokeStatusQueryJob} surfaces that dispatch
+ * through
+ * {@code WASmaxStatusPublishPostNewsletterStatusRPC.sendPostNewsletterStatusRPC}.
+ * The relay responds with a
+ * {@link SmaxStatusPublishPostNewsletterStatusResponse}: a
+ * {@link SmaxStatusPublishPostNewsletterStatusResponse.Success} when
+ * the publish landed, a
+ * {@link SmaxStatusPublishPostNewsletterStatusResponse.Negative} when
+ * it was rejected.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusRequest")
 public final class SmaxStatusPublishPostNewsletterStatusRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID being posted to. Routed verbatim into the
-     * status's {@code to} attribute.
+     * The target newsletter JID; routed verbatim into the status's
+     * {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
-     * The publish payload. Selects between "client + server id"
-     * and "client id only".
+     * The disjunctive publish payload selecting between server-id
+     * addressing and brand-new-post addressing.
      */
     private final SmaxStatusPublishPostNewsletterStatusPayload payload;
 
     /**
-     * Constructs a new request.
+     * Constructs a newsletter-status publish request.
+     *
+     * @apiNote
+     * Use this when assembling a
+     * {@link SmaxStatusPublishPostNewsletterStatusRequest} for
+     * dispatch through the smax send pipeline.
      *
      * @param newsletterJid the target newsletter JID; never
      *                      {@code null}
-     * @param payload       the publish payload; never {@code null}
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @param payload       the disjunctive publish payload; never
+     *                      {@code null}
+     * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxStatusPublishPostNewsletterStatusRequest(Jid newsletterJid, SmaxStatusPublishPostNewsletterStatusPayload payload) {
         this.newsletterJid = Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
@@ -62,10 +80,21 @@ public final class SmaxStatusPublishPostNewsletterStatusRequest implements SmaxO
     }
 
     /**
-     * Builds the outbound status stanza ready for dispatch.
+     * Builds the outbound {@code <status>} stanza ready for
+     * dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the status envelope
-     *         and the disjunctive payload children
+     * @apiNote
+     * The server-id arm stamps the {@code server_id} attribute and
+     * embeds the inner content directly; the brand-new-post arm
+     * only embeds the inner client-id content.
+     *
+     * @implNote
+     * This implementation dispatches on the
+     * {@link SmaxStatusPublishPostNewsletterStatusPayload}
+     * sealed-interface variants via a Java pattern-matching switch.
+     *
+     * @return a {@link NodeBuilder} carrying the partially-built
+     *         status envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutStatusPublishPostNewsletterStatusRequest",
@@ -89,6 +118,14 @@ public final class SmaxStatusPublishPostNewsletterStatusRequest implements SmaxO
         return builder;
     }
 
+    /**
+     * Compares this request to another for value equality.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxStatusPublishPostNewsletterStatusRequest}
+     *         with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -102,11 +139,25 @@ public final class SmaxStatusPublishPostNewsletterStatusRequest implements SmaxO
                 && Objects.equals(this.payload, that.payload);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(newsletterJid, payload);
     }
 
+    /**
+     * Returns a debug-friendly representation of this request.
+     *
+     * @apiNote
+     * Intended for logging; the format is not part of the public
+     * contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxStatusPublishPostNewsletterStatusRequest[newsletterJid=" + newsletterJid

@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
+import com.github.auties00.cobalt.model.message.MessageKey;
 import com.github.auties00.cobalt.model.message.poll.PollEncValue;
 import com.github.auties00.cobalt.model.message.poll.PollEncValueBuilder;
 import com.github.auties00.cobalt.model.message.poll.PollVoteMessageBuilder;
@@ -26,21 +27,31 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Factory that converts plaintext comment, reaction, and poll-vote messages
- * into the encrypted forms WhatsApp expects on the wire for CAG (community /
- * announcement group) threads.
+ * Factory that wraps plaintext comments, reactions, and poll votes into the
+ * encrypted-addon wire form WhatsApp uses inside community / announcement
+ * group threads.
  *
- * <p>Each addon is delivered as an {@code <enc>} child of the outer Signal
- * envelope whose content is an AES-GCM ciphertext bound to the parent
- * message's secret. The factory builds that ciphertext via
- * {@link MessageAddonEncryption#encrypt} and packages the resulting bytes
- * into the matching Cobalt model type ({@link EncCommentMessage},
- * {@link EncReactionMessage}, or {@link PollEncValue}).
+ * @apiNote Each addon ships as an outer Signal envelope plus an inner
+ * AES-GCM ciphertext bound to the parent message's {@code messageSecret};
+ * the server can route the addon without reading its body. The factory
+ * produces the inner ciphertext through {@link MessageAddonEncryption#encrypt}
+ * and packages the resulting bytes into the matching protobuf model
+ * ({@link EncCommentMessage}, {@link EncReactionMessage}, or
+ * {@link PollEncValue}).
+ *
+ * @implNote This implementation mirrors the call-graph that WA Web exposes
+ * through three separate per-addon wrappers
+ * ({@code WAWebCommentUtils.encryptComment},
+ * {@code WAWebReactionEncryptMsgData.encryptReaction},
+ * {@code WAWebPollsVoteEncryption.encryptVote}); Cobalt collapses them into
+ * one factory because the only shared work, the
+ * sender-resolution and the {@link MessageAddonEncryption} call, is the same
+ * across all three paths.
  */
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryption")
 public final class EncMessageFactory {
     /**
-     * Private constructor preventing instantiation.
+     * Hidden constructor; this is a static factory.
      *
      * @throws UnsupportedOperationException always
      */
@@ -50,26 +61,33 @@ public final class EncMessageFactory {
 
     /**
      * Encrypts a plaintext {@link CommentMessage} into an
-     * {@link EncCommentMessage} that can be attached to an outbound stanza
-     * without exposing the comment body to the server.
+     * {@link EncCommentMessage} ready to ride as an addon on the parent
+     * stanza.
      *
-     * <p>The comment's inner {@link com.github.auties00.cobalt.model.message.MessageContainer}
-     * is serialised via {@link MessageContainerSpec} and then encrypted with
-     * a key derived from the parent message's {@code messageSecret}. The
-     * original sender used in the key derivation is taken from the parent
-     * key. If the parent was authored by the current user the self JID is
-     * used, otherwise the parent participant or chat JID is used.
+     * @apiNote Used when a comment is attached to a message in a CAG
+     * (community / announcement group) thread; the inner
+     * {@link com.github.auties00.cobalt.model.message.MessageContainer} is
+     * serialised via {@link MessageContainerSpec} and then dual-encrypted so
+     * the server can route the addon without reading the comment body. The
+     * {@code targetMessageKey} of the input is propagated as-is.
+     *
+     * @implNote This implementation derives the addon key with
+     * {@link MessageAddonType#ENC_COMMENT}, which selects the matching HKDF
+     * info label inside {@link MessageAddonEncryption#encrypt}. The
+     * {@code originalSender} for the derivation is resolved through
+     * {@link #resolveOriginalSender(MessageKey, Jid, Jid)}.
      *
      * @param comment       the plaintext comment to encrypt
      * @param parentMessage the message the comment is attached to
-     * @param selfJid       the JID of the current user, used when the parent
-     *                      was authored by the current user
-     * @return the encrypted comment wrapper ready to be wrapped in a stanza
+     * @param selfJid       the current user's JID, used when the parent was
+     *                      authored by the current user
+     * @return the encrypted comment wrapper, ready to be added to the
+     *         outbound stanza
      * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if the parent message does not carry a
+     * @throws IllegalArgumentException if the parent carries no
      *                                  {@code messageSecret}, the parent key
-     *                                  has no id or parent JID, or the comment
-     *                                  has no inner message
+     *                                  lacks an id or parent JID, or the
+     *                                  comment has no inner message
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryption", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -107,23 +125,32 @@ public final class EncMessageFactory {
 
     /**
      * Encrypts a plaintext {@link ReactionMessage} into an
-     * {@link EncReactionMessage} so the emoji and target key stay hidden from
-     * the server while still being deliverable through the fanout pipeline.
+     * {@link EncReactionMessage} ready to ride as an addon on the parent
+     * stanza.
      *
-     * <p>Follows the same HKDF-plus-AES-GCM scheme as
-     * {@link #encryptComment(CommentMessage, ChatMessageInfo, Jid)} but uses
-     * {@link MessageAddonType#ENC_REACTION} so the derivation is bound to a
-     * different context string.
+     * @apiNote Used for reactions in CAG threads, where the default
+     * non-encrypted reaction wire format would leak the emoji content to the
+     * server. The {@code targetMessageKey} on the input
+     * {@link ReactionMessage} (the message being reacted to) is propagated as
+     * the {@code targetMessageKey} on the resulting wrapper.
+     *
+     * @implNote This implementation derives the addon key with
+     * {@link MessageAddonType#ENC_REACTION}, which differs from
+     * {@link #encryptComment(CommentMessage, ChatMessageInfo, Jid)} only in
+     * the HKDF info label. The plaintext for the cipher is the protobuf
+     * encoding of the reaction itself (not its inner container), produced
+     * with {@link ReactionMessageSpec#encode}.
      *
      * @param reaction      the plaintext reaction to encrypt
      * @param parentMessage the message the reaction is attached to
-     * @param selfJid       the JID of the current user, used when the parent
-     *                      was authored by the current user
-     * @return the encrypted reaction wrapper ready to be attached to a stanza
+     * @param selfJid       the current user's JID, used when the parent was
+     *                      authored by the current user
+     * @return the encrypted reaction wrapper, ready to be added to the
+     *         outbound stanza
      * @throws NullPointerException     if any argument is {@code null}
-     * @throws IllegalArgumentException if the parent message does not carry a
-     *                                  {@code messageSecret}, or the parent
-     *                                  key has no id or parent JID
+     * @throws IllegalArgumentException if the parent carries no
+     *                                  {@code messageSecret} or the parent
+     *                                  key lacks an id or parent JID
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryption", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -159,26 +186,34 @@ public final class EncMessageFactory {
 
     /**
      * Encrypts the voter's selected option labels into a {@link PollEncValue}
-     * suitable for embedding in an outgoing
+     * ready to embed in an outgoing
      * {@link com.github.auties00.cobalt.model.message.poll.PollUpdateMessage}.
      *
-     * <p>Each selected label is hashed with SHA-256 to obtain the canonical
-     * 32-byte option digest, the digests are wrapped in a
+     * @apiNote Mirrors WA Web's {@code WAWebPollsVoteEncryption.encryptVote}.
+     * Each label is SHA-256-hashed to its canonical 32-byte option digest
+     * (the same shape WA Web's {@code WAWebPollOptionHashUtils.getHashBufferForString}
+     * returns), the digests are wrapped in a
      * {@link com.github.auties00.cobalt.model.message.poll.PollVoteMessage},
-     * the protobuf is serialised, and the resulting bytes are encrypted under
-     * an HKDF-derived key bound to the parent poll's {@code messageSecret} via
-     * {@link MessageAddonEncryption#encrypt}. The poll-vote use case mixes
-     * the voter JID and the poll-creation stanza id into the AES-GCM AAD so a
-     * malicious server cannot rebind the ciphertext to a different voter.
+     * the protobuf is serialised, and the bytes are encrypted under
+     * {@link MessageAddonType#POLL_VOTE} (an AAD-bound use case) so the
+     * server cannot rebind a vote from one user to another.
      *
-     * @param selectedOptions the option labels the voter chose, in any order
+     * @implNote This implementation stores the raw 32-byte digest rather
+     * than the hex-encoded form; that matches WA Web's
+     * {@code WAWebPollsCreateOptionLocalIdMap.getLocalIdForHash}, which
+     * accepts the raw buffer.
+     *
+     * @param selectedOptions the option labels the voter chose, in any order;
+     *                        list entries must not be {@code null}
      * @param pollCreation    the poll-creation message the vote refers to
      * @param voterJid        the JID of the user casting the vote
      * @return the {@link PollEncValue} containing the ciphertext and IV
-     * @throws NullPointerException     if any argument is {@code null}
+     * @throws NullPointerException     if any argument is {@code null}, or if
+     *                                  {@code selectedOptions} contains a
+     *                                  {@code null} entry
      * @throws IllegalArgumentException if {@code pollCreation} carries no
-     *                                  {@code messageSecret}, or its key has
-     *                                  no id or parent JID
+     *                                  {@code messageSecret} or its key lacks
+     *                                  an id or parent JID
      */
     @WhatsAppWebExport(moduleName = "WAWebPollsVoteEncryption", exports = "encryptVote",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -202,11 +237,6 @@ public final class EncMessageFactory {
 
         var optionHashes = new ArrayList<byte[]>(selectedOptions.size());
         try {
-            // WAWebPollOptionHashUtils.getHashBufferForString:
-            //   self.crypto.subtle.digest("SHA-256", new TextEncoder().encode(e))
-            // Cobalt stores the raw 32-byte digest because PollVoteMessage.selectedOptions
-            // is wire-encoded as bytes (matches WAWebPollsCreateOptionLocalIdMap.getLocalIdForHash
-            // which accepts the raw buffer rather than the hex form).
             var digest = MessageDigest.getInstance("SHA-256");
             for (var option : selectedOptions) {
                 Objects.requireNonNull(option, "selectedOptions cannot contain null entries");
@@ -234,18 +264,23 @@ public final class EncMessageFactory {
     }
 
     /**
-     * Resolves the original-sender JID for the addon HKDF info, mirroring
-     * {@code WAWebMsgGetters.getOriginalSender(parent)}: prefer the
-     * self-author marker (the {@code fromMe} flag), fall back to the
-     * explicit {@code senderJid}, then to the {@code parentJid}.
+     * Resolves the original-sender JID that the addon HKDF info parameter is
+     * bound to.
+     *
+     * @apiNote Mirrors {@code WAWebMsgGetters.getOriginalSender(parent)}.
+     * When the parent message was authored by the current user
+     * ({@code fromMe == true}) the self JID is used; otherwise the parent
+     * key's explicit {@code senderJid} wins, falling back to the parent's
+     * {@code parentJid} when no sender is set. The return value is forced to
+     * user form so device suffixes do not leak into the HKDF input.
      *
      * @param parentKey    the parent message's key
      * @param parentKeyJid the parent key's chat JID
-     * @param selfJid      the JID of the local user
-     * @return the resolved original sender in user form
+     * @param selfJid      the current user's JID
+     * @return the resolved original sender, in user form
      */
     private static Jid resolveOriginalSender(
-            com.github.auties00.cobalt.model.message.MessageKey parentKey,
+            MessageKey parentKey,
             Jid parentKeyJid,
             Jid selfJid
     ) {

@@ -15,40 +15,45 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the {@code <promote>} /
- * {@code <demote>} children inside an {@code <admin>} envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that adjusts the community-admin roster of a parent
+ * group.
+ *
+ * @apiNote Drives the "Add community admin" and "Remove community admin" affordances on the community-management
+ * screen. The relay accepts the promote and demote lists inside a single {@code <admin>} envelope (each capped at
+ * 1024 entries) and returns a per-participant outcome list in the matching
+ * {@link SmaxGroupsPromoteDemoteAdminResponse.SuccessMultiAdmin#participants()}. At least one of the two lists
+ * must be non-empty; an entirely empty payload is rejected client-side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsPromoteDemoteAdminRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.Request {
     /**
-     * The community parent-group JID.
+     * The community parent-group {@link Jid} that anchors the admin roster.
      */
     private final Jid groupJid;
 
     /**
-     * The participants to promote to community admin. May be empty.
+     * The candidate {@link Jid}s to promote to community admin.
      */
     private final List<Jid> participantsToPromote;
 
     /**
-     * The participants to demote from community admin. May be
-     * empty.
+     * The candidate {@link Jid}s to demote from community admin.
      */
     private final List<Jid> participantsToDemote;
 
     /**
-     * Constructs a request.
+     * Constructs a promote-demote-admin request.
      *
-     * @param groupJid              the community parent-group JID;
-     *                              never {@code null}
-     * @param participantsToPromote the JIDs to promote; never
-     *                              {@code null}, may be empty
-     * @param participantsToDemote  the JIDs to demote; never
-     *                              {@code null}, may be empty
-     * @throws NullPointerException     if any argument is
-     *                                  {@code null}
+     * @apiNote The relay caps each of the {@code <promote>} and {@code <demote>} child sets at 1024 entries; a
+     * caller batching a wider roster change should split the work across multiple requests. The two lists are
+     * defensively copied so post-construction mutation of the caller's lists has no effect on the request.
+     *
+     * @param groupJid              the community parent-group {@link Jid}
+     * @param participantsToPromote the {@link Jid}s to promote
+     * @param participantsToDemote  the {@link Jid}s to demote
+     * @throws NullPointerException     if any argument is {@code null}
      * @throws IllegalArgumentException if both lists are empty
      */
     public SmaxGroupsPromoteDemoteAdminRequest(Jid groupJid, List<Jid> participantsToPromote,
@@ -65,37 +70,55 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
     }
 
     /**
-     * Returns the community parent-group JID.
+     * Returns the community parent-group {@link Jid}.
      *
-     * @return the group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the JIDs to promote.
+     * Returns the {@link Jid}s to promote to community admin.
      *
-     * @return an unmodifiable list; never {@code null}
+     * @return an unmodifiable list of {@link Jid}s; never {@code null}
      */
     public List<Jid> participantsToPromote() {
         return participantsToPromote;
     }
 
     /**
-     * Returns the JIDs to demote.
+     * Returns the {@link Jid}s to demote from community admin.
      *
-     * @return an unmodifiable list; never {@code null}
+     * @return an unmodifiable list of {@link Jid}s; never {@code null}
      */
     public List<Jid> participantsToDemote() {
         return participantsToDemote;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <admin>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <admin>
+     *             <promote>
+     *                 <participant jid="<promote0>"/>
+     *                 ...
+     *             </promote>
+     *             <demote>
+     *                 <participant jid="<demote0>"/>
+     *                 ...
+     *             </demote>
+     *         </admin>
+     *     </iq>
+     * }
+     * either {@code <promote>} or {@code <demote>} is omitted when the corresponding caller list is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <admin>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsPromoteDemoteAdminRequest",
@@ -140,6 +163,12 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
                 .content(adminBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsPromoteDemoteAdminRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -154,11 +183,21 @@ public final class SmaxGroupsPromoteDemoteAdminRequest implements SmaxOperation.
                 && Objects.equals(this.participantsToDemote, that.participantsToDemote);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, participantsToPromote, participantsToDemote);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsPromoteDemoteAdminRequest[groupJid=" + groupJid

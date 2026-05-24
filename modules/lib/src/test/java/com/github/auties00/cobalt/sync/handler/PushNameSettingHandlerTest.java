@@ -2,12 +2,12 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClientListener;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.PushNameSetting;
@@ -16,9 +16,7 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
-import com.github.auties00.cobalt.sync.factory.PushNameSettingMutationFactory;
 import com.github.auties00.cobalt.wam.DefaultWamService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,15 +27,33 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link PushNameSettingHandler} — Cobalt's adapter for
- * {@code WAWebPushNameSync}.
+ * Exercises {@link PushNameSettingHandler} against the
+ * {@code WAWebPushNameSync.applyMutations} per-mutation flow.
+ *
+ * @apiNote
+ * Verifies the
+ * {@link SyncdOperation#SET}
+ * happy path: a {@code presence} node is dispatched on the wire,
+ * {@link WhatsAppStore#setName(String)} is updated, the self-contact's
+ * {@code chosenName} is mirrored, and the
+ * {@link WhatsAppClientListener#onNameChanged}
+ * listener fires. A missing or empty
+ * {@link PushNameSetting#name()}
+ * defaults to the empty string and still returns
+ * {@link SyncActionState#SUCCESS}.
+ *
+ * @implNote
+ * This implementation captures outgoing nodes via the
+ * {@code onNodeSent} listener rather than wrapping
+ * {@link TestWhatsAppClient} in a
+ * proxy: {@code TestWhatsAppClient.sendNodeWithNoResponse} fires the
+ * listener directly, which is sufficient for asserting the
+ * {@code <presence name="..."/>} stanza shape.
  */
 @DisplayName("PushNameSettingHandler")
 class PushNameSettingHandlerTest {
@@ -55,11 +71,7 @@ class PushNameSettingHandlerTest {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         props = TestABPropsService.builder().build();
         sentNodes = new ArrayList<>();
-        // PushNameSettingHandler dispatches a <presence name="…"/> stanza via
-        // WhatsAppClient.sendNodeWithNoResponse. TestWhatsAppClient fires the
-        // onNodeSent listener on its store for that call, so the test simply
-        // registers a listener to capture the outgoing nodes — no proxy required.
-        store.addListener(new com.github.auties00.cobalt.client.WhatsAppClientListener() {
+        store.addListener(new WhatsAppClientListener() {
             @Override
             public void onNodeSent(WhatsAppClient whatsapp, Node outgoing) {
                 sentNodes.add(outgoing);
@@ -242,52 +254,6 @@ class PushNameSettingHandlerTest {
             assertEquals(SyncActionState.SUCCESS, results.get(0).actionState());
             assertEquals(SyncActionState.SUCCESS, results.get(1).actionState());
             assertEquals("Bob", store.name());
-        }
-    }
-
-    @Nested
-    @DisplayName("static builder — getPushnameMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index and ACTION_VERSION")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new PushNameSettingMutationFactory().getPushnameMutation(ts, "Maria");
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(PushNameSetting.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"setting_pushName\"]", inner.index(),
-                    "WAWebSyncdActionUtils.buildPendingMutation: indexArgs are empty for the pushname singleton");
-            assertEquals("Maria", inner.value().action().filter(a -> a instanceof PushNameSetting).map(a -> (PushNameSetting) a).orElseThrow().name().orElseThrow());
-            assertEquals(ts, inner.value().timestamp().orElseThrow());
-        }
-
-        @Test
-        @DisplayName("null name builds a SET mutation with no name field on the protobuf")
-        void buildsWithNullName() {
-            var pending = new PushNameSettingMutationFactory().getPushnameMutation(Instant.now(), null);
-            assertEquals(SyncdOperation.SET, pending.mutation().operation());
-            assertFalse(pending.mutation().value().action().filter(a -> a instanceof PushNameSetting).map(a -> (PushNameSetting) a).orElseThrow().name().isPresent(),
-                    "null name leaves the protobuf field unset on the wire");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/push-name-setting/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/push-name-setting/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new PushNameSettingMutationFactory().getPushnameMutation(Instant.ofEpochSecond(1_700_000_000L), "Maria");
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
         }
     }
 

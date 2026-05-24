@@ -15,51 +15,85 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the pagination cursor. Either {@code before}
- * or {@code after} a server-id, or none for the latest slice.
+ * Sealed disjunction over the optional pagination cursor of a
+ * {@link SmaxNewslettersGetNewsletterMessagesRequest}.
+ *
+ * @apiNote
+ * Pick this when scrolling a newsletter's message history; omitting
+ * the cursor altogether requests the latest slice. WA Web's Channels
+ * surface (see
+ * {@code WAWebNewsletterGetMessagesQueryJob.queryNewsletterMessagesByJid})
+ * sets {@link Before} when the user scrolls up into older content.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMessageDirections")
 public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits SmaxNewslettersGetNewsletterMessagesDirection.Before, SmaxNewslettersGetNewsletterMessagesDirection.After {
 
     /**
-     * The {@code before} cursor. Fetch messages with server-ids
-     * strictly less than the given pivot.
+     * The variant that walks backwards from a pivot server-id.
+     *
+     * @apiNote
+     * Selects messages with server-ids strictly less than
+     * {@link #pivot()}, materialised as the {@code before} attribute on
+     * the wire {@code <messages>} element. This is the dominant cursor
+     * direction in WA Web's history-scroll-up UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersBeforeMixinMixin")
     final class Before implements SmaxNewslettersGetNewsletterMessagesDirection {
         /**
-         * The server-id pivot.
+         * The server-id pivot below which messages are returned.
          */
         private final long pivot;
 
         /**
-         * Constructs a {@code before} cursor at the given pivot.
+         * Constructs a backward-walking cursor at the given pivot.
          *
-         * @param pivot the server-id pivot
+         * @apiNote
+         * Used when paginating older newsletter messages, typically
+         * with the lowest-known server-id of the previous slice.
+         *
+         * @param pivot the server-id pivot; the relay returns messages
+         *              strictly less than this value
          */
         public Before(long pivot) {
             this.pivot = pivot;
         }
 
         /**
-         * Returns the server-id pivot.
+         * Returns the server-id pivot for this cursor.
          *
-         * @return the pivot
+         * @return the pivot below which messages are fetched
          */
         public long pivot() {
             return pivot;
         }
 
+        /**
+         * Compares two cursors for value equality on {@link #pivot()}.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Before}
+         *         carrying the same pivot
+         */
         @Override
         public boolean equals(Object obj) {
             return obj instanceof Before that && this.pivot == that.pivot;
         }
 
+        /**
+         * Returns the hash code derived from {@link #pivot()}.
+         *
+         * @return the {@link Long#hashCode(long)} of {@link #pivot()}
+         */
         @Override
         public int hashCode() {
             return Long.hashCode(pivot);
         }
 
+        /**
+         * Returns a debug representation including the pivot.
+         *
+         * @return a record-like rendering of this cursor
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesDirection.Before[pivot=" + pivot + ']';
@@ -67,44 +101,70 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesDirection permits Sm
     }
 
     /**
-     * The {@code after} cursor. Fetch messages with server-ids
-     * strictly greater than the given pivot.
+     * The variant that walks forwards from a pivot server-id.
+     *
+     * @apiNote
+     * Selects messages with server-ids strictly greater than
+     * {@link #pivot()}, materialised as the {@code after} attribute on
+     * the wire {@code <messages>} element.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersAfterMixinMixin")
     final class After implements SmaxNewslettersGetNewsletterMessagesDirection {
         /**
-         * The server-id pivot.
+         * The server-id pivot above which messages are returned.
          */
         private final long pivot;
 
         /**
-         * Constructs an {@code after} cursor at the given pivot.
+         * Constructs a forward-walking cursor at the given pivot.
          *
-         * @param pivot the server-id pivot
+         * @apiNote
+         * Used when fetching newsletter messages newer than the
+         * highest-known server-id of the previous slice.
+         *
+         * @param pivot the server-id pivot; the relay returns messages
+         *              strictly greater than this value
          */
         public After(long pivot) {
             this.pivot = pivot;
         }
 
         /**
-         * Returns the server-id pivot.
+         * Returns the server-id pivot for this cursor.
          *
-         * @return the pivot
+         * @return the pivot above which messages are fetched
          */
         public long pivot() {
             return pivot;
         }
 
+        /**
+         * Compares two cursors for value equality on {@link #pivot()}.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is an {@link After}
+         *         carrying the same pivot
+         */
         @Override
         public boolean equals(Object obj) {
             return obj instanceof After that && this.pivot == that.pivot;
         }
 
+        /**
+         * Returns the hash code derived from {@link #pivot()}.
+         *
+         * @return the {@link Long#hashCode(long)} of {@link #pivot()}
+         */
         @Override
         public int hashCode() {
             return Long.hashCode(pivot);
         }
 
+        /**
+         * Returns a debug representation including the pivot.
+         *
+         * @return a record-like rendering of this cursor
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesDirection.After[pivot=" + pivot + ']';

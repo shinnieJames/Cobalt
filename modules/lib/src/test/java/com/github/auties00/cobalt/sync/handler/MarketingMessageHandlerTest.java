@@ -28,15 +28,25 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MarketingMessageHandler} — Cobalt's adapter for
+ * Exercises the {@link MarketingMessageHandler} adapter for
  * {@code WAWebPremiumMessageSync}.
  *
- * <p>The handler upserts marketing-message templates keyed by the
- * {@code indexParts[1]} template id. Non-SET operations and any malformed
- * payloads are reported via the typed result. These tests pin down the
- * wire metadata, the SET behaviour, the type-null malformed branch, the
- * unsupported REMOVE branch, and the default timestamp-based conflict
- * resolution.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code marketingMessage}
+ * app-state sync action across metadata, the SET upsert keyed by
+ * {@code indexParts[1]}, the malformed branch when
+ * {@link MarketingMessageAction#type()} is empty, the
+ * malformed-input fallbacks, the REMOVE rejection and the inherited
+ * timestamp-based conflict resolution.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#findMarketingMessage(String)} read-back can
+ * be asserted directly. The
+ * {@link MarketingMessageAction#isDeleted()} flag is preserved on
+ * the stored row so subsequent readers can filter live templates.
  */
 @DisplayName("MarketingMessageHandler")
 class MarketingMessageHandlerTest {
@@ -55,13 +65,24 @@ class MarketingMessageHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation whose value carries the given marketing action.
+     * Builds a {@link DecryptedMutation.Trusted} carrying the given
+     * marketing action under the canonical
+     * {@code ["marketingMessage", indexId]} index.
      *
-     * @param indexId   the template id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the marketing action payload, may be {@code null}
-     * @param operation the sync operation
+     * @apiNote
+     * Used by every test to centralise mutation construction; the
+     * nullable {@code indexId} and {@code action} let the
+     * malformed-index and malformed-value paths be exercised without
+     * re-implementing the envelope.
+     *
+     * @param indexId   the template id placed in
+     *                  {@code indexParts[1]}, may be {@code null}
+     * @param action    the marketing action payload, may be
+     *                  {@code null}
+     * @param operation the {@link SyncdOperation} to wrap
      * @param ts        the mutation timestamp
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} with the requested
+     *         shape
      */
     private DecryptedMutation.Trusted buildMutation(String indexId, MarketingMessageAction action, SyncdOperation operation, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
@@ -74,7 +95,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the MarketingMessageAction wire constant")
@@ -98,7 +119,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET upsert")
+    @DisplayName("applyMutation - SET upsert")
     class ApplySet {
         @Test
         @DisplayName("a SET with a non-null type upserts the marketing template")
@@ -123,7 +144,7 @@ class MarketingMessageHandlerTest {
         }
 
         @Test
-        @DisplayName("a SET with isDeleted=true still stores the template — readers filter on the flag")
+        @DisplayName("a SET with isDeleted=true still stores the template - readers filter on the flag")
         void deletedFlagPropagates() {
             var action = new MarketingMessageActionBuilder()
                     .type(MarketingMessagePrototypeType.PERSONALIZED)
@@ -140,7 +161,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("SET on an unknown id is the upsert path, not an orphan")
@@ -161,7 +182,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -193,7 +214,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a missing template id slot returns MALFORMED")
@@ -223,7 +244,7 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -240,10 +261,10 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -252,7 +273,7 @@ class MarketingMessageHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("equal timestamps - APPLY_REMOTE_DROP_LOCAL")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -260,7 +281,7 @@ class MarketingMessageHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -277,10 +298,10 @@ class MarketingMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("MarketingMessageHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("MarketingMessageHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
             // Marketing message templates are authored via the WA Web business UI; Cobalt does
             // not emit `marketingMessage` mutations from this handler. INSTANCE is the only

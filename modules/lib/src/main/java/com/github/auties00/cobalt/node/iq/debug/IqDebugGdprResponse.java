@@ -11,22 +11,43 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqDebugGdprRequest}.
+ * Sealed family of inbound reply variants produced by the relay in response to an
+ * {@link IqDebugGdprRequest}.
+ *
+ * @apiNote
+ * Switch on the returned variant to discriminate the relay outcome: a
+ * {@link Success} echoes the post-cancel GDPR status (typically the
+ * {@code "none"} string with a zeroed expiration), a {@link ClientError} surfaces
+ * relay rejections (commonly {@code 404} when no GDPR request is in flight), and a
+ * {@link ServerError} surfaces transient relay failures the caller may retry.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's GDPR status wap-parser
+ * ({@code useWAWebGdprStatus.GdprStatusWapParser}) which projects the same trio of
+ * outcomes, plus the standard SMAX server-error envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebGdprHookUtils")
 public sealed interface IqDebugGdprResponse extends IqOperation.Response
         permits IqDebugGdprResponse.Success, IqDebugGdprResponse.ClientError, IqDebugGdprResponse.ServerError {
 
     /**
-     * Tries each {@link IqDebugGdprResponse} variant in priority order.
+     * Parses the inbound stanza into the first matching {@link IqDebugGdprResponse}
+     * variant.
      *
-     * @param node    the inbound IQ stanza; never {@code null}
+     * @apiNote
+     * Try this once per inbound reply, in any order; the priority ordering
+     * (success, then client-error, then server-error) matches the wire shape and
+     * never returns ambiguous matches.
+     *
+     * @implNote
+     * This implementation calls each variant's {@code of(node, request)} in turn and
+     * returns the first present result.
+     *
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no documented variant matched
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty when no
+     *         documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebDebugGDPR",
             exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -45,33 +66,39 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay accepted the
-     * cancel request. Carries the post-cancel GDPR status string
-     * and the optional {@code expiration} timestamp echoed by the
-     * relay (typically {@code 0} after a cancel).
+     * Success variant. The relay accepted the cancel request and echoed the
+     * post-cancel GDPR status.
+     *
+     * @apiNote
+     * Inspect {@link #status()} for the textual status (typically {@code "none"}
+     * after a successful cancel) and {@link #expirationSeconds()} for the
+     * relay-echoed expiration timestamp (typically {@code 0} after cancel).
      */
     @WhatsAppWebModule(moduleName = "WAWebDebugGDPR")
     final class Success implements IqDebugGdprResponse {
         /**
-         * The optional GDPR status string echoed by the relay
-         * (e.g. {@code "none"} after a successful cancel).
+         * Holds the relay-echoed GDPR status string, or {@code null} when the
+         * relay omitted the {@code <gdpr>} child entirely.
          */
         private final String status;
 
         /**
-         * The optional expiration timestamp echoed by the relay
-         * (seconds since epoch). Typically {@code 0} or absent
-         * after a cancel.
+         * Holds the relay-echoed expiration timestamp in seconds since epoch, or
+         * {@code null} when the relay omitted the attribute.
          */
         private final Long expirationSeconds;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a successful reply carrying the relay-echoed fields.
          *
-         * @param status            the optional status string; may
-         *                          be {@code null}
-         * @param expirationSeconds the optional expiration
-         *                          timestamp; may be {@code null}
+         * @apiNote
+         * Both fields are nullable because the relay may return either a bare
+         * acknowledgement or a {@code <gdpr>} child with arbitrary attribute
+         * coverage.
+         *
+         * @param status            the optional status string; may be {@code null}
+         * @param expirationSeconds the optional expiration timestamp; may be
+         *                          {@code null}
          */
         public Success(String status, Long expirationSeconds) {
             this.status = status;
@@ -79,33 +106,43 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the optional GDPR status string.
+         * Returns the optional relay-echoed GDPR status string.
          *
-         * @return an {@link Optional} carrying the status, or
-         *         empty
+         * @return an {@link Optional} carrying the status (typically
+         *         {@code "none"} after cancel), or empty when omitted
          */
         public Optional<String> status() {
             return Optional.ofNullable(status);
         }
 
         /**
-         * Returns the optional expiration timestamp.
+         * Returns the optional relay-echoed expiration timestamp in seconds.
          *
-         * @return an {@link Optional} carrying the timestamp, or
-         *         empty
+         * @return an {@link Optional} carrying the timestamp, or empty when
+         *         omitted
          */
         public Optional<Long> expirationSeconds() {
             return Optional.ofNullable(expirationSeconds);
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Parses the inbound stanza into a {@link Success} variant when it
+         * matches the success schema.
+         *
+         * @apiNote
+         * Returns empty when the SMAX result-envelope check fails; never
+         * inspects the {@code <gdpr>} child's attribute set beyond the optional
+         * {@code status} and {@code expiration}.
+         *
+         * @implNote
+         * This implementation accepts a missing {@code <gdpr>} child by
+         * returning a {@link Success} with both fields {@code null}, matching
+         * the relay's bare-acknowledgement shape.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or empty
+         *         when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebDebugGDPR",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -119,7 +156,7 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
             }
             var status = gdpr.getAttributeAsString("status").orElse(null);
             var expirationAttr = gdpr.getAttributeAsLong("expiration");
-            Long expirationSeconds = expirationAttr.isPresent()
+            var expirationSeconds = expirationAttr.isPresent()
                     ? expirationAttr.getAsLong()
                     : null;
             return Optional.of(new Success(status, expirationSeconds));
@@ -151,26 +188,32 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — {@code 4xx} rejection
-     * (typically {@code 404} when no GDPR request is in flight).
+     * Client-error variant. The relay rejected the cancel request with a {@code 4xx}
+     * code.
+     *
+     * @apiNote
+     * The dominant client-error is {@code 404} when no GDPR request is in flight for
+     * the bound report type; the request payload itself is well-formed so a different
+     * code typically signals an authorisation issue.
      */
     @WhatsAppWebModule(moduleName = "WAWebDebugGDPR")
     final class ClientError implements IqDebugGdprResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text echoed by the relay, or
+         * {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a client-error reply carrying the relay-echoed envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -178,7 +221,7 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -187,23 +230,27 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Parses the inbound stanza into a {@link ClientError} variant when it
+         * matches the standard SMAX client-error envelope.
+         *
+         * @apiNote
+         * Returns empty when the envelope check fails; delegates entirely to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty
+         *         when the stanza does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebDebugGDPR",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -241,26 +288,32 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — {@code 5xx} transient
-     * failure.
+     * Server-error variant. The relay encountered a transient {@code 5xx} failure
+     * processing the cancel request.
+     *
+     * @apiNote
+     * Typically retryable after a short backoff; the relay surfaces no
+     * machine-readable backoff hint on this stanza, so the caller's standard
+     * retry policy applies.
      */
     @WhatsAppWebModule(moduleName = "WAWebDebugGDPR")
     final class ServerError implements IqDebugGdprResponse {
         /**
-         * The numeric server-side error code.
+         * Holds the numeric server-side error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * Holds the optional human-readable error text echoed by the relay, or
+         * {@code null} when omitted.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a server-error reply carrying the relay-echoed envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -268,7 +321,7 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -277,23 +330,27 @@ public sealed interface IqDebugGdprResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the text, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay
+         *         omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Parses the inbound stanza into a {@link ServerError} variant when it
+         * matches the standard SMAX server-error envelope.
+         *
+         * @apiNote
+         * Returns empty when the envelope check fails; delegates entirely to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty
+         *         when the stanza does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WAWebDebugGDPR",
                 exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)

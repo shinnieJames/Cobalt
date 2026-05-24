@@ -19,13 +19,18 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 import java.util.*;
 
 /**
- * Distributes the sender's group encryption key to participants that do not yet possess it.
+ * Distributes the sender's group encryption key to participants that do not
+ * yet hold it.
  *
- * <p>Before a group message encrypted with a sender key (SKMSG) can be decrypted by a
- * participant, that participant must have received the sender's
- * {@code SenderKeyDistributionMessage}. This service builds the per-device encrypted
- * distribution messages, populates ICDC metadata per recipient and wraps companion device
- * payloads in {@code DeviceSentMessage}.
+ * @apiNote
+ * Required before any SKMSG produced by
+ * {@link MessageEncryption#encryptForGroup} can be decrypted: each recipient
+ * device must have received the sender's
+ * {@code SenderKeyDistributionMessage} via this service, encrypted with that
+ * device's per-device Signal session. Invoked by the group/status/broadcast
+ * send jobs (matching WA Web's {@code WAWebSendGroupKeyDistributionMsgJob} /
+ * {@code WAWebSendGroupSkmsgJob} / {@code WAWebEncryptAndSendStatusMsg} /
+ * {@code WAWebEncryptAndSendBroadcastMsg}) before the SKMSG itself goes out.
  */
 @WhatsAppWebModule(moduleName = "WAWebGetGroupKeyDistributionMsg")
 public final class SenderKeyDistribution {
@@ -35,26 +40,38 @@ public final class SenderKeyDistribution {
     private static final System.Logger LOGGER = System.getLogger(SenderKeyDistribution.class.getName());
 
     /**
-     * Encryption service used to encrypt the distribution payload per device.
+     * The encryption service used to encrypt the distribution payload per
+     * device.
      */
     private final MessageEncryption encryption;
 
     /**
-     * Device service used to compute ICDC metadata for sender and recipient JIDs.
+     * The device service used to compute ICDC metadata for the sender and
+     * each recipient.
      */
     private final DeviceService deviceService;
 
     /**
-     * Store used to resolve the self JID and update the identity range after distribution.
+     * The store used to resolve the self JID and to update the identity range
+     * after distribution.
      */
     private final WhatsAppStore store;
 
     /**
-     * Creates a new sender-key distribution service.
+     * Constructs a sender-key distribution service bound to the given
+     * dependencies.
      *
-     * @param encryption    the encryption service for per-device encryption
-     * @param deviceService the device service for ICDC and sessions
-     * @param store         the store for self JID and identity range
+     * @apiNote
+     * Held by the send-pipeline orchestrator as a long-lived singleton; the
+     * three collaborators must share the same {@link WhatsAppStore} so
+     * post-send {@link WhatsAppStore#updateIdentityRange} and per-recipient
+     * ICDC lookups see consistent state.
+     *
+     * @param encryption    the {@link MessageEncryption} service for per-device
+     *                      encryption
+     * @param deviceService the {@link DeviceService} for ICDC metadata
+     * @param store         the {@link WhatsAppStore} for self JID and identity
+     *                      range
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getKeyDistributionMsg",
@@ -70,22 +87,28 @@ public final class SenderKeyDistribution {
     }
 
     /**
-     * Encrypts the sender-key distribution message for each device without DSM wrapping
-     * and without a participant hash.
+     * Encrypts the sender-key distribution message for each device without
+     * DSM wrapping and without a participant hash.
      *
-     * <p>Convenience overload equivalent to calling
+     * @apiNote
+     * Convenience overload matching the group SKMSG and status send paths
+     * (matching {@code WAWebSendGroupSkmsgJob} and
+     * {@code WAWebEncryptAndSendStatusMsg}), where the distribution is not
+     * wrapped in a {@code DeviceSentMessage}. Equivalent to calling
      * {@link #encrypt(Jid, byte[], Collection, boolean, String)} with
-     * {@code shouldWrapDsm = false} and {@code phash = null}. Matches the group SKMSG and
-     * status sending flows where DSM wrapping is not performed at the key distribution
-     * level.
+     * {@code shouldWrapDsm = false} and {@code phash = null}.
      *
-     * @param groupJid       the group JID
-     * @param senderKeyBytes the serialised {@code SenderKeyDistributionMessage} from the
-     *                       Signal group cipher
-     * @param devices        the device JIDs that need the sender key
-     * @return the per-device encrypted payloads
-     * @throws NullPointerException          if any argument is {@code null}
-     * @throws WhatsAppMessageException.Send if encryption fails for a primary device
+     * @param groupJid       the group {@link Jid}
+     * @param senderKeyBytes the serialised {@code SenderKeyDistributionMessage}
+     *                       bytes produced by
+     *                       {@link MessageEncryption#getSenderKeyBytes}
+     * @param devices        the device {@link Jid}s that need the sender key
+     * @return one {@link MessageEncryptedPayload} per device that successfully
+     *         encrypted
+     * @throws NullPointerException                  if any argument is
+     *                                               {@code null}
+     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for a
+     *                                               primary device
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getKeyDistributionMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -98,28 +121,44 @@ public final class SenderKeyDistribution {
     }
 
     /**
-     * Encrypts the sender-key distribution message for each device, populating ICDC
-     * metadata per recipient.
+     * Encrypts the sender-key distribution message for each device, with
+     * optional DSM wrapping and per-recipient ICDC metadata.
      *
-     * <p>Each device receives the distribution protobuf encrypted individually via the
-     * Signal session cipher (pkmsg or msg). When {@code shouldWrapDsm} is {@code true},
-     * companion devices receive a {@code DeviceSentMessage} wrapper with the group JID as
-     * destination and the optional {@code phash}. All devices receive ICDC metadata
-     * appropriate to their role: sender-only for self, sender plus recipient for others.
-     * Devices that fail encryption are logged and dropped, except primary devices whose
-     * failure is propagated.
+     * @apiNote
+     * Mirrors WA Web's {@code getKeyDistributionMsg(t, a, i, l, u, d, m)}: for
+     * each device the distribution proto is encrypted through the Signal
+     * session cipher (producing PKMSG for fresh sessions, MSG once the
+     * recipient has acknowledged a prior PreKey), wrapped as a
+     * {@code DeviceSentMessage} with the group as destination plus the
+     * {@code phash} when {@code shouldWrapDsm} is {@code true} and the
+     * recipient is a self-companion, and stamped with the appropriate ICDC
+     * (sender-only for self, sender plus recipient for other accounts).
+     * Companion devices whose encryption fails are dropped from the result;
+     * primary-device failures propagate as
+     * {@link WhatsAppMessageException.Send.Unknown} so the orchestrator can
+     * abort the whole send.
+     * @implNote
+     * This implementation post-calls {@link WhatsAppStore#updateIdentityRange}
+     * with the supplied device set so the next fanout sees the freshly-keyed
+     * recipients in the identity range cache; WA Web does the same range
+     * bump inside {@code WAWebSendGroupKeyDistributionMsgJob}.
      *
-     * @param groupJid       the group JID
-     * @param senderKeyBytes the serialised {@code SenderKeyDistributionMessage} from the
-     *                       Signal group cipher
-     * @param devices        the device JIDs that need the sender key
+     * @param groupJid       the group {@link Jid}
+     * @param senderKeyBytes the serialised {@code SenderKeyDistributionMessage}
+     *                       bytes
+     * @param devices        the device {@link Jid}s that need the sender key
      * @param shouldWrapDsm  whether to wrap self-device protos in a
      *                       {@code DeviceSentMessage}
-     * @param phash          the participant hash to include in the DSM, or {@code null}
-     * @return the per-device encrypted payloads
-     * @throws NullPointerException          if {@code groupJid}, {@code senderKeyBytes},
-     *                                       or {@code devices} is {@code null}
-     * @throws WhatsAppMessageException.Send if encryption fails for a primary device
+     * @param phash          the participant hash to include in the DSM, or
+     *                       {@code null}
+     * @return the per-device encrypted payloads, in source iteration order,
+     *         excluding any failed companions
+     * @throws NullPointerException                  if {@code groupJid},
+     *                                               {@code senderKeyBytes}, or
+     *                                               {@code devices} is
+     *                                               {@code null}
+     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for a
+     *                                               primary device
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getKeyDistributionMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -168,23 +207,31 @@ public final class SenderKeyDistribution {
     }
 
     /**
-     * Encrypts a companion device-sent message that carries the participant hash for
-     * group sync.
+     * Encrypts a {@code DeviceSentMessage} carrying the participant hash for
+     * group sync, delivered to the caller's own companion devices.
      *
-     * <p>Used by the broadcast flow to deliver a DSM-wrapped message with phash to
-     * companion (self-account) devices. The message is wrapped as a
-     * {@code DeviceSentMessage} with the group JID as destination and the phash set, then
-     * enriched with the sender's ICDC metadata. No recipient ICDC is emitted because the
-     * targets are self devices.
+     * @apiNote
+     * Mirrors WA Web's {@code getCompanionDsmPhashMsg}: used by the broadcast
+     * send path (matching {@code WAWebEncryptAndSendBroadcastMsg}) when the
+     * caller has at least one companion device that also needs to learn the
+     * {@code phash} (participant hash) of the broadcast list. The supplied
+     * {@code message} is wrapped as a
+     * {@link com.github.auties00.cobalt.model.message.system.DeviceSentMessage}
+     * with the group/broadcast as destination, stamped with the sender's ICDC
+     * only (no recipient ICDC because the targets are self), and encrypted per
+     * companion device. Failures are logged and dropped so the broadcast can
+     * still ship.
      *
      * @param message          the message proto to wrap as DSM
-     * @param companionDevices the companion device JIDs
+     * @param companionDevices the companion device {@link Jid}s
      * @param phash            the participant hash to include in the DSM
-     * @param groupJid         the group/broadcast JID for the DSM destination
-     * @return the per-device encrypted payloads, or {@code null} if {@code companionDevices}
-     *         is empty or all encryption attempts fail
-     * @throws NullPointerException if {@code message}, {@code phash}, or {@code groupJid}
-     *                              is {@code null}
+     * @param groupJid         the group or broadcast {@link Jid} used as DSM
+     *                         destination
+     * @return the per-device encrypted payloads, or {@code null} when
+     *         {@code companionDevices} is {@code null} or empty, or when every
+     *         encryption attempt fails
+     * @throws NullPointerException if {@code message}, {@code phash}, or
+     *                              {@code groupJid} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "getCompanionDsmPhashMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -236,20 +283,24 @@ public final class SenderKeyDistribution {
     }
 
     /**
-     * Precalculates per-user message protos with ICDC metadata and optional DSM wrapping.
+     * Precomputes the per-user message proto by deduplicating devices on
+     * their user JID and stamping ICDC plus optional DSM wrapping.
      *
-     * <p>Deduplicates devices by user JID, computes the sender's ICDC metadata once, then
-     * for each unique user wraps the proto as a {@code DeviceSentMessage} when the user
-     * is self and {@code shouldWrapDsm} is {@code true}, computes the recipient's ICDC
-     * metadata when the user is a different account, and finally populates ICDC on the
+     * @apiNote
+     * Mirrors WA Web's {@code generateMsgProtobufs}: the sender's ICDC is
+     * computed exactly once and the recipient ICDC is computed per unique
+     * non-self user, so a multi-device recipient does not pay the ICDC cost
+     * per companion. Self devices receive a DSM-wrapped proto only when
+     * {@code shouldWrapDsm} is {@code true}; other accounts receive the plain
      * proto.
      *
-     * @param baseContainer the base message container with the SK distribution
-     * @param devices       the device JIDs to process
-     * @param shouldWrapDsm whether to wrap self-device protos as DSM
-     * @param groupJid      the group JID for DSM destination
+     * @param baseContainer the base distribution container shared across users
+     * @param devices       the device {@link Jid}s to plan for
+     * @param shouldWrapDsm whether self-device protos are DSM-wrapped
+     * @param groupJid      the group {@link Jid} used as DSM destination
      * @param phash         the participant hash for DSM, or {@code null}
-     * @return a map from user JID to enriched message container
+     * @return a map from unique user {@link Jid} to the proto for that user's
+     *         devices
      */
     @WhatsAppWebExport(moduleName = "WAWebGetGroupKeyDistributionMsg", exports = "generateMsgProtobufs",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -309,10 +360,15 @@ public final class SenderKeyDistribution {
     /**
      * Returns whether the given device JID identifies a primary device.
      *
-     * <p>A primary device has a device identifier of {@code 0} (the default device ID).
+     * @apiNote
+     * Used by {@link #encrypt} to distinguish primary-device encryption
+     * failures (which must abort the whole send) from companion failures
+     * (which are logged and dropped). Mirrors WA Web's
+     * {@code WAWebSendMsgCommonApi.isPrimaryDevice}: device id {@code 0} is
+     * the primary, every other id is a companion.
      *
-     * @param device the device JID to check
-     * @return {@code true} if this is a primary device
+     * @param device the device {@link Jid} to check
+     * @return {@code true} when {@code device} is the primary device
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "isPrimaryDevice",
             adaptation = WhatsAppAdaptation.DIRECT)

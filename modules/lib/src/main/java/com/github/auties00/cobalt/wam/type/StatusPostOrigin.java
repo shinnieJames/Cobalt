@@ -61,5 +61,8 @@ public enum StatusPostOrigin {
     @WamEnumConstant(51) CHATS_TAB_NEW_CHAT,
     @WamEnumConstant(52) GROUP_STATUS_CHAT_HEADER_PROFILE_RING,
     @WamEnumConstant(53) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN,
-    @WamEnumConstant(54) CLOSE_SHARING_MIMICRY
+    @WamEnumConstant(54) CLOSE_SHARING_MIMICRY,
+    @WamEnumConstant(55) CHANNEL_STATUS_VIEWER_TOP_BAR,
+    @WamEnumConstant(56) MEDIA_BROWSER_STATUS_MENU,
+    @WamEnumConstant(57) ARCHIVE_STATUS_VIEWER
 }

@@ -11,9 +11,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of the
- * {@code <status from=NEWSLETTER_JID id server_id t
- * is_sender?>...</status>} stanza.
+ * The structured projection of an inbound newsletter
+ * {@code <status>} stanza; carries the envelope correlation metadata
+ * and a content-type classifier for the inner payload shape
+ * (reaction or reaction-revoke today; the relay reserves the room
+ * for future variants).
+ *
+ * @apiNote
+ * Surfaced to callers handling newsletter-status deliveries; pair
+ * with a {@link SmaxStatusDeliverIncomingNewsletterStatusAcknowledgement.SuccessAck}
+ * to ack the delivery. The {@link #raw()} accessor exposes the
+ * underlying {@link Node} so callers can decode the variable-shape
+ * payload (reaction emoji, target server-id) without Cobalt having
+ * to model each variant here.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInStatusDeliverIncomingNewsletterStatusRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInStatusDeliverFromNewsletterMixin")
@@ -31,45 +41,55 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     private final Jid newsletterJid;
 
     /**
-     * The server-assigned status-message id.
+     * The relay-assigned status-message id within the newsletter.
      */
     private final long serverId;
 
     /**
-     * The unix-second timestamp of the status post.
+     * The unix-second timestamp of the post.
      */
     private final long timestamp;
 
     /**
-     * Whether the {@code is_sender="true"} attribute was present.
-     * i.e. the connected client authored the status post.
+     * Whether the {@code is_sender="true"} attribute was present;
+     * {@code true} when the connected client authored this status
+     * post.
      */
     private final boolean fromSelf;
 
     /**
-     * The newsletter-status content-type variant name. E.g.
-     * {@code "newsletter_reaction"},
-     * {@code "newsletter_reaction_revoke"}. Derived from the first
-     * matching content child.
+     * The content-type variant name classifying the inner payload
+     * shape.
+     *
+     * @apiNote
+     * Today either {@code "newsletter_reaction"} or
+     * {@code "newsletter_reaction_revoke"}; future variants extend
+     * this set without breaking the projection contract.
      */
     private final String contentTypeName;
 
     /**
      * The optional offline counter from the {@code offline}
-     * attribute (0..12).
+     * attribute; bounded to {@code 0..12}.
      */
     private final Integer offline;
 
     /**
-     * The raw underlying {@code <status/>} {@link Node}. Exposed so
-     * callers can project the variable-shape content children
-     * (reaction emoji, target server-id, etc.) without Cobalt
-     * needing to model every fanout variant here.
+     * The raw {@code <status>} {@link Node} backing this projection.
+     *
+     * @apiNote
+     * Exposed so callers can project the variable-shape content
+     * children (reaction emoji, target server-id) without Cobalt
+     * having to model every payload variant.
      */
     private final Node raw;
 
     /**
-     * Constructs a new inbound projection.
+     * Constructs a newsletter-status projection.
+     *
+     * @apiNote
+     * Called by {@link #of(Node)} after a successful parse; not
+     * intended for direct caller use.
      *
      * @param stanzaId        the relay-assigned stanza id; never
      *                        {@code null}
@@ -109,6 +129,10 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     /**
      * Returns the relay-assigned stanza id.
      *
+     * @apiNote
+     * Echo this into the matching
+     * {@link SmaxStatusDeliverIncomingNewsletterStatusAcknowledgement.SuccessAck}.
+     *
      * @return the id; never {@code null}
      */
     public String stanzaId() {
@@ -125,9 +149,10 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     }
 
     /**
-     * Returns the server-assigned status-message id.
+     * Returns the server-assigned status-message id within the
+     * newsletter.
      *
-     * @return the server id
+     * @return the id
      */
     public long serverId() {
         return serverId;
@@ -143,10 +168,11 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     }
 
     /**
-     * Returns whether the connected client authored the status
+     * Reports whether the connected client authored this status
      * post.
      *
-     * @return {@code true} when {@code is_sender="true"} was set
+     * @return {@code true} when the {@code is_sender="true"}
+     *         attribute was present
      */
     public boolean fromSelf() {
         return fromSelf;
@@ -155,7 +181,7 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     /**
      * Returns the content-type variant name.
      *
-     * @return the variant name; never {@code null}
+     * @return the name; never {@code null}
      */
     public String contentTypeName() {
         return contentTypeName;
@@ -164,16 +190,23 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     /**
      * Returns the optional offline counter.
      *
-     * @return an {@link Optional} carrying the counter, or empty
-     *         when omitted
+     * @apiNote
+     * Bounded to {@code 0..12} by the WA Web schema; set on
+     * deliveries replayed from the relay's offline backlog.
+     *
+     * @return an {@link Optional} carrying the counter, or
+     *         {@link Optional#empty()} when omitted
      */
     public Optional<Integer> offline() {
         return Optional.ofNullable(offline);
     }
 
     /**
-     * Returns the underlying {@code <status/>} node for downstream
-     * inspection of the variable-shape content payload.
+     * Returns the underlying {@code <status>} {@link Node}.
+     *
+     * @apiNote
+     * Lets callers project the variable-shape content children
+     * without Cobalt having to model every variant.
      *
      * @return the raw node; never {@code null}
      */
@@ -182,12 +215,24 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
     }
 
     /**
-     * Tries to parse an {@link SmaxStatusDeliverIncomingNewsletterStatusResponse} projection from the given
-     * {@code <status/>} stanza.
+     * Parses a newsletter-status projection from the given
+     * {@code <status>} stanza.
+     *
+     * @apiNote
+     * Returns {@link Optional#empty()} for any deviation from the
+     * documented schema (wrong description, missing id, non-newsletter
+     * sender JID, out-of-range server_id / timestamp / offline,
+     * unrecognised content-type shape).
+     *
+     * @implNote
+     * This implementation enforces the WA Web range bounds inline:
+     * server_id in {@code 99..2147476647}, timestamp in
+     * {@code 1577865600..4102473600}, and offline in {@code 0..12}.
      *
      * @param node the inbound status stanza; never {@code null}
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza does not match the expected shape
+     * @return an {@link Optional} carrying the projection, or
+     *         {@link Optional#empty()} when the stanza does not match
+     *         the expected shape
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInStatusDeliverIncomingNewsletterStatusRequest",
@@ -242,7 +287,15 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
 
     /**
      * Classifies the content-type variant by inspecting the
-     * {@code <status/>} child structure.
+     * {@code <status>} child structure.
+     *
+     * @apiNote
+     * Returns {@code null} when no documented content variant matched.
+     *
+     * @implNote
+     * This implementation only recognises the two reaction variants
+     * today; future content types extend the cascade without
+     * breaking callers.
      *
      * @param node the status stanza; never {@code null}
      * @return the variant name, or {@code null} when no variant
@@ -263,6 +316,15 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
         return null;
     }
 
+    /**
+     * Compares this projection to another for value equality on
+     * every field including the underlying {@link Node}.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxStatusDeliverIncomingNewsletterStatusResponse}
+     *         with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -282,12 +344,27 @@ public final class SmaxStatusDeliverIncomingNewsletterStatusResponse implements 
                 && Objects.equals(this.raw, that.raw);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(stanzaId, newsletterJid, serverId, timestamp, fromSelf,
                 contentTypeName, offline, raw);
     }
 
+    /**
+     * Returns a debug-friendly representation of this projection.
+     *
+     * @apiNote
+     * Intended for logging; the underlying node is deliberately
+     * omitted to keep the result readable. The format is not part of
+     * the public contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxStatusDeliverIncomingNewsletterStatusResponse[stanzaId=" + stanzaId

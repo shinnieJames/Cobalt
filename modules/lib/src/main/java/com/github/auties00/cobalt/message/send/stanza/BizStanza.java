@@ -15,27 +15,34 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Builds the {@code <biz>} stanza child node that carries verified business account
- * privacy mode metadata and native flow attributes.
+ * Builds the optional {@code <biz>} child node carried inside an outgoing
+ * {@code <message>} stanza for hosted-business and native-flow sends.
  *
- * <p>The privacy mode form of the node is included only when the recipient has a
- * verified business name with all three privacy mode fields populated
- * ({@code host_storage}, {@code actual_actors}, {@code privacy_mode_ts}). A native flow
- * form is also produced when the message protobuf carries a native flow name.
- *
- * @see ChatFanoutStanza
+ * @apiNote
+ * Embedders do not call this directly. {@link ChatFanoutStanza} composes a
+ * {@code <biz>} node when the recipient is a verified business with privacy
+ * mode set (the WhatsApp Business hosted-storage opt-in) or when the message
+ * carries a native-flow name (interactive payment buttons, review-and-pay
+ * forms, etc.); the server uses the resulting attributes to route the
+ * stanza to the correct business backend.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 public final class BizStanza {
     /**
-     * Store used to look up the recipient's verified business name.
+     * The store consulted for the recipient's
+     * {@link BusinessVerifiedName} privacy-mode record.
      */
     private final WhatsAppStore store;
 
     /**
-     * Creates a new biz stanza builder with the given store.
+     * Constructs a builder backed by the given store.
      *
-     * @param store the WhatsApp store for contact lookups
+     * @apiNote
+     * Constructed once per client; the instance is stateless and may be
+     * reused across sends.
+     *
+     * @param store the {@link WhatsAppStore} used to resolve the recipient's
+     *              verified business name
      * @throws NullPointerException if {@code store} is {@code null}
      */
     public BizStanza(WhatsAppStore store) {
@@ -43,14 +50,18 @@ public final class BizStanza {
     }
 
     /**
-     * Builds the {@code <biz>} node for the given chat recipient with no native flow
+     * Builds the {@code <biz>} node for a recipient with no native-flow
      * context.
      *
-     * <p>Returns {@code null} if the recipient has no verified business name with privacy
-     * mode populated.
+     * @apiNote
+     * Convenience overload that delegates to
+     * {@link #build(Jid, String, boolean)} with no native-flow name; returns
+     * {@code null} when the recipient has no hosted-business privacy mode
+     * recorded.
      *
-     * @param chatJid the recipient chat JID
-     * @return the biz node, or {@code null} if not applicable
+     * @param chatJid the recipient chat {@link Jid}
+     * @return the {@code <biz>} {@link Node}, or {@code null} when not
+     *         applicable
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -59,24 +70,36 @@ public final class BizStanza {
     }
 
     /**
-     * Builds the {@code <biz>} node for the given chat recipient, including the native
-     * flow name attribute and an interactive child when applicable.
+     * Builds the {@code <biz>} node for a recipient, optionally including a
+     * native-flow name and an {@code <interactive>}/{@code <native_flow>}
+     * subtree.
      *
-     * <p>Resolution order: when the contact has a verified business name with privacy
-     * mode, builds a {@code <biz>} node with the {@code host_storage},
-     * {@code actual_actors}, {@code privacy_mode_ts} and {@code native_flow_name}
-     * attributes. Otherwise, when {@code nativeFlowName} is non-null and
-     * {@code isNativeFlowInteractive} is {@code true}, builds a {@code <biz>} node with
-     * an {@code <interactive>} child containing a {@code <native_flow>} element.
-     * Otherwise, when {@code nativeFlowName} is non-null, builds a simple {@code <biz>}
-     * node with just the {@code native_flow_name} attribute. Otherwise returns
-     * {@code null}.
+     * @apiNote
+     * Three forms are emitted in priority order: (a) a hosted-business node
+     * carrying the {@code host_storage}, {@code actual_actors},
+     * {@code privacy_mode_ts} attributes (plus {@code native_flow_name} when
+     * present); (b) when the message is a native-flow interactive payload,
+     * a node wrapping {@code <interactive v="1" type="native_flow"><native_flow
+     * name="..."/></interactive>}; (c) a bare node carrying only
+     * {@code native_flow_name}. Returns {@code null} when none of the three
+     * conditions apply.
      *
-     * @param chatJid                 the recipient chat JID
-     * @param nativeFlowName          the native flow name from the protobuf, or
-     *                                {@code null}
-     * @param isNativeFlowInteractive whether this is a native flow interactive message
-     * @return the biz node, or {@code null} if not applicable
+     * @implNote
+     * This implementation reads the privacy-mode triplet from the
+     * {@link BusinessVerifiedName} contact record via
+     * {@link WhatsAppStore#findVerifiedBusinessName(Jid)}; the WA Web
+     * counterpart sources the same triplet from
+     * {@code WAWebContactCollection.ContactCollection.get(chatJid).privacyMode}.
+     *
+     * @param chatJid                 the recipient chat {@link Jid}
+     * @param nativeFlowName          the native-flow name from the message
+     *                                protobuf, or {@code null}
+     * @param isNativeFlowInteractive {@code true} when the message is a
+     *                                {@code nativeFlowInteractiveMsg}
+     *                                payload that must wrap an
+     *                                {@code <interactive>} subtree
+     * @return the {@code <biz>} {@link Node}, or {@code null} when none of
+     *         the three branches apply
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -131,14 +154,19 @@ public final class BizStanza {
     }
 
     /**
-     * Builds the {@code <biz>} node for group messages that carry a payment-info native
-     * flow interactive message.
+     * Builds the {@code <biz>} node for a group SKMSG send carrying a
+     * {@code payment_info} native-flow interactive message.
      *
-     * <p>Returns {@code null} for any other message type.
+     * @apiNote
+     * Mirrors the {@code b(t, e)} helper inside
+     * {@code WAWebSendGroupSkmsgJob}: groups attach a
+     * {@code <biz><interactive type="native_flow"><native_flow name="payment_info"/>}
+     * subtree only for the payment-info native flow. Returns {@code null}
+     * for every other message shape, including other native flows and
+     * non-interactive bodies.
      *
-     * @param container the message container
-     * @return the biz node, or {@code null}
-     * @see GroupSkmsgFanoutStanza
+     * @param container the outgoing {@link MessageContainer}
+     * @return the {@code <biz>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupSkmsgJob", exports = "encryptAndSendSenderKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)

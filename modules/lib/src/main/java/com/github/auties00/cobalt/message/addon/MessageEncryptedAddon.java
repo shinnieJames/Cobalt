@@ -7,31 +7,39 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Objects;
 
 /**
- * Immutable pair of the AES-GCM ciphertext and IV produced by the inner addon
- * encryption layer.
+ * Immutable pair of the AES-GCM ciphertext and IV produced by the inner
+ * addon encryption layer.
  *
- * <p>Returned by {@link MessageAddonEncryption#encrypt} and consumed by addon
- * protobuf builders that split the payload into an
- * {@code encPayload}/{@code encIv} pair. The ciphertext already includes the
- * trailing 16-byte GCM authentication tag.
+ * @apiNote Returned by {@link MessageAddonEncryption#encrypt} and consumed
+ * by the per-addon protobuf builders ({@code EncCommentMessage},
+ * {@code EncReactionMessage}, {@code PollEncValue}) which split this pair
+ * into the {@code encPayload}/{@code encIv} wire fields. The ciphertext
+ * includes the trailing 16-byte GCM authentication tag.
  *
  * @param ciphertext the AES-GCM ciphertext including the 16-byte auth tag
- * @param iv         the 12-byte initialization vector used for this ciphertext
+ * @param iv         the 12-byte initialisation vector used for this
+ *                   ciphertext
  */
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryption")
 public record MessageEncryptedAddon(byte[] ciphertext, byte[] iv) {
     /**
-     * Expected size of the AES-GCM initialization vector in bytes.
+     * Expected size of the AES-GCM initialisation vector, in bytes.
      */
     private static final int AES_GCM_IV_SIZE = 12;
 
     /**
-     * Compact constructor that validates the IV length and rejects
-     * {@code null} components.
+     * Validates the IV length and rejects {@code null} components.
      *
-     * @throws NullPointerException     if {@code ciphertext} or {@code iv} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code iv} is not exactly 12 bytes
+     * @apiNote Defends against accidental construction with a malformed IV;
+     * the inner addon ciphers always use a 12-byte IV, and a mismatch here
+     * would later surface as a more confusing
+     * {@link java.security.InvalidAlgorithmParameterException} inside the
+     * cipher.
+     *
+     * @throws NullPointerException     if {@code ciphertext} or {@code iv}
+     *                                  is {@code null}
+     * @throws IllegalArgumentException if {@code iv.length} is not exactly
+     *                                  12
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryption", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)

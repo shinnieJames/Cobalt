@@ -17,39 +17,72 @@ import java.util.Objects;
 /**
  * Builds outgoing NUX-action sync mutations.
  *
- * <p>The factory is the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.NuxActionHandler}.
+ * @apiNote
+ * Drives the new-user-experience acknowledgement system; every dismissible
+ * tooltip, banner, or one-time-tip on the WhatsApp Web surface broadcasts
+ * its dismissal across linked devices through a NUX mutation. Mutations
+ * produced here are consumed on the inbound side by
+ * {@link com.github.auties00.cobalt.sync.handler.NuxActionHandler} which
+ * calls {@code WAWebUserPrefsNuxPreferences.updateNuxSyncList} on the
+ * receiver.
+ *
+ * @implNote
+ * This implementation mirrors {@code WAWebNuxSync.$NuxSync$p_1} (the
+ * private mutation builder consumed by {@code acknowledgeNux} and
+ * {@code unAcknowledgeNux}) and adds defensive null checks on the
+ * caller-supplied identifier and timestamp.
  */
 public final class NuxActionMutationFactory {
     /**
      * Constructs a NUX-action mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public NUX acknowledgement entry point. The
+     * factory keeps no state, so a single instance is sufficient per
+     * client.
      */
     public NuxActionMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for acknowledging or unacknowledging a NUX
-     * item.
+     * Builds a pending mutation for acknowledging or unacknowledging a
+     * NUX item.
      *
-     * <p>Per WhatsApp Web {@code WAWebNuxSync.$NuxSync$p_1}:
-     * <ol>
-     *   <li>Wraps the {@code acknowledged} flag in a
-     *       {@code {nuxAction: {acknowledged}}} value</li>
-     *   <li>Calls {@code WAWebSyncdActionUtils.buildPendingMutation} with
-     *       {@code collection}, {@code indexArgs = [nuxKey]}, value,
-     *       version, operation {@code SET}, and the supplied timestamp</li>
-     * </ol>
+     * @apiNote
+     * Invoked from the public NUX acknowledgement entry point on
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient};
+     * receiving devices update their local map from NUX key to
+     * acknowledged flag via
+     * {@code WAWebUserPrefsNuxPreferences.updateNuxSyncList}. The same
+     * builder serves both the acknowledge and unacknowledge paths via
+     * the {@code acknowledged} flag.
      *
-     * @param nuxKey       the NUX identifier (the {@code indexArgs[0]} entry)
-     * @param timestamp    the mutation timestamp
-     * @param acknowledged whether the NUX item is acknowledged
+     * @implNote
+     * This implementation adds two defensive null checks not present in
+     * WA Web ({@code WAWebNuxSync} relies on the caller never passing
+     * {@code null}). The index follows the standard
+     * {@code [actionName, nuxKey]} shape and writes into the
+     * {@code RegularLow} collection alongside the other account-scoped
+     * NUX state.
+     *
+     * @param nuxKey       the NUX identifier (the {@code indexArgs[0]}
+     *                     entry); the receiver requires it to be a
+     *                     non-empty string
+     * @param timestamp    the mutation timestamp recorded on both the
+     *                     outer mutation and the inner
+     *                     {@code SyncActionValue}
+     * @param acknowledged {@code true} when the NUX item is
+     *                     acknowledged, {@code false} to revert
      * @return the pending mutation for the NUX action
+     * @throws NullPointerException if {@code nuxKey} or {@code timestamp}
+     *                              is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebNuxSync", exports = "$NuxSync$p_1", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getNuxMutation(String nuxKey, Instant timestamp, boolean acknowledged) {
-        Objects.requireNonNull(nuxKey, "nuxKey cannot be null"); // ADAPTED: defensive null check not present in WA Web
-        Objects.requireNonNull(timestamp, "timestamp cannot be null"); // ADAPTED: defensive null check not present in WA Web
+        Objects.requireNonNull(nuxKey, "nuxKey cannot be null");
+        Objects.requireNonNull(timestamp, "timestamp cannot be null");
         var action = new NuxActionBuilder()
                 .acknowledged(acknowledged)
                 .build();

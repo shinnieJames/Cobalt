@@ -15,43 +15,71 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Creates a fresh invite code for a group, community or other receiver
- * thread, returning the freshly minted opaque code string.
+ * Outbound MEX mutation that rotates a group's invite code by asking the
+ * relay to mint a fresh opaque code string.
  *
- * <p>The mutation is the rotation counterpart to
- * {@code FetchGroupInviteCodeMexRequest}: where the latter reads the current code
- * without altering it, this mutation asks the server to issue a new one,
- * implicitly invalidating any previously distributed link. The
- * {@code entry_point} variable carries the UI surface that triggered the
- * rotation so the relay can attribute usage telemetry to the originating
- * flow.
+ * @apiNote Issued by callers that surface WA Web's
+ * {@code WAWebOutContactInviteAction.sendInvite} flow, where a fresh invite
+ * code is generated before sending the share text on behalf of a contact.
+ * The mutation invalidates any previously distributed
+ * {@code chat.whatsapp.com/<code>} link bound to the same receiver. To read
+ * the current code without rotating it, use
+ * {@link FetchGroupInviteCodeMexRequest} instead.
+ *
+ * @implNote This implementation hard-codes the WA Web
+ * {@code server_send_sms = false} input field by omitting it from the
+ * payload; the wire-level GraphQL variables object only carries
+ * {@code receiver} and {@code entry_point}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateInviteCodeJob")
 public final class CreateInviteCodeMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the compiled {@code mexCreateInviteCode} mutation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexCreateInviteCodeJobMutation} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexCreateInviteCodeJobMutation.graphql}. The relay maps
+     * this id to its persisted operation; the GraphQL text is never sent on
+     * the wire.
      */
+    @WhatsAppWebExport(moduleName = "WAWebMexCreateInviteCodeJobMutation.graphql", exports = "params.id",
+            adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "26155584267463745";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this query, mirroring the {@code params.name} value of
-     * the compiled {@code mexCreateInviteCode} operation.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this mutation is
+     * dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
+     * latency and error metrics; Cobalt keeps the name on the request for
+     * embedders mirroring WA Web's telemetry surface.
      */
     public static final String OPERATION_NAME = "mexCreateInviteCode";
+
+    /**
+     * The receiver identifier bound to the {@code input.receiver} GraphQL
+     * input field.
+     */
     private final String receiver;
+
+    /**
+     * The originating UI surface tag bound to the {@code input.entry_point}
+     * GraphQL input field.
+     */
     private final String entryPoint;
 
     /**
-     * Constructs a request that asks the relay to mint a fresh invite code
-     * for the given {@code receiver}.
-     * @param receiver   the opaque receiver identifier the code is being
-     *                   minted for, never {@code null}
-     * @param entryPoint the UI-surface telemetry tag (e.g.
-     *                   {@code "CHAT_INFO_INVITE_BUTTON"}) identifying what
-     *                   triggered the rotation, never {@code null}
-     * @throws NullPointerException if any argument is {@code null}
+     * Constructs a new request with the two GraphQL input fields.
+     *
+     * @apiNote Both arguments are required and forwarded verbatim to the
+     * relay. {@code entryPoint} is the telemetry attribution tag (e.g.
+     * {@code "CHAT_INFO_INVITE_BUTTON"}) the relay associates with the
+     * rotation event.
+     *
+     * @param receiver   the receiver identifier the code is minted for, never {@code null}
+     * @param entryPoint the originating UI surface tag, never {@code null}
+     * @throws NullPointerException if either argument is {@code null}
      */
     public CreateInviteCodeMexRequest(String receiver, String entryPoint) {
         this.receiver = Objects.requireNonNull(receiver, "receiver cannot be null");
@@ -59,9 +87,7 @@ public final class CreateInviteCodeMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -69,9 +95,7 @@ public final class CreateInviteCodeMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -79,9 +103,15 @@ public final class CreateInviteCodeMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp relay.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the {@code input.receiver} and
+     * {@code input.entry_point} GraphQL fields through fastjson2's
+     * {@link JSONWriter} and wraps them in the standard MEX IQ envelope
+     * built through
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}. The
+     * WA Web {@code input.server_send_sms = false} field is omitted; the
+     * relay treats the absent flag as {@code false}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateInviteCodeJob", exports = "mexCreateInviteCode",
             adaptation = WhatsAppAdaptation.ADAPTED)

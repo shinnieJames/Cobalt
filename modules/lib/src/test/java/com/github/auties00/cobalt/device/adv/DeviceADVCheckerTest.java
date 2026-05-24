@@ -3,12 +3,12 @@ package com.github.auties00.cobalt.device.adv;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.device.DefaultDeviceService;
-import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.device.info.DeviceInfo;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.device.info.DeviceListBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
 import com.github.auties00.cobalt.sync.WebAppStateService;
@@ -29,20 +29,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Unit tests for {@link DeviceADVChecker}'s analysis core.
  *
- * <p>The 24-hour scheduler itself uses {@code Instant.now()} for "now" and
- * a singleton {@link java.util.concurrent.ScheduledExecutorService} — both
- * difficult to drive under test without a production-side {@code Clock}
- * injection. The staleness analysis was therefore extracted into a
- * package-private {@code analyzeDeviceLists(...)} that takes {@code now}
- * as an explicit parameter; this test class exercises that method
- * directly with synthetic device-list states and asserts the contract
- * the scheduler relies on:
+ * @apiNote
+ * The scheduler itself uses {@link Instant#now()} for the wall clock and a
+ * singleton {@link java.util.concurrent.ScheduledExecutorService}; both are
+ * difficult to drive under test without a production-side clock injection.
+ * The staleness analysis was therefore extracted into a package-private
+ * {@code analyzeDeviceLists} that takes {@code now} as an explicit parameter;
+ * this test class exercises that method directly with synthetic device-list
+ * states and asserts the scheduler-facing contract: fresh records survive,
+ * stale records are flagged for expiration, own-device-list expiration sets
+ * {@code selfExpired}, and primary-only and deleted records are skipped.
  *
- * <ul>
- *   <li>fresh records survive;</li>
- *   <li>stale records are flagged for expiration;</li>
- *   <li>own-device-list expiration sets {@code selfExpired}.</li>
- * </ul>
+ * @implNote
+ * This implementation builds the full collaborator graph through
+ * {@link DefaultDeviceService} so the checker can read the cached
+ * {@code lastAdvCheckTime} from a real {@link com.github.auties00.cobalt.device.DeviceService};
+ * tests then pass synthetic timestamps to {@code analyzeDeviceLists} so the
+ * outcome is deterministic.
  */
 @DisplayName("DeviceADVChecker")
 class DeviceADVCheckerTest {
@@ -50,9 +53,29 @@ class DeviceADVCheckerTest {
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
     private static final Jid PEER = Jid.of("12025550100@s.whatsapp.net");
 
+    /**
+     * Bundles the constructed client, props, and checker so each test can
+     * share the same wiring.
+     *
+     * @apiNote
+     * Local record; never exposed outside this class.
+     *
+     * @param client  the test client
+     * @param props   the test AB props service
+     * @param checker the constructed ADV checker
+     */
     private record Harness(TestWhatsAppClient client, TestABPropsService props, DeviceADVChecker checker) {
     }
 
+    /**
+     * Builds a fresh harness with all collaborators wired against a temporary
+     * store.
+     *
+     * @apiNote
+     * Called by every test for isolation; never reused across tests.
+     *
+     * @return the constructed harness
+     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -60,13 +83,26 @@ class DeviceADVCheckerTest {
         var wamService = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wamService);
         var snapshotRecovery = new SnapshotRecoveryService(client, props, wamService);
-        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wamService);
+        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wamService, TestMediaConnectionService.create());
         var sessionCipher = new SignalSessionCipher(store);
         var deviceService = new DefaultDeviceService(client, webAppState, props, sessionCipher, wamService);
         var checker = new DeviceADVChecker(client, deviceService, props, wamService);
         return new Harness(client, props, checker);
     }
 
+    /**
+     * Builds a {@link DeviceList} for the given user with the supplied
+     * timestamp and devices.
+     *
+     * @apiNote
+     * Local test helper; uses a fresh empty {@code validIndexes} so the
+     * analysis treats every device as potentially-valid.
+     *
+     * @param userJid   the user JID
+     * @param timestamp the list timestamp
+     * @param devices   the devices
+     * @return the constructed device list
+     */
     private static DeviceList list(Jid userJid, Instant timestamp, List<DeviceInfo> devices) {
         return new DeviceListBuilder()
                 .userJid(userJid)
@@ -77,6 +113,10 @@ class DeviceADVCheckerTest {
                 .build();
     }
 
+    /**
+     * Verifies a fresh device list (one hour old, 24-hour threshold) is not
+     * flagged for expiration.
+     */
     @Test
     @DisplayName("analyzeDeviceLists: fresh records aren't flagged for expiration")
     void freshRecordsSurvive() {
@@ -98,6 +138,10 @@ class DeviceADVCheckerTest {
                 "fresh device list (1h old, 24h threshold) is not expired");
     }
 
+    /**
+     * Verifies a stale peer list is flagged for expiration and queued for
+     * sync, with {@code selfExpired} unchanged.
+     */
     @Test
     @DisplayName("analyzeDeviceLists: stale records get queued for sync, selfExpired stays false for non-self")
     void stalePeerRecord() {
@@ -122,6 +166,14 @@ class DeviceADVCheckerTest {
                 "expired peer is queued for proactive sync");
     }
 
+    /**
+     * Verifies the local user's own expired device list sets
+     * {@code selfExpired}.
+     *
+     * @apiNote
+     * Downstream of this flag the checker logs the local user out (subject to
+     * the {@code web_adv_logout_on_self_device_list_expired} AB prop).
+     */
     @Test
     @DisplayName("analyzeDeviceLists: own device-list expiration sets selfExpired")
     void selfExpiredTriggers() {
@@ -143,6 +195,10 @@ class DeviceADVCheckerTest {
         assertEquals(1, result.expiredLists().size());
     }
 
+    /**
+     * Verifies primary-only and deleted device lists are skipped before the
+     * staleness check.
+     */
     @Test
     @DisplayName("analyzeDeviceLists: primary-only and deleted lists are skipped")
     void primaryOnlyAndDeletedSkipped() {

@@ -18,30 +18,44 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MessageDedup} and {@link PendingMessageKey}, mirroring
+ * Exercises {@link MessageDedup} and {@link PendingMessageKey}, mirroring
  * {@code WAWebMessageDedupUtils} and {@code WAWebPendingMessageKey}.
  *
- * <p>Cells exercised:
+ * @apiNote Coverage spans composite-key shape (fromMe / parentJid / id /
+ * optional participant / timestamp / encs), refcount semantics on
+ * {@code add} and {@code remove},
+ * {@link MessageDedup#maybeClear(int)} triggering only at zero, the
+ * composite-overload variant of {@link MessageDedup#isPending(MessageKey, Instant, List)},
+ * null-input contract on every entry point, and the
+ * encryption-type-sensitivity invariant: the same message id under
+ * different {@code <enc>} variants yields distinct dedup keys.
  *
- * <ul>
- *   <li>composite key shape (fromMe / parentJid / id / [participant] /
- *       timestamp / sorted encs);</li>
- *   <li>refcount semantics on add and remove;</li>
- *   <li>{@link MessageDedup#maybeClear} only triggers when the offline
- *       counter is exactly zero;</li>
- *   <li>{@link MessageDedup#isPending} hits with and without composite
- *       construction;</li>
- *   <li>null-input contract on all entry points;</li>
- *   <li>encryption-type sensitivity: same message id under different
- *       {@code <enc>} variants yields distinct dedup keys.</li>
- * </ul>
+ * @implNote The fixtures build messages with {@link MessageKeyBuilder} and
+ * synthesise encrypted-payload stubs through {@link #payload}, avoiding any
+ * dependency on a captured stanza corpus; the test runs in-process and
+ * never opens a socket.
  */
 @DisplayName("MessageDedup + PendingMessageKey")
 class MessageDedupTest {
+    /**
+     * Chat JID used by every test in this suite.
+     */
     private static final Jid CHAT = Jid.of("12025550100@s.whatsapp.net");
+
+    /**
+     * Self JID used as the {@code senderJid} in group-message cases.
+     */
     private static final Jid SELF = Jid.of("393495089819@s.whatsapp.net");
+
+    /**
+     * Reference timestamp used by every test in this suite.
+     */
     private static final Instant T = Instant.ofEpochSecond(1700000000L);
 
+    /**
+     * Verifies the canonical composite-key shape
+     * {@code fromMe_remote_id_timestamp_enc:retry}.
+     */
     @Test
     @DisplayName("composite key includes fromMe, parentJid, id, timestamp, and enc segments")
     void compositeKeyShape() {
@@ -55,11 +69,17 @@ class MessageDedupTest {
                 "composite key follows fromMe_parent_id_ts_enc:retry");
     }
 
+    /**
+     * Verifies that the participant suffix is suppressed when it equals the
+     * parent JID (one-to-one chats).
+     *
+     * @implNote Mirrors {@code WAWebMsgKey.prototype.toString}, which
+     * suppresses the participant segment when the sender's JID equals the
+     * chat JID.
+     */
     @Test
     @DisplayName("composite key omits participant when it matches parentJid (one-to-one chats)")
     void compositeKeyOmitsParticipantWhenSameAsParent() {
-        // In 1:1 chats the sender's JID equals the chat JID; WAWebMsgKey.toString
-        // suppresses the participant suffix in that case.
         var key = msgKey(false, CHAT, "ID1", CHAT);
         var composite = PendingMessageKey.create(key, T, List.of());
 
@@ -67,6 +87,10 @@ class MessageDedupTest {
                 "participant suffix must collapse when participant == parentJid");
     }
 
+    /**
+     * Verifies that the participant suffix is preserved when distinct from
+     * the parent JID (group chats).
+     */
     @Test
     @DisplayName("composite key includes participant when distinct from parentJid (group chats)")
     void compositeKeyIncludesGroupParticipant() {
@@ -79,6 +103,10 @@ class MessageDedupTest {
                 "group messages must include the participant JID in the dedup key");
     }
 
+    /**
+     * Verifies that multiple enc variants on the same message appear as a
+     * comma-joined list, in input order.
+     */
     @Test
     @DisplayName("composite key reflects multiple enc variants, joined by commas in protocol order")
     void compositeKeyMultipleEncs() {
@@ -93,6 +121,10 @@ class MessageDedupTest {
                 "enc segments must follow the input order, joined by comma: " + composite);
     }
 
+    /**
+     * Verifies that the same logical id under different
+     * {@link MessageEncryptionType} variants produces distinct dedup keys.
+     */
     @Test
     @DisplayName("same id under different enc variants produces distinct dedup keys")
     void encryptionTypeChangesKey() {
@@ -103,6 +135,10 @@ class MessageDedupTest {
                 "PKMSG and MSG variants of the same logical id must dedup separately");
     }
 
+    /**
+     * Verifies that the same logical id with different retry counts
+     * produces distinct dedup keys.
+     */
     @Test
     @DisplayName("same id with different retry counts produces distinct dedup keys")
     void retryCountChangesKey() {
@@ -113,6 +149,11 @@ class MessageDedupTest {
                 "different retry counts of the same enc variant must dedup separately");
     }
 
+    /**
+     * Verifies that {@link MessageDedup#add(String)} returns an incrementing
+     * refcount and that {@link MessageDedup#isPending(String)} mirrors
+     * presence.
+     */
     @Test
     @DisplayName("add returns incrementing refcount; isPending mirrors presence")
     void addAndRefcount() {
@@ -124,27 +165,38 @@ class MessageDedupTest {
         assertEquals(1, dedup.size(), "size counts distinct keys, not the refcount sum");
     }
 
+    /**
+     * Verifies that {@link MessageDedup#remove(String)} decrements the
+     * refcount and evicts the entry when the count reaches zero.
+     */
     @Test
     @DisplayName("remove decrements refcount; key disappears at zero")
     void removeDecrements() {
         var dedup = new MessageDedup();
         dedup.add("KEY");
-        dedup.add("KEY"); // refcount=2
-        dedup.remove("KEY"); // refcount=1
+        dedup.add("KEY");
+        dedup.remove("KEY");
         assertTrue(dedup.isPending("KEY"));
-        dedup.remove("KEY"); // refcount=0 → evict
+        dedup.remove("KEY");
         assertFalse(dedup.isPending("KEY"), "refcount reaching zero must remove the entry");
         assertEquals(0, dedup.size());
     }
 
+    /**
+     * Verifies that removing an unknown key is a no-op.
+     */
     @Test
     @DisplayName("remove on unknown key is a no-op")
     void removeUnknownIsNoop() {
         var dedup = new MessageDedup();
-        dedup.remove("KEY"); // must not throw
+        dedup.remove("KEY");
         assertEquals(0, dedup.size());
     }
 
+    /**
+     * Verifies that {@link MessageDedup#maybeClear(int)} clears the cache
+     * only when the offline counter is exactly zero.
+     */
     @Test
     @DisplayName("maybeClear(0) drops all entries; maybeClear(>0) keeps them")
     void maybeClearOnlyOnZero() {
@@ -161,6 +213,10 @@ class MessageDedupTest {
         assertEquals(0, dedup.size(), "zero offline counter clears the cache in bulk");
     }
 
+    /**
+     * Verifies that {@link MessageDedup#clear()} unconditionally empties
+     * the cache.
+     */
     @Test
     @DisplayName("clear() unconditionally empties the cache")
     void clearForce() {
@@ -171,6 +227,11 @@ class MessageDedupTest {
         assertEquals(0, dedup.size());
     }
 
+    /**
+     * Verifies that the composite-overload of
+     * {@link MessageDedup#add(MessageKey, Instant, List)} round-trips with
+     * the matching {@link MessageDedup#isPending(MessageKey, Instant, List)}.
+     */
     @Test
     @DisplayName("add(MessageKey, Instant, encs) delegates to the composite key path")
     void compositeAddPath() {
@@ -182,6 +243,10 @@ class MessageDedupTest {
                 "isPending(key, ts, encs) must hit the entry added via add(key, ts, encs)");
     }
 
+    /**
+     * Verifies that every entry point throws {@link NullPointerException}
+     * on null input.
+     */
     @Test
     @DisplayName("null arguments throw NullPointerException across the API surface")
     void nullRejection() {
@@ -202,6 +267,17 @@ class MessageDedupTest {
                 () -> PendingMessageKey.create(msgKey(false, CHAT, "X", null), T, null));
     }
 
+    /**
+     * Builds a {@link MessageKey} configured with the given direction, chat
+     * JID, id, and optional participant.
+     *
+     * @param fromMe whether the parent message was authored by the local
+     *               user
+     * @param parent the chat JID
+     * @param id     the message id
+     * @param sender the participant JID, or {@code null} to leave unset
+     * @return the configured key
+     */
     private static MessageKey msgKey(boolean fromMe, Jid parent, String id, Jid sender) {
         var builder = new MessageKeyBuilder()
                 .fromMe(fromMe)
@@ -213,6 +289,14 @@ class MessageDedupTest {
         return builder.build();
     }
 
+    /**
+     * Builds a stub {@link MessageReceiveEncryptedPayload} carrying the
+     * given encryption type and retry count.
+     *
+     * @param type  the {@code <enc>} variant
+     * @param retry the retry count
+     * @return the stub payload
+     */
     private static MessageReceiveEncryptedPayload payload(MessageEncryptionType type, int retry) {
         return new MessageReceiveEncryptedPayload(type, null, new byte[]{0}, retry, false);
     }

@@ -14,32 +14,52 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <props/>} payload in
- * the canonical {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">}
+ * group-scoped AB-props bundle fetch.
+ *
+ * @apiNote
+ * Drives WA Web's
+ * {@code WASmaxAbPropsGetGroupExperimentConfigRPC.sendGetGroupExperimentConfigRPC},
+ * invoked by {@code WAWebGroupAbPropsSyncJob} when a group becomes
+ * active so the relay returns the per-group experiment overrides
+ * layered on top of the user-scoped bundle from
+ * {@link SmaxAbPropsGetExperimentConfigRequest}; Cobalt embedders
+ * dispatch one of these per group they want to sync.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsGetGroupExperimentConfigRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsBaseIQGetRequestMixin")
 public final class SmaxAbPropsGetGroupExperimentConfigRequest implements SmaxOperation.Request {
     /**
-     * The group JID whose experiment configuration is requested. Routed
-     * verbatim into the {@code <props group/>} attribute.
+     * The group JID whose experiment configuration is requested.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code <props group/>} attribute via
+     * the SMAX {@code GROUP_JID} wrapper; matches the
+     * {@code propsGroup} field {@code WAWebGroupAbPropsSyncJob} keys
+     * its sync state by.
      */
     private final Jid groupJid;
 
     /**
-     * The optional content hash echoed back to the relay so it can
-     * short-circuit the reply to a delta when the client's snapshot is
-     * already up to date.
+     * The optional content hash echoed back to the relay.
+     *
+     * @apiNote
+     * Mirrors the per-group cached hash; the relay short-circuits the
+     * reply to a delta when the supplied hash matches its current
+     * bundle for that group.
      */
     private final String propsHash;
 
     /**
-     * Constructs a request for the given group and hash.
+     * Constructs a conditional request for the given group.
      *
-     * @param groupJid  the target group JID. Never {@code null}
-     * @param propsHash the client's currently-cached props hash. May
-     *                  be {@code null} on the first fetch
+     * @apiNote
+     * Use this overload when the client already has a cached bundle
+     * for the group and wants the relay to short-circuit on a hash
+     * match.
+     *
+     * @param groupJid  the target group JID; never {@code null}
+     * @param propsHash the cached props hash; may be {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxAbPropsGetGroupExperimentConfigRequest(Jid groupJid, String propsHash) {
@@ -50,7 +70,11 @@ public final class SmaxAbPropsGetGroupExperimentConfigRequest implements SmaxOpe
     /**
      * Constructs an unconditional request for the given group.
      *
-     * @param groupJid the target group JID. Never {@code null}
+     * @apiNote
+     * Use this overload on the first fetch for a group, when no
+     * cached bundle exists.
+     *
+     * @param groupJid the target group JID; never {@code null}
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxAbPropsGetGroupExperimentConfigRequest(Jid groupJid) {
@@ -60,16 +84,19 @@ public final class SmaxAbPropsGetGroupExperimentConfigRequest implements SmaxOpe
     /**
      * Returns the target group JID.
      *
-     * @return the group JID. Never {@code null}
+     * @return the group JID; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the client's currently-cached props hash, when set.
+     * Returns the cached props hash, when set.
      *
-     * @return an {@link Optional} carrying the hash, or empty
+     * @apiNote
+     * Empty on the first fetch for the group.
+     *
+     * @return an {@link Optional} carrying the hash
      */
     public Optional<String> propsHash() {
         return Optional.ofNullable(propsHash);
@@ -77,6 +104,12 @@ public final class SmaxAbPropsGetGroupExperimentConfigRequest implements SmaxOpe
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     *
+     * @apiNote
+     * Returned unbuilt so the dispatch path can stamp a fresh IQ id
+     * before flushing; mirrors
+     * {@code WASmaxOutAbPropsGetGroupExperimentConfigRequest.makeGetGroupExperimentConfigRequest}
+     * composed with the IQ-get merge mixin.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <props/>} payload

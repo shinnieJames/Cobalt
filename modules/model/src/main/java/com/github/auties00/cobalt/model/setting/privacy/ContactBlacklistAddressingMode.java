@@ -10,9 +10,8 @@ package com.github.auties00.cobalt.model.setting.privacy;
  * WhatsApp ships two parallel addressing schemes for the entries:
  * the legacy phone-number form and the modern lid form that
  * decouples the privacy entry from the user's phone number. Callers
- * pick the desired addressing scheme through this enum and the same
- * choice is echoed back on the matching {@link ContactBlacklistResult}
- * variant.
+ * pick the desired addressing scheme through this enum when calling
+ * the per-category contact-blacklist refresh.
  */
 public enum ContactBlacklistAddressingMode {
     /**

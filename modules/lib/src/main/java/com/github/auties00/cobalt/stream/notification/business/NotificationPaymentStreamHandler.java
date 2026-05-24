@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
@@ -25,46 +27,71 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Handles incoming payment notification stanzas ({@code type="pay"}) by parsing
- * invite and transaction child nodes, updating the corresponding message's payment
- * metadata in the store, and sending protocol-level acknowledgements.
+ * Handles {@code type="pay"} notifications carrying payment invites and
+ * payment-transaction state changes.
  *
- * <p>When a transaction notification references a message not yet in the store, the
- * payment data is saved as an orphan payment notification for later resolution when
- * the message arrives via the message stream handler.
+ * @apiNote
+ * Dispatched by {@link NotificationBusinessDispatcher}. Each notification
+ * contains either an {@code <invite>} child (account-setup invite or a
+ * pre-payment prompt) or a {@code <transaction>} child (transaction
+ * lifecycle update for an already-sent payment request or transfer).
+ * Transactions whose referenced message has not yet arrived are
+ * recorded as orphan-payment entries on the store and reconciled when
+ * the message arrives via the chat-message stream handler.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code WAWebPaymentNotificationHandler.handlePaymentNotification}
+ * ternary: {@code invite != null ? handleInvite(invite) : transaction != null && handleTransaction(transaction)}.
+ * Invite takes priority over transaction; only one is processed per
+ * stanza.
  */
 @WhatsAppWebModule(moduleName = "WAWebPaymentNotificationHandler")
 @WhatsAppWebModule(moduleName = "WAWebPaymentNotificationParser")
 final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for payment notification handling diagnostics.
+     * Logger used for warnings about malformed stanzas and unsupported
+     * services (e.g. Novi payments).
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationPaymentStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client instance providing access to the store and socket for
-     * sending acknowledgement stanzas.
+     * The {@link WhatsAppClient} used for store reads, message lookups,
+     * and orphan-payment writes.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new payment notification stream handler with the given client.
-     * @param whatsapp the WhatsApp client instance
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification" type="pay"/>} stanza.
      */
-    NotificationPaymentStreamHandler(WhatsAppClient whatsapp) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with the shared client and ack sender.
+     *
+     * @apiNote
+     * Called once by {@link NotificationBusinessDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp  the {@link WhatsAppClient}
+     * @param ackSender the {@link AckSender}
+     */
+    NotificationPaymentStreamHandler(WhatsAppClient whatsapp, AckSender ackSender) {
         this.whatsapp = whatsapp;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles an incoming payment notification stanza by dispatching to the appropriate
-     * sub-handler based on whether it contains an invite or transaction child node,
-     * then sending an acknowledgement stanza back to the server.
+     * Dispatches to the invite or transaction branch and always sends
+     * the protocol-level ACK.
      *
-     * <p>Invite notifications take priority: if the stanza contains an {@code invite}
-     * child, the transaction child (if any) is not processed. This mirrors the WA Web
-     * ternary dispatch: {@code invite != null ? handleInvite(invite) : transaction != null && handleTransaction(transaction)}.
+     * @apiNote
+     * Invoked by {@link NotificationBusinessDispatcher}. Invite takes
+     * priority over transaction so a stanza carrying both children
+     * processes only the invite, matching WA Web's ternary dispatch.
      *
-     * @param node the incoming notification stanza node
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -73,7 +100,6 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
         }
 
         try {
-            // invite takes priority over transaction (if/else, not both)
             var invite = node.getChild("invite").orElse(null);
             if (invite != null) {
                 handlePaymentInvite(node, invite);
@@ -91,15 +117,28 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a payment invite notification by processing {@code account-set-up} invites.
+     * Materialises an account-setup invite as a local stub message in
+     * the inviter's chat and fires
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onNewMessage}
+     * for listeners.
      *
-     * <p>For the {@code "account-set-up"} type, materialises a local stub message
-     * representing the invite, attaches it to the inviter's chat (creating the chat
-     * if necessary), and dispatches an {@code onNewMessage} callback so listeners can
-     * surface it to the user. Other invite types are logged and otherwise ignored,
-     * matching WA Web which only processes {@code account-set-up} in this branch.
-     * @param node   the parent notification stanza node
-     * @param invite the invite child node
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebPaymentNotificationHandler._(invite)} when
+     * {@code invite.type === "account-set-up"}, which generates a
+     * {@code NotificationTemplate}/{@code PaymentInviteAccountSetUp}
+     * subtype stub message via
+     * {@code WAWebHandleSingleMsgWorkerCompatible.handleSingleMsg}.
+     * Other invite types are logged and otherwise ignored.
+     *
+     * @implNote
+     * This implementation uses {@link StubType#PAYMENT_ACTION_ACCOUNT_SETUP_REMINDER}
+     * for the stub type because that is Cobalt's nearest model
+     * equivalent to WA Web's
+     * {@code MsgSubtype.PaymentInviteAccountSetUp}.
+     *
+     * @param node   the parent {@code <notification>} stanza
+     * @param invite the {@code <invite>} child node
      */
     private void handlePaymentInvite(Node node, Node invite) {
         var type = invite.getAttributeAsString("type", null);
@@ -128,8 +167,6 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
                 ? Instant.ofEpochSecond(timestampAttr.getAsLong())
                 : Instant.now();
 
-        // {type: NOTIFICATION_TEMPLATE, kind: NotificationTemplate,
-        //  subtype: PaymentInviteAccountSetUp, templateParams: [from], ...}
         var info = new ChatMessageInfoBuilder()
                 .key(key)
                 .senderJid(from)
@@ -140,7 +177,6 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
                 .message(MessageContainer.empty())
                 .build();
 
-        //   chatId: from -> resolve or create the chat, append the message, bump unread
         var chat = whatsapp.store()
                 .findChatByJid(from)
                 .orElseGet(() -> whatsapp.store().addNewChat(from));
@@ -155,13 +191,25 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a payment transaction notification by looking up the referenced message,
-     * updating its payment metadata, and notifying listeners.
+     * Applies a transaction state change to the referenced message;
+     * records the data as an orphan payment when the message is not
+     * yet in the store.
      *
-     * <p>If the referenced message cannot be found in the store, the transaction data
-     * is saved as an orphan payment notification for later resolution when the message
-     * arrives.
-     * @param transaction the transaction child node from the notification stanza
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebPaymentNotificationHandler.m(transaction)} which
+     * resolves the message via
+     * {@code getMessageFromCollection} (in-memory) then
+     * {@code getMessageFromDb} (persistent) and falls back to
+     * {@code WAWebSchemaOrphanPaymentNotification.getTable().createOrReplace}
+     * when neither finds the message.
+     *
+     * @implNote
+     * This implementation skips Novi-service transactions
+     * ({@code service="NOVI"}) with a warning, matching WA Web's
+     * comment {@code "Payment notification from Novi not supported"}.
+     *
+     * @param transaction the {@code <transaction>} child node
      */
     private void handlePaymentTransaction(Node transaction) {
         var service = transaction.getAttributeAsString("service", null);
@@ -201,17 +249,28 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies payment transaction data to a resolved chat message, updating its
-     * payment info fields and notifying listeners.
+     * Writes transaction fields onto the resolved chat message,
+     * propagates the status onto the originating payment request when
+     * one exists, and fires
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onMessageStatus}
+     * for listeners.
      *
-     * <p>This method also handles the linked payment request message: if the resolved
-     * message has a {@code requestMessageKey}, the original request message is looked
-     * up and its payment status is updated, with {@code txnStatus} coerced through
-     * {@link #determinePaymentRequestFulfilledStatus(PaymentInfo.TxnStatus)} so that
-     * a successful payment transitions the request to its fulfilled state.
-     * @param chatMessageInfo the resolved chat message to update
-     * @param transaction     the transaction child node with payment data
-     * @param fromMe          whether the current user is the sender
+     * @apiNote
+     * The originating request message (when this transaction fulfils a
+     * payment request) is coerced through
+     * {@link #determinePaymentRequestFulfilledStatus(PaymentInfo.TxnStatus)}
+     * so a successful payment marks the request as fulfilled and any
+     * other status resets it to
+     * {@link PaymentInfo.TxnStatus#COLLECT_INIT}.
+     *
+     * @implNote
+     * This implementation removes the orphan-payment record by message
+     * id on success, mirroring WA Web's
+     * {@code WAWebSchemaOrphanPaymentNotification.getTable().bulkRemove([msgId])}.
+     *
+     * @param chatMessageInfo the resolved chat message
+     * @param transaction     the {@code <transaction>} child node
+     * @param fromMe          whether the local account is the sender
      */
     private void applyPaymentTransaction(ChatMessageInfo chatMessageInfo, Node transaction, boolean fromMe) {
         var receiver = transaction.getAttributeAsJid("receiver").orElse(null);
@@ -227,17 +286,13 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
         paymentInfo.setTxnStatus(mapTxnStatus(type, status, fromMe));
         chatMessageInfo.setPaymentInfo(paymentInfo);
 
-        // originating request message, propagate the resolved status onto it and
-        // coerce the txnStatus through determinePaymentRequestFulfilledStatus.
         paymentInfo.requestMessageKey().ifPresent(requestKey -> {
             var requestIdOpt = requestKey.id();
             var requestRemoteOpt = requestKey.parentJid();
             if (requestIdOpt.isEmpty() || requestRemoteOpt.isEmpty()) {
                 return;
             }
-            // ADAPTED: store().findMessageByKey / findMessageById return Optional<? extends MessageInfo>;
-            // materialise each branch via .map(Function.identity()) pattern to avoid wildcard capture issues in .or().
-            MessageInfo requestMessage = whatsapp.store().findMessageByKey(requestKey).orElse(null);
+            var requestMessage = whatsapp.store().findMessageByKey(requestKey).orElse(null);
             if (requestMessage == null) {
                 requestMessage = whatsapp.store().findMessageById(requestRemoteOpt.get(), requestIdOpt.get()).orElse(null);
             }
@@ -246,7 +301,6 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
             }
             var requestPaymentInfo = requestChat.paymentInfo().orElseGet(this::newPaymentInfo);
             requestPaymentInfo.setStatus(paymentInfo.status().orElse(PaymentInfo.Status.UNKNOWN_STATUS));
-            //   determinePaymentRequestFulfilledStatus(e.paymentTxnStatus)
             requestPaymentInfo.setTxnStatus(determinePaymentRequestFulfilledStatus(
                     paymentInfo.txnStatus().orElse(PaymentInfo.TxnStatus.UNKNOWN)));
             requestChat.setPaymentInfo(requestPaymentInfo);
@@ -259,27 +313,25 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
             Thread.startVirtualThread(() -> listener.onMessageStatus(whatsapp, chatMessageInfo));
         }
 
-        // successful processing (only the primary message's id is pushed to n).
         chatMessageInfo.key().id().ifPresent(whatsapp.store()::removeOrphanPaymentNotification);
     }
 
     /**
-     * Coerces a payment transaction status into its fulfilled variant for
-     * propagation onto the originating payment request message.
+     * Coerces a transaction status into the status that should propagate
+     * onto the originating payment-request message.
      *
-     * <p>When the transaction has completed successfully (i.e. the status is
-     * {@link PaymentInfo.TxnStatus#COMPLETED} or {@link PaymentInfo.TxnStatus#SUCCESS}),
-     * the value is returned unchanged so the request reflects the completion.
-     * Otherwise the request status is reset to
-     * {@link PaymentInfo.TxnStatus#COLLECT_INIT}, signalling that the request is
-     * still awaiting a fulfilling payment.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebPaymentStatusUtils.determinePaymentRequestFulfilledStatus}
+     * which returns the input status when it is
+     * {@link PaymentInfo.TxnStatus#COMPLETED} or
+     * {@link PaymentInfo.TxnStatus#SUCCESS} and
+     * {@link PaymentInfo.TxnStatus#COLLECT_INIT} otherwise.
      *
-     * @param txnStatus the transaction status from the fulfilling payment message
-     * @return the coerced status to apply to the originating request message
+     * @param txnStatus the transaction status from the fulfilling payment
+     * @return the coerced status to apply to the request
      */
     private PaymentInfo.TxnStatus determinePaymentRequestFulfilledStatus(PaymentInfo.TxnStatus txnStatus) {
-        // isPaymentRequestFulfilled(e) returns e===COMPLETED || e===SUCCESS;
-        // h returns isFulfilled ? e : COLLECT_INIT
         if (txnStatus == PaymentInfo.TxnStatus.COMPLETED || txnStatus == PaymentInfo.TxnStatus.SUCCESS) {
             return txnStatus;
         }
@@ -287,17 +339,20 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Looks up a payment message first from the in-memory store by exact message key,
-     * then falls back to a broader search by message ID within the chat.
+     * Locates the chat message that this transaction targets, first by
+     * exact key, then by id within the chat.
      *
-     * <p>This method combines the behavior of both {@code getMessageFromCollection}
-     * (in-memory lookup) and {@code getMessageFromDb} (persistent lookup) from WA Web,
-     * since Cobalt's store unifies both storage layers.
-     * @param remote      the remote JID (chat or group) that owns the message
-     * @param participant the sender JID within a group, or {@code null} for 1:1 chats
-     * @param messageId   the message identifier to look up
-     * @param fromMe      whether the message was sent by the current user
-     * @return the found {@link MessageInfo}, or {@code null} if not found
+     * @apiNote
+     * Mirrors WA Web's {@code k(key, alt)} (collection lookup) and
+     * {@code I(key, alt)} (DB lookup) functions which Cobalt collapses
+     * into one call because the Cobalt store unifies the two storage
+     * layers.
+     *
+     * @param remote      the chat/group JID
+     * @param participant the sender JID in a group, or {@code null} for one-to-one chats
+     * @param messageId   the message id to look up
+     * @param fromMe      whether the local account is the sender
+     * @return the matching {@link MessageInfo}, or {@code null} when not found
      */
     private MessageInfo findPaymentMessage(Jid remote, Jid participant, String messageId, boolean fromMe) {
         var direct = whatsapp.store()
@@ -318,9 +373,16 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Creates a new {@link PaymentInfo} with default unknown status values.
-     * @return a new {@link PaymentInfo} with {@link PaymentInfo.Status#UNKNOWN_STATUS}
-     *         and {@link PaymentInfo.TxnStatus#UNKNOWN}
+     * Returns a fresh {@link PaymentInfo} with {@code status =
+     * UNKNOWN_STATUS} and {@code txnStatus = UNKNOWN}.
+     *
+     * @apiNote
+     * Internal helper used by
+     * {@link #applyPaymentTransaction(ChatMessageInfo, Node, boolean)}
+     * when neither the resolved message nor the originating request
+     * message has an existing {@link PaymentInfo}.
+     *
+     * @return the new {@link PaymentInfo}
      */
     private PaymentInfo newPaymentInfo() {
         return new PaymentInfoBuilder()
@@ -330,12 +392,18 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Maps the resolved payment message status and transaction type to a high-level
-     * {@link PaymentInfo.Status} for user-facing display.
+     * Maps a resolved {@link PaymentMessageStatus} to the user-facing
+     * {@link PaymentInfo.Status}.
      *
-     * @param type   the raw transaction type string from the stanza
-     * @param status the raw status string from the stanza
-     * @param fromMe whether the current user is the sender
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebPaymentStatusUtils.getPaymentWebStatus(status, type)}
+     * which is the source of truth for the status-to-display-state
+     * mapping shown in the chat thread.
+     *
+     * @param type   the raw transaction-type string
+     * @param status the raw status string
+     * @param fromMe whether the local account is the sender
      * @return the mapped {@link PaymentInfo.Status}
      */
     private PaymentInfo.Status mapPaymentStatus(String type, String status, boolean fromMe) {
@@ -355,12 +423,18 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Maps the resolved payment message status to a fine-grained
-     * {@link PaymentInfo.TxnStatus} that tracks the internal transaction state machine.
+     * Maps a resolved {@link PaymentMessageStatus} to the fine-grained
+     * {@link PaymentInfo.TxnStatus} that tracks the internal state
+     * machine.
      *
-     * @param type   the raw transaction type string from the stanza
-     * @param status the raw status string from the stanza
-     * @param fromMe whether the current user is the sender
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebPaymentStatusUtils.getPaymentTxnWebStatus(status)}
+     * mapping table.
+     *
+     * @param type   the raw transaction-type string
+     * @param status the raw status string
+     * @param fromMe whether the local account is the sender
      * @return the mapped {@link PaymentInfo.TxnStatus}
      */
     private PaymentInfo.TxnStatus mapTxnStatus(String type, String status, boolean fromMe) {
@@ -397,16 +471,19 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves a raw transaction type string and status string into a fine-grained
-     * {@link PaymentMessageStatus} constant.
+     * Resolves a raw transaction-type and status pair into the
+     * fine-grained {@link PaymentMessageStatus} used by the two
+     * mapping functions above.
      *
-     * <p>The resolution uses the transaction type (combined with {@code fromMe}) to
-     * select the appropriate status mapping table, then matches the uppercased status
-     * string against the known server-reported values.
+     * @apiNote
+     * Mirrors WA Web's status-mapping switch inside
+     * {@code WAWebPaymentStatusUtils.getPaymentWebStatus} which uses
+     * the resolved transaction type as the outer key and the
+     * uppercased status string as the inner key.
      *
-     * @param type   the raw transaction type string from the stanza, or {@code null}
-     * @param status the raw status string from the stanza, or {@code null}
-     * @param fromMe whether the current user is the sender
+     * @param type   the raw transaction-type string, or {@code null}
+     * @param status the raw status string, or {@code null}
+     * @param fromMe whether the local account is the sender
      * @return the resolved {@link PaymentMessageStatus}
      */
     private PaymentMessageStatus paymentMessageStatus(String type, String status, boolean fromMe) {
@@ -483,16 +560,19 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the raw transaction type string from the stanza into a
-     * {@link PaymentMessageTransactionType} constant.
+     * Resolves the raw transaction-type string and {@code fromMe} flag
+     * into a {@link PaymentMessageTransactionType}.
      *
-     * <p>When the type string is {@code null} or unrecognized, the result defaults to
-     * {@link PaymentMessageTransactionType#TYPE_P2P_SENT} or
-     * {@link PaymentMessageTransactionType#TYPE_P2P_RCVD} based on the {@code fromMe}
-     * flag.
+     * @apiNote
+     * The fallback for {@code null}/unknown types is
+     * {@link PaymentMessageTransactionType#TYPE_P2P_SENT} when
+     * {@code fromMe} is {@code true} and
+     * {@link PaymentMessageTransactionType#TYPE_P2P_RCVD} otherwise,
+     * matching the defensive default WA Web's status mapper applies
+     * when the server omits the field.
      *
-     * @param type   the raw transaction type string, or {@code null}
-     * @param fromMe whether the current user is the sender
+     * @param type   the raw transaction-type string, or {@code null}
+     * @param fromMe whether the local account is the sender
      * @return the resolved {@link PaymentMessageTransactionType}
      */
     private PaymentMessageTransactionType paymentMessageTransactionType(String type, boolean fromMe) {
@@ -512,26 +592,16 @@ final class NotificationPaymentStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends an acknowledgement stanza for a payment notification back to the server.
+     * Sends the {@code <ack class="notification" type="pay"/>} stanza.
      *
-     * <p>The ACK stanza uses fixed {@code class="notification"} and {@code type="pay"}
-     * attributes as specified in the WA Web protocol, rather than reflecting the
-     * original stanza's attributes generically.
-     * @param node the notification stanza to acknowledge
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code E(success)} ack-builder inside
+     * {@code WAWebPaymentNotificationHandler.handlePaymentNotification}.
+     *
+     * @param node the original {@code <notification>} stanza
      */
     private void sendNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from").orElse(null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", stanzaFrom)
-                .attribute("type", "pay")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("pay").send();
     }
 }

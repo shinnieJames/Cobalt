@@ -6,7 +6,7 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
@@ -19,64 +19,79 @@ import java.util.LinkedHashMap;
 import java.util.Objects;
 
 /**
- * Builds the {@code <cstoken>} stanza child node carrying an HMAC-SHA-256 non-contact
- * token (NCT) for the recipient.
+ * Builds the optional {@code <cstoken>} child of an outgoing
+ * {@code <message>} stanza carrying the non-contact-token (NCT) HMAC tag.
  *
- * <p>The token is included only when the {@code wa_nct_token_send_enabled} AB prop is
- * enabled, the recipient is a regular user (not a bot or group), an NCT salt is available
- * in the store, and the chat has an {@code accountLid} for the recipient.
+ * @apiNote
+ * The NCT tag lets the server flag an outgoing message as sent to a
+ * non-contact recipient without revealing whom; it is keyed by the
+ * server-issued NCT salt and the recipient's account LID. The tag is
+ * emitted only when (a) the {@code wa_nct_token_send_enabled} AB prop is
+ * on, (b) the recipient is a regular user (not bot, not group, not
+ * broadcast), (c) the store holds an NCT salt, and (d) the chat carries an
+ * {@code accountLid} for the recipient. Composed by {@link ChatFanoutStanza}
+ * after the more authoritative {@code <tctoken>} fallback in
+ * {@link TcTokenStanza}.
  *
- * <p>The HMAC is computed as {@code HMAC-SHA-256(salt, accountLid.toString())} and cached
- * per recipient LID with a maximum of {@value #MAX_CACHE_SIZE} entries. The salt itself
- * is cached to avoid redundant decoding and the HMAC cache is cleared whenever the salt
- * changes.
- *
- * @see TcTokenStanza
- * @see ChatFanoutStanza
+ * @implNote
+ * This implementation caches up to {@value #MAX_CACHE_SIZE} HMAC results
+ * per salt: the salt is cached alongside its results and the cache is
+ * cleared whenever the salt changes. The cache is intentionally small;
+ * regenerating an HMAC-SHA-256 is cheap, but caching avoids the per-send
+ * cost in steady state.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 public final class CsTokenStanza {
     /**
-     * Logger for HMAC computation failures and missing data.
+     * The {@link System.Logger} for missing-salt and HMAC failures.
      */
     private static final System.Logger LOGGER = System.getLogger(CsTokenStanza.class.getName());
 
     /**
-     * Maximum number of cached HMAC results per salt.
+     * The maximum number of cached HMAC results per salt; matches WA Web's
+     * inline {@code T = 5} cap.
      */
     private static final int MAX_CACHE_SIZE = 5;
 
     /**
-     * The HMAC algorithm used for token computation.
+     * The HMAC algorithm name used for NCT token derivation.
      */
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     /**
-     * Store used to retrieve the NCT salt and the chat's account LID.
+     * The {@link WhatsAppStore} consulted for the NCT salt and the chat's
+     * {@code accountLid}.
      */
     private final WhatsAppStore store;
 
     /**
-     * AB props service used to gate token emission via
-     * {@code wa_nct_token_send_enabled}.
+     * The {@link ABPropsService} that gates token emission via the
+     * {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} prop.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Cached reference to the last salt bytes used, to avoid re-decoding.
+     * The salt bytes currently bound to {@link #hmacCache}; the cache is
+     * cleared whenever this reference moves.
      */
     private byte[] cachedSalt;
 
     /**
-     * Cached HMAC results keyed by the recipient LID string.
+     * The HMAC result cache keyed by the recipient LID's string form.
      */
     private final LinkedHashMap<String, byte[]> hmacCache;
 
     /**
-     * Creates a new CS token stanza builder.
+     * Constructs a builder bound to a store and AB-props service.
      *
-     * @param store          the WhatsApp store for salt and chat lookup
-     * @param abPropsService the AB props service for feature gating
+     * @apiNote
+     * Constructed once per client; the per-salt HMAC cache lives on this
+     * instance so reusing the builder across sends amortises the HMAC cost.
+     *
+     * @param store          the {@link WhatsAppStore} used to retrieve the
+     *                       NCT salt and chat account LID
+     * @param abPropsService the {@link ABPropsService} used to gate token
+     *                       emission
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "genCsTokenBody",
@@ -88,13 +103,28 @@ public final class CsTokenStanza {
     }
 
     /**
-     * Builds the {@code <cstoken>} node for the given chat recipient.
+     * Builds the {@code <cstoken>} node for the recipient chat, or
+     * {@code null} when emission is gated off.
      *
-     * <p>Returns {@code null} if the AB prop is disabled, the recipient is not a regular
-     * user, no NCT salt is available, or the chat has no {@code accountLid}.
+     * @apiNote
+     * Returns {@code null} when any of the four gates fails:
+     * {@link ABProp#WA_NCT_TOKEN_SEND_ENABLED} is disabled, the recipient
+     * is not a regular user, the store has no NCT salt, or the chat has no
+     * {@code accountLid}. The returned node carries the raw HMAC-SHA-256
+     * bytes as its content (no attributes).
      *
-     * @param chatJid the recipient chat JID
-     * @return the cstoken node, or {@code null} if not applicable
+     * @implNote
+     * This implementation computes
+     * {@code HMAC-SHA-256(salt, accountLid.toString())}; the WA Web
+     * counterpart in {@code WAWebSendMsgCreateFanoutStanza.genCsTokenBody}
+     * reads the salt from {@code WAWebUserPrefsIndexedDBStorage} under
+     * {@code "WAWebNctSalt"} after base64 decoding it once. Cobalt stores
+     * the decoded salt directly in the store so no decode step is needed
+     * inside {@code build}.
+     *
+     * @param chatJid the recipient chat {@link Jid}
+     * @return the {@code <cstoken>} {@link Node}, or {@code null} when not
+     *         applicable
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "genCsTokenBody",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -121,8 +151,6 @@ public final class CsTokenStanza {
         }
 
         try {
-            // The HMAC cache is keyed implicitly to the current salt; clearing it on
-            // salt change keeps cache hits valid without per-entry salt tags.
             if (cachedSalt == null || !Arrays.equals(cachedSalt, salt)) {
                 cachedSalt = salt;
                 hmacCache.clear();
@@ -162,11 +190,22 @@ public final class CsTokenStanza {
     }
 
     /**
-     * Returns whether the given JID represents a regular user, excluding bots, groups
-     * and broadcasts.
+     * Returns whether the given {@link Jid} identifies a regular human user
+     * eligible for NCT tagging.
      *
-     * @param jid the JID to check
-     * @return {@code true} if the JID is a regular user
+     * @apiNote
+     * Bots, groups, broadcasts, newsletters, and PSAs are all excluded.
+     * Hosted-business JIDs ({@code @hosted}, {@code @hosted.lid}) are also
+     * excluded because they do not satisfy
+     * {@link Jid#hasUserServer()}/{@link Jid#hasLidServer()}.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code Wid.prototype.isRegularUser}: a regular user is a user JID
+     * that is neither a PSA nor a bot.
+     *
+     * @param jid the {@link Jid} to test
+     * @return {@code true} when the JID is a regular user
      */
     @WhatsAppWebExport(moduleName = "WAWebWid", exports = "isRegularUser",
             adaptation = WhatsAppAdaptation.ADAPTED)

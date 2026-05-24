@@ -11,49 +11,68 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Transfers ownership of a newsletter to another user.
+ * Builds the MEX request that transfers newsletter ownership to another user.
  *
- * <p>Only the current owner of a newsletter may initiate an ownership change.
- * The target user must already be registered on WhatsApp. After the mutation
- * completes successfully the target user receives full owner privileges and
- * the original owner is demoted to an admin role.
+ * @apiNote
+ * Drives the "change newsletter owner" flow consumed by
+ * {@code WAWebNewsletterChangeOwnerJob}: only the current owner may dispatch
+ * the mutation, and the target user must be reachable as a user LID. On
+ * success the relay swaps the owner role onto the target user and demotes
+ * the previous owner to admin.
+ *
+ * @implNote
+ * This implementation expects the caller to have already converted the
+ * target user's Jid to its LID string; WA Web performs the conversion via
+ * {@code WAWebLidMigrationUtils.toUserLidOrThrow}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexChangeNewsletterOwnerJob")
 public final class ChangeNewsletterOwnerMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the {@code ChangeNewsletterOwner} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexChangeNewsletterOwnerJobMutation.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9546742745432473";
 
     /**
      * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this mutation.
+     * for this mutation.
+     *
+     * @apiNote
+     * Mirrors the export name exposed by
+     * {@code WAWebMexChangeNewsletterOwnerJob}.
      */
     public static final String OPERATION_NAME = "mexChangeNewsletterOwner";
 
     /**
-     * The identifier of the newsletter whose ownership is being transferred.
+     * The Jid string of the newsletter whose ownership is being transferred.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexChangeNewsletterOwnerJob", exports = "mexChangeNewsletterOwner",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final String newsletterId;
 
     /**
-     * The identifier of the user who will become the new owner.
+     * The user LID string of the recipient that will become the new owner.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexChangeNewsletterOwnerJob", exports = "mexChangeNewsletterOwner",
             adaptation = WhatsAppAdaptation.DIRECT)
     private final String userId;
 
     /**
-     * Creates a request that transfers ownership of the given newsletter to
-     * the given user.
+     * Constructs a request that transfers ownership of the given newsletter
+     * to the given user.
      *
-     * @param newsletterId the identifier of the newsletter whose owner is
-     *                     being changed
-     * @param userId       the identifier of the user who will become the new
-     *                     owner
+     * @apiNote
+     * The {@code userId} parameter must be the user LID string; WA Web's
+     * {@code WAWebLidMigrationUtils.toUserLidOrThrow} performs the
+     * conversion before invoking the underlying mutation.
+     *
+     * @param newsletterId the newsletter Jid whose owner is being changed
+     * @param userId       the user LID of the recipient that will become the
+     *                     new owner
      */
     @WhatsAppWebExport(moduleName = "WAWebMexChangeNewsletterOwnerJob", exports = "mexChangeNewsletterOwner",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -63,10 +82,10 @@ public final class ChangeNewsletterOwnerMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -74,10 +93,10 @@ public final class ChangeNewsletterOwnerMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -85,11 +104,21 @@ public final class ChangeNewsletterOwnerMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Builds the IQ stanza that dispatches this ownership-transfer mutation
-     * to the WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id, user_id}}} payload;
+     * either field is omitted when its backing string is {@code null} so the
+     * server-side schema never receives an explicit {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexChangeNewsletterOwnerJob", exports = "mexChangeNewsletterOwner",
             adaptation = WhatsAppAdaptation.ADAPTED)

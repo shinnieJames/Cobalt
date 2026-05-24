@@ -10,19 +10,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the two state-type child shapes
- * documented by
- * {@code WASmaxInChatstateStateTypes.parseStateTypes}.
+ * Sealed disjunction over the two inbound chat-state indicators: the peer
+ * is typing ({@link Composing}) or has stopped ({@link Paused}).
+ *
+ * @apiNote
+ * Cobalt's analogue of {@code WAHandleChatStateProtocol.parseChatStatus}
+ * derives a UI-facing {@code "composing"} / {@code "recording_audio"} /
+ * {@code "paused"} status from this disjunction: {@link Paused} maps to
+ * {@code "paused"}, {@link Composing} with empty {@link Composing#composingMedia()}
+ * maps to {@code "composing"}, and {@link Composing} with
+ * {@code composingMedia == "audio"} maps to {@code "recording_audio"}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInChatstateStateTypes")
 public sealed interface SmaxServerNotificationStateType permits SmaxServerNotificationStateType.Composing, SmaxServerNotificationStateType.Paused {
 
     /**
-     * Tries each {@link SmaxServerNotificationStateType} variant in WA Web declared
-     * order and returns the first that parses cleanly.
+     * Parses an inbound stanza into the first matching variant.
+     *
+     * @implNote
+     * This implementation mirrors {@code parseStateTypes}: it tries
+     * {@link Composing} first and falls back to {@link Paused}, returning
+     * the first successful parse.
      *
      * @param node the inbound {@code <chatstate/>} stanza
-     * @return an {@link Optional} carrying the parsed variant
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
      */
     @WhatsAppWebExport(moduleName = "WASmaxInChatstateStateTypes",
             exports = "parseStateTypes", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -36,22 +47,26 @@ public sealed interface SmaxServerNotificationStateType permits SmaxServerNotifi
     }
 
     /**
-     * The {@code Composing} state-type. The peer is currently
-     * typing.
+     * The variant indicating the peer is currently typing or recording
+     * audio.
+     *
+     * @apiNote
+     * The presence and value of {@link #composingMedia()} distinguishes
+     * text typing (empty) from voice-note recording ({@code "audio"}).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstateComposingMixin")
     final class Composing implements SmaxServerNotificationStateType {
         /**
-         * The optional literal {@code "audio"} {@code media}
-         * attribute.
+         * The optional {@code media} attribute on the {@code <composing>}
+         * child. Either {@code "audio"} for voice-note recording or
+         * {@code null} for plain text typing.
          */
         private final String composingMedia;
 
         /**
-         * Constructs a new {@code Composing} variant.
+         * Constructs a {@link Composing} variant.
          *
-         * @param composingMedia the optional {@code media}
-         *                       attribute; may be {@code null}
+         * @param composingMedia the optional {@code media} attribute; may be {@code null}
          */
         public Composing(String composingMedia) {
             this.composingMedia = composingMedia;
@@ -60,19 +75,25 @@ public sealed interface SmaxServerNotificationStateType permits SmaxServerNotifi
         /**
          * Returns the optional {@code media} attribute.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when the peer is typing text rather than
-         *         recording audio
+         * @return an {@link Optional} carrying {@code "audio"} when the peer
+         *         is recording a voice note, or empty when typing text
          */
         public Optional<String> composingMedia() {
             return Optional.ofNullable(composingMedia);
         }
 
         /**
-         * Tries to parse a {@link Composing} variant.
+         * Parses an inbound stanza into a {@link Composing} variant.
+         *
+         * @implNote
+         * This implementation mirrors {@code parseComposingMixin}: it
+         * asserts the {@code <chatstate>} tag, requires an inner
+         * {@code <composing>} child, and accepts only an absent
+         * {@code media} attribute or one whose value is the literal
+         * {@code "audio"}.
          *
          * @param node the inbound chatstate stanza
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInChatstateComposingMixin",
                 exports = "parseComposingMixin",
@@ -117,21 +138,30 @@ public sealed interface SmaxServerNotificationStateType permits SmaxServerNotifi
     }
 
     /**
-     * The {@code Paused} state-type. The peer has stopped typing.
+     * The variant indicating the peer has stopped typing.
+     *
+     * @apiNote
+     * Clears the typing dot from the chat UI; carries no payload of its
+     * own.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInChatstatePausedMixin")
     final class Paused implements SmaxServerNotificationStateType {
         /**
-         * Constructs a new {@code Paused} variant.
+         * Constructs the empty {@link Paused} variant.
          */
         public Paused() {
         }
 
         /**
-         * Tries to parse a {@link Paused} variant.
+         * Parses an inbound stanza into a {@link Paused} variant.
+         *
+         * @implNote
+         * This implementation mirrors {@code parsePausedMixin}: it asserts
+         * the {@code <chatstate>} tag and requires the inner
+         * {@code <paused>} child to be present.
          *
          * @param node the inbound chatstate stanza
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInChatstatePausedMixin",
                 exports = "parsePausedMixin",

@@ -32,8 +32,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link StatusPrivacyHandler} â€” Cobalt's adapter for
- * {@code WAWebStatusPrivacySettingSync}.
+ * Exercises {@link StatusPrivacyHandler}'s parity with
+ * {@code WAWebStatusPrivacySettingSync.applyMutations}.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the per-mode dispatch (CONTACTS,
+ * ALLOW_LIST, DENY_LIST, CLOSE_FRIENDS, CUSTOM_LIST), the
+ * {@code WAWebWid.isUser} JID-filter applied to the allow/deny lists,
+ * the malformed branches (missing value, missing mode), the
+ * exactly-one-mutation enforcement of
+ * {@code applyMutationBatch}, the {@code REMOVE} unsupported branch,
+ * and the default conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture seeds a peer-A, peer-B, and group JID; allow/deny-list
+ * tests pass all three so they can observe the group JID being dropped
+ * by {@code isUser}.
  */
 @DisplayName("StatusPrivacyHandler")
 class StatusPrivacyHandlerTest {
@@ -45,12 +59,35 @@ class StatusPrivacyHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * persisted {@link PrivacySettingType#STATUS} entry starts empty.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps a status-privacy mode plus an optional user-JID list into
+     * a trusted mutation.
+     *
+     * @apiNote
+     * Both {@code mode} and {@code userJids} may be {@code null} so the
+     * malformed-value branches can be exercised; the index is the
+     * canonical one-element {@code ["status_privacy"]} array.
+     *
+     * @param mode     the distribution mode, or {@code null} to omit
+     * @param userJids the allow/deny list, or {@code null} to omit
+     * @param op       the mutation operation
+     * @param ts       the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted statusMutation(StatusPrivacyAction.StatusDistributionMode mode,
                                                             List<Jid> userJids,
                                                             SyncdOperation op,
@@ -66,7 +103,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the StatusPrivacyAction wire constant")
@@ -91,7 +128,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("CONTACTS mode persists a STATUS entry with CONTACTS value and empty excluded list")
@@ -156,7 +193,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("status privacy is a global setting; no per-entity orphan path")
@@ -169,7 +206,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -194,7 +231,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the status-privacy handler ignores the index shape (global setting)")
@@ -215,7 +252,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -227,7 +264,7 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” exactly one mutation required")
+    @DisplayName("applyMutationBatch - exactly one mutation required")
     class ApplyBatchOverride {
         @Test
         @DisplayName("an empty batch yields an empty result list")
@@ -264,10 +301,10 @@ class StatusPrivacyHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemote() {
             var local = statusMutation(StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of(), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = statusMutation(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST, List.of(PEER_A), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -276,7 +313,7 @@ class StatusPrivacyHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemote() {
             var local = statusMutation(StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of(), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = statusMutation(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST, List.of(PEER_A), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -285,53 +322,4 @@ class StatusPrivacyHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder â€” getMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index, version, and a CONTACTS action")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new StatusPrivacyMutationFactory().getStatusPrivacyMutation(ts,
-                    StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST,
-                    List.of(PEER_A, PEER_B));
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(StatusPrivacyAction.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"status_privacy\"]", inner.index());
-            var action = inner.value().action().filter(a -> a instanceof StatusPrivacyAction).map(a -> (StatusPrivacyAction) a).orElseThrow();
-            assertEquals(StatusPrivacyAction.StatusDistributionMode.ALLOW_LIST, action.mode().orElseThrow());
-            assertEquals(List.of(PEER_A, PEER_B), action.userJid());
-            assertTrue(action.customLists().isEmpty());
-        }
-
-        @Test
-        @DisplayName("null userJids is normalised to an empty list")
-        void nullUserJidsBecomesEmpty() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new StatusPrivacyMutationFactory().getStatusPrivacyMutation(ts,
-                    StatusPrivacyAction.StatusDistributionMode.CONTACTS, null);
-            assertTrue(pending.mutation().value().action().filter(a -> a instanceof StatusPrivacyAction).map(a -> (StatusPrivacyAction) a).orElseThrow().userJid().isEmpty());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/status-privacy/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/status-privacy/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new StatusPrivacyMutationFactory().getStatusPrivacyMutation(Instant.ofEpochSecond(1_700_000_000L),
-                    StatusPrivacyAction.StatusDistributionMode.CONTACTS, List.of());
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

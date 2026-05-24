@@ -6,8 +6,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <content/>} projection. Banner copy plus locale and
- * optional localised parallels.
+ * The {@code <content/>} child of the CTWA banner-suggestion {@code <banner/>},
+ * carrying the banner copy (locale plus heading, body, highlight) and the
+ * three optional localised parallels.
+ *
+ * @apiNote
+ * Drives the headline, body, and highlight text rendered by the WhatsApp
+ * Business "suggested banner" panel. WA Web's
+ * {@code WAWebCTWAParseSuggestion.parseCTWASuggestion} forwards
+ * {@link #heading()}, {@link #body()}, {@link #highlight()}, and
+ * {@link #locale()} straight to the banner-view value object; the three
+ * {@code localised_*} parallels are passed to translation telemetry by
+ * downstream consumers.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionContent {
@@ -17,50 +27,51 @@ public final class SmaxBannerSuggestionContent {
     private final String locale;
 
     /**
-     * The mandatory {@code <heading/>} element-content.
+     * The text content of the mandatory {@code <heading/>} child.
      */
     private final String heading;
 
     /**
-     * The mandatory {@code <body/>} element-content.
+     * The text content of the mandatory {@code <body/>} child.
      */
     private final String body;
 
     /**
-     * The mandatory {@code <highlight/>} element-content.
+     * The text content of the mandatory {@code <highlight/>} child.
      */
     private final String highlight;
 
     /**
-     * The optional {@code <localised_heading/>} projection.
+     * The optional {@code <localised_heading/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedHeading;
 
     /**
-     * The optional {@code <localised_body/>} projection.
+     * The optional {@code <localised_body/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedBody;
 
     /**
-     * The optional {@code <localised_highlight/>} projection.
+     * The optional {@code <localised_highlight/>} parallel.
      */
     private final SmaxBannerSuggestionLocalisedString localisedHighlight;
 
     /**
-     * Constructs a new content projection.
+     * Constructs a projection from already-validated wire values.
      *
-     * @param locale             the locale; never {@code null}
-     * @param heading            the heading; never {@code null}
-     * @param body               the body; never {@code null}
-     * @param highlight          the highlight; never {@code null}
-     * @param localisedHeading   the optional localised heading; may
-     *                           be {@code null}
-     * @param localisedBody      the optional localised body; may be
-     *                           {@code null}
-     * @param localisedHighlight the optional localised highlight;
-     *                           may be {@code null}
-     * @throws NullPointerException if any of the four mandatory
-     *                              arguments is {@code null}
+     * @apiNote
+     * Cobalt callers normally obtain a projection by parsing a node via
+     * {@link #of(Node)}; this constructor is exposed for tests and for
+     * hand-built fixtures.
+     *
+     * @param locale             the locale identifier; never {@code null}
+     * @param heading            the heading copy; never {@code null}
+     * @param body               the body copy; never {@code null}
+     * @param highlight          the highlight copy; never {@code null}
+     * @param localisedHeading   the optional {@code <localised_heading/>} parallel; may be {@code null}
+     * @param localisedBody      the optional {@code <localised_body/>} parallel; may be {@code null}
+     * @param localisedHighlight the optional {@code <localised_highlight/>} parallel; may be {@code null}
+     * @throws NullPointerException if any of the four mandatory arguments is {@code null}
      */
     public SmaxBannerSuggestionContent(String locale, String heading, String body, String highlight,
                    SmaxBannerSuggestionLocalisedString localisedHeading, SmaxBannerSuggestionLocalisedString localisedBody,
@@ -75,7 +86,12 @@ public final class SmaxBannerSuggestionContent {
     }
 
     /**
-     * Returns the locale.
+     * Returns the locale identifier.
+     *
+     * @apiNote
+     * Forwarded to the banner-view component as the {@code bannerLocale}
+     * field; downstream CTWA understand-banner telemetry compares it to
+     * the client locale to flag translation mismatches.
      *
      * @return the locale; never {@code null}
      */
@@ -84,65 +100,104 @@ public final class SmaxBannerSuggestionContent {
     }
 
     /**
-     * Returns the heading.
+     * Returns the heading copy.
      *
-     * @return the heading; never {@code null}
+     * @apiNote
+     * Rendered as the bold heading line of the banner panel.
+     *
+     * @return the heading text; never {@code null}
      */
     public String heading() {
         return heading;
     }
 
     /**
-     * Returns the body.
+     * Returns the body copy.
      *
-     * @return the body; never {@code null}
+     * @apiNote
+     * Rendered as the main paragraph below the heading.
+     *
+     * @return the body text; never {@code null}
      */
     public String body() {
         return body;
     }
 
     /**
-     * Returns the highlight.
+     * Returns the highlight copy.
      *
-     * @return the highlight; never {@code null}
+     * @apiNote
+     * Rendered as the accented call-to-action snippet inside the body.
+     *
+     * @return the highlight text; never {@code null}
      */
     public String highlight() {
         return highlight;
     }
 
     /**
-     * Returns the optional localised heading.
+     * Returns the optional {@code <localised_heading/>} parallel.
      *
-     * @return an {@link Optional} carrying the projection, or empty
+     * @apiNote
+     * Carries the heading copy with full
+     * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}
+     * (translation uid plus parameters). Empty when the relay omitted
+     * the parallel.
+     *
+     * @return an {@link Optional} carrying the parallel, or empty
      */
     public Optional<SmaxBannerSuggestionLocalisedString> localisedHeading() {
         return Optional.ofNullable(localisedHeading);
     }
 
     /**
-     * Returns the optional localised body.
+     * Returns the optional {@code <localised_body/>} parallel.
      *
-     * @return an {@link Optional} carrying the projection, or empty
+     * @apiNote
+     * Carries the body copy with full
+     * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}.
+     * Empty when the relay omitted the parallel.
+     *
+     * @return an {@link Optional} carrying the parallel, or empty
      */
     public Optional<SmaxBannerSuggestionLocalisedString> localisedBody() {
         return Optional.ofNullable(localisedBody);
     }
 
     /**
-     * Returns the optional localised highlight.
+     * Returns the optional {@code <localised_highlight/>} parallel.
      *
-     * @return an {@link Optional} carrying the projection, or empty
+     * @apiNote
+     * Carries the highlight copy with full
+     * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}.
+     * Empty when the relay omitted the parallel.
+     *
+     * @return an {@link Optional} carrying the parallel, or empty
      */
     public Optional<SmaxBannerSuggestionLocalisedString> localisedHighlight() {
         return Optional.ofNullable(localisedHighlight);
     }
 
     /**
-     * Tries to parse the projection from the given node.
+     * Parses the projection from a {@code <content/>} node.
      *
-     * @param node the {@code <content/>} node
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the node does not match the documented schema
+     * @apiNote
+     * Returns empty when the node tag is wrong, when any mandatory copy
+     * element ({@code locale}, {@code <heading>}, {@code <body>},
+     * {@code <highlight>}) is missing or empty-content, or when an
+     * optional {@code <localised_*>} child is present but fails parsing.
+     *
+     * @implNote
+     * This implementation walks the children in WA Web's documented
+     * order; each {@code <localised_*>} parallel is delegated to
+     * {@link SmaxBannerSuggestionLocalisedString#of(Node, String)} with
+     * the matching expected tag so a mis-shaped parallel aborts the
+     * whole content parse (matching the WA Web error propagation).
+     *
+     * @param node the candidate {@code <content/>} node; never {@code null}
+     * @return an {@link Optional} carrying the projection, or empty when
+     *         parsing fails at any step
+     * @throws NullPointerException if {@code node} is {@code null}
      */
     public static Optional<SmaxBannerSuggestionContent> of(Node node) {
         Objects.requireNonNull(node, "node cannot be null");
@@ -208,6 +263,15 @@ public final class SmaxBannerSuggestionContent {
                 localisedHeading, localisedBody, localisedHighlight));
     }
 
+    /**
+     * Compares this projection to {@code obj} for structural equality on
+     * all seven slots.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionContent}
+     *         with matching {@link #locale()}, mandatory copy fields,
+     *         and the three localised parallels
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -226,12 +290,22 @@ public final class SmaxBannerSuggestionContent {
                 && Objects.equals(this.localisedHighlight, that.localisedHighlight);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash of all seven slots
+     */
     @Override
     public int hashCode() {
         return Objects.hash(locale, heading, body, highlight,
                 localisedHeading, localisedBody, localisedHighlight);
     }
 
+    /**
+     * Returns a debug-friendly rendering naming all seven slots.
+     *
+     * @return a record-style string with the seven slot values
+     */
     @Override
     public String toString() {
         return "SmaxBannerSuggestionContent[locale=" + locale

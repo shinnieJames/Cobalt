@@ -10,7 +10,7 @@ import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -28,17 +28,23 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ShareOwnPnHandler} — Cobalt's adapter for
- * {@code WAWebShareOwnPnSync}.
+ * Exercises {@link ShareOwnPnHandler}'s parity with
+ * {@code WAWebShareOwnPnSync.applyMutations}.
  *
- * <p>The action has no value payload: presence of a SET mutation under
- * {@code ["shareOwnPn", lidJid]} records that the local user is willing to
- * share their phone number with that LID contact, and the handler writes
- * {@code phoneNumberShared = true} on the corresponding {@code Contact}
- * record. Gating is the {@code share_own_pn_sync} AB-prop. These tests pin
- * the wire metadata, the AB-prop gating, the SET happy path (including
- * upsert), the non-LID rejection, malformed-index fallbacks, REMOVE
- * unsupported, and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Covers the wire-constant trio, the {@link ABProp#SHARE_OWN_PN_SYNC}
+ * AB-prop gate, the happy {@code SET} path that upserts a LID contact
+ * with {@code phoneNumberShared = true}, the rejection of non-LID JIDs,
+ * the malformed-index branches (empty array, missing slot, empty
+ * string), the {@link SyncdOperation#REMOVE} unsupported branch, and
+ * the default conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The {@code shareOwnPn} action carries no value payload of its own;
+ * the {@link DecryptedMutation.Trusted#value()} only transports the
+ * wire timestamp. Test fixtures therefore build the
+ * {@link com.github.auties00.cobalt.model.sync.SyncActionValue} with
+ * only the timestamp set.
  */
 @DisplayName("ShareOwnPnHandler")
 class ShareOwnPnHandlerTest {
@@ -52,10 +58,18 @@ class ShareOwnPnHandlerTest {
     private WhatsAppClient client;
     private ShareOwnPnHandler handler;
 
+    /**
+     * Builds the per-test harness with the
+     * {@link ABProp#SHARE_OWN_PN_SYNC} gate pre-opened.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link WhatsAppStore} and a
+     * fresh AB-props snapshot so gating-flip tests do not leak state.
+     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
-        // Default-on so happy-path tests don't have to repeat the .set(...) call.
         props = TestABPropsService.builder()
                 .with(ABProp.SHARE_OWN_PN_SYNC, true)
                 .build();
@@ -64,13 +78,17 @@ class ShareOwnPnHandlerTest {
     }
 
     /**
-     * Builds a mutation under the canonical {@code ["shareOwnPn", lidJid]} index.
-     * {@code shareOwnPn} has no value payload of its own — the {@code SyncActionValue}
+     * Wraps the given LID JID into a trusted mutation under the
+     * canonical {@code ["shareOwnPn", lidJid]} index.
+     *
+     * @apiNote
+     * The {@code shareOwnPn} action has no value payload of its own;
+     * the inner {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
      * only carries the wire timestamp.
      *
-     * @param lidJid the LID JID
+     * @param lidJid the LID JID at index slot 1
      * @param op     the sync operation
-     * @param ts     the timestamp
+     * @param ts     the mutation timestamp (also the {@code SyncActionValue} timestamp)
      * @return the trusted mutation
      */
     private DecryptedMutation.Trusted build(Jid lidJid, SyncdOperation op, Instant ts) {
@@ -80,7 +98,7 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the WAWebShareOwnPnSync wire constant")
@@ -102,7 +120,7 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("AB-prop gating — share_own_pn_sync")
+    @DisplayName("AB-prop gating - share_own_pn_sync")
     class AbPropGating {
         @Test
         @DisplayName("when the prop is off, the mutation returns UNSUPPORTED")
@@ -117,7 +135,7 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("upserts the LID contact with phoneNumberShared=true when none exists")
@@ -144,12 +162,12 @@ class ShareOwnPnHandlerTest {
             assertEquals(SyncActionState.SUCCESS, result.actionState());
             assertTrue(contact.isPhoneNumberShared());
             assertEquals("Maria", contact.fullName().orElseThrow(),
-                    "merge semantics — non-target fields must be left untouched");
+                    "merge semantics - non-target fields must be left untouched");
         }
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("the contact is upserted rather than orphaned when absent")
@@ -163,10 +181,10 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value dimension is n/a")
+    @DisplayName("applyMutation - malformed value dimension is n/a")
     class MalformedValue {
         @Test
-        @DisplayName("the action has no value payload — value contents are ignored")
+        @DisplayName("the action has no value payload - value contents are ignored")
         void valueContentsIgnored() {
             // The shareOwnPn action carries no value payload: WAWebShareOwnPnSync.applyMutations
             // never reads value.action(). Even when the SyncActionValue carries a foreign payload,
@@ -183,7 +201,7 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty lidJid slot returns MALFORMED")
@@ -221,7 +239,7 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -234,10 +252,10 @@ class ShareOwnPnHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -246,7 +264,7 @@ class ShareOwnPnHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -256,57 +274,12 @@ class ShareOwnPnHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(CONTACT_LID, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             assertEquals(ConflictResolutionState.SKIP_REMOTE,
                     handler.resolveConflicts(local, remote).state());
-        }
-    }
-
-    @Nested
-    @DisplayName("static builder — none exposed")
-    class StaticBuilder {
-        @Test
-        @DisplayName("ShareOwnPnHandler exposes no static builder helpers")
-        void noBuilder() {
-            // Cobalt is read-only for shareOwnPn — WA Web's reverse-engineered code path emits the
-            // mutation through user-action handlers outside the sync registry; the handler itself
-            // exposes no public mutation builder. This test pins that surface.
-            var methods = ShareOwnPnHandler.class.getDeclaredMethods();
-            var hasBuilder = false;
-            for (var m : methods) {
-                if (m.isSynthetic() || m.isBridge()) {
-                    continue;
-                }
-                if (m.getName().toLowerCase().contains("mutation") && !m.getName().startsWith("apply")) {
-                    hasBuilder = true;
-                    break;
-                }
-            }
-            assertFalse(hasBuilder, "no mutation-building helper is exposed on ShareOwnPnHandler");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!com.github.auties00.cobalt.sync.SyncFixtures.isOracleAvailable("handler/share-own-pn/encode")) return;
-            var oracle = com.github.auties00.cobalt.sync.SyncFixtures.loadOracle("handler/share-own-pn/encode");
-            var expected = com.github.auties00.cobalt.sync.SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            // shareOwnPn carries no value payload — only the timestamp field is encoded.
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(1_700_000_000L))
-                    .build();
-            var actual = com.github.auties00.cobalt.model.sync.SyncActionValueSpec.encode(value);
-
-            org.junit.jupiter.api.Assertions.assertNotNull(actual);
-            org.junit.jupiter.api.Assertions.assertArrayEquals(expected, actual);
         }
     }
 

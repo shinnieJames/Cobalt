@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.wam.processor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.ForwardingJavaFileManager;
 import javax.tools.JavaCompiler;
@@ -12,9 +13,14 @@ import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FilterOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Reader;
+import java.io.StringReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -234,7 +240,7 @@ class WamImplGeneratorTest {
         var compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "system Java compiler must be available; ToolProvider returned null");
 
-        var diagnostics = new ArrayList<javax.tools.Diagnostic<? extends JavaFileObject>>();
+        var diagnostics = new ArrayList<Diagnostic<? extends JavaFileObject>>();
         var standardFileManager = compiler.getStandardFileManager(diagnostics::add, null, StandardCharsets.UTF_8);
         try (var captured = new CapturingFileManager(standardFileManager)) {
             var sources = List.of(
@@ -255,7 +261,7 @@ class WamImplGeneratorTest {
             if (!success) {
                 var errors = new StringBuilder("compilation failed:\n");
                 for (var d : diagnostics) {
-                    if (d.getKind() == javax.tools.Diagnostic.Kind.ERROR) {
+                    if (d.getKind() == Diagnostic.Kind.ERROR) {
                         errors.append("  ").append(d.getMessage(null)).append("\n");
                     }
                 }
@@ -282,13 +288,13 @@ class WamImplGeneratorTest {
             }
 
             @Override
-            public java.io.InputStream openInputStream() {
-                return new java.io.ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8));
+            public InputStream openInputStream() {
+                return new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8));
             }
 
             @Override
-            public java.io.Reader openReader(boolean ignoreEncodingErrors) {
-                return new java.io.StringReader(source);
+            public Reader openReader(boolean ignoreEncodingErrors) {
+                return new StringReader(source);
             }
         };
     }
@@ -369,7 +375,7 @@ class WamImplGeneratorTest {
 
             @Override
             public OutputStream openOutputStream() {
-                return new java.io.FilterOutputStream(sink) {
+                return new FilterOutputStream(sink) {
                     @Override
                     public void close() throws IOException {
                         out.close();
@@ -384,13 +390,13 @@ class WamImplGeneratorTest {
             }
 
             @Override
-            public java.io.InputStream openInputStream() {
-                return new java.io.ByteArrayInputStream(sink.toByteArray());
+            public InputStream openInputStream() {
+                return new ByteArrayInputStream(sink.toByteArray());
             }
 
             @Override
-            public java.io.Reader openReader(boolean ignoreEncodingErrors) {
-                return new java.io.StringReader(sink.toString(StandardCharsets.UTF_8));
+            public Reader openReader(boolean ignoreEncodingErrors) {
+                return new StringReader(sink.toString(StandardCharsets.UTF_8));
             }
         }
 

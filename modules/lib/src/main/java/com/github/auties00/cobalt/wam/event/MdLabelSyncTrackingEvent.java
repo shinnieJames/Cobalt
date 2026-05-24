@@ -35,6 +35,9 @@ public interface MdLabelSyncTrackingEvent extends WamEventSpec {
     @WamProperty(index = 6, type = WamType.BOOLEAN)
     Optional<Boolean> labelSyncIsLabeled();
 
+    @WamProperty(index = 10, type = WamType.INTEGER)
+    OptionalInt labelSyncPredefinedId();
+
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<LabelSyncResultType> labelSyncResult();
 

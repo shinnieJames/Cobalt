@@ -8,61 +8,55 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Applies {@code notificationActivitySetting} mutations decoded from app state sync.
+ * Applies the {@code notificationActivitySetting} app-state action that
+ * carries the user's per-account notification activity preference.
  *
- * <p>Handles the {@code SyncActionValue.NotificationActivitySettingAction} sync
- * action in the {@link SyncPatchType#REGULAR} collection. A mutation of this
- * type carries the user's per-account notification activity preference, encoded
- * as a {@link NotificationActivitySettingAction.NotificationActivitySetting}
- * enum value: {@code DEFAULT_ALL_MESSAGES}, {@code ALL_MESSAGES},
- * {@code HIGHLIGHTS} or {@code DEFAULT_HIGHLIGHTS}. The setting controls which
- * incoming messages should produce a system notification on the paired devices.
+ * @apiNote
+ * Persists one of
+ * {@link NotificationActivitySettingAction.NotificationActivitySetting}'s
+ * four enum values
+ * ({@code DEFAULT_ALL_MESSAGES}, {@code ALL_MESSAGES},
+ * {@code HIGHLIGHTS}, {@code DEFAULT_HIGHLIGHTS}) on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+ * notification activity preference fans out across linked devices.
+ * Only {@link SyncdOperation#SET} is accepted; any other operation is
+ * reported as {@link MutationApplicationResult#unsupported()} and a
+ * missing or wrong-typed value as
+ * {@link MutationApplicationResult#malformed()}.
  *
- * <h2>Forward-looking handler — no current WA Web counterpart</h2>
- *
- * <p>This handler has <b>no concrete WA Web sync module</b>. WA Web defines
- * the {@code NotificationActivitySettingAction} protobuf schema (action index
- * {@code 60}, action name {@code "notificationActivitySetting"}, collection
- * {@code REGULAR}, version {@code 1}) inside {@code WAWebProtobufSyncAction.pb},
- * but it never registers a {@code WAWebNotificationActivitySettingSync} module
- * in {@code WAWebCollectionHandlerActions.ActionHandlers}. As a result, when
- * such a mutation reaches WA Web, {@code WAWebSyncdGetActionHandler.getActionHandler}
- * returns {@code undefined} and the mutation is dropped by the upstream
- * dispatcher as unsupported.
- *
- * <p>Cobalt anticipates a future WA Web release that adds the missing handler
- * by implementing the obvious shape derived from the protobuf metadata:
- * <ul>
- *   <li>{@code SET}-only operation,</li>
- *   <li>routed via {@link NotificationActivitySettingAction#ACTION_NAME},</li>
- *   <li>persisted to {@link com.github.auties00.cobalt.store.WhatsAppStore#setNotificationActivitySetting},</li>
- *   <li>stored in {@link SyncPatchType#REGULAR} at version
- *       {@link NotificationActivitySettingAction#ACTION_VERSION}.</li>
- * </ul>
- *
- * <p>The metadata mirrors {@code WAWebProtobufSyncAction.pb}'s
- * {@code getMutationProps$CollectionName} branch
- * {@code e === c.NOTIFICATION_ACTIVITY_SETTING_ACTION ? u.REGULAR}, so when WA
- * Web ships the real {@code WAWebNotificationActivitySettingSync} this file
- * should already be wire-compatible.
+ * @implNote
+ * This implementation has no WA Web counterpart: the
+ * {@code SyncActionValue.NotificationActivitySettingAction} protobuf
+ * (action index 60, action name {@code "notificationActivitySetting"})
+ * is declared in {@code WAWebProtobufSyncAction.pb} but no
+ * {@code WAWebNotificationActivitySettingSync} module ships, and the
+ * action is absent from
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
+ * silently drops any incoming mutation. The handler exists in Cobalt
+ * as a forward-looking implementation. The {@link SyncPatchType#REGULAR}
+ * collection is taken directly from the inline router in
+ * {@code WAWebProtobufSyncAction.pb}; the version and apply path are
+ * inferred from sibling settings handlers.
  */
 public final class NotificationActivitySettingHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates a new {@code NotificationActivitySettingHandler}.
+     * Constructs the notification activity setting sync handler.
      *
-     * <p>The constructor is private because callers should always go through
-     * {@link #INSTANCE}, matching the WA Web module-level singleton pattern
-     * used by other sync handlers.
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; the handler holds no
+     * AB-prop / store / WAM dependency.
      */
     public NotificationActivitySettingHandler() {
 
     }
 
     /**
-     * Returns the action name this handler processes.
-     * @return the constant {@link NotificationActivitySettingAction#ACTION_NAME},
-     *         always {@code "notificationActivitySetting"}
+     * {@inheritDoc}
      */
     @Override
     public String actionName() {
@@ -70,14 +64,13 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
     }
 
     /**
-     * Returns the sync collection this handler's action belongs to.
+     * {@inheritDoc}
      *
-     * <p>Per {@code WAWebProtobufSyncAction.pb} the
-     * {@code getMutationProps$CollectionName} resolver branches on
-     * {@code e === c.NOTIFICATION_ACTIVITY_SETTING_ACTION} and returns
-     * {@code u.REGULAR}, so the mutation is stored in the regular-priority
-     * sync collection.
-     * @return {@link SyncPatchType#REGULAR}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR} as
+     * declared by the inline router in
+     * {@code WAWebProtobufSyncAction.pb}
+     * ({@code e === c.NOTIFICATION_ACTIVITY_SETTING_ACTION ? u.REGULAR}).
      */
     @Override
     public SyncPatchType collectionName() {
@@ -85,16 +78,14 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
     }
 
     /**
-     * Returns the mutation format version this handler supports.
+     * {@inheritDoc}
      *
-     * <p>WA Web has no concrete sync module for this action, so there is no
-     * {@code getVersion()} method to inspect. The protobuf shape only defines
-     * a single field ({@code notificationActivitySetting} at index 1), so
-     * Cobalt declares the initial version {@code 1} as a forward-looking
-     * default. The actual value should be re-checked when WA Web ships the
-     * matching {@code WAWebNotificationActivitySettingSync} module.
-     * @return the constant {@link NotificationActivitySettingAction#ACTION_VERSION},
-     *         always {@code 1}
+     * @implNote
+     * This implementation returns
+     * {@link NotificationActivitySettingAction#ACTION_VERSION}
+     * (currently {@code 1}); WA Web has no concrete handler so there
+     * is no {@code getVersion()} to mirror, and {@code 1} is the
+     * forward-looking default for a single-field protobuf.
      */
     @Override
     public int version() {
@@ -102,64 +93,33 @@ public final class NotificationActivitySettingHandler implements WebAppStateActi
     }
 
     /**
-     * Applies a single decoded notification activity setting mutation and
-     * returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>WA Web has no concrete handler to mirror, so this implementation
-     * follows the canonical shape used by every other sibling sync handler
-     * (e.g. {@code WAWebLocaleSettingSync.applyMutations}):
-     * <ol>
-     *   <li><b>Operation filter</b> — only {@code SET} mutations are processed;
-     *       any other operation falls through to
-     *       {@link MutationApplicationResult#unsupported()}, mirroring the
-     *       trailing {@code p++; return {actionState: Unsupported}} branch in
-     *       sibling handlers.</li>
-     *   <li><b>Action type and payload check</b> — the mutation value must
-     *       decode to a {@link NotificationActivitySettingAction} with a
-     *       non-empty {@code notificationActivitySetting} enum field. Sibling
-     *       handlers express the same guard as
-     *       {@code var n = e.value, a = n.someAction; if (!a) { i++; return malformedActionValue(this.collectionName) }}.
-     *       Cobalt collapses the equivalent
-     *       {@link SyncdIndexUtils#malformedActionValue}
-     *       contract into {@link MutationApplicationResult#malformed()}.</li>
-     *   <li><b>Apply the new setting</b> — persists the decoded enum into
-     *       {@link com.github.auties00.cobalt.store.WhatsAppStore#setNotificationActivitySetting}.
-     *       Since WA Web does not yet have an apply path, there is no UI/IPC
-     *       call to mirror; only the store side-effect is performed.</li>
-     *   <li><b>Success</b> — returns {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>Sibling WA Web handlers also wrap the per-mutation body in a
-     * {@code try/catch} that swallows any exception and returns
-     * {@code {actionState: Failed}}. In Cobalt, exceptions are allowed to
-     * propagate and the configured
-     * {@code WhatsAppClientErrorHandler} decides recovery, per Cobalt's
-     * pluggable error model.
-     * @param client   the WhatsApp client the mutation is being applied to
-     * @param mutation the trusted, decoded mutation to apply
-     * @return {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     *         operations; {@link MutationApplicationResult#malformed()} if the
-     *         decoded action is not a {@link NotificationActivitySettingAction}
-     *         or has no {@code notificationActivitySetting} field;
-     *         {@link MutationApplicationResult#success()} otherwise
+     * @implNote
+     * This implementation accepts only {@link SyncdOperation#SET}: the
+     * action carries a single mandatory enum and there is no semantic
+     * for {@code REMOVE}. A missing or empty
+     * {@link NotificationActivitySettingAction#notificationActivitySetting()}
+     * is rejected as {@link MutationApplicationResult#malformed()}; on
+     * success the resolved enum is written via
+     * {@code WhatsAppStore.setNotificationActivitySetting}. WA Web
+     * sibling handlers wrap the body in a try/catch returning
+     * {@code Failed}; Cobalt lets exceptions propagate so the
+     * configured {@code WhatsAppClientErrorHandler} decides recovery.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: if (e.operation === "set") { ... } p++; return {actionState: Unsupported}
         if (mutation.operation() != SyncdOperation.SET) {
             return MutationApplicationResult.unsupported();
         }
 
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: var n = e.value, a = n.notificationActivitySetting; if (!a) { i++; return malformedActionValue(this.collectionName) }
         if (!(mutation.value().action().orElse(null) instanceof NotificationActivitySettingAction action)
                 || action.notificationActivitySetting().isEmpty()) {
             return MutationApplicationResult.malformed();
         }
 
-        // NO_WA_BASIS: WA Web has no apply path; Cobalt persists the decoded enum into the store as the obvious side-effect
         client.store().setNotificationActivitySetting(action.notificationActivitySetting().get());
 
-        // ADAPTED: sibling WAWeb*Sync.applyMutations: return {actionState: Success}
         return MutationApplicationResult.success();
     }
 

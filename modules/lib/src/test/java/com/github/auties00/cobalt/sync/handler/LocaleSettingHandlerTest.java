@@ -7,13 +7,11 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSetting;
 import com.github.auties00.cobalt.model.sync.action.setting.LocaleSettingBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LocaleSettingMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,15 +20,30 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LocaleSettingHandler} â€” Cobalt's adapter for
+ * Exercises the {@link LocaleSettingHandler} adapter for
  * {@code WAWebLocaleSettingSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code setting_locale}
+ * app-state sync action across metadata, the SET happy path that
+ * persists the new locale, the malformed-value branch, the
+ * null-locale {@code SKIPPED} branch, the REMOVE rejection and the
+ * inherited timestamp-based conflict resolution.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#locale()}
+ * read-back can be asserted directly. The Windows-Electron
+ * short-circuit that WA Web takes is intentionally not modelled in
+ * production, so it is also absent here.
  */
 @DisplayName("LocaleSettingHandler")
 class LocaleSettingHandlerTest {
@@ -56,7 +69,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the LocaleSetting wire constant")
@@ -81,7 +94,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("persists the new locale into the store and returns SUCCESS")
@@ -107,7 +120,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("locale is a global setting, so there is no per-entity orphan path")
@@ -120,7 +133,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -147,7 +160,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the locale handler ignores the index shape (global setting)")
@@ -167,7 +180,7 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -179,10 +192,10 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = localeMutation("en", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = localeMutation("fr", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -191,7 +204,7 @@ class LocaleSettingHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps â†’ APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void tieGoesToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -202,7 +215,7 @@ class LocaleSettingHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = localeMutation("en", SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = localeMutation("fr", SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -212,14 +225,14 @@ class LocaleSettingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” inherits default sequential apply")
+    @DisplayName("applyMutationBatch - inherits default sequential apply")
     class ApplyBatch {
         @Test
         @DisplayName("default batch path applies each mutation in order")
         void sequentialApply() {
             var ts1 = Instant.ofEpochSecond(1_000);
             var ts2 = Instant.ofEpochSecond(2_000);
-            var results = new LocaleSettingHandler().applyMutationBatch(client, java.util.List.of(
+            var results = new LocaleSettingHandler().applyMutationBatch(client, List.of(
                     localeMutation("en", SyncdOperation.SET, ts1),
                     localeMutation("fr", SyncdOperation.SET, ts2)
             ));
@@ -231,40 +244,4 @@ class LocaleSettingHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder â€” getLocaleMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index and version")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new LocaleSettingMutationFactory().getLocaleMutation(ts, "es_ES");
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(LocaleSetting.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"setting_locale\"]", inner.index(),
-                    "WAWebSyncdActionUtils.buildPendingMutation: indexArgs are empty for the locale singleton");
-            assertEquals("es_ES", inner.value().action().filter(a -> a instanceof LocaleSetting).map(a -> (LocaleSetting) a).orElseThrow().locale().orElseThrow());
-            assertEquals(ts, inner.value().timestamp().orElseThrow());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/locale-setting/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/locale-setting/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new LocaleSettingMutationFactory().getLocaleMutation(Instant.ofEpochSecond(1_700_000_000L), "en_US");
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

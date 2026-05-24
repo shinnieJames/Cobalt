@@ -20,46 +20,72 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the ephemeral text status entries for one or more WhatsApp users.
+ * Builds the MEX IQ stanza that batches text-status fetches for several users.
  *
- * <p>The text status is the short message (with optional emoji) that a user publishes to the status tab and that
- * expires automatically after a configurable duration. Each entry in the response carries the status author JID, the
- * text body, the ephemeral duration and the last update timestamp so the client can render expiry countdowns.
+ * @apiNote Powers the text status displayed on the Status tab and on the
+ * Search Within Chat header. WA Web's
+ * {@code WAWebMexFetchTextStatusListJob.mexGetTextStatusList} de-duplicates
+ * the JID list and batches the inputs through {@code WABatcher} with a 50
+ * ms window before invoking the relay. Pair the dispatched stanza with
+ * {@link FetchTextStatusListMexResponse} to consume the reply.
+ *
+ * @implNote This implementation accepts the {@code input} variable as an
+ * already-serialised string and forwards it verbatim. WA Web instead
+ * constructs the variable as an array of
+ * {@code [{jid, last_update_time, privacy_token?}]} objects and attaches
+ * per-entry {@code privacy_token.tctoken} values when the
+ * {@code isProfileScrappingProtectionInMexFetchEnabled} gate is on; Cobalt
+ * callers that need those features must materialise the array at a higher
+ * layer.
+ *
+ * @see FetchTextStatusListMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchTextStatusListJob")
 public final class FetchTextStatusListMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexFetchTextStatusListJobQuery.graphql} for the snapshot
+     * this file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "24072923595647473";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexFetchTextStatusListJobQuery.graphql}; WA Web tags the
+     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexGetTextStatusList";
 
     /**
-     * The serialised batch of target user JIDs encoded as a single GraphQL input scalar.
+     * The {@code input} GraphQL variable carrying the pre-serialised batch.
      */
     private final String input;
 
     /**
-     * Constructs a new request for the given input batch.
+     * Constructs a request that asks for the text-status of a batch of users.
      *
-     * @param input the serialised list of target user JIDs, or {@code null} to omit the variable
+     * @apiNote {@code input} must already be the JSON string representation
+     * of the {@code [{jid, last_update_time}]} array the relay expects;
+     * Cobalt does not materialise the array on the caller's behalf.
+     *
+     * @param input the serialised batch payload, or {@code null} to omit
+     *              the variable
      */
     public FetchTextStatusListMexRequest(String input) {
         this.input = input;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -67,9 +93,7 @@ public final class FetchTextStatusListMexRequest implements MexOperation.Request
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -77,9 +101,12 @@ public final class FetchTextStatusListMexRequest implements MexOperation.Request
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {"input": <input>}}}
+     * (or {@code {"variables": {}}} when {@code input} is {@code null}) and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJob", exports = "mexGetTextStatusList",
             adaptation = WhatsAppAdaptation.ADAPTED)

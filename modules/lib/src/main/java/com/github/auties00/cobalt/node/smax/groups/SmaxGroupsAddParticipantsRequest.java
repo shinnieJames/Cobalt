@@ -15,40 +15,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps an {@code <add>} payload
- * carrying one {@code <participant jid="..."/>} entry per candidate
- * in the canonical {@code <iq xmlns="w:g2" type="set" to=GROUP_JID>}
- * envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that adds participants to an existing group.
+ *
+ * @apiNote Drives the "Add participants" affordance on the group info screen:
+ * {@code WAWebGroupModifyParticipantsJob} maps the user's contact picks into one of these stanzas. The relay
+ * accepts up to 1024 entries per request and returns a per-participant outcome list in the matching
+ * {@link SmaxGroupsAddParticipantsResponse.Success#participants()}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsAddParticipantsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Request {
     /**
-     * The group JID to which participants are being added. Routed
-     * verbatim into the IQ's {@code to} attribute.
+     * The group {@link Jid} receiving the new participants.
      */
     private final Jid groupJid;
 
     /**
-     * The list of candidate participant JIDs. Mandatory and
-     * non-empty; the relay enforces a 1..1024 cardinality on the
-     * {@code <participant>} children.
+     * The candidate participant {@link Jid}s.
      */
     private final List<Jid> participants;
 
     /**
-     * Constructs a request for the given group and participants.
+     * Constructs an add-participants request.
      *
-     * @param groupJid     the group JID; never {@code null}
-     * @param participants the participant JIDs to add; never
-     *                     {@code null} and must contain at least
-     *                     one entry
-     * @throws NullPointerException     if {@code groupJid} or
-     *                                  {@code participants} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code participants} is
-     *                                  empty
+     * @apiNote The relay enforces a 1..1024 cardinality on the {@code <participant>} children; callers should
+     * pre-batch larger contact lists.
+     *
+     * @param groupJid     the group {@link Jid}
+     * @param participants the candidate {@link Jid}s; defensively copied
+     * @throws NullPointerException     if {@code groupJid} or {@code participants} is {@code null}
+     * @throws IllegalArgumentException if {@code participants} is empty
      */
     public SmaxGroupsAddParticipantsRequest(Jid groupJid, List<Jid> participants) {
         this.groupJid = Objects.requireNonNull(groupJid, "groupJid cannot be null");
@@ -60,29 +57,40 @@ public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Req
     }
 
     /**
-     * Returns the target group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the candidate participant JIDs.
+     * Returns the candidate participant {@link Jid}s.
      *
-     * @return an unmodifiable list of participant JIDs; never
-     *         {@code null} and never empty
+     * @return an unmodifiable list of {@link Jid}s; never {@code null} and never empty
      */
     public List<Jid> participants() {
         return participants;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <add>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <add>
+     *             <participant jid="<jid0>"/>
+     *             <participant jid="<jid1>"/>
+     *             ...
+     *         </add>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <add>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsAddParticipantsRequest",
@@ -108,6 +116,12 @@ public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Req
                 .content(addNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across both fields.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsAddParticipantsRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -121,11 +135,21 @@ public final class SmaxGroupsAddParticipantsRequest implements SmaxOperation.Req
                 && Objects.equals(this.participants, that.participants);
     }
 
+    /**
+     * Returns a hash composed of both fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, participants);
     }
 
+    /**
+     * Returns a debug string carrying both fields.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsAddParticipantsRequest[groupJid=" + groupJid

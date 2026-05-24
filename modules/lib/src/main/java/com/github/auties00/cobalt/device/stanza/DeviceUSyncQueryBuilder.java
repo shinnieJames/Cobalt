@@ -13,18 +13,26 @@ import com.github.auties00.cobalt.util.RandomIdUtils;
 import java.util.*;
 
 /**
- * Builds the USync IQ stanzas Cobalt sends to the WhatsApp server when it needs to learn
- * which companion devices each user has linked.
+ * Builds the USync IQ stanzas used by the device-protocol query path.
  *
- * <p>USync is WhatsApp's multi-user query protocol; the device protocol inside it returns
- * each user's device list and signed key index list. This builder wraps the repetitive XML
- * construction (session id generation, per-user nodes, delta update attributes, username
- * co-query, batching large lists) so callers at {@link com.github.auties00.cobalt.device.DeviceService}
- * can simply provide a set of JIDs and a sync context.
+ * @apiNote
+ * Callers (typically {@link com.github.auties00.cobalt.device.DeviceService})
+ * pass a set of user {@link Jid}s plus an optional dhash-and-timestamp map and
+ * receive one or more IQ {@link NodeBuilder} instances they can send through
+ * the socket. Each IQ wraps the WAP {@code <iq xmlns="usync" type="get">}
+ * shape that {@link com.github.auties00.cobalt.device.adv.DeviceADVValidator}
+ * and {@link DeviceUSyncResponseParser} consume on the response side. The
+ * builder is the wire-level entry point for the
+ * {@code WAWebAdvSyncDeviceListApi.syncDeviceList} flow, but does not include
+ * the contact / business / picture / lid / disappearing-mode protocols that
+ * the broader {@code WAWebUsync.USyncQuery} chain supports.
  *
- * <p>Each user entry optionally carries the locally cached {@code device_hash}, timestamp, and
- * expected timestamp so the server can answer with an "omitted" result (hash still matches)
- * instead of retransmitting unchanged device lists.
+ * @implNote
+ * This implementation flattens the JS fluent {@code USyncQuery} builder into
+ * a single static factory because Cobalt only emits the device protocol
+ * (optionally paired with username) and never combines several USync
+ * protocols in one query. Attribute insertion order matches WA Web's WAP
+ * object literal so the encoded bytes are byte-identical to live traffic.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
@@ -32,7 +40,18 @@ import java.util.*;
 public final class DeviceUSyncQueryBuilder {
 
     /**
-     * Maximum users per USync query batch.
+     * Caps the number of {@code <user>} entries that fit in a single USync IQ.
+     *
+     * @apiNote
+     * Larger user sets passed to {@link #build(Set, String, Map, boolean)}
+     * are sliced into batches of this size so each individual IQ stays under
+     * the server-enforced stanza budget the
+     * {@code WAWebAdvSyncDeviceListApi.syncDeviceList} flow assumes.
+     *
+     * @implNote
+     * This implementation hard-codes the cap because WA Web does the same
+     * splitting outside the {@code USyncQuery} builder and the value is not
+     * exposed as an AB prop.
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSyncDeviceListApi",
             exports = "syncDeviceList",
@@ -40,14 +59,16 @@ public final class DeviceUSyncQueryBuilder {
     private static final int MAX_USERS_PER_QUERY = 500;
 
     /**
-     * Wire-protocol addressing-mode discriminator for the {@code addressing_mode}
-     * attribute on the contact USync query element: phone-number addressing.
+     * Phone-number addressing literal for the {@code addressing_mode}
+     * attribute on a USync contact-protocol query element.
      *
-     * <p>WhatsApp Web exports a frozen object {@code USYNC_ADDRESSING_MODE = {PN: "pn",
-     * LID: "lid"}} from {@code WAWebUsync} that callers branch on when building the
-     * contact protocol query element. Cobalt mirrors the constant as plain string
-     * fields because no enum coercion is required at the wire layer; they are written
-     * verbatim into the {@code addressing_mode} attribute when present.
+     * @apiNote
+     * Mirrors the {@code "pn"} entry of WA Web's frozen
+     * {@code USYNC_ADDRESSING_MODE = {PN: "pn", LID: "lid"}} object exported
+     * from {@code WAWebUsync}. Callers write the value verbatim into the
+     * {@code addressing_mode} attribute when the contact protocol is in use.
+     *
+     * @see #USYNC_ADDRESSING_MODE_LID
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USYNC_ADDRESSING_MODE",
@@ -55,8 +76,14 @@ public final class DeviceUSyncQueryBuilder {
     public static final String USYNC_ADDRESSING_MODE_PN = "pn";
 
     /**
-     * Wire-protocol addressing-mode discriminator for the {@code addressing_mode}
-     * attribute on the contact USync query element: long-identifier (LID) addressing.
+     * Long-identifier (LID) addressing literal for the {@code addressing_mode}
+     * attribute on a USync contact-protocol query element.
+     *
+     * @apiNote
+     * Mirrors the {@code "lid"} entry of WA Web's frozen
+     * {@code USYNC_ADDRESSING_MODE = {PN: "pn", LID: "lid"}} object exported
+     * from {@code WAWebUsync}.
+     *
      * @see #USYNC_ADDRESSING_MODE_PN
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
@@ -74,15 +101,40 @@ public final class DeviceUSyncQueryBuilder {
     }
 
     /**
-     * Builds batched USync queries with optional username protocol.
+     * Builds one or more USync device-protocol IQ stanzas for the given users.
      *
-     * <p>Splits large user lists into batches of up to {@value MAX_USERS_PER_QUERY} users
-     * and constructs an IQ stanza for each batch.
-     * @param userJids                the user JIDs to query
-     * @param context                 the context for device filtering
-     * @param hashInfos               hash information for delta updates, or {@code null}
-     * @param includeUsernameProtocol whether to include the username protocol
-     * @return list of IQ node builders, one per batch
+     * @apiNote
+     * Returns a list because the {@code userJids} set is sliced into batches of
+     * up to {@value MAX_USERS_PER_QUERY} entries (see
+     * {@link #MAX_USERS_PER_QUERY}); callers send each {@link NodeBuilder} in
+     * turn. The {@code context} attribute is written verbatim onto the
+     * {@code <usync>} element and propagated through
+     * {@code WAWebContactSyncLogger}; typical values are
+     * {@code "message"} / {@code "interactive"} / {@code "inactive_group_migration"}.
+     * Pass {@code includeUsernameProtocol = true} when the call site also
+     * needs the {@code <username/>} probe (see
+     * {@link com.github.auties00.cobalt.device.DeviceService}).
+     *
+     * @implNote
+     * This implementation always returns at least one batch, even when
+     * {@code userJids} is empty, so callers do not have to special-case the
+     * zero-user path; the resulting IQ carries an empty
+     * {@code <list/>}.
+     *
+     * @param userJids                the JIDs whose device lists must be queried
+     * @param context                 the {@code context} attribute written
+     *                                onto the {@code <usync>} element
+     * @param hashInfos               per-user dhash-and-timestamp records that
+     *                                let the server reply with
+     *                                {@code <devices/>} when the cached list
+     *                                is unchanged, or {@code null} for an
+     *                                unconditional refresh
+     * @param includeUsernameProtocol whether to add the
+     *                                {@code <username/>} probe to the
+     *                                {@code <query>} element
+     * @return the IQ {@link NodeBuilder} instances, one per batch
+     * @throws NullPointerException if {@code userJids} or {@code context} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
@@ -113,15 +165,29 @@ public final class DeviceUSyncQueryBuilder {
     }
 
     /**
-     * Builds a single USync IQ stanza for a batch of users.
+     * Assembles a single batch IQ around a {@code <usync><query/><list/></usync>}
+     * envelope.
      *
-     * <p>Constructs the full IQ structure: {@code <iq> <usync> <query> <devices/> </query>
-     * <list> <user/> ... </list> </usync> </iq>}.
-     * @param userJids                the user JIDs to include in this batch
-     * @param context                 the context string for the usync request
-     * @param hashInfos               hash information for delta updates, or {@code null}
-     * @param includeUsernameProtocol whether to include the username protocol query element
-     * @return the IQ node builder (not yet built, so caller can add id attribute)
+     * @apiNote
+     * Internal worker called by {@link #build(Set, String, Map, boolean)} for
+     * every batch slice; callers should not use it directly.
+     *
+     * @implNote
+     * This implementation drops the public-service announcements account from
+     * the user list (matching the {@code WAWebWid.isServer} filter inside
+     * {@code USyncQuery.$3}), then mirrors the JS attribute insertion order
+     * ({@code sid}, {@code index}, {@code last}, {@code mode},
+     * {@code context}) so the serialised WAP bytes match live traffic. The
+     * outer {@code <iq>} {@link Node} has no {@code id} attribute; the
+     * transport layer assigns one at send time, which is why a
+     * {@link NodeBuilder} is returned instead of a built {@link Node}.
+     *
+     * @param userJids                the JIDs forming this batch
+     * @param context                 the {@code context} attribute
+     * @param hashInfos               the per-user dhash map, or {@code null}
+     * @param includeUsernameProtocol whether to add the {@code <username/>}
+     *                                probe
+     * @return the partially built {@link NodeBuilder} for the IQ
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",
@@ -132,7 +198,6 @@ public final class DeviceUSyncQueryBuilder {
     private static NodeBuilder buildEntry(Collection<Jid> userJids, String context, Map<Jid, DeviceListHashInfo> hashInfos, boolean includeUsernameProtocol) {
         var sessionId = RandomIdUtils.newId();
 
-        // The PSA (Public Service Announcement) account is filtered out, matching WA Web.
         var userNodes = userJids.stream()
                 .filter(jid -> !jid.toUserJid().equals(Jid.announcementsAccount()))
                 .map(jid -> buildUserNode(jid, hashInfos))
@@ -164,8 +229,6 @@ public final class DeviceUSyncQueryBuilder {
                     .build();
         }
 
-        // Attribute insertion order matches the WA Web JS object literal so the encoded
-        // WAP byte stream is identical to live traffic.
         var usyncNode = new NodeBuilder()
                 .description("usync")
                 .attribute("sid", sessionId)
@@ -176,7 +239,6 @@ public final class DeviceUSyncQueryBuilder {
                 .content(queryNode, listNode)
                 .build();
 
-        // The id attribute is appended by the transport layer at send time.
         return new NodeBuilder()
                 .description("iq")
                 .attribute("to", JidServer.user())
@@ -186,13 +248,23 @@ public final class DeviceUSyncQueryBuilder {
     }
 
     /**
-     * Builds the per-user devices element for delta updates.
+     * Builds the per-user {@code <devices>} element carrying the cached dhash
+     * and timestamps.
      *
-     * <p>Returns a {@code <devices>} node with {@code device_hash}, {@code ts}, and
-     * {@code expected_ts} attributes if hash info is available, or {@code null} if all
-     * values are absent.
-     * @param hashInfo the hash info for this user, or {@code null}
-     * @return the devices user element, or {@code null} if not needed
+     * @apiNote
+     * Internal worker for {@link #buildUserNode(Jid, Map)}; emitted only when
+     * the server may reply with the lighter "omitted" form (cached list is
+     * still current) instead of resending the full device list.
+     *
+     * @implNote
+     * This implementation returns {@code null} (so the caller omits the
+     * element entirely) when every field of {@code hashInfo} is unset,
+     * matching WA Web's {@code USyncDeviceProtocol.getUserElement} which
+     * returns {@code null} in the same case.
+     *
+     * @param hashInfo the cached dhash record for the user, or {@code null}
+     * @return the {@code <devices>} {@link Node}, or {@code null} when no
+     *         attributes would be set
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "USyncDeviceProtocol",
@@ -225,13 +297,23 @@ public final class DeviceUSyncQueryBuilder {
     }
 
     /**
-     * Builds a user node for the USync query list.
+     * Builds the {@code <user jid="...">} envelope for one entry of the USync
+     * batch.
      *
-     * <p>Each user node contains the JID attribute and optional protocol-specific children
-     * such as a {@code <devices>} element with delta update attributes.
+     * @apiNote
+     * Internal worker for {@link #buildEntry(Collection, String, Map, boolean)};
+     * one is emitted per JID that survives the announcements-account filter.
+     *
+     * @implNote
+     * This implementation defers to {@link #buildUserDevicesElement(DeviceListHashInfo)}
+     * for the optional inner {@code <devices>} child. The JID written into
+     * the {@code jid} attribute is normalised via {@link Jid#toUserJid()} so
+     * the device suffix is stripped, matching WA Web's
+     * {@code USER_JID} attribute helper.
+     *
      * @param jid       the user JID
-     * @param hashInfos hash information for delta updates, or {@code null}
-     * @return the user node
+     * @param hashInfos the dhash map keyed by user JID, or {@code null}
+     * @return the built {@code <user>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery",

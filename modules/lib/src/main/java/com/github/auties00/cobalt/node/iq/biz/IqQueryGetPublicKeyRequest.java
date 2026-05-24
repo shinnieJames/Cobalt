@@ -11,43 +11,65 @@ import java.util.Objects;
 
 /**
  * The outbound {@code <iq xmlns="w:biz:catalog" type="get">} stanza that
- * fetches a merchant's catalog public key. Cobalt models the legacy IQ
- * variant; the GraphQL counterpart lives in
- * {@code WAWebGraphQLProductCatalogGetPublicKeyJob}.
+ * fetches the catalog public key of a single merchant.
+ *
+ * @apiNote
+ * Use this request to obtain the PEM-encoded ECC certificate that the
+ * buyer-side direct-connection flow uses to encrypt the postcode and
+ * phone-number payloads forwarded to the merchant; without the
+ * certificate the cart UI cannot ship a {@link IqVerifyPostcodeRequest}
+ * for that merchant.
+ *
+ * @implNote
+ * This implementation models the legacy WAP-IQ path only; WA Web routes
+ * the same call through a Relay GraphQL fetch when the
+ * {@code isGraphQLForGetPublicKeyEnabled} gating flag is on, but Cobalt
+ * keeps the WAP-IQ payload as the single transport.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryGetPublicKeyJob")
 public final class IqQueryGetPublicKeyRequest implements IqOperation.Request {
     /**
-     * The business JID whose public key is being requested. Routed
-     * verbatim into the {@code jid} attribute of the
-     * {@code <public_key/>} payload.
+     * The merchant JID stamped into the {@code jid} attribute of the
+     * {@code <public_key/>} child.
      */
     private final Jid businessJid;
 
     /**
-     * Constructs a request for the given business.
+     * Constructs a request.
      *
-     * @param businessJid the business JID; never {@code null}
-     * @throws NullPointerException if {@code businessJid} is
-     *                              {@code null}
+     * @apiNote
+     * Pass the merchant JID whose catalog public key should be fetched;
+     * any other field on the wire is fixed by the relay schema.
+     *
+     * @param businessJid the merchant JID; never {@code null}
+     * @throws NullPointerException if {@code businessJid} is {@code null}
      */
     public IqQueryGetPublicKeyRequest(Jid businessJid) {
         this.businessJid = Objects.requireNonNull(businessJid, "businessJid cannot be null");
     }
 
     /**
-     * Returns the business JID being queried.
+     * Returns the merchant JID.
      *
-     * @return the business JID; never {@code null}
+     * @apiNote
+     * Use this getter to read back the merchant JID the stanza will
+     * name; the value is routed verbatim into the {@code jid} attribute
+     * of the resulting {@code <public_key/>} child.
+     *
+     * @return the merchant JID; never {@code null}
      */
     public Jid businessJid() {
         return businessJid;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by the
+     * {@code WAWebQueryGetPublicKeyJob} export: a single
+     * {@code <public_key jid/>} child wrapped in the
+     * {@code w:biz:catalog get} IQ frame routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryGetPublicKeyJob",
@@ -65,6 +87,9 @@ public final class IqQueryGetPublicKeyRequest implements IqOperation.Request {
                 .content(publicKey);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -77,11 +102,17 @@ public final class IqQueryGetPublicKeyRequest implements IqOperation.Request {
         return Objects.equals(this.businessJid, that.businessJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(businessJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqQueryGetPublicKeyRequest[businessJid=" + businessJid + ']';

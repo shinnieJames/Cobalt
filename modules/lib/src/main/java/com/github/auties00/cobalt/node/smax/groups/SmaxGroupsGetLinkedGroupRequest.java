@@ -13,7 +13,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that asks the relay to traverse a community parent-or-sub
+ * linkage and return the linked group's preview metadata.
+ *
+ * @apiNote Drives the {@code WAWebGroupQuerySubGroupsJob.querySubgroup} flow: from the community page the caller passes
+ * the parent group JID as {@link #groupJid()} (the IQ target), {@code "sub_group"} as {@link #queryLinkedType()}, and
+ * the target sub-group JID as {@link #queryLinkedJid()}. The optional {@link #subGroupJid()} disambiguates the sub-group
+ * lookup when the parent hosts multiple linked groups with the same announcement role.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetLinkedGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -22,39 +28,34 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsOptionalSubGroupMixin")
 public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Request {
     /**
-     * The group JID the IQ is addressed to (the "anchor" group whose
-     * linked counterpart is being looked up).
+     * The {@link Jid} surfaced on the IQ's {@code to} attribute; identifies the anchor group of the linkage.
      */
     private final Jid groupJid;
 
     /**
-     * The linkage direction selector — {@code "parent_group"} or
-     * {@code "sub_group"}.
+     * The linkage direction selector echoed under {@code <query_linked type="..."/>} (typically {@code "sub_group"} or
+     * {@code "parent_group"}).
      */
     private final String queryLinkedType;
 
     /**
-     * The linked group's JID — interpretation depends on
-     * {@link #queryLinkedType}: it identifies the parent community
-     * when {@code type="parent_group"}, or the target sub-group
-     * when {@code type="sub_group"}.
+     * The {@link Jid} of the linked group being queried; carried under {@code <query_linked jid="..."/>}.
      */
     private final Jid queryLinkedJid;
 
     /**
-     * The optional disambiguation hint pinning the sub-group target.
+     * The optional sub-group disambiguation hint surfaced under {@code <query_linked sub_group_jid="..."/>}.
      */
     private final Jid subGroupJid;
 
     /**
      * Constructs a request without a sub-group disambiguation hint.
      *
-     * @param groupJid        the IQ-{@code to} group; never
-     *                        {@code null}
-     * @param queryLinkedType the linkage direction; never
-     *                        {@code null}
-     * @param queryLinkedJid  the linked group JID; never
-     *                        {@code null}
+     * @apiNote Convenience overload for the common case where {@code queryLinkedJid} alone identifies the target.
+     *
+     * @param groupJid        the IQ {@code to} group {@link Jid}; never {@code null}
+     * @param queryLinkedType the linkage direction; never {@code null}
+     * @param queryLinkedJid  the linked group {@link Jid}; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxGroupsGetLinkedGroupRequest(Jid groupJid, String queryLinkedType, Jid queryLinkedJid) {
@@ -64,17 +65,14 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     /**
      * Constructs a fully-parametrised request.
      *
-     * @param groupJid        the IQ-{@code to} group; never
-     *                        {@code null}
-     * @param queryLinkedType the linkage direction; never
-     *                        {@code null}
-     * @param queryLinkedJid  the linked group JID; never
-     *                        {@code null}
-     * @param subGroupJid     the optional sub-group disambiguation
-     *                        hint; may be {@code null}
-     * @throws NullPointerException if {@code groupJid},
-     *                              {@code queryLinkedType} or
-     *                              {@code queryLinkedJid} is
+     * @apiNote Pass {@code subGroupJid} when the anchor group hosts multiple linked groups sharing the same
+     * announcement role; the relay uses it to scope the lookup.
+     *
+     * @param groupJid        the IQ {@code to} group {@link Jid}; never {@code null}
+     * @param queryLinkedType the linkage direction; never {@code null}
+     * @param queryLinkedJid  the linked group {@link Jid}; never {@code null}
+     * @param subGroupJid     the optional sub-group disambiguation hint; may be {@code null}
+     * @throws NullPointerException if {@code groupJid}, {@code queryLinkedType}, or {@code queryLinkedJid} is
      *                              {@code null}
      */
     public SmaxGroupsGetLinkedGroupRequest(Jid groupJid, String queryLinkedType, Jid queryLinkedJid, Jid subGroupJid) {
@@ -85,27 +83,30 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     }
 
     /**
-     * Returns the IQ-{@code to} group JID.
+     * Returns the IQ {@code to} group {@link Jid}.
      *
-     * @return the group JID; never {@code null}
+     * @return the anchor group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the linkage direction.
+     * Returns the linkage direction selector.
      *
-     * @return the type token; never {@code null}
+     * @apiNote Surfaced verbatim under {@code <query_linked type="..."/>}; typically {@code "sub_group"} or
+     * {@code "parent_group"}.
+     *
+     * @return the linkage direction token; never {@code null}
      */
     public String queryLinkedType() {
         return queryLinkedType;
     }
 
     /**
-     * Returns the linked group's JID.
+     * Returns the linked group's {@link Jid}.
      *
-     * @return the linked group JID; never {@code null}
+     * @return the linked group {@link Jid}; never {@code null}
      */
     public Jid queryLinkedJid() {
         return queryLinkedJid;
@@ -114,17 +115,24 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
     /**
      * Returns the optional sub-group disambiguation hint.
      *
-     * @return an {@link Optional} carrying the sub-group JID
+     * @return an {@link Optional} carrying the sub-group {@link Jid}, or empty when omitted
      */
     public Optional<Jid> subGroupJid() {
         return Optional.ofNullable(subGroupJid);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <query_linked/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="get">
+     *         <query_linked type="<queryLinkedType>" jid="<queryLinkedJid>" sub_group_jid="<subGroupJid>"/>
+     *     </iq>
+     * }
+     * where the {@code sub_group_jid} attribute is omitted when {@link #subGroupJid()} is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <query_linked/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetLinkedGroupRequest",
@@ -145,6 +153,12 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
                 .content(queryLinkedBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetLinkedGroupRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -160,11 +174,21 @@ public final class SmaxGroupsGetLinkedGroupRequest implements SmaxOperation.Requ
                 && Objects.equals(this.subGroupJid, that.subGroupJid);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, queryLinkedType, queryLinkedJid, subGroupJid);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetLinkedGroupRequest[groupJid=" + groupJid

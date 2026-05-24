@@ -16,22 +16,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxNewslettersMyAddOnsRequest}.
+ * Sealed family of inbound reply variants for a
+ * {@link SmaxNewslettersMyAddOnsRequest}.
+ *
+ * @apiNote
+ * Pattern-match on the three permitted variants ({@link Success},
+ * {@link ClientError}, {@link ServerError}) when handling a reply
+ * from WA Web's {@code WAWebGetMyAddOnsRPC.getMyNewsletterAddOnsRPC};
+ * the {@link Success} payload feeds the per-message own-reaction and
+ * own-poll-vote cache used by the Channels message renderer.
  */
 public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Response
         permits SmaxNewslettersMyAddOnsResponse.Success, SmaxNewslettersMyAddOnsResponse.ClientError, SmaxNewslettersMyAddOnsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxNewslettersMyAddOnsResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Dispatches the inbound IQ stanza to the first matching variant
+     * parser.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code sendMyAddOnsRPC} entry-point: try
+     * {@link Success}, then {@link ClientError}, then
+     * {@link ServerError} in order.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
      * @param request the original outbound stanza, used to validate
      *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or empty
-     *         when no documented variant matched the stanza shape
+     * @return an {@link Optional} carrying the parsed variant, or
+     *         empty when no documented variant matched the stanza
+     *         shape
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxNewslettersMyAddOnsRPC",
@@ -51,8 +64,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code Success} reply variant. The relay returned the user's
-     * per-newsletter add-on list.
+     * The variant that carries the user's per-newsletter add-on list.
+     *
+     * @apiNote
+     * Project {@link #blocks()} onto the local own-reaction and
+     * own-poll-vote caches. Each {@link NewsletterBlock} is keyed by
+     * newsletter JID and carries a list of {@link MessageAddOns}
+     * entries.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersMyAddOnsResponseSuccess")
     final class Success implements SmaxNewslettersMyAddOnsResponse {
@@ -64,7 +82,12 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Constructs a new successful reply.
          *
+         * @apiNote
+         * An empty {@code blocks} list is permitted and signals the
+         * user has no add-ons on the queried newsletters.
+         *
          * @param blocks the per-newsletter blocks; never {@code null}
+         *               (empty allowed)
          */
         public Success(List<NewsletterBlock> blocks) {
             this.blocks = List.copyOf(Objects.requireNonNullElse(blocks, List.of()));
@@ -73,21 +96,27 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Returns the per-newsletter blocks.
          *
-         * @return an unmodifiable list of blocks; never {@code null}
+         * @return an unmodifiable {@link List} of blocks; never
+         *         {@code null}
          */
         public List<NewsletterBlock> blocks() {
             return blocks;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the IQ envelope fails
+         * {@link SmaxIqResultResponseMixin} validation, the
+         * {@code <my_addons>} envelope is missing, or any
+         * {@code <messages>} block fails its own
+         * {@link NewsletterBlock#of(Node)} parse.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         *         empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInNewslettersMyAddOnsResponseSuccess",
                 exports = "parseMyAddOnsResponseSuccess",
@@ -111,6 +140,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return Optional.of(new Success(blocks));
         }
 
+        /**
+         * Compares two replies for value equality on {@link #blocks()}.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success}
+         *         carrying equal {@link #blocks()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -123,42 +159,61 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return Objects.equals(this.blocks, that.blocks);
         }
 
+        /**
+         * Returns the hash code derived from {@link #blocks()}.
+         *
+         * @return the hash of the {@link #blocks()} {@link List}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(blocks);
         }
 
+        /**
+         * Returns a debug representation including the blocks.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersMyAddOnsResponse.Success[blocks=" + blocks + ']';
         }
 
         /**
-         * One per-newsletter block returned by the relay. Projects a
-         * {@code <messages jid="<newsletterJid>"><message ...>*</messages>}
-         * sub-tree into a typed pair of {@code (newsletterJid,
-         * messages)}.
+         * One per-newsletter block of add-ons.
+         *
+         * @apiNote
+         * Pairs a newsletter {@link Jid} with the list of
+         * {@link MessageAddOns} the user has on that newsletter's
+         * messages. Used by the renderer to look up own-reactions /
+         * own-poll-votes by {@code (newsletterJid, serverId)}.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInNewslettersMyAddOnsResponseSuccess")
         public static final class NewsletterBlock {
             /**
-             * The newsletter JID this block belongs to.
+             * The newsletter {@link Jid} for this block.
              */
             private final Jid newsletterJid;
 
             /**
-             * The per-message add-on entries projected from the
-             * {@code <messages>} child.
+             * The per-message add-on entries belonging to this
+             * newsletter.
              */
             private final List<MessageAddOns> messages;
 
             /**
              * Constructs a new block.
              *
-             * @param newsletterJid the newsletter JID; never
+             * @apiNote
+             * An empty {@code messages} list is permitted and signals
+             * the user has no add-ons on this specific newsletter.
+             *
+             * @param newsletterJid the newsletter {@link Jid}; never
              *                      {@code null}
              * @param messages      the message entries; never
-             *                      {@code null}
+             *                      {@code null} (empty allowed)
+             * @throws NullPointerException if {@code newsletterJid} is
+             *                              {@code null}
              */
             public NewsletterBlock(Jid newsletterJid, List<MessageAddOns> messages) {
                 this.newsletterJid = Objects.requireNonNull(newsletterJid, "newsletterJid cannot be null");
@@ -166,9 +221,9 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             }
 
             /**
-             * Returns the newsletter JID for this block.
+             * Returns the newsletter {@link Jid} for this block.
              *
-             * @return the newsletter JID; never {@code null}
+             * @return the newsletter {@link Jid}; never {@code null}
              */
             public Jid newsletterJid() {
                 return newsletterJid;
@@ -177,7 +232,7 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             /**
              * Returns the per-message add-on entries.
              *
-             * @return an unmodifiable list; never {@code null}
+             * @return an unmodifiable {@link List}; never {@code null}
              */
             public List<MessageAddOns> messages() {
                 return messages;
@@ -185,12 +240,18 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
 
             /**
              * Tries to parse a {@link NewsletterBlock} from a
-             * {@code <messages>} child.
+             * {@code <messages>} {@link Node}.
              *
-             * @param messagesNode the {@code <messages>} child; never
+             * @apiNote
+             * Returns {@link Optional#empty()} when the description
+             * is not {@code messages}, the {@code jid} attribute is
+             * missing, or any nested {@code <message>} fails its own
+             * {@link MessageAddOns#of(Node)} parse.
+             *
+             * @param messagesNode the source {@link Node}; never
              *                     {@code null}
-             * @return an {@link Optional} carrying the parsed block, or
-             *         empty when the child does not match the schema
+             * @return an {@link Optional} carrying the parsed block,
+             *         or empty on no-match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInNewslettersMyAddOnsResponseSuccess",
                     exports = "parseMyAddOnsResponseSuccessMyAddonsMessages",
@@ -214,6 +275,15 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return Optional.of(new NewsletterBlock(jid, messages));
             }
 
+            /**
+             * Compares two blocks for value equality on both fields.
+             *
+             * @param obj the reference object to compare against
+             * @return {@code true} when {@code obj} is a
+             *         {@link NewsletterBlock} with equal
+             *         {@link #newsletterJid()} and
+             *         {@link #messages()}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -227,11 +297,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                         && Objects.equals(this.messages, that.messages);
             }
 
+            /**
+             * Returns the hash code derived from both fields.
+             *
+             * @return the combined hash of {@link #newsletterJid()}
+             *         and {@link #messages()}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(newsletterJid, messages);
             }
 
+            /**
+             * Returns a debug representation including both fields.
+             *
+             * @return a record-like rendering of this block
+             */
             @Override
             public String toString() {
                 return "SmaxNewslettersMyAddOnsResponse.Success.NewsletterBlock[newsletterJid="
@@ -240,9 +321,12 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         }
 
         /**
-         * One per-message add-on entry. Projects a
-         * {@code <message server_id><reaction?/><votes?/></message>}
-         * sub-tree into a typed bundle.
+         * One per-message bundle of own add-ons.
+         *
+         * @apiNote
+         * Pairs a message server-id with the user's own reaction and
+         * own-poll-vote projections, when present. Either or both may
+         * be {@link Optional#empty()}.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMessageMyAddOnsMixin")
         public static final class MessageAddOns {
@@ -252,19 +336,21 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             private final long serverId;
 
             /**
-             * The optional own-reaction projection; {@code null} when
-             * absent.
+             * The optional own-reaction projection.
              */
             private final MyReaction reaction;
 
             /**
-             * The optional own-poll-vote projection; {@code null} when
-             * absent.
+             * The optional own-poll-vote projection.
              */
             private final MyPollVote pollVote;
 
             /**
-             * Constructs a new message add-on bundle.
+             * Constructs a new add-on bundle.
+             *
+             * @apiNote
+             * Pass {@code null} for either projection to indicate the
+             * relay did not echo that add-on for the message.
              *
              * @param serverId the server-assigned message id
              * @param reaction the optional own-reaction; may be
@@ -281,7 +367,7 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             /**
              * Returns the server-assigned message id.
              *
-             * @return the server id
+             * @return the server-assigned id
              */
             public long serverId() {
                 return serverId;
@@ -309,12 +395,19 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
 
             /**
              * Tries to parse a {@link MessageAddOns} from a
-             * {@code <message>} child.
+             * {@code <message>} {@link Node}.
              *
-             * @param messageNode the {@code <message>} child; never
+             * @apiNote
+             * Returns {@link Optional#empty()} when the description is
+             * not {@code message} or the {@code server_id} is missing
+             * or out of the {@code [99, 2147476647]} range. Both
+             * {@link MyReaction} and {@link MyPollVote} child parses
+             * fall back to {@link Optional#empty()} when absent.
+             *
+             * @param messageNode the source {@link Node}; never
              *                    {@code null}
-             * @return an {@link Optional} carrying the parsed entry, or
-             *         empty when the child does not match the schema
+             * @return an {@link Optional} carrying the parsed entry,
+             *         or empty on no-match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInNewslettersNewsletterMessageMyAddOnsMixin",
                     exports = "parseNewsletterMessageMyAddOnsMixin",
@@ -336,6 +429,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return Optional.of(new MessageAddOns(serverId, reaction, pollVote));
             }
 
+            /**
+             * Compares two bundles for value equality on every field.
+             *
+             * @param obj the reference object to compare against
+             * @return {@code true} when {@code obj} is a
+             *         {@link MessageAddOns} with equal field values
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -350,11 +450,21 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                         && Objects.equals(this.pollVote, that.pollVote);
             }
 
+            /**
+             * Returns the hash code derived from every field.
+             *
+             * @return the combined hash of every field
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(serverId, reaction, pollVote);
             }
 
+            /**
+             * Returns a debug representation including every field.
+             *
+             * @return a record-like rendering of this entry
+             */
             @Override
             public String toString() {
                 return "SmaxNewslettersMyAddOnsResponse.Success.MessageAddOns[serverId="
@@ -363,8 +473,12 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         }
 
         /**
-         * The user's own reaction on a newsletter message .
-         * {@code <reaction code t/>}.
+         * The user's own reaction on a newsletter message.
+         *
+         * @apiNote
+         * Materialises the {@code <reaction code t>} child as a typed
+         * pair so the renderer can show "you reacted with X at T"
+         * without re-parsing the raw {@link Node}.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMyReactionMixin")
         public static final class MyReaction {
@@ -383,6 +497,8 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
              *
              * @param code      the emoji code; never {@code null}
              * @param timestamp the unix-second timestamp
+             * @throws NullPointerException if {@code code} is
+             *                              {@code null}
              */
             public MyReaction(String code, long timestamp) {
                 this.code = Objects.requireNonNull(code, "code cannot be null");
@@ -392,7 +508,7 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             /**
              * Returns the emoji code.
              *
-             * @return the code; never {@code null}
+             * @return the emoji code; never {@code null}
              */
             public String code() {
                 return code;
@@ -408,11 +524,17 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             }
 
             /**
-             * Tries to parse a {@link MyReaction} from a
-             * {@code <message>} sub-tree.
+             * Tries to parse a {@link MyReaction} from a parent
+             * {@code <message>} {@link Node}.
              *
-             * @param messageNode the parent {@code <message>} child;
-             *                    never {@code null}
+             * @apiNote
+             * Returns {@link Optional#empty()} when the
+             * {@code <reaction>} child is absent, the {@code code}
+             * attribute is missing, or the {@code t} attribute is
+             * missing or negative.
+             *
+             * @param messageNode the parent {@link Node}; never
+             *                    {@code null}
              * @return an {@link Optional} carrying the parsed
              *         reaction, or empty when absent or malformed
              */
@@ -439,6 +561,15 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return Optional.of(new MyReaction(code, t));
             }
 
+            /**
+             * Compares two reactions for value equality on both
+             * fields.
+             *
+             * @param obj the reference object to compare against
+             * @return {@code true} when {@code obj} is a
+             *         {@link MyReaction} with equal {@link #code()}
+             *         and {@link #timestamp()}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -452,11 +583,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                         && Objects.equals(this.code, that.code);
             }
 
+            /**
+             * Returns the hash code derived from both fields.
+             *
+             * @return the combined hash of {@link #code()} and
+             *         {@link #timestamp()}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(code, timestamp);
             }
 
+            /**
+             * Returns a debug representation including both fields.
+             *
+             * @return a record-like rendering of this reaction
+             */
             @Override
             public String toString() {
                 return "SmaxNewslettersMyAddOnsResponse.Success.MyReaction[code="
@@ -465,9 +607,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         }
 
         /**
-         * The user's own poll-vote projection .
-         * {@code <votes t><vote/>+</votes>} where every {@code <vote/>}
-         * carries an opaque 32-byte option id as its content.
+         * The user's own poll-vote projection on a newsletter
+         * question message.
+         *
+         * @apiNote
+         * Materialises the {@code <votes t><vote>*</votes>} block where
+         * each {@code <vote/>} child carries an opaque 32-byte option
+         * id as its content bytes. Lengths other than 32 are rejected.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInNewslettersNewsletterMyPollVoteMixin")
         public static final class MyPollVote {
@@ -484,8 +630,14 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             /**
              * Constructs a new own-poll-vote projection.
              *
+             * @apiNote
+             * Each byte array in {@code votes} is expected to be
+             * exactly 32 bytes long; the parser will fail upstream
+             * otherwise.
+             *
              * @param timestamp the unix-second timestamp
              * @param votes     the option ids; never {@code null}
+             *                  (empty allowed)
              */
             public MyPollVote(long timestamp, List<byte[]> votes) {
                 this.timestamp = timestamp;
@@ -502,21 +654,27 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             }
 
             /**
-             * Returns the opaque 32-byte option ids the user selected.
+             * Returns the option ids the user selected.
              *
-             * @return an unmodifiable list of byte arrays; never
-             *         {@code null}
+             * @return an unmodifiable {@link List} of 32-byte arrays;
+             *         never {@code null}
              */
             public List<byte[]> votes() {
                 return votes;
             }
 
             /**
-             * Tries to parse a {@link MyPollVote} from a
-             * {@code <message>} sub-tree.
+             * Tries to parse a {@link MyPollVote} from a parent
+             * {@code <message>} {@link Node}.
              *
-             * @param messageNode the parent {@code <message>} child;
-             *                    never {@code null}
+             * @apiNote
+             * Returns {@link Optional#empty()} when the
+             * {@code <votes>} child is absent, the {@code t}
+             * attribute is missing or negative, or any
+             * {@code <vote/>} content is not exactly 32 bytes.
+             *
+             * @param messageNode the parent {@link Node}; never
+             *                    {@code null}
              * @return an {@link Optional} carrying the parsed vote
              *         block, or empty when absent or malformed
              */
@@ -547,6 +705,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return Optional.of(new MyPollVote(t, voteIds));
             }
 
+            /**
+             * Compares two vote blocks for value equality on every
+             * field.
+             *
+             * @apiNote
+             * The {@link #votes()} list is compared element-wise via
+             * {@link Arrays#equals(byte[], byte[])} since
+             * {@link List#equals(Object)} would compare references on
+             * the raw byte arrays.
+             *
+             * @param obj the reference object to compare against
+             * @return {@code true} when {@code obj} is a
+             *         {@link MyPollVote} with equal
+             *         {@link #timestamp()} and element-wise-equal
+             *         {@link #votes()}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -570,6 +744,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return true;
             }
 
+            /**
+             * Returns the hash code derived from {@link #timestamp()}
+             * and the element-wise {@link Arrays#hashCode(byte[])} of
+             * each vote.
+             *
+             * @return the combined hash
+             */
             @Override
             public int hashCode() {
                 var result = Long.hashCode(timestamp);
@@ -579,6 +760,13 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
                 return result;
             }
 
+            /**
+             * Returns a debug representation showing the timestamp
+             * and vote count.
+             *
+             * @return a record-like rendering of this vote block,
+             *         truncated to the vote count for brevity
+             */
             @Override
             public String toString() {
                 return "SmaxNewslettersMyAddOnsResponse.Success.MyPollVote[timestamp="
@@ -588,26 +776,36 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request as malformed, unauthorised, or referencing a
-     * non-existent newsletter.
+     * The variant carrying a relay-side client-rejection.
+     *
+     * @apiNote
+     * WA Web routes every documented sub-error
+     * ({@code ItemNotFoundIQErrorResponse},
+     * {@code RateLimitedIQErrorResponse},
+     * {@code BadRequestIQErrorResponse},
+     * {@code UnauthorizedIQErrorResponse}) through the same
+     * {@code ServerStatusCodeError} type.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersMyAddOnsResponseClientError")
     final class ClientError implements SmaxNewslettersMyAddOnsResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new client-error reply.
          *
-         * @param errorCode the numeric error code
+         * @apiNote
+         * The text is optional because not every sub-error carries a
+         * human-readable message.
+         *
+         * @param errorCode the numeric error code echoed by the relay
          * @param errorText the optional human-readable text; may be
          *                  {@code null}
          */
@@ -619,7 +817,7 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
@@ -628,19 +826,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the client-error
          *         schema
@@ -656,6 +857,14 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ClientError}
+         *         with equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -668,11 +877,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersMyAddOnsResponse.ClientError[errorCode=" + errorCode
@@ -681,25 +901,33 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure while processing the request.
+     * The variant carrying a transient relay-side failure.
+     *
+     * @apiNote
+     * WA Web rejects the {@code Promise} with a
+     * {@code ServerStatusCodeError} on this variant; Cobalt callers
+     * may retry through a consuming layer's helper.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersMyAddOnsResponseServerError")
     final class ServerError implements SmaxNewslettersMyAddOnsResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
          *
-         * @param errorCode the numeric error code
+         * @apiNote
+         * Mirror of {@link ClientError} for relay-side internal
+         * failures; the text is optional.
+         *
+         * @param errorCode the numeric error code echoed by the relay
          * @param errorText the optional human-readable text; may be
          *                  {@code null}
          */
@@ -711,7 +939,7 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
@@ -720,19 +948,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or empty when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the server-error
          *         schema
@@ -748,6 +979,14 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ServerError}
+         *         with equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -760,11 +999,22 @@ public sealed interface SmaxNewslettersMyAddOnsResponse extends SmaxOperation.Re
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersMyAddOnsResponse.ServerError[errorCode=" + errorCode

@@ -34,5 +34,9 @@ public enum UpdateEntryPoint {
     @WamEnumConstant(24) LIST_TOAST,
     @WamEnumConstant(25) EDIT_LIST_VIEW,
     @WamEnumConstant(26) LIST_DETAIL_VIEW,
-    @WamEnumConstant(27) AUTO_CREATED
+    @WamEnumConstant(27) AUTO_CREATED,
+    @WamEnumConstant(28) MULTI_SELECT,
+    @WamEnumConstant(29) QUICK_REPLIES,
+    @WamEnumConstant(30) LISTS_MORE_BOTTOM_SHEET,
+    @WamEnumConstant(31) LIST_MORE_BOTTOM_SHEET_OPEN
 }

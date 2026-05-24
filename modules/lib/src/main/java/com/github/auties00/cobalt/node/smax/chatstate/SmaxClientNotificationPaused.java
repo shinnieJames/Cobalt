@@ -10,20 +10,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code SmaxClientNotificationPaused} state-type. The user has stopped typing.
+ * The outbound "paused" state-type carried by a
+ * {@link SmaxClientNotificationRequest}.
+ *
+ * @apiNote
+ * Backs {@code WAWebChatStateBridge.sendChatStatePaused}, the "user stopped
+ * typing" indicator. The "idle" branch of
+ * {@code WASendChatStateProtocol.sendChatStateProtocol} routes to this
+ * payload to clear the typing dot from the peer's chat UI.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstatePausedMixin")
 public final class SmaxClientNotificationPaused implements SmaxClientNotificationStateType {
     /**
-     * Constructs a new {@code SmaxClientNotificationPaused} state-type.
+     * Constructs the empty paused state-type.
      */
     public SmaxClientNotificationPaused() {
     }
 
     /**
-     * Builds the {@code <paused/>} child node.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the child
+     * @implNote
+     * This implementation emits a bare {@code <paused/>} child with no
+     * attributes, mirroring {@code mergePausedMixin}.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <paused/>} child
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstatePausedMixin",

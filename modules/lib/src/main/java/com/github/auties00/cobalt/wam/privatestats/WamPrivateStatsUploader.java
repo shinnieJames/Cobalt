@@ -19,107 +19,136 @@ import java.util.Base64;
 import java.util.Objects;
 
 /**
- * Uploads WAM private-stats buffers to the
+ * Uploads one WAM private-stats buffer per call to the
  * {@code https://dit.whatsapp.net/deidentified_telemetry} endpoint.
  *
- * <p>Mirrors the {@code privateStatsUpload} module bundled with
- * WhatsApp Web. The request is a {@code multipart/form-data} POST
- * carrying:
+ * <p>The request is a {@code multipart/form-data} POST with four
+ * named parts that mirror the body the WhatsApp Web JavaScript bundle
+ * sends via its opaque {@code privateStatsUpload} dependency:
  *
  * <ul>
- *   <li>{@code access_token}, a hard-coded Facebook-style app
- *       credential ({@value #ACCESS_TOKEN}) that gates access to the
- *       endpoint.</li>
- *   <li>{@code credential}, set to {@code base64UrlSafe(token) + "+" +
- *       base64UrlSafe(HMAC-SHA256(sharedSecret, buffer))}, where
+ *   <li>{@code access_token}: the hard-coded Facebook-style app
+ *       credential ({@value #ACCESS_TOKEN}) that gates the endpoint.</li>
+ *   <li>{@code credential}: {@code base64UrlSafe(token) + "+" +
+ *       base64UrlSafe(HMAC-SHA256(sharedSecret, buffer))} where
  *       {@code (token, sharedSecret)} comes from a fresh
  *       {@link WamPrivateStatsTokenIssuer#issue} round-trip.</li>
- *   <li>{@code message}, the encoded WAM buffer as an octet-stream
- *       attachment named {@value #BUFFER_FILE_NAME}.</li>
- *   <li>{@code meta_data}, the JSON
+ *   <li>{@code message}: the encoded WAM buffer attached as an
+ *       {@code application/octet-stream} file named
+ *       {@value #BUFFER_FILE_NAME}.</li>
+ *   <li>{@code meta_data}: the JSON object
  *       {@code {"t": unixSeconds, "p": 0}}.</li>
  * </ul>
  *
- * <p>The {@code access_token}, file name, and metadata layout were
- * recovered from the live JavaScript bundle on 2026-04-27.
+ * @apiNote
+ * Used by the WAM flush loop to ship each private-channel buffer one
+ * at a time after a successful {@link WamPrivateStatsTokenIssuer#issue}.
+ * The endpoint, access token, file name, and metadata layout were
+ * recovered from the live JavaScript bundle on 2026-04-27; the WA Web
+ * source manifest does not expose them because {@code privateStatsUpload}
+ * is an external dependency not bundled into the analysed module set.
  *
- * @apiNote Java's {@link HttpClient} does not have native
- * {@code multipart/form-data} support, so the body is assembled by
- * hand with a randomly generated boundary string.
+ * @implNote
+ * This implementation hand-assembles the multipart body because
+ * Java's {@link HttpClient} has no native {@code multipart/form-data}
+ * support. The boundary follows the WebKit/Chromium convention
+ * ({@value #BOUNDARY_PREFIX} plus {@value #BOUNDARY_SUFFIX_LENGTH}
+ * random alphanumeric characters) so a Cobalt-issued request is
+ * byte-indistinguishable from a Chrome {@code FormData} POST.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPrivateStatsBackend")
 public final class WamPrivateStatsUploader {
     /**
-     * The {@code dit.whatsapp.net} endpoint that accepts the upload.
+     * The destination URL accepting the upload.
      */
     private static final URI ENDPOINT = URI.create("https://dit.whatsapp.net/deidentified_telemetry");
 
     /**
-     * The hard-coded {@code access_token} that the WhatsApp Web
-     * JavaScript bundle sends. It is a Facebook
-     * {@code app_id|app_secret} pair, not a per-user secret.
+     * The hard-coded Facebook {@code app_id|app_secret} pair that
+     * gates the endpoint.
+     *
+     * @apiNote
+     * This is not a per-user secret; the same value is shipped by
+     * every WA Web client. The 401 response on rejection maps to
+     * {@link WamPrivateStatsUploadResult.Type#ERROR_ACCESS_TOKEN}.
      */
     private static final String ACCESS_TOKEN = "245118376424571|3e7d275052f1522bf3200afcf53841a7";
 
     /**
      * The filename advertised for the buffer attachment in the
-     * multipart body, matching the WhatsApp Web bundle's
-     * {@code "WAMEventBuffer.dat"} literal.
+     * multipart body.
      */
     private static final String BUFFER_FILE_NAME = "WAMEventBuffer.dat";
 
     /**
-     * The metadata field {@code p} (priority or similar opaque tag),
-     * set to {@code 0} on every upload by the WhatsApp Web bundle.
+     * The constant value written into the {@code p} field of the
+     * meta-data JSON.
+     *
+     * @apiNote
+     * Treated by the WhatsApp Web bundle as an opaque tag; always
+     * zero on every observed upload.
      */
     private static final int META_PRIORITY = 0;
 
     /**
-     * Base64 URL-safe encoder without padding, matching
-     * {@code WABase64.encodeB64UrlSafe(bytes, true)}.
+     * The padding-free URL-safe Base64 encoder used for the
+     * {@code credential} field.
+     *
+     * @apiNote
+     * Matches the {@code WABase64.encodeB64UrlSafe(bytes, true)} call
+     * used inside WA Web.
      */
     private static final Base64.Encoder URL_BASE64 = Base64.getUrlEncoder().withoutPadding();
 
     /**
-     * Alphabet used for the random suffix of the multipart boundary,
-     * mirroring WebKit's choice (mixed-case alphanumeric, no special
-     * characters).
+     * The alphabet used to randomise the multipart-boundary suffix.
+     *
+     * @apiNote
+     * Mixed-case ASCII alphanumeric, no special characters, matching
+     * the WebKit/Chromium convention.
      */
     private static final char[] BOUNDARY_ALPHABET =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
 
     /**
-     * Length in characters of the random suffix appended to the boundary
-     * prefix, matching WebKit's 16-character convention.
+     * The length in characters of the random suffix appended to the
+     * boundary prefix.
      */
     private static final int BOUNDARY_SUFFIX_LENGTH = 16;
 
     /**
-     * Boundary prefix matching the WebKit/Chromium convention. Chosen so
-     * that a Cobalt-issued request is byte-indistinguishable from a Chrome
-     * {@code FormData} POST, which is the kind of request the
-     * {@code dit.whatsapp.net} endpoint normally accepts.
+     * The boundary prefix recognised by the WebKit and Chromium
+     * {@code FormData} serialisers.
+     *
+     * @apiNote
+     * The boundary string only needs to be unique within a request
+     * and absent from any part. The shape is arbitrary; matching the
+     * browser convention is the lowest-risk choice for an endpoint
+     * that primarily serves browser traffic.
      */
     private static final String BOUNDARY_PREFIX = "----WebKitFormBoundary";
 
     /**
-     * Shared issuer used to acquire fresh {@link WamPrivateStatsToken}s on
-     * every upload.
+     * The token issuer used to acquire a fresh
+     * {@link WamPrivateStatsToken} on every upload.
      */
     private final WamPrivateStatsTokenIssuer issuer;
 
     /**
-     * HTTP client used for the {@code POST}. Reused across uploads for
-     * connection pooling.
+     * The HTTP client used for the {@code POST}, reused across
+     * uploads for connection pooling.
      */
     private final HttpClient httpClient;
 
     /**
-     * Constructs a new uploader bound to a token issuer. The HTTP client
-     * is created internally with default settings.
+     * Constructs a new uploader bound to a token issuer and a
+     * default-configured {@link HttpClient}.
      *
-     * @param issuer the issuer to use for acquiring tokens; must not be
-     *               {@code null}
+     * @apiNote
+     * Public entry point used by {@code WhatsAppClient} when wiring
+     * the private-stats subsystem.
+     *
+     * @param issuer the token issuer
      * @throws NullPointerException if {@code issuer} is {@code null}
      */
     public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer) {
@@ -127,12 +156,16 @@ public final class WamPrivateStatsUploader {
     }
 
     /**
-     * Constructs a new uploader bound to a token issuer and a specific
-     * HTTP client (e.g. for testing or shared connection pooling).
+     * Constructs a new uploader bound to a token issuer and a
+     * caller-supplied HTTP client.
      *
-     * @param issuer     the issuer to use for acquiring tokens; must not be
-     *                   {@code null}
-     * @param httpClient the HTTP client to use; must not be {@code null}
+     * @apiNote
+     * Intended for tests that drive the uploader with a recording
+     * {@link HttpClient} stub, or for embedders that want to share a
+     * connection pool with other Cobalt subsystems.
+     *
+     * @param issuer     the token issuer
+     * @param httpClient the HTTP client to use
      * @throws NullPointerException if either argument is {@code null}
      */
     public WamPrivateStatsUploader(WamPrivateStatsTokenIssuer issuer, HttpClient httpClient) {
@@ -141,17 +174,29 @@ public final class WamPrivateStatsUploader {
     }
 
     /**
-     * Uploads a single WAM buffer.
+     * Uploads one WAM private-stats buffer and returns the
+     * categorised outcome.
      *
-     * <p>Acquires a fresh token from the configured
-     * {@link WamPrivateStatsTokenIssuer}, authenticates the buffer
-     * via {@code HMAC-SHA256(sharedSecret, buffer)}, and POSTs the
-     * multipart body to the endpoint. Returns a
-     * {@link WamPrivateStatsUploadResult} describing the outcome.
-     * This method does not retry. The caller owns retry policy.
+     * @apiNote
+     * Acquires a fresh token via {@link WamPrivateStatsTokenIssuer#issue},
+     * authenticates the buffer with {@code HMAC-SHA256(sharedSecret, buffer)},
+     * POSTs the multipart body, and reports the result. The caller
+     * owns retry policy; this method never retries.
      *
-     * @param buffer the encoded WAM buffer
-     * @return the upload outcome
+     * @implNote
+     * This implementation diverges from the WA Web
+     * {@code privateStatsUpload} dependency, which loops with
+     * exponential backoff up to 12 attempts per buffer (see
+     * {@link WhatsAppWebModule WAWebUploadPrivateStatsBackend}'s
+     * {@code d} helper). Cobalt makes exactly one HTTP attempt;
+     * transport exceptions and unmapped status codes collapse to
+     * {@link WamPrivateStatsUploadResult.Type#ERROR_OTHER}. A token
+     * issuance failure short-circuits to
+     * {@link WamPrivateStatsUploadResult.Type#ERROR_CREDENTIAL}
+     * without contacting the HTTP layer.
+     *
+     * @param buffer the encoded WAM buffer to ship
+     * @return the categorised upload outcome
      * @throws NullPointerException if {@code buffer} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUploadPrivateStatsBackend", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -190,15 +235,14 @@ public final class WamPrivateStatsUploader {
     }
 
     /**
-     * Generates a per-request multipart boundary in the WebKit/Chromium
-     * format ({@code ----WebKitFormBoundary} + 16 random alphanumeric
-     * characters).
+     * Generates a fresh per-request multipart boundary.
      *
-     * <p>This makes the request byte-indistinguishable from a Chrome
-     * {@code FormData} POST. The boundary just needs to be unique within
-     * a request and absent from any part. The format itself is arbitrary,
-     * but matching the browser's pattern is the lowest-risk choice for an
-     * endpoint that primarily serves browser traffic.
+     * @implNote
+     * This implementation appends {@value #BOUNDARY_SUFFIX_LENGTH}
+     * random characters drawn from {@link #BOUNDARY_ALPHABET} to the
+     * {@value #BOUNDARY_PREFIX} prefix, matching the WebKit/Chromium
+     * shape so the request is byte-indistinguishable from a browser
+     * {@code FormData} POST.
      *
      * @return a fresh boundary string
      */
@@ -212,16 +256,19 @@ public final class WamPrivateStatsUploader {
 
     /**
      * Builds the {@code credential} multipart field value as
-     * {@code base64UrlSafe(token) + "+" + base64UrlSafe(hmac)}.
+     * {@code base64UrlSafe(token) + "+" + base64UrlSafe(HMAC-SHA256(sharedSecret, buffer))}.
      *
-     * <p>HMAC-SHA256 is computed inline so the
+     * @implNote
+     * This implementation keeps HMAC-SHA256 inline so the
      * {@link NoSuchAlgorithmException} and {@link InvalidKeyException}
-     * catch blocks live with the only call site that can produce
-     * them.
+     * catch blocks live with the only call site that can throw them;
+     * an unavailable HMAC algorithm is fatal per JCE conformance and
+     * surfaces as {@link AssertionError}.
      *
-     * @param token  the issued token
+     * @param token  the issued token, used both as the secret and as
+     *               the nonce concatenated into the credential
      * @param buffer the buffer being uploaded
-     * @return the credential string
+     * @return the credential field value
      */
     private static String buildCredential(WamPrivateStatsToken token, byte[] buffer) {
         try {
@@ -239,37 +286,43 @@ public final class WamPrivateStatsUploader {
     }
 
     /**
-     * Assembles the {@code multipart/form-data} body by computing its
-     * total length up front and writing directly into a single
-     * heap-allocated {@code byte[]}
+     * Assembles the {@code multipart/form-data} request body.
      *
-     * <p>Layout:
+     * @apiNote
+     * The body layout is:
+     * {@snippet :
+     *     --boundary
+     *     Content-Disposition: form-data; name="access_token"
      *
-     * <pre>
-     * --boundary
-     * Content-Disposition: form-data; name="access_token"
+     *     245118376424571|3e7d275052f1522bf3200afcf53841a7
+     *     --boundary
+     *     Content-Disposition: form-data; name="credential"
      *
-     * 245118376424571|3e7d275052f1522bf3200afcf53841a7
-     * --boundary
-     * Content-Disposition: form-data; name="credential"
+     *     {credential}
+     *     --boundary
+     *     Content-Disposition: form-data; name="message"; filename="WAMEventBuffer.dat"
+     *     Content-Type: application/octet-stream
      *
-     * {credential}
-     * --boundary
-     * Content-Disposition: form-data; name="message"; filename="WAMEventBuffer.dat"
-     * Content-Type: application/octet-stream
+     *     {buffer bytes}
+     *     --boundary
+     *     Content-Disposition: form-data; name="meta_data"
      *
-     * {buffer bytes}
-     * --boundary
-     * Content-Disposition: form-data; name="meta_data"
+     *     {"t":unixSeconds,"p":0}
+     *     --boundary--
+     * }
      *
-     * {"t":unixSeconds,"p":0}
-     * --boundary--
-     * </pre>
+     * @implNote
+     * This implementation computes the total length up front and
+     * writes the body directly into a single heap-allocated
+     * {@code byte[]} so the result can be handed to
+     * {@link HttpRequest.BodyPublishers#ofByteArray(byte[])} without
+     * an extra copy.
      *
-     * @param boundary   the boundary string (must not appear in any part)
-     * @param credential the credential string
-     * @param buffer     the WAM buffer
-     * @return the body bytes
+     * @param boundary   the per-request boundary string; must be
+     *                   absent from every embedded part
+     * @param credential the {@code credential} field value
+     * @param buffer     the encoded WAM buffer
+     * @return the assembled multipart body bytes
      */
     private static byte[] buildMultipartBody(String boundary, String credential, byte[] buffer) {
         var partSeparator = ("--" + boundary + "\r\n").getBytes(StandardCharsets.US_ASCII);

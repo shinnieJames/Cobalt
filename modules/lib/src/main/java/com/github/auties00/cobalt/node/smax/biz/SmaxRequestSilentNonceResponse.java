@@ -11,25 +11,61 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxRequestSilentNonceRequest}.
+ * The sealed family of inbound reply variants produced by the relay
+ * in response to a {@link SmaxRequestSilentNonceRequest}.
+ *
+ * @apiNote
+ * Surfaced by the CTWA (click-to-WhatsApp) biz-token-nonce flow whose
+ * JS caller {@code WAWebCTWABizAccessTokenNonceManager.fetchNonce}
+ * polls the relay for a silent nonce before driving the Meta
+ * token-exchange surface; the four variants split the wire outcome
+ * into {@link Success} (relay supplied a nonce directly without
+ * recovery), {@link RecoveryRequired} (relay refused the silent path
+ * because the user must first confirm account ownership via a
+ * recovery email; carries the email mask the UI must show),
+ * {@link ClientError} (relay rejected the request with a {@code 4xx}
+ * envelope) and {@link ServerError} (transient {@code 5xx} relay
+ * failure).
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code WASmaxBizAccessTokenRequestSilentNonceRPC.sendRequestSilentNonceRPC}
+ * by trying each variant in priority order via {@link #of} and
+ * returning the first successful parse.
  */
 public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Response
         permits SmaxRequestSilentNonceResponse.Success, SmaxRequestSilentNonceResponse.RecoveryRequired,
         SmaxRequestSilentNonceResponse.ClientError, SmaxRequestSilentNonceResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxRequestSilentNonceResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Tries each {@link SmaxRequestSilentNonceResponse} variant in
+     * priority order and returns the first that parses cleanly.
+     *
+     * @apiNote
+     * Invoked by the smax reply pump after dispatching a
+     * {@link SmaxRequestSilentNonceRequest}; the priority order
+     * matches WA Web's {@code parsing} dispatch table
+     * ({@code Success}/{@code RecoveryRequired}/{@code Error}) so
+     * that a malformed {@code Success} stanza falls through to
+     * {@link RecoveryRequired} (then to {@link ClientError}) rather
+     * than masking the documented outcome.
+     *
+     * @implNote
+     * This implementation invokes {@link Success#of(Node, Node)}
+     * first, then {@link RecoveryRequired#of(Node, Node)}, then
+     * {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
+     * shape returns {@link Optional#empty()}.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
+     * @param request the original outbound stanza, used to validate
      *                echoed identifiers; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant
      *         matched the stanza shape
-     * @throws NullPointerException if either argument is {@code null}
+     * @throws NullPointerException if either argument is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizAccessTokenRequestSilentNonceRPC",
             exports = "sendRequestSilentNonceRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -52,15 +88,30 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     }
 
     /**
-     * The {@code Success} reply variant. The relay supplied a silent
-     * nonce token directly without requiring an account-recovery
-     * confirmation step.
+     * The {@code Success} reply variant signalling that the relay
+     * accepted the silent-nonce request and will push the nonce via
+     * a separate notification.
+     *
+     * @apiNote
+     * Projected by
+     * {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the
+     * relay returns the documented {@code <Result status="Success"/>}
+     * tree; WA Web's {@code fetchNonce} treats this branch as a hand
+     * off to the QPL {@code push_nonce_start} marker and waits for
+     * the asynchronous nonce-push notification before resolving the
+     * fetch promise.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQResultResponseMixin")
     final class Success implements SmaxRequestSilentNonceResponse {
         /**
          * Constructs a new successful reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code <Result status="Success"/>} tree has been validated;
+         * takes no arguments because the wire form carries no
+         * projected payload besides the literal status string.
          */
         public Success() {
         }
@@ -69,11 +120,19 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
          *
+         * @implNote
+         * This implementation enforces the
+         * {@link SmaxIqResultResponseMixin} envelope check, walks the
+         * {@code <result>} child, and requires the {@code status}
+         * attribute to be the literal {@code "Success"}; any other
+         * value yields {@link Optional#empty()} so the dispatch can
+         * fall through to {@link RecoveryRequired}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseSuccess",
                 exports = "parseRequestSilentNonceResponseSuccess",
@@ -97,6 +156,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return Optional.of(new Success());
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -105,11 +167,17 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxRequestSilentNonceResponse.Success[]";
@@ -117,26 +185,41 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     }
 
     /**
-     * The {@code RecoveryRequired} reply variant. The relay refused
-     * to issue a silent nonce because the user must first confirm
-     * account ownership via an email recovery code.
+     * The {@code RecoveryRequired} reply variant signalling that the
+     * relay refused the silent nonce path and instead dispatched a
+     * recovery email the user must confirm before retrying.
      *
-     * <p>Carries the email address the relay sent the recovery code
-     * to, so the UI can route the user toward the correct inbox.
+     * @apiNote
+     * Projected by
+     * {@link SmaxRequestSilentNonceResponse#of(Node, Node)} when the
+     * relay returns the documented
+     * {@code <Result status="RecoveryRequired" email="..."/>} tree;
+     * WA Web's {@code fetchNonce} surfaces the email mask to the UI
+     * (annotating the QPL flow with
+     * {@code fetch_nonce_recovery_needed=true}) so the user can
+     * complete the recovery flow via
+     * {@code requestAdAccountRecoveryCode}; see
+     * {@link SmaxSendAccountRecoveryNonceResponse}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseRecoveryRequired")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQResultResponseMixin")
     final class RecoveryRequired implements SmaxRequestSilentNonceResponse {
         /**
-         * The email address the relay sent the recovery code to.
+         * The masked email address the relay dispatched the recovery
+         * code to.
          */
         private final String email;
 
         /**
          * Constructs a new recovery-required reply.
          *
-         * @param email the email address the recovery code was
-         *              dispatched to; never {@code null}
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code <Result status="RecoveryRequired"/>} envelope and
+         * the {@code email} attribute have been validated.
+         *
+         * @param email the masked recovery-email address; never
+         *              {@code null}
          * @throws NullPointerException if {@code email} is
          *                              {@code null}
          */
@@ -145,9 +228,14 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
         }
 
         /**
-         * Returns the recovery-code email address.
+         * Returns the masked recovery-email address.
          *
-         * @return the email address; never {@code null}
+         * @apiNote
+         * Surface this to the UI as the "we sent a code to ..."
+         * disclosure text; WA Web stores it as
+         * {@code resultEmail} on the projected nonce-fetch outcome.
+         *
+         * @return the email mask; never {@code null}
          */
         public String email() {
             return email;
@@ -157,10 +245,19 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
          * Tries to parse a {@link RecoveryRequired} variant from the
          * given inbound stanza.
          *
+         * @implNote
+         * This implementation enforces the
+         * {@link SmaxIqResultResponseMixin} envelope check, walks
+         * the {@code <result>} child, requires the {@code status}
+         * attribute to be the literal {@code "RecoveryRequired"},
+         * and then requires the {@code email} attribute to be
+         * present; missing or wrong attributes yield
+         * {@link Optional#empty()}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
          *         recovery-required schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseRecoveryRequired",
@@ -189,6 +286,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return Optional.of(new RecoveryRequired(email));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -201,11 +301,17 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return Objects.equals(this.email, that.email);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(email);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxRequestSilentNonceResponse.RecoveryRequired[email=" + email + ']';
@@ -213,9 +319,15 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request as malformed, unauthorised, or with a transient
-     * client-recoverable code.
+     * The {@code ClientError} reply variant carrying a documented
+     * {@code 4xx} biz-access-token rejection.
+     *
+     * @apiNote
+     * Surfaced when the relay rejected the silent-nonce request via
+     * one of the bad-request or forbidden mixin arms; WA Web's
+     * {@code fetchNonce} treats this branch as
+     * {@code {type: "error"}} and ends the QPL flow with code
+     * {@code 3} without retrying.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceErrors")
@@ -224,22 +336,27 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQErrorResponseMixin")
     final class ClientError implements SmaxRequestSilentNonceResponse {
         /**
-         * The numeric server-side error code ({@code 400} or
-         * {@code 403}).
+         * The numeric server-side error code in the {@code 4xx}
+         * range ({@code 400} bad-request or {@code 403} forbidden).
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text, when the relay supplied
+         * one.
          */
         private final String errorText;
 
         /**
          * Constructs a new client-error reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code 4xx} envelope has been validated.
+         *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may
+         *                  be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -269,10 +386,18 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
          * Tries to parse a {@link ClientError} variant from the given
          * inbound stanza.
          *
+         * @implNote
+         * This implementation routes the {@code <iq>}/{@code <error>}
+         * extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * and admits the full {@code 4xx} range as a catch-all,
+         * matching WA Web's {@code parseRequestSilentNonceErrors}
+         * disjunction over the bad-request and forbidden mixins.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
          *         client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError",
@@ -295,6 +420,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -307,11 +435,17 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxRequestSilentNonceResponse.ClientError[errorCode=" + errorCode
@@ -320,9 +454,16 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure ({@code 500} / {@code 503}) while
-     * processing the request.
+     * The {@code ServerError} reply variant carrying a transient
+     * {@code 5xx} relay failure.
+     *
+     * @apiNote
+     * Surfaced when the relay returned a transient internal failure
+     * while processing the silent-nonce request (internal-server-error
+     * or service-unavailable); WA Web's
+     * {@code WAPromiseRetryLoop}-backed {@code fetchNonce} retries
+     * with exponential backoff up to
+     * {@code adAccountTokenNonceMaxRetries} attempts.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceErrors")
@@ -331,22 +472,28 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
     @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenHackBaseIQErrorResponseMixin")
     final class ServerError implements SmaxRequestSilentNonceResponse {
         /**
-         * The numeric server-side error code ({@code 500} or
-         * {@code 503}).
+         * The numeric server-side error code in the {@code 5xx}
+         * range ({@code 500} internal-server-error or {@code 503}
+         * service-unavailable).
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text, when the relay supplied
+         * one.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the
+         * {@code 5xx} envelope has been validated.
+         *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may
+         *                  be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -376,10 +523,17 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
          * Tries to parse a {@link ServerError} variant from the given
          * inbound stanza.
          *
+         * @implNote
+         * This implementation delegates the {@code 5xx} range check
+         * to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
+         * any stanza outside the {@code 5xx} range yields
+         * {@link Optional#empty()}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
          *         server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizAccessTokenRequestSilentNonceResponseError",
@@ -402,6 +556,9 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -414,11 +571,17 @@ public sealed interface SmaxRequestSilentNonceResponse extends SmaxOperation.Res
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxRequestSilentNonceResponse.ServerError[errorCode=" + errorCode

@@ -52,19 +52,6 @@ public final class LidChange {
     }
 
     /**
-     * Constructs a new {@code LidChange} carrying the rotation pair.
-     *
-     * @param oldValue the pre-rotation LID literal, or {@code null}
-     *                 when omitted
-     * @param newValue the post-rotation LID literal, or {@code null}
-     *                 when omitted
-     * @return a new {@code LidChange}
-     */
-    public static LidChange of(String oldValue, String newValue) {
-        return new LidChange(oldValue, newValue);
-    }
-
-    /**
      * Returns the pre-rotation LID literal.
      *
      * @return an {@link Optional} carrying the literal, or empty

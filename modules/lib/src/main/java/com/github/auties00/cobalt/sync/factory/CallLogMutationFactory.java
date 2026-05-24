@@ -16,46 +16,66 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing call-log sync mutations.
+ * Builds outgoing app-state mutations that record a call-log entry.
  *
- * <p>Mirrors the {@code getCallLogMutation} export of WhatsApp Web's
- * {@code WAWebCallLogSync} module. The factory is the outgoing-mutation
- * counterpart of
+ * @apiNote
+ * Drives WhatsApp's call-history surface. The single consumer in WA Web is
+ * {@code WAWebVoipHandleNativeCallEventCallLogHandlers}, which calls
+ * {@code WAWebCallLogSync.getCallLogMutation} when a VoIP call ends and
+ * pushes the result through {@code WAWebSyncdCoreApi.lockForSync} so the
+ * call appears in every linked device's call tab. The factory is the
+ * outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.CallLogHandler}.
+ *
+ * @implNote
+ * This implementation takes the resolved caller JID as a parameter. WA Web
+ * derives it inline by reading {@code callCreatorJid} first, then falling
+ * back to the local-device PN ({@code WAWebUserPrefsMeUser.getMeDevicePnOrThrow})
+ * when {@code fromMe}, or to the {@code peerJid} otherwise; Cobalt callers
+ * resolve that upstream because the Me-user lookup is store-side.
  */
 public final class CallLogMutationFactory {
     /**
-     * Constructs a call-log mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public CallLogMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for syncing an outgoing call log record.
+     * Returns a SET mutation that records the given call in the cross-device call log.
      *
-     * <p>Per WhatsApp Web {@code WAWebCallLogSync.getCallLogMutation}:
-     * <ol>
-     *   <li>Determines the caller JID: uses {@code callCreatorJid} from the
-     *       record if present, otherwise falls back to the current user's
-     *       device PN JID (when {@code fromMe} is {@code true}) or the
-     *       {@code peerJid}</li>
-     *   <li>Builds the mutation index as
-     *       {@code [action, callerJid, callId, fromMe ? "1" : "0"]}</li>
-     *   <li>Wraps the record in a {@code callLogAction} value</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}</li>
-     * </ol>
+     * @apiNote
+     * Emit one mutation per terminated VoIP call. The mutation index follows
+     * {@snippet :
+     *     ["call_log", callerJid.toString(), callId, fromMe ? "1" : "0"]
+     * }
+     * and the {@link CallLogAction} sub-message carries the {@link CallLog}
+     * record (result, duration, start time, video flag, participants,
+     * scheduled-call metadata).
      *
-     * <p>In Cobalt, the caller must supply the pre-computed caller JID and the
-     * {@code CallLog} record directly.
+     * @implNote
+     * This implementation passes through {@code log} verbatim into the
+     * {@link CallLogAction}. WA Web's
+     * {@code WAWebCallLogSync.getCallLogMutation} builds the
+     * {@code callLogRecord} payload field-by-field via
+     * {@code WAWebVoipWaCallEnums.getSyncCallResultFromCallLogResult} and
+     * the per-participant projection; Cobalt has the same shape on
+     * {@link CallLog} already so the projection collapses into a single
+     * builder field.
      *
      * @param timestamp the mutation timestamp
-     * @param callerJid the JID to use as the first index key (the resolved
-     *                  caller or peer JID)
-     * @param callId    the unique call identifier
-     * @param fromMe    whether the call was initiated by the current user
-     * @param log       the call log record to sync
-     * @return the pending mutation for the call log action
+     * @param callerJid the JID used as the first index segment (pre-resolved
+     *                  caller, falling back to the peer or the local device PN)
+     * @param callId    the call identifier as exposed by the VoIP stack
+     * @param fromMe    {@code true} when the local user initiated the call,
+     *                  encoded as {@code "1"}/{@code "0"} in the index
+     * @param log       the call record to ship
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebCallLogSync", exports = "getCallLogMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getCallLogMutation(

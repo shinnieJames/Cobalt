@@ -11,27 +11,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound acknowledgement stanza. Emitted by the client back
- * through the socket pipeline after consuming the {@link SmaxPsaResetSmbLastQpPrefetchTimestampResponse}
- * notification.
+ * The outbound acknowledgement stanza emitted in response to a
+ * {@link SmaxPsaResetSmbLastQpPrefetchTimestampResponse} notification.
+ *
+ * @apiNote
+ * Closes the loop for the SMB quick-promotions prefetch-timestamp reset
+ * handled by {@code WAWebHandleQPPrefetchTimestampNotification}: the
+ * notification-handler builds and returns this ack, while the worker-safe
+ * fire-and-forget {@code fetchQuickPromotionsNow} kicks off the actual
+ * SMB quick-promotion GraphQL refresh.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaResetSmbLastQpPrefetchTimestampResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutPsaNotificationClientAckMixin")
 public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement implements SmaxOperation.Request {
     /**
-     * The {@code id} of the notification being acknowledged.
+     * The notification id being acknowledged; echoed verbatim back into the
+     * ack stanza.
      */
     private final String notificationId;
 
     /**
-     * The {@code from} of the notification (becomes the ack's
-     * {@code to}).
+     * The notification sender JID becomes the ack's {@code to} attribute.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code type} of the notification (echoed back into the
-     * ack). Always {@code "psa"} for this RPC.
+     * The notification type echoed back into the ack. Always
+     * {@code "psa"} for this RPC.
      */
     private final String notificationType;
 
@@ -39,8 +45,7 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
      * Constructs an acknowledgement.
      *
      * @param notificationId   the notification id; never {@code null}
-     * @param notificationFrom the notification sender JID; never
-     *                         {@code null}
+     * @param notificationFrom the notification sender JID; never {@code null}
      * @param notificationType the notification type; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
@@ -51,22 +56,20 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
     }
 
     /**
-     * Constructs an acknowledgement from a parsed inbound
-     * notification.
+     * Constructs an acknowledgement from a parsed inbound notification
+     * stanza.
      *
-     * <p>Lifts the {@code id}/{@code from}/{@code type} attributes
-     * verbatim from the supplied {@code <notification/>} stanza.
-     * convenience factory mirroring the WA Web closure-builder
-     * surface.
+     * @apiNote
+     * Convenience factory mirroring the closure-builder returned by
+     * {@code WASmaxPsaResetSmbLastQpPrefetchTimestampRPC.receiveResetSmbLastQpPrefetchTimestampRPC};
+     * lifts {@code id}, {@code from}, and {@code type} verbatim from the
+     * source notification.
      *
-     * @param notification the inbound notification stanza; never
-     *                     {@code null}
+     * @param notification the inbound notification stanza; never {@code null}
      * @return a new acknowledgement
-     * @throws NullPointerException     if {@code notification} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if the notification is missing
-     *                                  one of the required echoed
-     *                                  attributes
+     * @throws NullPointerException     if {@code notification} is {@code null}
+     * @throws IllegalArgumentException if the notification is missing one of
+     *                                  the required echoed attributes
      */
     public static SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement from(Node notification) {
         Objects.requireNonNull(notification, "notification cannot be null");
@@ -107,9 +110,16 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement impleme
     }
 
     /**
-     * Builds the outbound ack stanza.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the ack envelope
+     * @implNote
+     * This implementation emits an {@code <ack class="notification">} stanza
+     * carrying the {@code id}, {@code to}, and {@code type} attributes
+     * lifted from the source notification, mirroring
+     * {@code makeResetSmbLastQpPrefetchTimestampResponseAck} +
+     * {@code mergeNotificationClientAckMixin}.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <ack/>} stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutPsaResetSmbLastQpPrefetchTimestampResponseAck",

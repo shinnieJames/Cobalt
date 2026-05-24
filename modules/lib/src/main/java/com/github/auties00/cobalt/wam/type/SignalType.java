@@ -35,5 +35,6 @@ public enum SignalType {
     @WamEnumConstant(24) USER_BLOCK_REASON_SCAM_OR_FRAUD,
     @WamEnumConstant(25) MESSAGE,
     @WamEnumConstant(26) USER_ARCHIVE,
-    @WamEnumConstant(27) USER_BLOCK_REASON_DONT_RECOGNIZE
+    @WamEnumConstant(27) USER_BLOCK_REASON_DONT_RECOGNIZE,
+    @WamEnumConstant(28) IAB_LPV
 }

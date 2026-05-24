@@ -6,40 +6,63 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * Success result of {@code WAWebUsyncTextStatus.textStatusParser}. Carries
- * the peer's modern text-status payload (text, leading emoji, ephemeral
- * lifetime, last-update timestamp) with every field nullable on the wire.
+ * Success result of the
+ * {@code WAWebUsyncTextStatus.textStatusParser} parser.
+ *
+ * @apiNote
+ * Surfaced by USync queries that include
+ * {@code UsyncQuery.withTextStatusProtocol()}; the WA Web caller is the
+ * background contact sync, gated by
+ * {@code WAWebTextStatusGatingUtils.receiveTextStatusEnabled}. Carries the
+ * peer's modern text-status payload (text, leading emoji, ephemeral
+ * lifetime, last-update timestamp); every field is nullable on the wire and
+ * the relay sets only those the peer published.
+ *
+ * @implNote
+ * This implementation reads the emoji glyph from the {@code content}
+ * attribute of the {@code <emoji>} child (the modern text-status uses an
+ * attribute, not inline content), matching {@code textStatusParser}'s
+ * {@code r.attrString("content")} call. The {@link #lastUpdateTime()} value
+ * is kept as a {@link String} because the relay echoes the value verbatim
+ * and WA Web does not parse it into a typed instant.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncTextStatus")
 public final class TextStatusResult implements UsyncProtocolResponse {
     /**
-     * Holds the status text, or {@code null} when absent.
+     * The status text from the {@code text} attribute, or {@code null} when
+     * absent.
      */
     private final String text;
 
     /**
-     * Holds the leading emoji glyph, or {@code null} when absent.
+     * The leading emoji glyph from the {@code <emoji>} child's
+     * {@code content} attribute, or {@code null} when absent.
      */
     private final String emoji;
 
     /**
-     * Holds the status's ephemeral lifetime, or {@code null} when absent.
+     * The status's ephemeral lifetime decoded from the
+     * {@code ephemeral_duration_sec} attribute, or {@code null} when absent.
      */
     private final Duration ephemeralDuration;
 
     /**
-     * Holds the last-update timestamp string the relay echoes back, or
-     * {@code null} when absent.
+     * The {@code last_update_time} attribute echoed verbatim by the relay,
+     * or {@code null} when absent.
      */
     private final String lastUpdateTime;
 
     /**
      * Creates a new text-status result.
      *
+     * @apiNote
+     * Instantiated by the text-status parser; embedders do not call this
+     * directly.
+     *
      * @param text              the status text, or {@code null}
      * @param emoji             the leading emoji glyph, or {@code null}
      * @param ephemeralDuration the ephemeral lifetime, or {@code null}
-     * @param lastUpdateTime    the last-update timestamp string, or
+     * @param lastUpdateTime    the {@code last_update_time} attribute, or
      *                          {@code null}
      */
     public TextStatusResult(String text, String emoji, Duration ephemeralDuration, String lastUpdateTime) {
@@ -52,7 +75,11 @@ public final class TextStatusResult implements UsyncProtocolResponse {
     /**
      * Returns the status text, when present.
      *
-     * @return the text
+     * @apiNote
+     * Body of the status chip shown beside the peer's name in the chat
+     * header.
+     *
+     * @return the text, or empty when absent
      */
     public Optional<String> text() {
         return Optional.ofNullable(text);
@@ -61,7 +88,12 @@ public final class TextStatusResult implements UsyncProtocolResponse {
     /**
      * Returns the leading emoji glyph, when present.
      *
-     * @return the emoji
+     * @apiNote
+     * Decorative emoji rendered to the left of the status text; sourced from
+     * the {@code content} attribute of the {@code <emoji>} child, not from
+     * the element's inline content.
+     *
+     * @return the emoji, or empty when absent
      */
     public Optional<String> emoji() {
         return Optional.ofNullable(emoji);
@@ -70,16 +102,25 @@ public final class TextStatusResult implements UsyncProtocolResponse {
     /**
      * Returns the ephemeral lifetime, when present.
      *
-     * @return the duration
+     * @apiNote
+     * Wall-clock duration the status remains visible for; absent for
+     * permanent statuses.
+     *
+     * @return the lifetime, or empty when absent
      */
     public Optional<Duration> ephemeralDuration() {
         return Optional.ofNullable(ephemeralDuration);
     }
 
     /**
-     * Returns the last-update timestamp string, when present.
+     * Returns the {@code last_update_time} attribute, when present.
      *
-     * @return the timestamp string
+     * @apiNote
+     * Kept as a {@link String} because the relay echoes the value verbatim
+     * and WA Web does not decode it into a typed instant; callers that need
+     * a timestamp parse it themselves.
+     *
+     * @return the timestamp string, or empty when absent
      */
     public Optional<String> lastUpdateTime() {
         return Optional.ofNullable(lastUpdateTime);

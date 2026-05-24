@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.receipt;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
@@ -34,11 +36,45 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Handles incoming message receipt stanzas from WhatsApp.
- * <p>
- * Parses receipt nodes into typed receipt objects and processes them by updating
- * message status and receipt metadata in the local store. Also handles retry
- * receipt requests by re-sending the originally encrypted message.
+ * Consumes the {@code <receipt>} stanzas that carry delivery, read, played
+ * and retry acknowledgements, then mirrors them into the local store.
+ *
+ * @apiNote
+ * Drives the per-message read/delivery status fanned out via
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onMessageStatus}
+ * and, for retry receipts, transparently re-encrypts and re-ships the
+ * original outbound message. {@link ReceiptStreamHandler} forwards every
+ * non-call receipt here regardless of whether it is a retry or a regular
+ * acknowledgement; the secondary split is performed inline by
+ * {@link #isRetryReceipt(Node)} in {@link #handle(Node)}.
+ *
+ * @implNote
+ * This implementation merges three WA Web pipelines into a single Java
+ * class.
+ * <ul>
+ * <li>{@code WAWebHandleMsgReceipt} and {@code WAWebHandleMsgReceiptParser}
+ * for the parse + per-stanza-class dispatch of regular delivery / read /
+ * played acknowledgements.</li>
+ * <li>{@code WAWebHandleMessageRetryRequest},
+ * {@code WAWebHandleRetryRequest} and {@code WAWebRetryRequestParser} for
+ * the retry-receipt flow that drives Signal session rebuild and message
+ * re-send.</li>
+ * <li>The {@code createReceiptStanzaReceiveMetric} closure from
+ * {@code WAWebCreateReceiptStanzaReceiveMetric} for the
+ * {@link com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEvent}
+ * telemetry that wraps the regular-receipt path.</li>
+ * </ul>
+ * WA Web routes simple receipts through a per-surface fan-out
+ * ({@code handleChatSimpleReceipt}, {@code handleGroupSimpleReceipt},
+ * {@code handleStatusSimpleReceipt}, {@code handleNewsletterSimpleReceipt},
+ * {@code handleBotOneToOneInvokeSimpleReadReceipt}, ...) keyed on the
+ * sender JID class; Cobalt collapses all surfaces into the
+ * {@link #updateMessage} path because the store is uniform across chat
+ * surfaces and the per-surface side effects (read-receipts-disabled
+ * downgrade in {@code WAWebHandleDirectChatReceipt}, view-once unlock in
+ * {@code handleViewOnceOpenedIfNecessary}, peer-message deletion in
+ * {@code handleAckPeerSimpleReceipt}) are either not modelled or live in
+ * a different package.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgReceipt")
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgReceiptParser")
@@ -47,52 +83,100 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WAWebRetryRequestParser")
 public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     /**
-     * Logger instance for this handler.
+     * The {@link System.Logger} used to report parse failures, refused
+     * retries and unknown-device WAM emissions.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageReceiptStreamHandler.class.getName());
 
     /**
-     * Maximum number of retry attempts that will be honoured before refusing further retries.
+     * The hard ceiling on the {@code count} attribute of a retry request,
+     * above which the request is refused outright.
+     *
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code WAWebPostMessageHighRetryCountMetric.MAX_RETRY}, which is the
+     * same {@code 5} value used by the server to cap retry escalation
+     * before it stops sending further retry stanzas.
      */
     private static final int MAX_RETRY = 5;
 
     /**
-     * The WhatsApp client instance providing access to the store and networking.
+     * The {@link WhatsAppClient} that owns the store this handler mutates
+     * and that ships outgoing {@code <ack>} stanzas via
+     * {@link WhatsAppClient#sendNodeWithNoResponse(Node)}.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Service responsible for sending and re-sending messages.
+     * The {@link MessageService} used to re-send a message in response to
+     * a retry receipt.
      */
     private final MessageService messageService;
 
     /**
-     * The WAM telemetry service used to commit receipt-related events.
+     * The {@link WamService} used to commit the
+     * {@link com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEvent}
+     * and {@link com.github.auties00.cobalt.wam.event.MdRetryFromUnknownDeviceEvent}
+     * telemetry events.
      */
     private final WamService wamService;
 
     /**
-     * Constructs a new message receipt stream handler.
-     *
-     * @param whatsapp       the WhatsApp client instance
-     * @param messageService the message service for re-sending on retry
-     * @param wamService     the WAM telemetry service for committing receipt events
+     * The {@link AckSender} used to ship the {@code <ack class="receipt">}
+     * stanza for inbound receipts and the {@code <ack class="receipt"
+     * type="retry">} stanza that closes the retry-receipt handshake.
      */
-    public MessageReceiptStreamHandler(WhatsAppClient whatsapp, MessageService messageService, WamService wamService) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs a new {@link MessageReceiptStreamHandler} bound to the
+     * given collaborators.
+     *
+     * @apiNote
+     * Constructed by {@link ReceiptStreamHandler}; embedders do not call
+     * this directly.
+     *
+     * @param whatsapp       the non-{@code null} client used to read the
+     *                       store
+     * @param messageService the non-{@code null} service used to re-send a
+     *                       message in response to a retry receipt
+     * @param wamService     the non-{@code null} telemetry service that
+     *                       commits receipt-related WAM events
+     * @param ackSender      the non-{@code null} ack sender used for the
+     *                       outbound {@code <ack class="receipt">} stanza
+     */
+    public MessageReceiptStreamHandler(WhatsAppClient whatsapp, MessageService messageService, WamService wamService, AckSender ackSender) {
         this.whatsapp = whatsapp;
         this.messageService = messageService;
         this.wamService = wamService;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles an incoming receipt stanza node.
-     * <p>
-     * If the receipt is a retry request, delegates to {@link #handleRetryReceipt(Node)}.
-     * Otherwise, parses the receipt into a typed object and dispatches to the
-     * appropriate handler based on receipt structure. When the ack type is
-     * {@link ReceiptAck#CONTENT_GONE}, only an ack is sent without processing.
+     * {@inheritDoc}
      *
-     * @param node the incoming receipt stanza node
+     * @apiNote
+     * Performs the secondary retry-vs-regular split that
+     * {@link ReceiptStreamHandler} defers to this class. Retry receipts
+     * flow into {@link #handleRetryReceipt(Node)}; regular receipts are
+     * parsed into a {@link ParsedReceipt} and routed by class to
+     * {@link #handleSimple(SimpleReceipt)},
+     * {@link #handleAggregatedByType(AggregatedByTypeReceipt)} or
+     * {@link #handleAggregatedByMessage(AggregatedByMessageReceipt)}. The
+     * {@link ReceiptAck#CONTENT_GONE} short-circuit (server-error response
+     * to a re-upload request) only sends the {@code <ack>} and commits the
+     * metric without invoking the per-class handler.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebHandleMsgReceipt} default export, which builds the
+     * {@code ReceiptStanzaReceiveMetric} closure first, parses via
+     * {@code msgReceiptParser.parse}, then dispatches by parsed
+     * {@code type}. The telemetry commit is gated on the {@code offline}
+     * attribute being absent, matching the WA Web guard
+     * {@code u==null && t(a)} inside the {@code C(e)} arrow function.
+     *
+     * @param node {@inheritDoc}
      */
     @Override
     public void handle(Node node) {
@@ -101,10 +185,6 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        // construct the ReceiptStanzaReceive metric with OVERALL stage and
-        // default totalCount=1, and start its duration timer. Commit is deferred
-        // until after parse/process, and only happens for non-offline receipts
-        // (WAWebHandleMsgReceipt.b: "u==null && t(a)").
         var receiptMetric = new ReceiptStanzaReceiveEventBuilder()
                 .receiptStanzaStage(ReceiptStanzaStage.OVERALL)
                 .receiptStanzaTotalCount(1)
@@ -140,40 +220,45 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Populates the parsed-receipt-dependent fields on the supplied
-     * {@link ReceiptStanzaReceiveEventBuilder} and commits the event.
-     * <p>
-     * Mirrors the closure returned by
-     * {@code WAWebCreateReceiptStanzaReceiveMetric.createReceiptStanzaReceiveMetric}:
-     * derives {@code messageType} from the {@code from} JID, sets
-     * {@code receiptStanzaType} to the raw ack string (or {@code "delivery"} when
-     * absent, per {@code WAWebAck.ACK_STRING.DELIVERY}), overrides the default
-     * {@code receiptStanzaTotalCount} of {@code 1} with the external id count
-     * for simple receipts when available, stops the duration timer, and
-     * commits. The caller gates the commit on the stanza's {@code offline}
-     * attribute being absent, matching WA Web's
-     * {@code u==null && t(a)} guard in {@code WAWebHandleMsgReceipt.b}.
+     * Finalizes and commits the
+     * {@link com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEvent}
+     * carried by {@code builder} using the fields surfaced by the parsed
+     * receipt.
      *
-     * @param builder the pre-populated event builder returned by
+     * @apiNote
+     * Called once per non-offline receipt after {@link #handle(Node)} has
+     * finished its per-class dispatch. Offline receipts skip the commit
+     * entirely so the metric does not double-count replays from the
+     * offline queue.
+     *
+     * @implNote
+     * This implementation mirrors the closure returned by
+     * {@code WAWebCreateReceiptStanzaReceiveMetric.createReceiptStanzaReceiveMetric}.
+     * The {@code receiptStanzaType} field is set to the literal
+     * {@code "delivery"} when the stanza had no {@code type} attribute, or
+     * to the raw {@code type} string when it matches a known
+     * {@code RECEIPT_TYPES_TO_ACK} entry; unknown {@code type} strings
+     * leave the field unset, matching WA Web's
+     * {@code n==null ? type=DELIVERY : RECEIPT_TYPES_TO_ACK[n]!=null && (type=n)}
+     * gate. The default {@code receiptStanzaTotalCount} of {@code 1} is
+     * preserved for {@link SimpleReceipt} because WA Web's parser never
+     * attaches a {@code receipts} array to simple receipts; only the
+     * aggregated variants override the count with the actual
+     * {@code <user>} child count.
+     *
+     * @param builder the pre-populated event builder from
      *                {@link #handle(Node)}
      * @param parsed  the parsed receipt carrying {@code from},
-     *                {@code ackString}, {@code offline}, and (for simple
-     *                receipts) the external id list
+     *                {@code ackString}, {@code offline} and, for
+     *                aggregated receipts, the per-user count
      */
     private void commitReceiptMetric(ReceiptStanzaReceiveEventBuilder builder, ParsedReceipt parsed) {
-        // attribute was absent. Cobalt records that attribute via
-        // ReceiptLike.offline() (true when the <receipt> carried offline="...").
         if (parsed.offline()) {
             return;
         }
 
         builder.messageType(resolveMessageType(parsed.from()));
 
-        // ACK_STRING.DELIVERY ("delivery") when ackString is null; otherwise
-        // it is the raw type string when (and only when) it matches a known
-        // RECEIPT_TYPES_TO_ACK entry. Unknown type strings leave the field
-        // unset (WA Web's metric body: `n==null ? type=DELIVERY :
-        // RECEIPT_TYPES_TO_ACK[n]!=null && (type=n)`).
         var ackString = parsed.ackString();
         if (ackString == null) {
             builder.receiptStanzaType("delivery");
@@ -181,19 +266,12 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             builder.receiptStanzaType(ackString);
         }
 
-        // (receipts?.length) != null && (receiptStanzaTotalCount = receipts.length)
-        // WA Web's parser only attaches a "receipts" array to aggregated-by-type
-        // and aggregated-by-message receipts (each entry corresponds to one
-        // <user> child). Simple receipts never populate that field, so the
-        // default count of 1 is retained by WA Web even when the <list>
-        // contains multiple <item>s. Cobalt mirrors that exactly.
         switch (parsed) {
             case AggregatedByTypeReceipt aggregatedByType ->
                     builder.receiptStanzaTotalCount(aggregatedByType.receipts().size());
             case AggregatedByMessageReceipt aggregatedByMessage ->
                     builder.receiptStanzaTotalCount(aggregatedByMessage.receipts().size());
             case SimpleReceipt ignored -> {
-                // WA Web: leave the default totalCount of 1 in place for simple receipts
             }
         }
 
@@ -202,18 +280,30 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the {@link MessageType} WAM enum value for a receipt's
-     * {@code from} JID, mirroring the {@code s(e)} helper in
-     * {@code WAWebCreateReceiptStanzaReceiveMetric}.
-     * <p>
-     * The status broadcast account is checked first (because it is also a
-     * broadcast-server JID), followed by group/community, broadcast, and
-     * newsletter server checks. Any other JID falls through to
-     * {@link MessageType#INDIVIDUAL}.
+     * Classifies the receipt's {@code from} JID into a {@link MessageType}
+     * WAM enum value.
      *
-     * @param from the {@code from} attribute of the incoming receipt
-     *             stanza
-     * @return the resolved WAM message-type classification
+     * @apiNote
+     * Used by {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
+     * to populate {@code messageType} on the
+     * {@link com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEvent}.
+     * The classifier matters because WA aggregates receipt telemetry by
+     * surface kind to detect regressions in specific chat surfaces.
+     *
+     * @implNote
+     * This implementation matches the {@code s(e)} helper inside
+     * {@code WAWebCreateReceiptStanzaReceiveMetric} verbatim. The
+     * status-broadcast check runs before the broadcast check because the
+     * status account uses a broadcast-shaped JID and must be classified as
+     * {@link MessageType#STATUS}; group-or-community comes next because
+     * communities reuse the group server suffix; the remaining branches
+     * are mutually exclusive on the server suffix alone.
+     *
+     * @param from the {@code from} attribute of the receipt stanza, or
+     *             {@code null}
+     * @return the resolved {@link MessageType}, defaulting to
+     *         {@link MessageType#INDIVIDUAL} when no other classifier
+     *         matches or {@code from} is {@code null}
      */
     private static MessageType resolveMessageType(Jid from) {
         if (from == null) {
@@ -235,16 +325,33 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a simple (non-aggregated) receipt by updating each referenced message.
-     * <p>
-     * If the receipt is for a peer ack, it is silently ignored (peer message deletion
-     * is handled elsewhere in Cobalt). For broadcast receipts from self, processing
-     * is skipped.
+     * Applies one simple (non-aggregated) receipt to every message it
+     * references.
+     *
+     * @apiNote
+     * Drives the read/delivery indicators on chat-bubble messages that the
+     * embedder displays. The {@link ReceiptAck#PEER} branch is dropped
+     * because Cobalt has no peer-message store; the self-broadcast guard
+     * suppresses the double notification WA delivers when a broadcast
+     * message originated from the local user.
+     *
+     * @implNote
+     * This implementation diverges from WA Web's {@code v(t)} inside
+     * {@code WAWebHandleMsgReceipt}. WA Web routes the receipt to one of
+     * {@code handleAckPeerSimpleReceipt} (peer),
+     * {@code handleNewsletterSimpleReceipt} (newsletter),
+     * {@code handleBotOneToOneInvokeSimpleReadReceipt} (bot 1:1 read),
+     * {@code handleStatusSimpleReceipt} (status),
+     * {@code handleChatSimpleReceipt} (user) and
+     * {@code handleGroupSimpleReceipt} (group); Cobalt invokes
+     * {@link #updateMessage} for every receipt and lets the store-side
+     * lookup decide what to do. The peer-message-deletion side effect
+     * implemented by {@code handleAckPeerSimpleReceipt} is not modelled
+     * here; the {@link ReceiptAck#PEER} early-return matches that gap.
      *
      * @param receipt the parsed simple receipt
      */
     private void handleSimple(SimpleReceipt receipt) {
-        // In Cobalt, peer message deletion is handled elsewhere
         if (receipt.ack() == ReceiptAck.PEER) {
             return;
         }
@@ -267,11 +374,26 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an aggregated-by-type receipt by deaggregating into individual simple
-     * receipt updates, one per participant.
-     * <p>
-     * Validates that {@link ReceiptAck#CONTENT_GONE} cannot appear in aggregated form
-     * and that only group or broadcast sources are supported.
+     * Deaggregates a by-type receipt into one per-participant update,
+     * applying the parent ack to every {@code <user>} child.
+     *
+     * @apiNote
+     * By-type aggregation is the wire-format optimisation WA uses when a
+     * group or broadcast message reaches its delivery / read milestone for
+     * many participants simultaneously: instead of one stanza per
+     * participant, the server sends one stanza per ack with a
+     * {@code <user>} list inside. This method expands the list back into
+     * the per-participant view the store expects.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code S(e)} inside
+     * {@code WAWebHandleMsgReceipt}, which calls
+     * {@code WAWebHandleMsgReceiptUtils.deaggregateGroupedByTypeReceipt}
+     * and then forwards each entry through the same {@code v} simple-receipt
+     * handler. Cobalt applies the parent ack inline rather than
+     * materializing intermediate {@link SimpleReceipt} instances. The
+     * {@link ReceiptAck#CONTENT_GONE} reject and the group/broadcast-only
+     * guard match WA Web's validation exactly.
      *
      * @param receipt the parsed aggregated-by-type receipt
      */
@@ -286,7 +408,6 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        // becomes a simple receipt with the parent's ack/ackString
         for (var participantReceipt : receipt.receipts()) {
             var info = findMessage(receipt.from(), participantReceipt.participant(), receipt.externalId());
             if (info == null) {
@@ -305,13 +426,26 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an aggregated-by-message receipt by deaggregating into individual simple
-     * receipt updates, one per participant. Each participant carries its own ack type.
+     * Deaggregates a by-message receipt into one per-participant update,
+     * using each participant's own ack type.
+     *
+     * @apiNote
+     * By-message aggregation is the wire-format optimisation WA uses when
+     * multiple participants in a single group or broadcast message hit
+     * different milestones at the same instant: each {@code <user>} child
+     * carries its own {@code type} attribute.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code R(e)} inside
+     * {@code WAWebHandleMsgReceipt}, which calls
+     * {@code WAWebHandleMsgReceiptUtils.deaggregateGroupedByMessageReceipt}
+     * and forwards each entry through the same {@code v} simple-receipt
+     * handler. Cobalt applies the per-participant ack inline rather than
+     * materializing intermediate {@link SimpleReceipt} instances.
      *
      * @param receipt the parsed aggregated-by-message receipt
      */
     private void handleAggregatedByMessage(AggregatedByMessageReceipt receipt) {
-        // uses its own ack/ackString from the per-user element
         for (var participantReceipt : receipt.receipts()) {
             var info = findMessage(receipt.from(), participantReceipt.participant(), receipt.externalId());
             if (info == null) {
@@ -330,12 +464,27 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a retry receipt request by processing any included key bundle
-     * and re-sending the original message.
-     * <p>
-     * Sends an ack with the retry type regardless of whether re-send succeeds.
+     * Processes one retry receipt: rebuilds the Signal session from any
+     * carried key bundle and re-ships the original message.
      *
-     * @param node the retry receipt stanza node
+     * @apiNote
+     * Retry receipts are the recovery path WA uses when the peer device
+     * cannot decrypt a delivered message; the peer asks the sender for a
+     * fresh ciphertext encrypted against an updated key bundle. The
+     * acknowledgement of the retry itself is always sent (regardless of
+     * whether the re-send succeeds) so the server stops re-delivering the
+     * retry request.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebHandleMessageRetryRequest.handleMessageRetryRequest},
+     * which wraps {@code WAWebHandleRetryRequest.handleRetryRequest} in
+     * the same try / send-ack pattern. Cobalt does not run the WA Web
+     * {@code WAWebMessageQueue.onMessageQueue} serialization layer because
+     * the dispatcher already runs each stanza on its own virtual thread
+     * and the store mutations downstream are short-lived.
+     *
+     * @param node the retry receipt stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMessageRetryRequest",
             exports = "handleMessageRetryRequest",
@@ -358,19 +507,41 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Processes the internals of a retry receipt request.
-     * <p>
-     * Extracts the retry count and original message ID from the {@code <retry>} child,
-     * validates the retry count against {@link #MAX_RETRY}, processes any included
-     * key bundle, and then attempts to re-send the original message.
+     * Performs the inner retry-receipt work: validates the retry count,
+     * processes the key bundle, looks up the original message and re-ships
+     * it through {@link MessageService}.
      *
-     * @param node the retry receipt stanza node
+     * @apiNote
+     * Called only via {@link #handleRetryReceipt(Node)}. The
+     * {@code enc_rekey_retry} and {@code voip_1x1_retry} type variants are
+     * skipped because Cobalt does not implement the VoIP rekey path
+     * driven by {@code WAWebVoipStackInterface.resendEncRekeyRetry} in
+     * WA Web.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebHandleRetryRequest.handleRetryRequest} and its inner
+     * {@code E} (key-bundle eligibility) helper, collapsed onto a single
+     * Java method because Cobalt does not have the
+     * {@code WAWebSendMsgQueueMap.enqueue} serialization or the
+     * pre-migration LID dual-key lookup of {@code getActualChatInfo}. The
+     * {@code requester = participant ?? from} selection matches WA Web's
+     * {@code e.isUser() ? a : c} branch (peer 1:1 retries carry the
+     * device id on the top-level {@code from}; group and broadcast
+     * retries carry it on {@code participant}). The peer-message branch
+     * (a {@link ProtocolMessage} with a participant present) routes
+     * through {@link MessageService#sendPeer(Jid, ChatMessageInfo)} so
+     * the message is re-shipped as a peer broadcast rather than a
+     * group/chat fanout. The self-broadcast guard avoids resending a
+     * broadcast originating from the local user, which would produce a
+     * duplicate.
+     *
+     * @param node the retry receipt stanza
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleRetryRequest",
             exports = "handleRetryRequest",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private void processRetryRequest(Node node) {
-        // which Cobalt does not implement. Skip non-regular retry types.
         var type = node.getAttributeAsString("type", null);
         if ("enc_rekey_retry".equals(type) || "voip_1x1_retry".equals(type)) {
             return;
@@ -391,9 +562,6 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        // In the stanza layout, user/bot 1:1 retries have participant == null and the top-level
-        // from is the requester device; group/broadcast retries carry the device in participant
-        // and the group JID in from. Using "participant ?? from" mirrors the WA Web selection.
         var requester = participant != null ? participant : from;
         if (requester == null) {
             LOGGER.log(System.Logger.Level.DEBUG,
@@ -437,13 +605,30 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Finds the message targeted by a retry request, first looking up by the provider
-     * JID and then falling back to the participant's user JID for broadcast messages.
+     * Looks up the original outbound {@link MessageInfo} addressed by a
+     * retry receipt.
      *
-     * @param provider    the JID of the original message sender
-     * @param participant the participant JID, used as fallback for broadcast lookups
-     * @param id          the original message ID
-     * @return the message info if found, or {@code null}
+     * @apiNote
+     * Called from {@link #processRetryRequest(Node)} to recover the
+     * message that needs to be re-shipped. The broadcast fallback uses
+     * the participant's user JID as the chat key because broadcast
+     * messages are stored per-participant in the chat thread.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code D(t)} helper inside
+     * {@code WAWebHandleRetryRequest}, exported as {@code getTargetChat}.
+     * WA Web also runs the {@code I(e)} {@code getActualChatInfo} helper
+     * to disambiguate pre-migration LID dual-keyed messages; Cobalt does
+     * not maintain that dual key and relies on the store's canonical PN
+     * keying instead.
+     *
+     * @param provider    the {@code from} JID of the retry stanza
+     * @param participant the {@code participant} JID of the retry stanza,
+     *                    or {@code null}
+     * @param id          the original message id read from the
+     *                    {@code <retry>} child
+     * @return the resolved {@link MessageInfo}, or {@code null} when the
+     *         message cannot be located in the store
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleRetryRequest",
             exports = "getTargetChat",
@@ -468,13 +653,31 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether a retry request targets a broadcast message sent by the
-     * current user, which should not be re-sent to avoid duplicate delivery.
+     * Returns {@code true} when a broadcast retry would re-ship a message
+     * the local user originally broadcast, in which case the re-send is
+     * suppressed.
      *
-     * @param message     the message being retried
-     * @param from        the JID that sent the retry request
-     * @param participant the participant JID from the retry stanza
-     * @return {@code true} if this is a self-retry on a broadcast
+     * @apiNote
+     * Prevents the duplicate-delivery race that occurs when the server
+     * pushes a retry for a broadcast addressed by the local user itself
+     * (status messages are the canonical case): re-shipping would send
+     * the message back to the local user.
+     *
+     * @implNote
+     * This implementation has no direct WA Web counterpart because WA Web
+     * routes self-broadcast retries through a different pipeline
+     * ({@code WAWebHandleAckPeerSimpleReceipt} and the
+     * {@code receiptBatcher.acceptPeerReceipt} fast path) that never
+     * reaches {@code handleRetryRequest}. The Cobalt guard catches the
+     * same case at the unified retry entry point.
+     *
+     * @param message     the {@link MessageInfo} resolved by
+     *                    {@link #findRetryMessage(Jid, Jid, String)}
+     * @param from        the {@code from} JID of the retry stanza
+     * @param participant the {@code participant} JID of the retry stanza,
+     *                    or {@code null}
+     * @return {@code true} when the resolved message is a self-broadcast
+     *         and must not be re-shipped; {@code false} otherwise
      */
     private boolean isBroadcastSelfRetry(MessageInfo message, Jid from, Jid participant) {
         var parentJid = message.key().parentJid().orElse(null);
@@ -488,20 +691,51 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Processes a key bundle included in a retry receipt, rebuilding the Signal
-     * session with the remote device using the provided pre-key material.
+     * Rebuilds the Signal session against the remote device using the key
+     * bundle carried inside a retry receipt.
      *
-     * <p>Mirrors the {@code WAWebRetryRequestParser} default export: the
-     * {@code <registration>} child carries a 4-byte big-endian unsigned
-     * registration id, the {@code <skey>} and optional {@code <key>}
-     * children carry 3-byte big-endian unsigned ids in their {@code <id>}
-     * sub-nodes, and the public-key / signature children carry raw 32 / 64
-     * byte payloads. The parent assertion that {@code type} is
-     * {@code "retry"} or {@code "enc_rekey_retry"} is performed by
-     * {@link #isRetryReceipt(Node)} and {@link #processRetryRequest(Node)}.
+     * @apiNote
+     * Called from {@link #processRetryRequest(Node)} before the original
+     * message is re-shipped. The remote device installs a fresh signed
+     * pre-key (and optionally a one-time pre-key) that the next encryption
+     * pass binds the new ciphertext to. The canonical wire shape is:
+     * {@snippet :
+     *     <receipt type="retry" ...>
+     *         <retry id="..." count="..."/>
+     *         <registration>4-byte BE unsigned regId</registration>
+     *         <keys>
+     *             <identity>32-byte Curve25519 public key</identity>
+     *             <skey>
+     *                 <id>3-byte BE unsigned signed-prekey id</id>
+     *                 <value>32-byte Curve25519 public key</value>
+     *                 <signature>64-byte Ed25519 signature</signature>
+     *             </skey>
+     *             <key>
+     *                 <id>3-byte BE unsigned one-time-prekey id</id>
+     *                 <value>32-byte Curve25519 public key</value>
+     *             </key>
+     *         </keys>
+     *     </receipt>
+     * }
      *
-     * @param node         the retry receipt stanza node containing keys
-     * @param remoteDevice the remote device JID to associate the session with
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebRetryRequestParser} default export plus the downstream
+     * {@code WAWebProcessRetryKeyBundle.processKeyBundle} that feeds the
+     * Signal session create call. WA Web's parser splits
+     * {@code regular_retry} from {@code bot_retry} (the latter expects a
+     * top-level {@code <key>} sibling rather than nested inside
+     * {@code <keys>}) and asserts the presence of the one-time pre-key
+     * differently per kind; Cobalt unifies the two by treating the
+     * one-time pre-key as optional, which works for both shapes because
+     * the Signal session rebuild succeeds with the signed pre-key alone.
+     * The catch-all on {@link Throwable} mirrors WA Web's outer
+     * try/catch in {@code processKeyBundle}, which swallows session-rebuild
+     * failures so the retry-ack still flows.
+     *
+     * @param node         the retry receipt stanza
+     * @param remoteDevice the remote device JID extracted from
+     *                     {@code participant ?? from}
      */
     @WhatsAppWebExport(moduleName = "WAWebRetryRequestParser",
             exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -511,8 +745,6 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
         }
 
         var keysNode = node.getChild("keys").orElse(null);
-        // <registration> content is exactly 4 raw bytes parsed as a big-endian
-        // unsigned integer, NOT an ASCII number string.
         var registrationId = node.getChild("registration")
                 .flatMap(Node::toContentBytes)
                 .map(bytes -> convertBytesToUint(bytes, 4))
@@ -547,12 +779,8 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
                             .orElseThrow())
                     .identityKey(identityKey);
 
-            // both cases, since the session rebuild succeeds with skey alone if the server
-            // omits the one-time prekey, and the bot/non-bot bifurcation only changes whether
-            // the parser would throw — both branches still feed the same SignalPreKeyBundle.
             var preKey = keysNode.getChild("key").orElse(null);
             if (preKey != null) {
-                //                         (or f.child("id").contentUint(3) for bot retry)
                 var preKeyId = preKey.getChild("id")
                         .flatMap(Node::toContentBytes)
                         .map(bytes -> convertBytesToUint(bytes, 3))
@@ -575,21 +803,30 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Converts a big-endian unsigned byte array to an int.
+     * Returns the value of the first {@code byteCount} bytes of
+     * {@code bytes} interpreted as a big-endian unsigned integer.
      *
-     * <p>Mirrors the WA Web {@code WAParsableXmlNode.convertBytesToUint(bytes, byteCount)}
-     * helper used by {@code WAWebRetryRequestParser} (and every smax {@code KeyIDMixin} /
-     * {@code RegistrationIDMixin} parser): accumulates {@code n = n * 256 + bytes[i]} for
-     * the first {@code byteCount} bytes.
+     * @apiNote
+     * Used by {@link #processRetryKeyBundle(Node, Jid)} to decode the
+     * fixed-width identifier fields carried inside retry-receipt
+     * sub-nodes. The {@code <registration>} content is 4 bytes; the
+     * {@code <id>} sub-node inside {@code <skey>} and {@code <key>} is 3
+     * bytes.
      *
-     * <p>Retry-receipt wire fields use this encoding instead of an ASCII number string:
-     * the {@code <registration>} content is 4 bytes, {@code <skey><id></id></skey>} and
-     * {@code <key><id></id></key>} contents are 3 bytes.
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAParsableXmlNode.convertBytesToUint} byte for byte:
+     * {@code n = n * 256 + bytes[i]} for the first {@code byteCount}
+     * positions. The same helper is consumed by every smax
+     * {@code KeyIDMixin} and {@code RegistrationIDMixin} parser inside
+     * WA Web's {@code WAWebFetchPrekeysJob} and
+     * {@code WAWebFetchResendMissingKeyJob}.
      *
-     * @param bytes     the raw content bytes from the wire-format node
+     * @param bytes     the raw content bytes read from a wire-format node
      * @param byteCount the number of leading bytes to interpret
-     * @return the resulting big-endian unsigned integer
-     * @throws IllegalArgumentException if {@code bytes} has fewer than {@code byteCount} bytes
+     * @return the decoded big-endian unsigned integer
+     * @throws IllegalArgumentException if {@code bytes} is {@code null} or
+     *                                  shorter than {@code byteCount}
      */
     @WhatsAppWebExport(moduleName = "WAParsableXmlNode",
             exports = "convertBytesToUint",
@@ -606,16 +843,29 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether the requester device is present in the cached device list
-     * for the user identified by {@code requester}.
-     * <p>
-     * Mirrors {@code WAWebApiDeviceList.hasDevice}: the primary device (id
-     * {@link DeviceConstants#PRIMARY_DEVICE_ID}) is always considered known; any
-     * other device id is resolved against the device list stored for the user JID.
+     * Returns {@code true} when {@code deviceId} corresponds to a device
+     * recorded for {@code requester} in the local device-list cache.
      *
-     * @param requester the device-level JID whose presence is being checked
-     * @param deviceId  the device id to locate; {@code 0} means primary
-     * @return {@code true} if the device is known for the user; {@code false} otherwise
+     * @apiNote
+     * Used by {@link #processRetryRequest(Node)} to gate the key-bundle
+     * processing on the requester device being one Cobalt knows about. An
+     * unknown device id signals that the local device-list cache is
+     * stale; the retry must be refused and a {@code MdRetryFromUnknownDevice}
+     * WAM event emitted so the server can detect the gap.
+     *
+     * @implNote
+     * This implementation mirrors {@code WAWebApiDeviceList.hasDevice}
+     * verbatim: the primary device id
+     * ({@link DeviceConstants#PRIMARY_DEVICE_ID}, value {@code 0}) is
+     * always treated as known without consulting the cache, and any other
+     * id is verified against the cached device list for the user.
+     *
+     * @param requester the device-level JID extracted by
+     *                  {@link #processRetryRequest(Node)}
+     * @param deviceId  the device id to verify, where {@code 0} means
+     *                  primary
+     * @return {@code true} when the device is known; {@code false}
+     *         otherwise
      */
     private boolean isDeviceKnown(Jid requester, int deviceId) {
         if (deviceId == DeviceConstants.PRIMARY_DEVICE_ID) {
@@ -629,17 +879,27 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Emits the {@code MdRetryFromUnknownDevice} WAM event to signal that a retry
-     * receipt referenced a device that is not present in the cached device list.
-     * <p>
-     * The {@code senderType} is {@code PRIMARY} when the requester device id equals
-     * {@link DeviceConstants#PRIMARY_DEVICE_ID} ({@code 0}), and {@code COMPANION}
+     * Commits one
+     * {@link com.github.auties00.cobalt.wam.event.MdRetryFromUnknownDeviceEvent}
+     * to the {@link WamService}.
+     *
+     * @apiNote
+     * Called by {@link #processRetryRequest(Node)} when the retry
+     * requester is unknown to the local device-list cache. The
+     * {@code offline} flag distinguishes retries delivered live from
+     * retries replayed off the offline queue so the server can correlate
+     * cache-staleness with reconnect timing.
+     *
+     * @implNote
+     * This implementation matches the WA Web emission in
+     * {@code WAWebHandleRetryRequest.E}, which constructs the event with
+     * {@code senderType = DEVICE_TYPE.PRIMARY} when the device id equals
+     * {@code WAJids.DEFAULT_DEVICE_ID} and {@code DEVICE_TYPE.COMPANION}
      * otherwise.
      *
-     * @param deviceId the requester device id read from the retry stanza
-     * @param offline  whether the original {@code <receipt>} stanza carried the
-     *                 {@code offline} attribute (i.e. the retry was delivered from
-     *                 the offline-processing queue)
+     * @param deviceId the device id extracted from the retry stanza
+     * @param offline  {@code true} when the retry stanza carried the
+     *                 {@code offline} attribute
      */
     private void emitRetryFromUnknownDevice(int deviceId, boolean offline) {
         var senderType = deviceId == DeviceConstants.PRIMARY_DEVICE_ID
@@ -652,13 +912,32 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Finds a message by its JID and external ID, falling back to participant-based
-     * lookup for broadcast messages.
+     * Looks up an inbound-receipt-targeted message in the store, with a
+     * broadcast-only fallback to the participant's user JID.
      *
-     * @param provider    the source JID (chat or group)
-     * @param participant the participant JID, used for broadcast fallback
-     * @param id          the message ID to search for
-     * @return the message info if found, or {@code null}
+     * @apiNote
+     * Used by {@link #handleSimple(SimpleReceipt)},
+     * {@link #handleAggregatedByType(AggregatedByTypeReceipt)} and
+     * {@link #handleAggregatedByMessage(AggregatedByMessageReceipt)} to
+     * resolve the {@link MessageInfo} the receipt applies to. The
+     * broadcast fallback covers the case where the message was stored
+     * under the participant's user JID rather than under the broadcast
+     * chat JID.
+     *
+     * @implNote
+     * This implementation collapses what WA Web spreads across
+     * {@code handleChatSimpleReceipt}, {@code handleGroupSimpleReceipt}
+     * and {@code handleStatusSimpleReceipt}, which each look the message
+     * up through {@code WAWebSchemaMessage.getMessageTable().get(...)}
+     * with a per-surface key shape. Cobalt's store keys uniformly on
+     * {@code (chatJid, messageId)} so the lookup is a single call.
+     *
+     * @param provider    the {@code from} JID of the receipt
+     * @param participant the {@code participant} JID, used as a broadcast
+     *                    fallback; may be {@code null}
+     * @param id          the external message id
+     * @return the matching {@link MessageInfo}, or {@code null} when the
+     *         message is not in the store
      */
     private MessageInfo findMessage(Jid provider, Jid participant, String id) {
         var direct = whatsapp.store()
@@ -680,14 +959,35 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Updates a message's status and receipt metadata based on an incoming receipt.
+     * Folds one per-participant receipt event into the existing
+     * {@link MessageInfo}, then fans out
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onMessageStatus}.
      *
-     * @param receipt          the receipt containing source and recipient metadata
-     * @param info             the message to update
-     * @param messageId        the external message ID
-     * @param participantDevice the device JID of the participant
-     * @param ack              the ack level of this receipt
-     * @param timestamp        the timestamp of this receipt event
+     * @apiNote
+     * Drives the per-chat-bubble status indicator the embedder displays.
+     * Both {@link ChatMessageInfo} and {@link NewsletterMessageInfo} are
+     * mutated in place because the store hands out the same instance
+     * across lookups.
+     *
+     * @implNote
+     * This implementation collapses two WA Web layers. The per-surface
+     * "fan-out into receipt batcher" step performed by
+     * {@code WAWebMessageReceiptBatcher.receiptBatcher.acceptOtherReceipt}
+     * is skipped because Cobalt updates the receipt in place rather than
+     * accumulating a batch. The per-status timestamp split (delivery /
+     * read / played stored separately) mirrors WA Web's
+     * {@code WAWebApiMessageInfoStore} record. The
+     * {@link #mergeStatus(MessageStatus, MessageStatus)} reduction
+     * preserves the highest ack already seen so a late-arriving delivery
+     * receipt cannot down-rank a previous read receipt.
+     *
+     * @param receipt           the upstream {@link ReceiptLike} carrying
+     *                          {@code from} and {@code recipient}
+     * @param info              the message being updated
+     * @param messageId         the external id of the message
+     * @param participantDevice the device JID that produced the receipt
+     * @param ack               the {@link ReceiptAck} for this update
+     * @param timestamp         the timestamp of the receipt event
      */
     private void updateMessage(
             ReceiptLike receipt,
@@ -729,71 +1029,86 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends an ack stanza in response to a regular (non-retry) receipt.
-     * <p>
-     * Constructs an ack node with the receipt's ID, from JID, optional participant,
-     * and type string.
+     * Ships an {@code <ack>} stanza in response to a regular (non-retry)
+     * receipt.
      *
-     * @param node   the original receipt stanza node
-     * @param parsed the parsed receipt, used to extract the participant for simple receipts
+     * @apiNote
+     * Called from {@link #handle(Node)} after every regular receipt is
+     * dispatched (or short-circuited on
+     * {@link ReceiptAck#CONTENT_GONE}). The ack drops the {@code participant}
+     * attribute when it would equal the {@code to} attribute, matching
+     * WA Web's wire shape.
+     *
+     * @implNote
+     * This implementation matches the {@code <ack>} builder inside
+     * {@code WAWebHandleMsgReceipt}, exported via
+     * {@code WAWebReceiptAck.buildReceiptAck(from, id, type, participant)}.
+     * The {@code class="receipt"} attribute is always present; the
+     * {@code type} attribute is the raw {@code ackString} from the parser
+     * or the inbound stanza's {@code type} attribute when parsing failed.
+     *
+     * @param node   the inbound receipt stanza
+     * @param parsed the {@link ParsedReceipt} returned by
+     *               {@link #parseReceipt(Node)}, or {@code null} when
+     *               parsing failed
      */
     private void sendAck(Node node, ParsedReceipt parsed) {
-        var id = node.getAttributeAsString("id", null);
-        var from = node.getAttributeAsJid("from").orElse(null);
-        if (id == null || from == null) {
-            return;
-        }
-
-        // and only when participant differs from from
         var participant = parsed instanceof SimpleReceipt simple ? simple.participant() : null;
         var ackString = parsed != null ? parsed.ackString() : node.getAttributeAsString("type", null);
-
-        var ack = new NodeBuilder()
-                .description("ack")
-                .attribute("id", id)
-                .attribute("class", "receipt")
-                .attribute("to", from)
-                .attribute("type", ackString)
-                .attribute("participant", participant != null && !Objects.equals(participant, from) ? participant : null)
-                .build();
-        whatsapp.sendNodeWithNoResponse(ack);
+        ackSender.ack(AckClass.RECEIPT, node)
+                .type(ackString)
+                .participantIfDifferent(participant)
+                .send();
     }
 
     /**
-     * Sends a retry-specific ack stanza.
-     * <p>
-     * For retry receipts, the ack type is always "retry" and the participant is
-     * included as a device JID.
+     * Ships the {@code <ack type="retry">} stanza that completes the
+     * retry-receipt handshake.
      *
-     * @param node the retry receipt stanza node
+     * @apiNote
+     * Called unconditionally from {@link #handleRetryReceipt(Node)} so
+     * the server stops re-delivering the retry request whether or not
+     * Cobalt successfully re-shipped the original message.
+     *
+     * @implNote
+     * This implementation matches the {@code <ack>} builder inside
+     * {@code WAWebHandleMessageRetryRequest}, which always sets
+     * {@code type="retry"} and preserves the original
+     * {@code participant} attribute when present.
+     *
+     * @param node the retry receipt stanza
      */
     private void sendRetryAck(Node node) {
-        var id = node.getAttributeAsString("id", null);
-        var from = node.getAttributeAsJid("from").orElse(null);
-        if (id == null || from == null) {
-            return;
-        }
-
-        var participant = node.getAttributeAsJid("participant").orElse(null);
-        var ack = new NodeBuilder()
-                .description("ack")
-                .attribute("id", id)
-                .attribute("class", "receipt")
-                .attribute("to", from)
-                .attribute("type", "retry")
-                .attribute("participant", participant)
-                .build();
-        whatsapp.sendNodeWithNoResponse(ack);
+        ackSender.ack(AckClass.RECEIPT, node)
+                .type("retry")
+                .participant(node.getAttributeAsJid("participant").orElse(null))
+                .send();
     }
 
     /**
-     * Parses an incoming receipt stanza node into a typed {@link ParsedReceipt}.
-     * <p>
-     * Determines the receipt structure (simple, aggregated-by-type, or
-     * aggregated-by-message) and delegates to the appropriate parsing method.
+     * Parses an inbound {@code <receipt>} stanza into the
+     * {@link ParsedReceipt} variant that matches its on-wire shape.
      *
-     * @param node the receipt stanza node
-     * @return the parsed receipt, or {@code null} if essential attributes are missing
+     * @apiNote
+     * Called from {@link #handle(Node)}; returns {@code null} when the
+     * stanza is missing either {@code id} or {@code from}, in which case
+     * the caller sends a bare {@code <ack>} and drops further processing.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebHandleMsgReceiptParser.msgReceiptParser}: the absence
+     * of a {@code <participants>} child means a simple receipt, the
+     * presence of a {@code message_id} attribute on that child means an
+     * aggregated-by-message receipt and otherwise it is aggregated by
+     * type. The {@code <error reason="lid" type="feature-incapable">}
+     * override sets the ack to {@link ReceiptAck#RECEIVED} instead of the
+     * default {@code RECEIVED} mapped from a missing type; WA Web sets it
+     * to {@code ACK.SENT}, which Cobalt does not model as a receipt-level
+     * concept and folds back into {@code RECEIVED}.
+     *
+     * @param node the inbound receipt stanza
+     * @return the parsed receipt, or {@code null} when {@code id} or
+     *         {@code from} is missing
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
             exports = "msgReceiptParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -808,8 +1123,6 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
         var ackString = node.getAttributeAsString("type", null);
         var ack = ReceiptAck.fromType(ackString);
 
-        // which overrides the ack to SENT (mapped to RECEIVED in Cobalt since SENT is not
-        // a receipt-level concept)
         var errorNode = node.getChild("error").orElse(null);
         if (errorNode != null
                 && "lid".equals(errorNode.getAttributeAsString("reason", null))
@@ -830,18 +1143,38 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses a simple (non-aggregated) receipt from the stanza node.
-     * <p>
-     * Extracts the participant, recipient, timestamp, external IDs from any
-     * {@code <list>} child, and optional business metadata from any {@code <biz>} child.
+     * Builds a {@link SimpleReceipt} from a non-aggregated receipt stanza.
      *
-     * @param node      the receipt stanza node
-     * @param id        the stanza ID
-     * @param from      the sender JID
-     * @param ack       the resolved ack level
-     * @param ackString the raw ack type string
-     * @param offline   whether the receipt has the offline attribute
-     * @return the parsed simple receipt
+     * @apiNote
+     * Simple receipts cover both 1:1 and the per-participant flavour of
+     * group / broadcast receipts (a group receipt with a single
+     * {@code <user>} ack lands here, not in the aggregated path). The
+     * optional {@code <list>} child enumerates additional message ids the
+     * receipt covers; the optional {@code <biz>} child carries business
+     * actor/storage/privacy metadata.
+     *
+     * @implNote
+     * This implementation mirrors the {@code p(e, t)} helper inside
+     * {@code WAWebHandleMsgReceiptParser}. For {@code type="view"}
+     * receipts the {@code <item>} children carry the message id under
+     * {@code server_id} rather than {@code id}; for any other type the
+     * stanza id is appended to the external-id list so the simple-receipt
+     * handler picks it up even when no {@code <list>} child is present.
+     * The bot {@code is_lid} flag is honoured only when the
+     * {@code participant} JID resolves to a bot, matching WA Web's
+     * {@code n!=null && n.isBot() && t.hasAttr("is_lid")} guard.
+     *
+     * @param node      the inbound receipt stanza
+     * @param id        the {@code id} attribute already extracted by
+     *                  {@link #parseReceipt(Node)}
+     * @param from      the {@code from} attribute already extracted by
+     *                  {@link #parseReceipt(Node)}
+     * @param ack       the {@link ReceiptAck} already resolved by
+     *                  {@link #parseReceipt(Node)}
+     * @param ackString the raw {@code type} attribute, or {@code null}
+     * @param offline   {@code true} when the stanza carried the
+     *                  {@code offline} attribute
+     * @return the parsed {@link SimpleReceipt}
      */
     private ParsedReceipt parseSimple(
             Node node,
@@ -909,20 +1242,36 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses an aggregated-by-type receipt from the participants node.
-     * <p>
-     * Each {@code <user>} child contributes a participant receipt with the parent's
-     * ack type. The external ID comes from the {@code key} attribute of the
-     * participants node.
+     * Builds an {@link AggregatedByTypeReceipt} from a receipt stanza
+     * whose {@code <participants>} child has no {@code message_id}
+     * attribute.
      *
-     * @param id               the stanza ID
-     * @param from             the sender JID
-     * @param recipient        the recipient JID, if present
-     * @param ack              the resolved ack level
-     * @param ackString        the raw ack type string
-     * @param participantsNode the {@code <participants>} node
-     * @param offline          whether the receipt has the offline attribute
-     * @return the parsed aggregated receipt, or {@code null} if the key attribute is missing
+     * @apiNote
+     * By-type aggregation means every {@code <user>} child shares the
+     * parent stanza's ack type and the external id read from the
+     * {@code key} attribute of the {@code <participants>} child.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code d(e, t)} helper inside
+     * {@code WAWebHandleMsgReceiptParser}. WA Web swallows individual
+     * malformed {@code <user>} entries through a {@code try / return null}
+     * pattern and filters them out; Cobalt drops them implicitly by
+     * skipping the iteration when the {@code jid} attribute is missing.
+     *
+     * @param id               the {@code id} attribute already extracted
+     *                         by {@link #parseReceipt(Node)}
+     * @param from             the {@code from} attribute already extracted
+     *                         by {@link #parseReceipt(Node)}
+     * @param recipient        the {@code recipient} attribute, or
+     *                         {@code null}
+     * @param ack              the parent {@link ReceiptAck}
+     * @param ackString        the raw parent {@code type} attribute
+     * @param participantsNode the {@code <participants>} child
+     * @param offline          {@code true} when the stanza carried the
+     *                         {@code offline} attribute
+     * @return the parsed {@link AggregatedByTypeReceipt}, or {@code null}
+     *         when the {@code <participants>} child has no {@code key}
+     *         attribute
      */
     private ParsedReceipt parseAggregatedByType(
             String id,
@@ -960,18 +1309,35 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Parses an aggregated-by-message receipt from the participants node.
-     * <p>
-     * Each {@code <user>} child carries its own ack type. The external message ID
-     * comes from the {@code message_id} attribute of the participants node.
+     * Builds an {@link AggregatedByMessageReceipt} from a receipt stanza
+     * whose {@code <participants>} child carries a {@code message_id}
+     * attribute.
      *
-     * @param id               the stanza ID
-     * @param from             the sender JID
-     * @param recipient        the recipient JID, if present
-     * @param ackString        the parent-level raw ack type string
-     * @param participantsNode the {@code <participants>} node
-     * @param offline          whether the receipt has the offline attribute
-     * @return the parsed aggregated receipt, or {@code null} if the message_id attribute is missing
+     * @apiNote
+     * By-message aggregation means each {@code <user>} child has its own
+     * ack type; the external message id is read from the
+     * {@code message_id} attribute of the {@code <participants>} child.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code m(t, n)} helper inside
+     * {@code WAWebHandleMsgReceiptParser}. The parent-level ack is
+     * forced to {@link ReceiptAck#RECEIVED} because the per-user ack
+     * supersedes it; WA Web does not bother carrying a parent ack on
+     * this variant.
+     *
+     * @param id               the {@code id} attribute already extracted
+     *                         by {@link #parseReceipt(Node)}
+     * @param from             the {@code from} attribute already extracted
+     *                         by {@link #parseReceipt(Node)}
+     * @param recipient        the {@code recipient} attribute, or
+     *                         {@code null}
+     * @param ackString        the raw parent {@code type} attribute
+     * @param participantsNode the {@code <participants>} child
+     * @param offline          {@code true} when the stanza carried the
+     *                         {@code offline} attribute
+     * @return the parsed {@link AggregatedByMessageReceipt}, or
+     *         {@code null} when the {@code <participants>} child has no
+     *         {@code message_id} attribute
      */
     private ParsedReceipt parseAggregatedByMessage(
             String id,
@@ -1020,11 +1386,25 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts an {@link Instant} from a node attribute containing epoch seconds.
+     * Returns the {@link Instant} parsed from the {@code key}-named
+     * attribute of {@code node}, or {@code null} when the attribute is
+     * missing or non-numeric.
      *
-     * @param node the node to read the attribute from
+     * @apiNote
+     * Used by the per-class parsers to decode the {@code t} attribute on
+     * receipt stanzas and {@code <user>} children, which carries the
+     * receipt event time as a unix epoch second.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's {@code attrTime} helper used
+     * inside {@code WAWebHandleMsgReceiptParser}, which reads the
+     * attribute as a number and converts it through
+     * {@code WATimeUtils.castToUnixTime}.
+     *
+     * @param node the node to read from
      * @param key  the attribute name
-     * @return the parsed instant, or {@code null} if the attribute is missing
+     * @return the parsed {@link Instant}, or {@code null} when the
+     *         attribute is missing or non-numeric
      */
     private static Instant attributeInstant(Node node, String key) {
         return node.getAttributeAsLong(key)
@@ -1035,15 +1415,29 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the user JID to use for receipt tracking from the available JIDs.
-     * <p>
-     * Priority: participant (converted to user JID), then recipient, then from
-     * (only if the from JID is a user-like server type).
+     * Returns the user-level JID to associate with a receipt event,
+     * choosing between {@code participant}, {@code recipient} and
+     * {@code from} in that priority order.
      *
-     * @param from        the sender JID
-     * @param participant the participant device JID
-     * @param recipient   the recipient JID
-     * @return the resolved user JID, or {@code null} if none can be determined
+     * @apiNote
+     * Called from {@link #updateMessage} to decide which
+     * {@link MessageReceipt#userJid()} slot the receipt event should fold
+     * into. The fallback to {@code from} is gated on the JID resolving to
+     * a user, LID, bot or hosted server because group and broadcast JIDs
+     * are not valid receipt-user values.
+     *
+     * @implNote
+     * This implementation matches the priority order WA Web uses in
+     * {@code handleChatSimpleReceipt}: participant takes precedence
+     * (it identifies the actual device that delivered), then recipient
+     * (set when the sender wants to disambiguate against the receiver's
+     * device), then the {@code from} JID itself for direct receipts.
+     *
+     * @param from        the {@code from} attribute of the receipt
+     * @param participant the participant device JID, or {@code null}
+     * @param recipient   the {@code recipient} attribute, or {@code null}
+     * @return the resolved user-level JID, or {@code null} when no
+     *         candidate matches the user/LID/bot/hosted check
      */
     private static Jid resolveReceiptUser(Jid from, Jid participant, Jid recipient) {
         if (participant != null) {
@@ -1059,10 +1453,24 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Maps a receipt ack level to the corresponding message status.
+     * Maps a {@link ReceiptAck} to the corresponding {@link MessageStatus}
+     * milestone stored on {@link MessageInfo}.
      *
-     * @param ack the receipt ack level
-     * @return the corresponding message status
+     * @apiNote
+     * The {@link ReceiptAck#CONTENT_GONE} and {@link ReceiptAck#INACTIVE}
+     * acks map to {@link MessageStatus#ERROR} because both indicate a
+     * server-side failure to deliver: {@code content_gone} means the
+     * server-side blob expired before re-upload and {@code inactive}
+     * means the recipient device is inactive.
+     *
+     * @implNote
+     * This implementation mirrors the keyset of WA Web's
+     * {@code WAWebAck.ACK} enum and the message-status promotion
+     * performed inside {@code WAWebApiMessageInfoStore}: every non-read,
+     * non-played, non-error ack maps to {@link MessageStatus#DELIVERED}.
+     *
+     * @param ack the {@link ReceiptAck}
+     * @return the corresponding {@link MessageStatus}
      */
     private static MessageStatus mapStatus(ReceiptAck ack) {
         return switch (ack) {
@@ -1075,26 +1483,61 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether a receipt ack level represents a delivery-like event
-     * (not a read or played confirmation).
+     * Returns {@code true} when {@code ack} should contribute to the
+     * {@link MessageReceipt#receiptTimestamp()} slot rather than the
+     * read/played-specific slots.
      *
-     * @param ack the receipt ack level
-     * @return {@code true} if the ack is delivery-like
+     * @apiNote
+     * Used by {@link #updateMessage} to decide which timestamp field on
+     * the receipt the incoming event populates. Read and played receipts
+     * land on their own dedicated timestamp slots so the delivery
+     * timestamp is preserved separately.
+     *
+     * @implNote
+     * This implementation matches the WA Web split inside
+     * {@code WAWebApiMessageInfoStore}, where delivery / sender / peer /
+     * content-gone events all carry a generic receipt timestamp and only
+     * {@code READ} and {@code PLAYED} get their own timestamp fields.
+     *
+     * @param ack the {@link ReceiptAck} to classify
+     * @return {@code true} for every ack except {@link ReceiptAck#READ}
+     *         and {@link ReceiptAck#PLAYED}
      */
     private static boolean isDeliveryLike(ReceiptAck ack) {
         return ack != ReceiptAck.READ && ack != ReceiptAck.PLAYED;
     }
 
     /**
-     * Resolves device-level delivery tracking for a message receipt.
-     * <p>
-     * Looks up pending receipt records for the message ID, partitions them into
-     * delivered and remaining devices, and updates the store accordingly.
+     * Reconciles the cached per-message pending-receipt set with the
+     * device that just confirmed delivery.
      *
-     * @param messageId        the message ID to look up
-     * @param userJid          the user JID to match against
-     * @param participantDevice the specific device JID that delivered the receipt
-     * @return a receipt update containing delivered and pending device lists
+     * @apiNote
+     * Called from {@link #updateMessage}. The returned
+     * {@link ReceiptUpdate} drives the
+     * {@link MessageReceipt#pendingDeviceJid()} and
+     * {@link MessageReceipt#deliveredDeviceJid()} slots so the embedder
+     * can render per-device delivery status (the "delivered to N of M
+     * devices" indicator on multi-device chats).
+     *
+     * @implNote
+     * This implementation has no exact WA Web counterpart because WA Web
+     * tracks pending-receipt-by-device inside the
+     * {@code WAWebMessageReceiptBatcher} batch loop rather than as a
+     * separate store accessor. The Cobalt store keeps the pending-device
+     * set externally so the lookup here is a single
+     * {@code findReceiptRecords} call. When the lookup yields zero
+     * delivered devices, the store remains untouched; when it yields
+     * one or more, the entire record is rewritten so the remaining
+     * devices replace the previous set.
+     *
+     * @param messageId         the external message id
+     * @param userJid           the user JID extracted by
+     *                          {@link #resolveReceiptUser(Jid, Jid, Jid)}
+     * @param participantDevice the device JID that produced the receipt,
+     *                          or {@code null} when only the user-level
+     *                          JID is known
+     * @return the {@link ReceiptUpdate} carrying the delivered and the
+     *         still-pending device lists
      */
     private ReceiptUpdate resolveDeviceUpdate(String messageId, Jid userJid, Jid participantDevice) {
         if (messageId == null || userJid == null) {
@@ -1130,20 +1573,34 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Merges a receipt event into the existing receipt list for a message.
-     * <p>
-     * Finds or creates a {@link MessageReceipt} for the given user JID and
-     * updates timestamps and device lists. Timestamps are only updated if the
-     * incoming value is later than the existing value.
+     * Folds one per-user receipt event into the message's existing
+     * {@link MessageReceipt} list, creating a fresh entry when none
+     * exists for {@code userJid}.
      *
-     * @param info             the message info containing existing receipts
-     * @param userJid          the user JID to track the receipt for
-     * @param receiptTimestamp  the delivery timestamp, or {@code null}
-     * @param readTimestamp     the read timestamp, or {@code null}
-     * @param playedTimestamp   the played timestamp, or {@code null}
-     * @param pendingDevices   the list of devices still pending delivery
-     * @param deliveredDevices the list of devices that have delivered
-     * @return the updated receipt list
+     * @apiNote
+     * Called from {@link #updateMessage}. Timestamps move forward only;
+     * a stale receipt arriving out of order cannot rewind an existing
+     * read or played timestamp.
+     *
+     * @implNote
+     * This implementation has no single WA Web counterpart because WA
+     * Web manages per-user receipt state through the
+     * {@code WAWebMessageReceiptBatcher} batch operations rather than a
+     * direct list mutation. The pending-devices slot is overwritten
+     * outright (it is the latest known snapshot) while the delivered
+     * devices set is unioned across receipts so a per-device delivery
+     * confirmation never erases prior confirmations.
+     *
+     * @param info             the message holding the existing receipts
+     * @param userJid          the user-level JID whose receipt is being
+     *                         updated
+     * @param receiptTimestamp the delivery timestamp, or {@code null}
+     * @param readTimestamp    the read timestamp, or {@code null}
+     * @param playedTimestamp  the played timestamp, or {@code null}
+     * @param pendingDevices   the devices still pending delivery
+     * @param deliveredDevices the devices that have just confirmed
+     *                         delivery
+     * @return the updated immutable {@link MessageReceipt} list
      */
     private List<MessageReceipt> mergeReceipt(
             MessageInfo info,
@@ -1199,14 +1656,29 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Merges two message statuses, keeping the higher-priority one.
-     * <p>
-     * Error status is replaced by any non-error incoming status. Otherwise, the
-     * status with the higher ordinal value wins.
+     * Reduces a current and an incoming {@link MessageStatus} to the
+     * single value the message should now carry.
      *
-     * @param current  the current message status, may be {@code null}
-     * @param incoming the incoming message status, may be {@code null}
-     * @return the merged status
+     * @apiNote
+     * Used by {@link #updateMessage} to promote the per-message status
+     * monotonically: an existing {@link MessageStatus#READ} is never
+     * down-ranked by a late-arriving {@link MessageStatus#DELIVERED},
+     * and a transient {@link MessageStatus#ERROR} is replaced as soon as
+     * any non-error ack arrives.
+     *
+     * @implNote
+     * This implementation diverges from WA Web's
+     * {@code WAWebApiMessageInfoStore} by using
+     * {@link Enum#ordinal()} to pick the higher-priority value. The
+     * {@link MessageStatus} enum is therefore declared in the
+     * ascending-priority order callers depend on; reordering its
+     * constants would silently break this reduction.
+     *
+     * @param current  the status currently stored on the message, or
+     *                 {@code null}
+     * @param incoming the status just derived from a receipt, or
+     *                 {@code null}
+     * @return the reduced {@link MessageStatus}
      */
     private MessageStatus mergeStatus(MessageStatus current, MessageStatus incoming) {
         if (current == null) {
@@ -1225,7 +1697,17 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners about a message status change.
+     * Fans out an {@code onMessageStatus} notification to every registered
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener}.
+     *
+     * @apiNote
+     * Called from {@link #updateMessage} after the message status and
+     * receipt list have been merged.
+     *
+     * @implNote
+     * This implementation starts one virtual thread per listener so that
+     * a blocking listener cannot stall the {@link SocketStream} dispatch
+     * loop.
      *
      * @param info the message whose status has changed
      */
@@ -1236,11 +1718,24 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether two JIDs represent the same user, ignoring device identifiers.
+     * Returns {@code true} when {@code left} and {@code right} refer to
+     * the same user, ignoring any device suffix.
      *
-     * @param left  the first JID
-     * @param right the second JID
-     * @return {@code true} if both JIDs have the same user JID
+     * @apiNote
+     * Used by the receipt-fold helpers to compare device JIDs against
+     * the user-level JID extracted by
+     * {@link #resolveReceiptUser(Jid, Jid, Jid)}.
+     *
+     * @implNote
+     * This implementation compares the canonical user form returned by
+     * {@link Jid#toUserJid()}, which collapses the device segment for
+     * both PN and LID server JIDs.
+     *
+     * @param left  the first {@link Jid}, or {@code null}
+     * @param right the second {@link Jid}, or {@code null}
+     * @return {@code true} when both JIDs resolve to the same user;
+     *         {@code false} when either is {@code null} or the user
+     *         segments differ
      */
     private boolean sameUser(Jid left, Jid right) {
         return left != null
@@ -1249,10 +1744,24 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether a receipt stanza is a retry request.
+     * Returns {@code true} when the receipt stanza is a retry request.
      *
-     * @param node the receipt stanza node
-     * @return {@code true} if the type attribute is "retry" or "enc_rekey_retry"
+     * @apiNote
+     * Used by {@link #handle(Node)} to take the
+     * {@link #handleRetryReceipt(Node)} branch before the regular
+     * receipt-parser path runs.
+     *
+     * @implNote
+     * This implementation accepts both {@code "retry"} and
+     * {@code "enc_rekey_retry"} as WA Web's
+     * {@code WAWebCommsHandleLoggedInStanza} does. The
+     * {@code "voip_1x1_retry"} variant is not split off here because
+     * {@link #processRetryRequest(Node)} drops it explicitly further
+     * down the pipeline.
+     *
+     * @param node the receipt stanza
+     * @return {@code true} when the {@code type} attribute is
+     *         {@code "retry"} or {@code "enc_rekey_retry"}
      */
     private static boolean isRetryReceipt(Node node) {
         var type = node.getAttributeAsString("type", null);
@@ -1260,15 +1769,29 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether a raw {@code type} attribute string maps to a known
-     * entry in WA Web's {@code RECEIPT_TYPES_TO_ACK} map.
-     * <p>
-     * Mirrors the keyset of the JS module-local object {@code u}:
-     * {@code delivery, read, played, inactive, server-error, sender,
-     * read-self, played-self, peer_msg}.
+     * Returns {@code true} when the raw {@code type} attribute string is a
+     * recognized {@code RECEIPT_TYPES_TO_ACK} key in WA Web's
+     * {@code WAWebHandleMsgReceiptParser}.
      *
-     * @param type the raw {@code type} attribute string from the receipt stanza
-     * @return {@code true} if the string is a recognized {@code RECEIPT_TYPES_TO_ACK} key
+     * @apiNote
+     * Used by
+     * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
+     * to decide whether the raw ack string is safe to forward to the
+     * {@link com.github.auties00.cobalt.wam.event.ReceiptStanzaReceiveEvent}'s
+     * {@code receiptStanzaType} field. Unrecognized strings would skew
+     * the WAM enum bucket counts on the server and are therefore
+     * filtered out.
+     *
+     * @implNote
+     * This implementation enumerates the keyset of WA Web's module-local
+     * {@code u} object inside {@code WAWebHandleMsgReceiptParser}:
+     * {@code delivery}, {@code read}, {@code played}, {@code inactive},
+     * {@code server-error}, {@code sender}, {@code read-self},
+     * {@code played-self}, {@code peer_msg}.
+     *
+     * @param type the raw {@code type} attribute, or {@code null}
+     * @return {@code true} when the string is a recognized
+     *         {@code RECEIPT_TYPES_TO_ACK} key; {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
             exports = "RECEIPT_TYPES_TO_ACK", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1284,78 +1807,153 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Holds the result of device-level delivery tracking resolution.
+     * Carries the {@code (delivered, pending)} device split returned by
+     * {@link #resolveDeviceUpdate(String, Jid, Jid)}.
      *
-     * @param deliveredDevices the devices that have confirmed delivery
-     * @param pendingDevices   the devices still pending delivery
+     * @apiNote
+     * Consumed only by {@link #updateMessage} to feed the per-user
+     * {@link MessageReceipt#deliveredDeviceJid()} and
+     * {@link MessageReceipt#pendingDeviceJid()} slots.
+     *
+     * @param deliveredDevices the device JIDs that just confirmed
+     *                         delivery
+     * @param pendingDevices   the device JIDs still pending delivery
      */
     private record ReceiptUpdate(List<Jid> deliveredDevices, List<Jid> pendingDevices) {
     }
 
     /**
-     * Sealed interface for all parsed receipt types.
+     * Sealed parent of the three parsed receipt shapes
+     * {@link #parseReceipt(Node)} can return.
+     *
+     * @apiNote
+     * Consumed by {@link #handle(Node)} for per-class dispatch and by
+     * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
+     * for the per-shape telemetry overrides.
+     *
+     * @implNote
+     * This implementation seals the type so {@link #handle(Node)} can
+     * exhaustively switch over the three variants; adding a new
+     * receipt shape would require touching both the parser and the
+     * dispatcher in lockstep.
      */
     private sealed interface ParsedReceipt extends ReceiptLike
             permits SimpleReceipt, AggregatedByTypeReceipt, AggregatedByMessageReceipt {
     }
 
     /**
-     * Common interface for all receipt-like objects providing shared accessors.
+     * Common accessors shared by every receipt-like payload, regardless
+     * of whether it is parsed or upstream.
+     *
+     * @apiNote
+     * Used by {@link #updateMessage} and
+     * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
+     * so the per-class records do not need to be unpacked through a
+     * pattern match every time.
+     *
+     * @implNote
+     * This implementation pulls only the five fields the downstream
+     * helpers actually touch. The full per-class record fields stay
+     * accessible through pattern matching when more detail is needed
+     * (the parser-private {@code stanzaId}, {@code participantPn} and
+     * {@code participantUsername} fields are intentionally excluded
+     * because no caller consumes them).
      */
     private interface ReceiptLike {
         /**
-         * Returns the sender JID.
+         * Returns the {@code from} JID of the receipt.
          *
-         * @return the from JID
+         * @apiNote
+         * Identifies the conversation the receipt applies to.
+         *
+         * @return the {@code from} JID
          */
         Jid from();
 
         /**
-         * Returns the recipient JID.
+         * Returns the optional {@code recipient} attribute of the receipt.
+         *
+         * @apiNote
+         * Set on direct receipts when the sender wants to disambiguate
+         * against a specific recipient device; absent on the common case.
          *
          * @return the recipient JID, or {@code null}
          */
         Jid recipient();
 
         /**
-         * Returns the receipt timestamp.
+         * Returns the {@code t} attribute of the receipt as an
+         * {@link Instant}.
          *
-         * @return the timestamp, or {@code null}
+         * @apiNote
+         * Represents the wall-clock time at which the receipt event was
+         * produced; consumed as the timestamp for each per-user
+         * {@link MessageReceipt} field.
+         *
+         * @return the event timestamp, or {@code null} when the attribute
+         *         was absent
          */
         Instant timestamp();
 
         /**
-         * Returns the raw ack type string.
+         * Returns the raw {@code type} attribute string of the receipt.
          *
-         * @return the ack string, or {@code null}
+         * @apiNote
+         * Carried through to the WAM telemetry event by
+         * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}.
+         *
+         * @return the raw ack string, or {@code null} when the attribute
+         *         was absent
          */
         String ackString();
 
         /**
-         * Returns whether this receipt arrived while offline.
+         * Returns {@code true} when the receipt was delivered via the
+         * offline queue.
          *
-         * @return {@code true} if the receipt was received offline
+         * @apiNote
+         * Used by
+         * {@link #commitReceiptMetric(ReceiptStanzaReceiveEventBuilder, ParsedReceipt)}
+         * to skip the telemetry commit on offline replays so the metric
+         * does not double-count.
+         *
+         * @return {@code true} when the {@code offline} attribute was
+         *         present on the receipt stanza
          */
         boolean offline();
     }
 
     /**
-     * Represents a simple (non-aggregated) receipt with a single participant
-     * and potentially multiple external message IDs.
+     * A receipt with no {@code <participants>} child: a single
+     * acknowledgement that may cover several external message ids.
      *
-     * @param stanzaId            the stanza ID
-     * @param from                the sender JID
-     * @param participant         the participant device JID
-     * @param participantPn       the participant phone number JID
-     * @param participantUsername  the participant username string
-     * @param recipient           the recipient JID
-     * @param timestamp           the receipt timestamp
-     * @param ack                 the resolved ack level
-     * @param ackString           the raw ack type string
-     * @param externalIds         the list of message IDs this receipt covers
-     * @param offline             whether the receipt was received offline
-     * @param isLidBot            whether the participant is a LID-based bot
-     * @param bizInfo             optional business metadata from the biz child
+     * @apiNote
+     * Both 1:1 and per-participant group / broadcast receipts land in
+     * this record. The {@link #bizInfo} field is set only when the
+     * receipt carried a {@code <biz>} child.
+     *
+     * @param stanzaId            the {@code id} attribute of the receipt
+     * @param from                the {@code from} JID of the receipt
+     * @param participant         the participant device JID, or
+     *                            {@code null}
+     * @param participantPn       the participant's phone-server JID, or
+     *                            {@code null}
+     * @param participantUsername the participant's WhatsApp username, or
+     *                            {@code null}
+     * @param recipient           the {@code recipient} JID, or
+     *                            {@code null}
+     * @param timestamp           the event time parsed from {@code t}
+     * @param ack                 the {@link ReceiptAck} resolved from
+     *                            {@code type}
+     * @param ackString           the raw {@code type} attribute
+     * @param externalIds         every message id this receipt covers
+     * @param offline             {@code true} when the stanza carried the
+     *                            {@code offline} attribute
+     * @param isLidBot            {@code true} when the participant is a
+     *                            LID-server bot and the stanza carried
+     *                            {@code is_lid="true"}
+     * @param bizInfo             the {@link BizInfo} parsed from the
+     *                            {@code <biz>} child, or {@code null}
      */
     private record SimpleReceipt(
             String stanzaId,
@@ -1375,19 +1973,30 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Represents an aggregated-by-type receipt where all participants share the
-     * same ack type from the parent stanza.
+     * A receipt whose {@code <participants>} child has no
+     * {@code message_id} attribute: every {@code <user>} child shares
+     * the parent ack type.
      *
-     * @param stanzaId   the stanza ID
-     * @param from       the sender JID
-     * @param recipient  the recipient JID
-     * @param participant unused, always {@code null}
-     * @param timestamp  unused, always {@code null}
-     * @param ack        the shared ack level
-     * @param ackString  the shared raw ack type string
-     * @param externalId the message ID this receipt covers
-     * @param receipts   the list of per-participant receipts
-     * @param offline    whether the receipt was received offline
+     * @apiNote
+     * The {@link #participant} and {@link #timestamp} fields are
+     * structurally unused for this shape; they are kept so
+     * {@link ReceiptLike} can be implemented uniformly across the three
+     * parsed variants.
+     *
+     * @param stanzaId    the {@code id} attribute of the receipt
+     * @param from        the {@code from} JID of the receipt
+     * @param recipient   the {@code recipient} JID, or {@code null}
+     * @param participant always {@code null} for this shape
+     * @param timestamp   always {@code null} for this shape
+     * @param ack         the parent {@link ReceiptAck} applied to every
+     *                    {@code <user>} child
+     * @param ackString   the raw parent {@code type} attribute
+     * @param externalId  the external message id read from the
+     *                    {@code key} attribute of the
+     *                    {@code <participants>} child
+     * @param receipts    the per-participant receipts
+     * @param offline     {@code true} when the stanza carried the
+     *                    {@code offline} attribute
      */
     private record AggregatedByTypeReceipt(
             String stanzaId,
@@ -1404,19 +2013,32 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Represents an aggregated-by-message receipt where each participant carries
-     * its own ack type.
+     * A receipt whose {@code <participants>} child carries a
+     * {@code message_id} attribute: each {@code <user>} child has its
+     * own ack type.
      *
-     * @param stanzaId   the stanza ID
-     * @param from       the sender JID
-     * @param recipient  the recipient JID
-     * @param participant unused, always {@code null}
-     * @param timestamp  unused, always {@code null}
-     * @param ack        the parent-level ack (always RECEIVED)
-     * @param ackString  the parent-level raw ack type string
-     * @param externalId the message ID this receipt covers
-     * @param receipts   the list of per-participant receipts with individual ack types
-     * @param offline    whether the receipt was received offline
+     * @apiNote
+     * The {@link #participant} and {@link #timestamp} fields are
+     * structurally unused for this shape; they are kept so
+     * {@link ReceiptLike} can be implemented uniformly. The
+     * {@link #ack} slot always carries {@link ReceiptAck#RECEIVED}
+     * because the per-user ack supersedes any parent value.
+     *
+     * @param stanzaId    the {@code id} attribute of the receipt
+     * @param from        the {@code from} JID of the receipt
+     * @param recipient   the {@code recipient} JID, or {@code null}
+     * @param participant always {@code null} for this shape
+     * @param timestamp   always {@code null} for this shape
+     * @param ack         always {@link ReceiptAck#RECEIVED} for this
+     *                    shape
+     * @param ackString   the raw parent {@code type} attribute
+     * @param externalId  the external message id read from the
+     *                    {@code message_id} attribute of the
+     *                    {@code <participants>} child
+     * @param receipts    the per-participant receipts, each with its own
+     *                    ack
+     * @param offline     {@code true} when the stanza carried the
+     *                    {@code offline} attribute
      */
     private record AggregatedByMessageReceipt(
             String stanzaId,
@@ -1433,14 +2055,27 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Represents a single participant's receipt within an aggregated receipt.
+     * One {@code <user>} child of an aggregated receipt.
      *
-     * @param participant         the participant device JID
-     * @param participantPn       the participant phone number JID
-     * @param participantUsername  the participant username string
-     * @param timestamp           the receipt timestamp for this participant
-     * @param ack                 the ack level for this participant
-     * @param ackString           the raw ack type string for this participant
+     * @apiNote
+     * Consumed by
+     * {@link #handleAggregatedByType(AggregatedByTypeReceipt)} and
+     * {@link #handleAggregatedByMessage(AggregatedByMessageReceipt)} to
+     * drive the per-participant {@link #updateMessage} call.
+     *
+     * @param participant         the device JID of the participant
+     * @param participantPn       the participant's phone-server JID, or
+     *                            {@code null}
+     * @param participantUsername the participant's WhatsApp username, or
+     *                            {@code null}
+     * @param timestamp           the {@code t} attribute of the
+     *                            {@code <user>} child
+     * @param ack                 the {@link ReceiptAck} for this
+     *                            participant (parent ack for the by-type
+     *                            shape, per-user ack for the by-message
+     *                            shape)
+     * @param ackString           the raw {@code type} attribute, when
+     *                            applicable
      */
     private record ParticipantReceipt(
             Jid participant,
@@ -1453,11 +2088,20 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Holds business-specific metadata from a receipt's {@code <biz>} child element.
+     * The business-metadata payload optionally carried inside the
+     * {@code <biz>} child of a {@link SimpleReceipt}.
      *
-     * @param actualActors   the actual actors enum value
-     * @param hostStorage    the host storage enum value
-     * @param privacyModeTs  the privacy mode timestamp
+     * @apiNote
+     * Consumed exclusively by WhatsApp Business surfaces; the three
+     * fields tag the receipt for downstream {@code WAWebApiContact}
+     * privacy-mode reconciliation in WA Web. Cobalt parses the payload
+     * for future expansion but does not yet surface it through a public
+     * listener.
+     *
+     * @param actualActors  the {@code ActualActors} enum value
+     * @param hostStorage   the {@code HostStorage} enum value
+     * @param privacyModeTs the privacy-mode change timestamp in seconds
+     *                      since the epoch
      */
     private record BizInfo(
             int actualActors,
@@ -1467,64 +2111,84 @@ public final class MessageReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Enumerates the receipt acknowledgement levels that map to WA Web's
-     * {@code RECEIPT_TYPES_TO_ACK} map.
-     * <p>
-     * Each value corresponds to a WA Web {@code ACK} constant:
-     * <ul>
-     *   <li>{@code RECEIVED} = ACK.RECEIVED (2) — delivery, sender, inactive (as default)</li>
-     *   <li>{@code READ} = ACK.READ (3)</li>
-     *   <li>{@code PLAYED} = ACK.PLAYED (4)</li>
-     *   <li>{@code CONTENT_GONE} = ACK.CONTENT_GONE (-3) — server-error</li>
-     *   <li>{@code PEER} = ACK.PEER (5) — peer_msg</li>
-     *   <li>{@code INACTIVE} = ACK.INACTIVE (-6) — inactive</li>
-     * </ul>
+     * The receipt-acknowledgement classifier used internally to drive
+     * {@link #mapStatus(ReceiptAck)},
+     * {@link #isDeliveryLike(ReceiptAck)} and the per-class dispatch.
+     *
+     * @apiNote
+     * Each constant corresponds to a value of WA Web's
+     * {@code WAWebAck.ACK} enum.
+     *
+     * @implNote
+     * This implementation diverges from WA Web's {@code ACK} enum in two
+     * places. WA Web includes an {@code ACK.SENT = 1} value used for the
+     * outbound-server-side feature-incapable error override; Cobalt
+     * folds {@code SENT} into {@link #RECEIVED} because there is no
+     * receipt-level distinction between the two in the local store. WA
+     * Web does not carry {@code ACK.PEER} as a positive ack; Cobalt
+     * uses it as a sentinel that diverts the simple-receipt path to
+     * the peer-message branch before any store mutation runs.
      */
     private enum ReceiptAck {
         /**
-         * Delivery-level acknowledgement (ACK.RECEIVED = 2).
+         * Delivery-level acknowledgement, mapped to WA Web
+         * {@code ACK.RECEIVED = 2}.
          */
         RECEIVED,
 
         /**
-         * Read acknowledgement (ACK.READ = 3).
+         * Read acknowledgement, mapped to WA Web {@code ACK.READ = 3}.
          */
         READ,
 
         /**
-         * Played acknowledgement for audio/video (ACK.PLAYED = 4).
+         * Played acknowledgement for audio or video media, mapped to WA
+         * Web {@code ACK.PLAYED = 4}.
          */
         PLAYED,
 
         /**
-         * Content gone / server error (ACK.CONTENT_GONE = -3).
+         * Content-gone (server-error) acknowledgement, mapped to WA Web
+         * {@code ACK.CONTENT_GONE = -3}.
          */
         CONTENT_GONE,
 
         /**
-         * Peer message acknowledgement (ACK.PEER = 5).
+         * Peer-message acknowledgement, mapped to WA Web
+         * {@code ACK.PEER = 5}.
          */
         PEER,
 
         /**
-         * Inactive acknowledgement (ACK.INACTIVE = -6).
+         * Inactive-device acknowledgement, mapped to WA Web
+         * {@code ACK.INACTIVE = -6}.
          */
         INACTIVE;
 
         /**
-         * Resolves a raw type string to the corresponding {@link ReceiptAck} value.
-         * <p>
-         * Maps the WA Web {@code RECEIPT_TYPES_TO_ACK} object:
-         * {@code delivery} and {@code sender} map to {@code RECEIVED},
-         * {@code read} and {@code read-self} map to {@code READ},
-         * {@code played} and {@code played-self} map to {@code PLAYED},
-         * {@code server-error} maps to {@code CONTENT_GONE},
-         * {@code peer_msg} maps to {@code PEER},
-         * {@code inactive} maps to {@code INACTIVE},
-         * and {@code null} or unknown values default to {@code RECEIVED}.
+         * Resolves a raw {@code type} attribute string to the
+         * corresponding {@link ReceiptAck}.
          *
-         * @param type the raw ack type string from the receipt stanza
-         * @return the resolved ack level
+         * @apiNote
+         * Called from {@link #parseReceipt(Node)} for the parent ack and
+         * from {@link #parseAggregatedByMessage(String, Jid, Jid, String, Node, boolean)}
+         * for the per-user ack. Both {@code null} and unknown strings
+         * fall back to {@link #RECEIVED}, matching WA Web's
+         * {@code t!=null ? t : ACK.RECEIVED} default after the
+         * {@code RECEIPT_TYPES_TO_ACK} lookup.
+         *
+         * @implNote
+         * This implementation enumerates WA Web's
+         * {@code RECEIPT_TYPES_TO_ACK} map verbatim:
+         * {@code delivery, sender -> RECEIVED};
+         * {@code read, read-self -> READ};
+         * {@code played, played-self -> PLAYED};
+         * {@code server-error -> CONTENT_GONE};
+         * {@code peer_msg -> PEER};
+         * {@code inactive -> INACTIVE}.
+         *
+         * @param type the raw {@code type} attribute, or {@code null}
+         * @return the resolved {@link ReceiptAck}
          */
         @WhatsAppWebExport(moduleName = "WAWebHandleMsgReceiptParser",
                 exports = "RECEIPT_TYPES_TO_ACK", adaptation = WhatsAppAdaptation.ADAPTED)

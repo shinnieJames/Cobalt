@@ -11,85 +11,102 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Mobile registration driver that impersonates the native iOS WhatsApp
+ * Mobile registration driver impersonating the native iOS WhatsApp
  * application.
  *
  * <p>Adds iOS-specific behaviour on top of
  * {@link MobileClientRegistration}:
  * <ul>
- *   <li>{@link #createRequest(String, String, String)} uses the iOS User-Agent
- *       derived from the store's device description and sends only the
- *       minimal HTTP headers the iOS app sends (no {@code WaMsysRequest},
- *       no explicit {@code Accept}, no per-request token header,
- *       no {@code Authorization} header).</li>
- *   <li>{@link #getRequestVerificationCodeParameters(String)} populates
- *       the short set of form fields the iOS app sends: method, SIM
- *       MCC/MNC, jailbroken flag, APNS push token + silent-push code,
- *       and cellular signal strength.</li>
- *   <li>{@link #generateFdid()} formats the device family UUID in upper
- *       case, matching the iOS behaviour.</li>
+ *   <li>{@link #createRequest(String, String, String)} uses the iOS
+ *       User-Agent and sends only the minimal headers the native iOS
+ *       app emits (no {@code WaMsysRequest}, no explicit
+ *       {@code Accept}, no {@code request_token}).</li>
+ *   <li>{@link #getRequestVerificationCodeParameters(String)}
+ *       populates the short set of form fields the iOS app sends
+ *       (method, SIM MCC/MNC, jailbroken flag, APNS silent-push
+ *       code, cellular strength).</li>
+ *   <li>{@link #attestBody(byte[])} mints an Apple App Attest
+ *       assertion + attestation pair via the configured
+ *       {@link WhatsAppDeviceAttestor.Ios} and packages it into the
+ *       {@code H=} body suffix plus the {@code Authorization}
+ *       header.</li>
+ *   <li>{@link #attestationFields()} ships just the APNS
+ *       {@code push_token} inside the encrypted body; the App
+ *       Attest payloads ride outside it.</li>
+ *   <li>{@link #generateFdid()} formats the device family UUID in
+ *       uppercase, matching the native client.</li>
  * </ul>
  *
- * <p>The configured {@link WhatsAppDeviceAttestor.Ios} produces an
- * Apple App Attest attestation+assertion pair plus the matching
- * {@code keyId} (per {@link WhatsAppDeviceAttestor.Ios.AppAttestData}),
- * and this driver emits both on every attested endpoint, in the wire
- * shape confirmed by Frida runtime tracing of {@code
- * -[RegistrationAttestationManagerImpl assertionFor:path:]} and
- * {@code attestationPayloadForRegistrationFor:} together with
- * {@code -[NSMutableURLRequest setHTTPBody:]} /
+ * @apiNote
+ * iOS-specific subclass of {@link MobileClientRegistration}.
+ * Package-private because embedders construct this through
+ * {@link MobileClientRegistration#newRegistration(WhatsAppStore,
+ * WhatsAppClientVerificationHandler.Mobile, WhatsAppDeviceAttestor,
+ * WhatsAppDevicePushClient)} rather than directly.
+ *
+ * @implNote
+ * This implementation reproduces the wire shape confirmed by Frida
+ * runtime tracing of
+ * {@code -[RegistrationAttestationManagerImpl assertionFor:path:]}
+ * and {@code attestationPayloadForRegistrationFor:} together with
+ * {@code -[NSMutableURLRequest setHTTPBody:]} and
  * {@code setValue:forHTTPHeaderField:} on a live iOS WhatsApp
- * registration:
- * <ul>
- *   <li>The per-request CBOR assertion goes into the {@code H=}
- *       suffix of the body, wrapped in a JSON envelope
- *       {@code {"assertion":"<base64 CBOR>"}}.</li>
- *   <li>The session-stable CBOR attestation goes into the
- *       {@code Authorization} request header alongside the
- *       {@code keyId}, joined by a literal {@code "|"}:
- *       {@code <base64 attestation>|<base64 keyId>}.</li>
- * </ul>
- * Both wire slots are skipped on the funnel endpoints
+ * registration. The per-request CBOR assertion goes into the
+ * {@code H=} suffix wrapped in a {@code {"assertion":"<base64>"}}
+ * JSON envelope; the session-stable CBOR attestation goes into the
+ * {@code Authorization} header alongside the
+ * {@code keyId}, joined by a literal {@code "|"}. Both wire slots are
+ * skipped on the funnel endpoints
  * ({@code /v2/client_log}, {@code /v2/pre_pn_client_log}), matching
- * the native client's behaviour where
- * {@code attestationFor:path:} returns {@code nil} for those paths.
+ * the native client's behaviour where {@code attestationFor:path:}
+ * returns {@code nil} for those paths.
  *
- * @apiNote iOS-specific driver for the native mobile registration
- *          protocol. Not present in WA Web. Package-private because
- *          callers should always go through
- *          {@link MobileClientRegistration#newRegistration} rather
- *          than constructing this class directly.
  * @see MobileClientRegistration
  */
 final class IosClientRegistration extends MobileClientRegistration {
     /**
-     * The iOS attestor the registration consults before each outgoing
-     * request. Never {@code null}: the constructor substitutes
-     * {@link WhatsAppDeviceAttestor.Ios#NONE} when the caller supplies
-     * {@code null}.
+     * The iOS attestor consulted before each outgoing request.
+     *
+     * @apiNote
+     * Never {@code null}: the constructor substitutes
+     * {@link WhatsAppDeviceAttestor.Ios#NONE} when the caller
+     * supplies {@code null}. The {@code NONE} fallback returns
+     * empty App Attest output, which the server tolerates as a
+     * low-trust downgrade signal.
      */
     private final WhatsAppDeviceAttestor.Ios attestor;
 
     /**
-     * The push client the registration consults for the {@code push_token}
-     * and {@code push_code} form fields. Never {@code null}: the
-     * constructor substitutes {@link WhatsAppDevicePushClient#noop()} when the
-     * caller supplies {@code null}.
+     * The push client consulted for the APNS {@code push_token} and
+     * the silent-push verification code form fields.
+     *
+     * @apiNote
+     * Never {@code null}: the constructor substitutes
+     * {@link WhatsAppDevicePushClient#noop()} when the caller
+     * supplies {@code null}.
      */
     private final WhatsAppDevicePushClient pushClient;
 
     /**
-     * Constructs a new iOS registration bound to the given store,
-     * verification handler, attestor, and push client.
+     * Constructs an iOS registration bound to the given
+     * collaborators.
      *
-     * @param store the store carrying identity keys and phone number
-     * @param verification the verification handler supplying the method
-     *                     and the user-entered code
-     * @param attestor the iOS device attestor, or {@code null} to use
-     *                 the low-trust {@link WhatsAppDeviceAttestor.Ios#NONE}
-     *                 fallback
-     * @param pushClient the push client, or {@code null} to use the
-     *                   low-trust {@link WhatsAppDevicePushClient#noop()} fallback
+     * @apiNote
+     * Called only from
+     * {@link MobileClientRegistration#newRegistration(WhatsAppStore,
+     * WhatsAppClientVerificationHandler.Mobile,
+     * WhatsAppDeviceAttestor, WhatsAppDevicePushClient)}.
+     *
+     * @param store        the store carrying identity keys and the
+     *                     phone number
+     * @param verification the verification handler supplying the
+     *                     method and the user-entered code
+     * @param attestor     the iOS device attestor, or {@code null}
+     *                     to fall back to
+     *                     {@link WhatsAppDeviceAttestor.Ios#NONE}
+     * @param pushClient   the push client, or {@code null} to fall
+     *                     back to
+     *                     {@link WhatsAppDevicePushClient#noop()}
      */
     IosClientRegistration(
             WhatsAppStore store,
@@ -102,19 +119,16 @@ final class IosClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Builds an HTTP POST request to the registration endpoint with the
-     * pre-assembled body and the minimal iOS headers, attaching the
-     * App Attest {@code Authorization} header when one is supplied.
+     * {@inheritDoc}
      *
-     * @param path the API sub-path ({@code /exist}, {@code /code},
-     *             {@code /register}, {@code /challenge},
-     *             {@code /security})
-     * @param body the fully-assembled request body
-     * @param authorizationHeader the
-     *                            {@code <base64 attestation>|<base64 keyId>}
-     *                            value produced by {@link #attestBody},
-     *                            or {@code null} to omit the header
-     * @return a ready-to-send HTTP request
+     * @implNote
+     * This implementation sets only the two headers the native iOS
+     * registration stack advertises ({@code User-Agent} and
+     * {@code Content-Type}), then attaches the
+     * {@code Authorization} header carrying
+     * {@code <base64 attestation>|<base64 keyId>} when one was
+     * produced. The native iOS client omits {@code Accept},
+     * {@code WaMsysRequest}, and {@code request_token} entirely.
      */
     @Override
     protected HttpRequest createRequest(String path, String body, String authorizationHeader) {
@@ -130,45 +144,43 @@ final class IosClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Asks the configured {@link WhatsAppDeviceAttestor.Ios} to mint
-     * an App Attest payload and packages it into the
-     * {@link BodyAttestation} pair the base class appends to the
-     * request:
+     * {@inheritDoc}
+     *
+     * @apiNote
+     * Concretely on iOS: asks the configured
+     * {@link WhatsAppDeviceAttestor.Ios} to mint an App Attest
+     * payload and packages it into the
+     * {@link BodyAttestation} pair:
      * <ul>
      *   <li>The {@code H=} body suffix carries
-     *       {@code {"assertion":"<base64 CBOR>"}} — a JSON envelope
-     *       around the per-request CBOR assertion the attestor
-     *       returned. The native iOS client emits the JSON verbatim
-     *       (with {@code "/"} JSON-escaped to {@code "\/"} but
-     *       otherwise un-URL-encoded), and the WhatsApp registration
-     *       server tolerates the resulting raw {@code =}, {@code +}
-     *       and {@code /} characters in the form value.</li>
+     *       {@code {"assertion":"<base64 CBOR>"}} (the per-request
+     *       CBOR assertion wrapped in a JSON envelope).</li>
      *   <li>The {@code Authorization} header carries
-     *       {@code <base64 attestation>|<base64 keyId>} — the cached
-     *       CBOR attestation object joined to the App Attest
-     *       {@code keyId} by a literal {@code "|"}.</li>
+     *       {@code <base64 attestation>|<base64 keyId>} (the
+     *       cached CBOR attestation joined to the App Attest
+     *       {@code keyId} by a literal {@code "|"}).</li>
      * </ul>
-     * When the attestor returns
-     * {@link WhatsAppDeviceAttestor.Ios.AppAttestData#EMPTY}
-     * (the case for the {@link WhatsAppDeviceAttestor.Ios#NONE}
-     * fallback or for any other attestor that cannot mint App
-     * Attest), {@link BodyAttestation#EMPTY} is returned and the base
-     * class skips both wire slots — matching the low-trust shape a
-     * simulator or jailbroken device would emit, which the server
-     * tolerates as a downgrade signal.
      *
-     * <p>Note that, unlike Android's {@code H=} which is an HMAC
-     * over the encrypted body, the iOS assertion does not sign
-     * {@code encBodyBytes}: the {@code clientDataHash} the attestor
-     * binds the assertion to is the SHA-256 of the noise public key,
-     * derived from the store rather than from the request body.
-     * {@code encBodyBytes} is accepted only because the base-class
-     * contract is platform-neutral.
+     * @implNote
+     * This implementation returns
+     * {@link BodyAttestation#EMPTY} whenever any of the three
+     * payload components (attestation, assertion, keyId) comes back
+     * empty, signalling either the
+     * {@link WhatsAppDeviceAttestor.Ios#NONE} fallback or an
+     * attestor that cannot mint App Attest (a simulator or a
+     * jailbroken device). The JSON envelope is emitted verbatim
+     * with {@code "/"} JSON-escaped to {@code "\/"} (matching the
+     * native client's emission) and otherwise unmodified; the
+     * resulting raw {@code =}, {@code +}, and {@code /} characters
+     * are passed through the form value untouched because the
+     * server's parser is known to tolerate them.
      *
-     * @param encBodyBytes the UTF-8 bytes of the base64 ENC body;
-     *                     unused by this implementation
-     * @return the App Attest pair, or {@link BodyAttestation#EMPTY}
-     *         when no real attestation is available
+     * <p>Unlike Android's body attestation, iOS's assertion does
+     * not sign {@code encBodyBytes}: the
+     * {@code clientDataHash} the attestor binds the assertion to is
+     * the SHA-256 of the Noise public key, derived from the store.
+     * The {@code encBodyBytes} parameter is accepted only because
+     * the base-class contract is platform-neutral.
      */
     @Override
     protected BodyAttestation attestBody(byte[] encBodyBytes) {
@@ -182,24 +194,24 @@ final class IosClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the iOS-specific form fields that the {@code /code}
-     * endpoint expects in addition to the shared registration parameters.
+     * {@inheritDoc}
      *
-     * <p>Mirrors the parameters that the native iOS client's
+     * @apiNote
+     * Concretely on iOS, the returned fields mirror what
      * {@code -[WARegistrationURLBuilder
      * verificationCodeRequestURLWithBaseURL:method:mcc:mnc:jailbroken:
-     * context:oldPhoneNumber:silentPushNotifRegCode:
-     * iosDeviceRegistrationUUID:cellularStrength:]} builder emits:
-     * verification method, empty SIM MCC/MNC, jailbroken flag {@code 0},
-     * the APNS silent-push verification code received via
-     * {@code application:didReceiveRemoteNotification:} (sourced from
-     * the push client's {@link WhatsAppDevicePushClient#getPushCode}), and a
-     * cellular signal strength of {@code 1}. The APNS device token
-     * itself is not emitted here because it ships on every attested
-     * endpoint via {@link #attestationFields()}.
+     * context:oldPhoneNumber:silentPushNotifRegCode:iosDeviceRegistrationUUID:cellularStrength:]}
+     * emits on the native client: method, empty SIM MCC/MNC,
+     * {@code jailbroken=0}, the APNS silent-push verification code
+     * received via
+     * {@code application:didReceiveRemoteNotification:} (sourced
+     * from {@link WhatsAppDevicePushClient#getPushCode}), and a
+     * cellular signal strength of {@code 1}.
      *
-     * @param method the verification method chosen by the user
-     * @return the alternating name/value form parameters
+     * @implNote
+     * This implementation does not include the APNS device token
+     * here because it ships on every attested endpoint via
+     * {@link #attestationFields()}.
      */
     @Override
     protected String[] getRequestVerificationCodeParameters(String method) {
@@ -214,30 +226,28 @@ final class IosClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the iOS-specific form fields that ship on every
-     * attested endpoint inside the encrypted body — currently just
-     * the APNS device token.
+     * {@inheritDoc}
      *
-     * <p>App Attest payloads do not appear here because they ride
-     * outside the encrypted body: the assertion goes into the
-     * {@code H=} suffix appended after the {@code ENC=} envelope
-     * (built by {@link #attestBody(byte[])}) and the attestation
-     * goes into the {@code Authorization} request header (built by
-     * {@link #attestBody(byte[])} and attached by
-     * {@link #createRequest(String, String, String) createRequest}).
-     * That mirrors the native iOS client which calls its own
-     * {@code attestationPayloadForRegistrationFor:} and
-     * {@code assertionFor:path:} hooks at request-build time, not
-     * during form-field assembly.
+     * @apiNote
+     * Concretely on iOS, returns only the APNS {@code push_token}.
+     * The App Attest payloads do not appear here because they ride
+     * outside the encrypted body, in the {@code H=} suffix
+     * appended after the {@code ENC=} envelope and in the
+     * {@code Authorization} request header, both built by
+     * {@link #attestBody(byte[])}.
      *
-     * <p>The {@code push_token} field carries the APNS device token
-     * the iOS app receives via {@code -[UIApplication
+     * @implNote
+     * This implementation mirrors the native iOS client's split
+     * between {@code attestationPayloadForRegistrationFor:} and
+     * {@code assertionFor:path:} hooks (called at request-build
+     * time, outside the form body) and the per-endpoint form-field
+     * assembly (which adds only the push token). The
+     * {@code push_token} field carries the APNS device token the
+     * iOS app receives via
+     * {@code -[UIApplication
      * application:didRegisterForRemoteNotificationsWithDeviceToken:]}
-     * and gets advertised on every attested endpoint so the
-     * registration server knows where to silent-push the verification
-     * code.
-     *
-     * @return the alternating name/value form parameters
+     * and is advertised on every attested endpoint so the server
+     * knows where to silent-push the verification code.
      */
     @Override
     protected String[] attestationFields() {
@@ -247,10 +257,11 @@ final class IosClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the device family identifier formatted as an upper-case UUID,
-     * matching the iOS client's {@code fdid} scheme.
+     * {@inheritDoc}
      *
-     * @return the upper-case UUID string
+     * @apiNote
+     * Concretely on iOS, the UUID is formatted in uppercase with
+     * hyphens, matching the native client's {@code fdid} scheme.
      */
     @Override
     protected String generateFdid() {

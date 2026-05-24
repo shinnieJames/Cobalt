@@ -6,16 +6,23 @@ import java.util.Objects;
  * Thrown when an A/B configuration property cannot be decoded as the type
  * the caller asked for.
  *
- * <p>WhatsApp ships A/B test ("AB prop") values from the server to drive
+ * @apiNote
+ * WhatsApp ships A/B test ("AB prop") values from the server to drive
  * feature flags, rate limits, and rollout percentages. Each property is
- * keyed by a numeric configuration code and is read from the client by
- * specifying the expected Java type ({@code Boolean}, {@code Integer},
- * {@code Long}, {@code Double}, {@code String}). When the raw string
- * value the server delivered cannot be parsed as the expected type, this
- * exception is raised so the caller can fall back to a default.
+ * keyed by a numeric configuration code and read from the client by
+ * specifying the expected Java type ({@link Boolean}, {@link Integer},
+ * {@link Long}, {@link Double}, {@link String}). When the raw string the
+ * server delivered cannot be parsed as the expected type, this exception
+ * is raised so the caller can fall back to a default. Equivalent to a
+ * type-coercion failure inside WA Web's {@code getABPropConfigValue}
+ * pipeline; WA Web handles the conversion inline and silently returns the
+ * default, whereas Cobalt surfaces the mismatch so the embedder can
+ * choose between logging it or falling back.
  *
- * <p>The failure does not invalidate the session. {@link #isFatal()}
- * always returns {@code false}.
+ * @implNote
+ * This implementation is non-fatal: {@link #isFatal()} always returns
+ * {@code false} because an AB prop lookup miss never invalidates the
+ * Noise session.
  */
 public final class WhatsAppABPropTypeMismatchException extends WhatsAppException {
 
@@ -84,13 +91,12 @@ public final class WhatsAppABPropTypeMismatchException extends WhatsAppException
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>An AB prop type mismatch is local to a single configuration
-     * lookup. The session is unaffected and the caller can fall back to a
-     * default value.
-     *
-     * @return {@code false}
+     * @implNote
+     * This implementation always returns {@code false}: an AB prop type
+     * mismatch is local to a single configuration lookup and the caller
+     * can fall back to a default value.
      */
     @Override
     public boolean isFatal() {

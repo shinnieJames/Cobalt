@@ -11,24 +11,30 @@ import java.security.GeneralSecurityException;
 import java.util.Objects;
 
 /**
- * Derives the bot message secret from a message's base secret. Bot messages
- * use a derived secret rather than the original one so the user's secret is
- * never exposed to the bot.
+ * Derives the bot-side message secret from a user message secret.
+ *
+ * @apiNote
+ * Used internally by the bot-message encryption pipeline so plaintext sent to
+ * a bot is encrypted with a key the user can rotate without exposing the
+ * original {@code messageSecret} value the {@link com.github.auties00.cobalt.model.chat.ChatMessageContextInfo}
+ * carries. Cobalt embedders do not typically call this directly; it is invoked
+ * by {@link BotProtobufTransform#transformForCapi} when preparing an outbound
+ * CAPI bot message.
  */
 @WhatsAppWebModule(moduleName = "WAWebBotMessageSecret")
 public final class BotMessageSecret {
     /**
-     * Holds the HKDF algorithm identifier used for the derivation.
+     * The HKDF algorithm identifier used for the derivation.
      */
     private static final String HKDF_ALGORITHM = "HKDF-SHA256";
 
     /**
-     * Holds the HKDF info string used during the expand step.
+     * The HKDF info string used during the expand step.
      */
     private static final String INFO = "Bot Message";
 
     /**
-     * Holds the length, in bytes, of the derived secret.
+     * The length, in bytes, of the derived secret.
      */
     private static final int SECRET_LENGTH = 32;
 
@@ -42,16 +48,26 @@ public final class BotMessageSecret {
     }
 
     /**
-     * Derives the 32-byte bot message secret from the given base message secret.
+     * Derives the 32-byte bot message secret from the supplied base message secret.
      *
-     * <p>Performs HKDF-Extract with a null (all-zero) salt over the given
-     * {@code messageSecret}, then HKDF-Expand with the info string
-     * {@code "Bot Message"} to produce 32 bytes.
+     * @apiNote
+     * HKDF-SHA-256 is invoked with an all-zero salt for the extract step and
+     * the fixed info string {@code "Bot Message"} for the expand step, matching
+     * WA Web's {@code genBotMsgSecretFromMsgSecret}. The output is the key
+     * material that the bot encryption layer feeds into AES-GCM along with the
+     * envelope's {@code encIv}/{@code encPayload}; producing different bytes
+     * here means the bot cannot decrypt the message at all, so callers must
+     * not mutate {@code messageSecret} concurrently with this call.
+     * @implNote
+     * This implementation accepts any IKM length because HKDF-Extract collapses
+     * arbitrary input to a fixed-size PRK; WA Web passes a 32-byte secret in
+     * practice. The output length is pinned at {@value #SECRET_LENGTH} to match
+     * the {@code u=32} constant in {@code WAWebBotMessageSecret}.
      *
-     * @param messageSecret the 32-byte base message secret
-     * @return the derived bot message secret
+     * @param messageSecret the base message secret bytes, typically 32 bytes
+     * @return the derived 32-byte bot message secret
      * @throws NullPointerException     if {@code messageSecret} is {@code null}
-     * @throws GeneralSecurityException if HKDF derivation fails
+     * @throws GeneralSecurityException if HKDF-SHA-256 is unavailable
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "genBotMsgSecretFromMsgSecret",
             adaptation = WhatsAppAdaptation.DIRECT)

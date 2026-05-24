@@ -1,34 +1,53 @@
 package com.github.auties00.cobalt.stream.receipt;
 
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.message.MessageService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
-import com.github.auties00.cobalt.call.signaling.CallReceiptReceiver;
+import com.github.auties00.cobalt.call.internal.signaling.CallReceiptReceiver;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**
- * Dispatches incoming {@code <receipt>} stanzas to the appropriate specialised
- * handler based on the child tag they carry and the stanza {@code type}.
+ * Routes an incoming {@code <receipt>} stanza to the appropriate specialised
+ * {@link SocketStream.Handler}.
  *
- * <p>WhatsApp multiplexes three distinct receipt flows onto the same stanza tag:
+ * @apiNote
+ * Embedders do not interact with this dispatcher directly; it is registered
+ * once by the {@link SocketStream} wiring and consumes every
+ * {@code <receipt>} stanza coming off the socket. WhatsApp multiplexes three
+ * disjoint flows onto the {@code <receipt>} tag:
  * <ul>
- *   <li>Call receipts: carry an {@code <offer>}, {@code <accept>}, or
- *       {@code <reject>} child and acknowledge the state of a VoIP call
- *       signalling message</li>
- *   <li>Retry receipts: have {@code type="retry"} or
- *       {@code type="enc_rekey_retry"} and request a re-send of a previously
- *       failed-to-decrypt message</li>
- *   <li>Message receipts: acknowledge delivery, read, and play states for
- *       individual or group messages (every other receipt)</li>
+ * <li>VoIP signalling receipts whose first child is {@code <offer>},
+ * {@code <accept>} or {@code <reject>}; these are forwarded to
+ * {@link CallReceiptReceiver}.</li>
+ * <li>Retry receipts whose stanza {@code type} is {@code "retry"} or
+ * {@code "enc_rekey_retry"}; these request the re-send of a previously
+ * failed-to-decrypt Signal message.</li>
+ * <li>Delivery, read and played acknowledgements (every other receipt).</li>
  * </ul>
+ * The latter two are both forwarded to {@link MessageReceiptStreamHandler},
+ * which performs the secondary retry-vs-regular split inside its own
+ * {@code handle} entry point.
  *
- * <p>This handler inspects the first child of the incoming stanza, routes
- * call receipts to the {@link CallReceiptReceiver}, and forwards
- * everything else (both retry and regular message receipts) to the
- * {@link MessageReceiptStreamHandler}, which performs the secondary
- * {@code retry}/{@code enc_rekey_retry} split internally.
+ * @implNote
+ * This implementation fuses three WA Web dispatch sites onto a single Java
+ * entry point.
+ * <ul>
+ * <li>{@code WAWebCommsHandleWorkerCompatibleStanza.handleWorkerCompatibleStanza}
+ * runs the call-receipt branch via
+ * {@code WAWebCommsHandleStanzaUtils.isCallReceipt} before any other
+ * handler can claim the stanza.</li>
+ * <li>{@code WAWebCommsHandleMessagingStanza.handleMessagingStanza}
+ * handles all non-retry, non-call receipts via
+ * {@code WAWebHandleMsgReceipt}.</li>
+ * <li>{@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza} handles
+ * retry receipts via {@code WAWebHandleMessageRetryRequest}.</li>
+ * </ul>
+ * Cobalt does not split per-worker / per-messaging / per-logged-in entry
+ * points because it has no worker thread model, so the three branches
+ * collapse into the single switch in {@link #handle(Node)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleWorkerCompatibleStanza")
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
@@ -36,43 +55,58 @@ import com.github.auties00.cobalt.wam.WamService;
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleStanzaUtils")
 public final class ReceiptStreamHandler implements SocketStream.Handler {
     /**
-     * Handler for VoIP call receipts carrying {@code <offer>},
-     * {@code <accept>}, or {@code <reject>} children.
+     * The {@link CallReceiptReceiver} that consumes VoIP signalling
+     * receipts.
      */
     private final CallReceiptReceiver callReceiptHandler;
 
     /**
-     * Handler for message delivery, read, and play receipts.
+     * The {@link MessageReceiptStreamHandler} that consumes retry receipts
+     * and delivery, read or played acknowledgements.
      */
     private final MessageReceiptStreamHandler messageReceiptHandler;
 
     /**
-     * Constructs a new receipt dispatcher wired with the dependencies
-     * required by both the call-receipt and the message-receipt handlers.
+     * Constructs a new {@link ReceiptStreamHandler} and eagerly instantiates
+     * both downstream specialised handlers.
      *
-     * @param whatsapp       the WhatsApp client used to send acknowledgements
-     *                       and access the local store
-     * @param messageService the message service used by the message-receipt
-     *                       handler to propagate state changes
-     * @param wamService     the WAM telemetry service forwarded to the message-receipt handler
+     * @apiNote
+     * Constructed by the {@link SocketStream} wiring with the
+     * {@link WhatsAppClient}, {@link MessageService} and {@link WamService}
+     * already initialized. {@link MessageService} is forwarded to
+     * {@link MessageReceiptStreamHandler} for the retry-receipt re-send
+     * path; {@link WamService} is forwarded for the
+     * {@code ReceiptStanzaReceive} telemetry event.
+     *
+     * @param whatsapp       the non-{@code null} client used to send the
+     *                       {@code <ack>} response and access the store
+     * @param messageService the non-{@code null} service that re-sends a
+     *                       message in response to a retry receipt
+     * @param wamService     the non-{@code null} telemetry service that
+     *                       commits the {@code ReceiptStanzaReceive} event
+     * @param ackSender      the {@link AckSender} forwarded to both
+     *                       sub-handlers for emitting outbound
+     *                       {@code <ack>} stanzas
      */
-    public ReceiptStreamHandler(WhatsAppClient whatsapp, MessageService messageService, WamService wamService) {
-        this.callReceiptHandler = new CallReceiptReceiver(whatsapp);
-        this.messageReceiptHandler = new MessageReceiptStreamHandler(whatsapp, messageService, wamService);
+    public ReceiptStreamHandler(WhatsAppClient whatsapp, MessageService messageService, WamService wamService, AckSender ackSender) {
+        this.callReceiptHandler = new CallReceiptReceiver(whatsapp, ackSender);
+        this.messageReceiptHandler = new MessageReceiptStreamHandler(whatsapp, messageService, wamService, ackSender);
     }
 
     /**
-     * Routes an incoming {@code <receipt>} stanza to the appropriate
-     * specialised handler.
+     * {@inheritDoc}
      *
-     * <p>Call receipts (first child is {@code <offer>}, {@code <accept>}, or
-     * {@code <reject>}) are forwarded to the {@link CallReceiptReceiver}.
-     * All other receipts — both {@code retry}/{@code enc_rekey_retry} and
-     * regular delivery/read/played — are forwarded to the
-     * {@link MessageReceiptStreamHandler}, which performs the retry vs.
-     * message-receipt split internally.
+     * @apiNote
+     * Forwards VoIP-signalling receipts to {@link CallReceiptReceiver} and
+     * everything else (both retry receipts and regular delivery, read or
+     * played acknowledgements) to {@link MessageReceiptStreamHandler}.
      *
-     * @param node the incoming {@code <receipt>} stanza
+     * @implNote
+     * This implementation defers the secondary retry-vs-regular split to
+     * {@link MessageReceiptStreamHandler#handle(Node)} so the routing logic
+     * stays close to the retry-specific state machine.
+     *
+     * @param node {@inheritDoc}
      */
     @Override
     public void handle(Node node) {
@@ -81,13 +115,16 @@ public final class ReceiptStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        // Both retry and regular receipts land in MessageReceiptStreamHandler, which performs the retry vs regular split via isRetryReceipt().
         messageReceiptHandler.handle(node);
     }
 
     /**
-     * Resets both underlying handlers so that any per-connection state
-     * (for example, in-flight retry tracking) is discarded.
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation forwards the reset to both downstream handlers
+     * so any per-connection state held inside the call-receipt or
+     * message-receipt paths is cleared on reconnect.
      */
     @Override
     public void reset() {
@@ -96,12 +133,25 @@ public final class ReceiptStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Checks whether the given receipt stanza targets a VoIP call by looking
-     * at the first child's tag.
+     * Returns {@code true} when the first child of the receipt stanza
+     * identifies a VoIP signalling acknowledgement.
+     *
+     * @apiNote
+     * Used by {@link #handle(Node)} to split the call branch off before
+     * the receipt is parsed as a delivery acknowledgement. The three
+     * recognized children mirror WA Web's classification: {@code <offer>}
+     * acknowledges a VoIP call offer, {@code <accept>} acknowledges the
+     * peer's acceptance and {@code <reject>} acknowledges a rejection.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebCommsHandleStanzaUtils.isCallReceipt} verbatim, including
+     * the assumption that the first child alone is sufficient to
+     * discriminate the stanza class.
      *
      * @param node the {@code <receipt>} stanza to classify
-     * @return {@code true} if the first child is {@code <offer>},
-     *         {@code <accept>}, or {@code <reject>}; {@code false} otherwise
+     * @return {@code true} when the first child has tag {@code offer},
+     *         {@code accept} or {@code reject}; {@code false} otherwise
      */
     private boolean isCallReceipt(Node node) {
         var child = node.getChild().orElse(null);

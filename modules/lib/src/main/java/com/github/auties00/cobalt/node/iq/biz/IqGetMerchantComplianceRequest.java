@@ -13,27 +13,30 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="w:biz:merchant_info" type="get">} stanza
- * that requests the regulatory-compliance bundle for one or more
- * merchants. India e-commerce surfaces consume the reply to render legal
- * entity details, customer-care contacts and grievance-officer details.
+ * The typed outbound {@code <iq xmlns="w:biz:merchant_info" type="get">} stanza that requests the regulatory-compliance bundle for one or more merchants.
+ *
+ * @apiNote
+ * Use this request from the India e-commerce surfaces (compliance entry-point banner, post-thread legal-entity row, grievance officer details) to fetch the merchant's compliance bundle for rendering; one stanza can carry multiple merchant JIDs so a list view can fetch all entries at once. The matching {@link IqGetMerchantComplianceResponse} surfaces the entity name, the entity type, the registered flag, the customer-care contact triple and the grievance-officer block per merchant.
+ *
+ * @implNote
+ * This implementation targets the deprecated WAP path of {@code WAWebMerchantComplianceJob.getMerchantCompliance}; WA Web routes through {@code WAWebBizGetMerchantCompliance} first when {@code graphQLForGetComplianceInfo} is set and only falls back to this stanza shape when the GraphQL path is disabled.
  */
 @WhatsAppWebModule(moduleName = "WAWebMerchantComplianceJob")
 public final class IqGetMerchantComplianceRequest implements IqOperation.Request {
     /**
-     * The merchant JIDs whose compliance bundles are being queried.
+     * The merchant JIDs whose compliance bundles are being queried, emitted as the {@code jid} attribute of one {@code <merchant_info/>} child per entry.
      */
     private final List<Jid> businessJids;
 
     /**
-     * Constructs a request.
+     * Constructs a typed request.
      *
-     * @param businessJids the list of merchant JIDs; never {@code null}
-     *                     and must be non-empty
-     * @throws NullPointerException     if {@code businessJids} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException when {@code businessJids} is
-     *                                  empty
+     * @apiNote
+     * Call this constructor with the merchant JIDs that should be queried; the list must contain at least one entry because the relay rejects an empty fan-out.
+     *
+     * @param businessJids the merchant JIDs; never {@code null} and must be non-empty
+     * @throws NullPointerException     if {@code businessJids} is {@code null}
+     * @throws IllegalArgumentException when {@code businessJids} is empty
      */
     public IqGetMerchantComplianceRequest(List<Jid> businessJids) {
         Objects.requireNonNull(businessJids, "businessJids cannot be null");
@@ -46,6 +49,9 @@ public final class IqGetMerchantComplianceRequest implements IqOperation.Request
     /**
      * Returns the queried merchant JIDs.
      *
+     * @apiNote
+     * Use this getter to read back the merchant JIDs that the stanza will fan out to; the list preserves the caller-supplied order.
+     *
      * @return an unmodifiable list; never {@code null}
      */
     public List<Jid> businessJids() {
@@ -53,9 +59,10 @@ public final class IqGetMerchantComplianceRequest implements IqOperation.Request
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by the legacy fallback branch of {@code WAWebMerchantComplianceJob.getMerchantCompliance}: one {@code <merchant_info jid/>} child per queried JID, wrapped in an {@code <iq xmlns="w:biz:merchant_info" type="get"/>} envelope routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMerchantComplianceJob",

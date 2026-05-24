@@ -9,25 +9,23 @@ import java.util.Objects;
 
 /**
  * Shared envelope-validation helper for the standard
- * {@code <iq from id type="result">} reply produced by every domain's SMAX
- * {@code Success}-shape response variant.
+ * {@code <iq from id type="result">} reply produced by every SMAX domain's
+ * {@code Success} response variant.
  *
- * <p>WhatsApp Web's {@code WASmaxIn*IQResultResponseMixin} family ships one
- * copy of this exact validation per (domain, RPC) pair. Every module looks
- * the same: assert the {@code iq} tag, echo-check the {@code id} attribute
- * against the request reference, echo-check the {@code from}/{@code to}
- * attribute, and assert {@code type="result"}. Cobalt deduplicates the
- * sixty-plus near-identical copies into this single helper that every
- * groups-domain {@code Response.Success} variant invokes through
- * {@link #validate(Node, Node)}.
+ * @apiNote
+ * Called by every per-RPC {@code Success.of(...)} factory before it
+ * extracts the success payload. Validates the {@code iq} tag, the
+ * {@code id} echo, the {@code from}/{@code to} echo (when the request
+ * carried a {@code to}), and asserts {@code type="result"}. Counterpart
+ * of {@link SmaxIqErrorResponseMixin} for the result envelope.
  *
- * <p>The helper is intentionally lenient about the {@code from} attribute:
- * the WA Web parser delegates to {@code attrStringFromReference} which
- * tolerates a missing {@code to} on the request when the relay echoes back
- * the implicit {@code g.us} server, so callers that build a request without
- * an explicit {@code to} (the sub-set of groups RPCs addressed at
- * {@code G_US}) can still use the helper without supplying a synthetic
- * reference.
+ * @implNote
+ * This implementation deduplicates the sixty-plus byte-identical WA Web
+ * {@code WASmaxIn*IQResultResponseMixin} modules; the
+ * {@code @WhatsAppWebModule} list keeps the source manifest pointing at
+ * every upstream module. The {@code from} echo is gated on the request
+ * carrying a {@code to} attribute because a sub-set of groups RPCs
+ * address {@code G_US} implicitly and omit the attribute on the wire.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsIQResultResponseMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInBizAccessTokenIQResultResponseMixin")
@@ -49,7 +47,11 @@ import java.util.Objects;
 public final class SmaxIqResultResponseMixin {
 
     /**
-     * Private constructor. The class is a static-only utility.
+     * Refuses instantiation of the static-only utility.
+     *
+     * @apiNote
+     * The class exposes only static helpers; the throwing constructor
+     * guards against reflective instantiation.
      */
     private SmaxIqResultResponseMixin() {
         throw new AssertionError("SmaxIqResultResponseMixin cannot be instantiated");
@@ -60,20 +62,24 @@ public final class SmaxIqResultResponseMixin {
      * {@code <iq type="result">} echoing the request's {@code id} and
      * {@code to} attributes.
      *
-     * <p>Returns {@code true} only when every check passes. The reply has
-     * the {@code iq} tag, carries {@code type="result"}, and echoes the
-     * request's {@code id} verbatim. The {@code from} echo check is applied
-     * only when the request actually carries a {@code to} attribute (some
-     * SMAX requests omit it because the relay defaults to the implicit
-     * {@code g.us} server).
+     * @apiNote
+     * Returns {@code true} when the reply has the {@code iq} tag,
+     * carries {@code type="result"}, echoes the request's {@code id}
+     * verbatim, and (when the request supplied a {@code to}) carries a
+     * matching {@code from} attribute.
      *
-     * @param reply   the inbound stanza received from the relay. Never
-     *                {@code null}
-     * @param request the outbound stanza emitted by the caller. Used to
-     *                cross-check the echoed {@code id} and {@code from}
-     *                attributes. Never {@code null}
-     * @return {@code true} when {@code reply} is a result envelope echoing
-     *         {@code request}'s identifiers; {@code false} otherwise
+     * @implNote
+     * This implementation enforces the four WA Web invariants in order:
+     * tag is {@code iq}, type is {@code result}, the request carries an
+     * {@code id} (and the reply echoes it), and the reply's {@code from}
+     * matches the request's {@code to} when that attribute is present.
+     *
+     * @param reply   the inbound stanza
+     * @param request the outbound stanza, used to cross-check the echoed
+     *                {@code id} and {@code from} attributes
+     * @return {@code true} when {@code reply} is a result envelope
+     *         echoing {@code request}'s identifiers; {@code false}
+     *         otherwise
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInGroupsIQResultResponseMixin",

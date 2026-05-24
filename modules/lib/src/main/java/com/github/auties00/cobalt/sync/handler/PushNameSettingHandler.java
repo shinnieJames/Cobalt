@@ -15,47 +15,68 @@ import com.github.auties00.cobalt.wam.type.BootstrapAppStateDataStageCode;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**
- * Applies {@code setting_pushName} mutations decoded from app state sync.
+ * Applies the {@code setting_pushName} app-state action that distributes
+ * the user's broadcast pushname across linked devices.
  *
- * <p>Handles the {@link PushNameSetting} sync action in the
- * {@link SyncPatchType#CRITICAL_BLOCK} collection. A mutation of this type
- * carries the user's display name (the "push name") as chosen on the paired
- * companion device, and instructs every other linked client to update its
- * own broadcast pushname to match.
+ * @apiNote
+ * Drives the broadcast-display-name surface: the pushname is the
+ * outwards-facing name the server attaches to the user's outgoing
+ * presences and to message envelopes shown to peers. Each
+ * {@link SyncdOperation#SET} mutation broadcasts a fresh
+ * {@code <presence name="..."/>} stanza, persists the new name to
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setName(String)},
+ * mirrors it onto the self-contact's {@code chosenName}, and fires
+ * {@link com.github.auties00.cobalt.client.WhatsAppClientListener#onNameChanged}
+ * on every registered listener via virtual threads. The mutation
+ * index is the singleton {@snippet :
+ *     ["setting_pushName"]
+ * }
  *
- * <p>On WhatsApp Web the handler:
- * <ol>
- *   <li>Sends an outbound {@code <presence name="..."/>} stanza so that the
- *       server propagates the new pushname to peers
- *       ({@code WASendPresenceStatusProtocol.sendPresenceStatusProtocol}).</li>
- *   <li>Persists the new pushname locally via
- *       {@code WAWebSetPushnameLocallyAction.setPushnameLocally}, which writes
- *       to {@code WAWebConnModel.Conn.pushname} and to the
- *       {@code LAST_PUSHNAME} user preference.</li>
- * </ol>
- *
- * <p>Cobalt mirrors both side effects: the {@code <presence name="..."/>}
- * stanza is dispatched through {@link WhatsAppClient#sendNodeWithNoResponse},
- * and the new name is persisted into {@link com.github.auties00.cobalt.store.WhatsAppStore#setName(String)}
- * (Cobalt's analogue of {@code Conn.pushname}/{@code LAST_PUSHNAME}). The
- * change is then broadcast to every registered
- * {@link com.github.auties00.cobalt.client.WhatsAppClientListener} on a
- * virtual thread, mirroring the {@link LocaleSettingHandler} pattern.
+ * @implNote
+ * This implementation collapses WA Web's two preference-side writes
+ * ({@code WAWebConnModel.Conn.pushname} and
+ * {@code WAWebUserPrefsGeneral.setPushname}) into a single
+ * {@code WhatsAppStore.setName} call: Cobalt's store is the sole
+ * source of truth for the broadcast pushname. The
+ * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess} ->
+ * {@code setSyncDCriticalSynced} / {@code setSyncDCriticalDataSyncCompleted}
+ * coordination is omitted because Cobalt tracks bootstrap state at
+ * the {@link com.github.auties00.cobalt.sync.WebAppStateService}
+ * layer keyed by collection (no global syncdCritical flag exists).
+ * The Cobalt-only listener-fanout and self-contact mirror are added
+ * because Cobalt has no equivalent of WA Web's
+ * {@code BackendEventBus} / {@code Conn} observable propagation;
+ * direct listener notification is the Cobalt analogue.
  */
 @WhatsAppWebModule(moduleName = "WAWebPushNameSync")
 public final class PushNameSettingHandler implements WebAppStateActionHandler {
     /**
-     * The WAM telemetry service used to commit the bootstrap stage events
-     * during {@code applyMutation}.
+     * The WAM telemetry service used to commit critical-bootstrap
+     * stage events when {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * runs during the initial sync.
+     *
+     * @apiNote
+     * Internal collaborator injected at construction; never accessed
+     * outside {@link #logCriticalBootstrapStageIfNecessary(WhatsAppClient, BootstrapAppStateDataStageCode)}.
      */
     private final WamService wamService;
 
     /**
-     * Creates a new {@code PushNameSettingHandler}.
+     * Constructs the push-name sync handler bound to the given WAM
+     * telemetry service.
      *
-     * <p>WA Web instantiates the handler exactly once at module evaluation
-     * time via {@code var y = new h; l.default = y;}. Cobalt mirrors that
-     * with a registry-injected instance carrying its WAM dependency.
+     * @apiNote
+     * Used by the sync handler registry; the WAM service is consulted
+     * during the initial-sync window to emit
+     * {@link BootstrapAppStateDataStageCode#PUSHNAME_INVALID} and
+     * {@link BootstrapAppStateDataStageCode#PUSHNAME_APPLIED} stage
+     * events.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code WAWebPushNameSync}
+     * constructor: it sets {@code collectionName = CriticalBlock} on
+     * the prototype and inherits from {@code AccountSyncdActionBase}.
+     *
      * @param wamService the WAM telemetry service used by this handler
      */
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -64,8 +85,7 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name this handler processes.
-     * @return the constant {@link PushNameSetting#ACTION_NAME}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -74,12 +94,7 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection this handler's action belongs to.
-     *
-     * <p>On WA Web this is set on the prototype inside the constructor as
-     * {@code this.collectionName = CollectionName.CriticalBlock}.
-     * @return the constant {@link PushNameSetting#COLLECTION_NAME}, always
-     *         {@link SyncPatchType#CRITICAL_BLOCK}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -88,8 +103,7 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version this handler supports.
-     * @return the constant {@link PushNameSetting#ACTION_VERSION}, always {@code 1}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -98,85 +112,43 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single decoded pushname mutation and returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>This method implements the body of the WA Web per-mutation callback
-     * passed to {@code Promise.all(t.map(async e => { ... }))} inside
-     * {@code applyMutations(t)}. The order of checks mirrors WA Web exactly:
+     * @implNote
+     * This implementation walks WA Web's per-mutation arm in
+     * {@code WAWebPushNameSync.applyMutations}:
      * <ol>
-     *   <li><b>Operation filter</b> — WA Web falls through to the final
-     *       {@code i++; return {actionState: Unsupported};} branch for any
-     *       operation other than {@code "set"}. Cobalt returns
-     *       {@link MutationApplicationResult#unsupported()}.</li>
-     *   <li><b>Read pushname</b> — WA Web reads
-     *       {@code _ = e.value.pushNameSetting?.name}. The optional chain
-     *       quietly tolerates a missing {@code pushNameSetting} field; the
-     *       only requirement is that the decoded {@code SyncActionValue}
-     *       exists. Cobalt mirrors that by reading the optional
-     *       {@link PushNameSetting#name()} via the action accessor without
-     *       failing when the field is absent.</li>
-     *   <li><b>Falsy default</b> — WA Web: {@code _ || (a++,
-     *       logCriticalBootstrapStageIfNecessary(PUSHNAME_INVALID), _="")}.
-     *       When the pushname is missing or empty it defaults to
-     *       {@code ""} and a critical-bootstrap WAM event is logged.
-     *       Cobalt drops the WAM increment and the {@code a++} counter
-     *       (telemetry only) but preserves the empty-string default.</li>
-     *   <li><b>Broadcast new presence</b> — WA Web awaits
-     *       {@code WASendPresenceStatusProtocol.sendPresenceStatusProtocol(
-     *       {name: _})}, which goes through
-     *       {@code WASmaxOutPresenceAvailabilityRequest.makeAvailabilityRequest}
-     *       and emits a {@code <presence name="..."/>} stanza via
-     *       {@code WAComms.castSmaxStanza}. Cobalt builds the same stanza
-     *       through {@link NodeBuilder} and dispatches it via
-     *       {@link WhatsAppClient#sendNodeWithNoResponse(com.github.auties00.cobalt.node.Node)}.
-     *       The {@code type} attribute is left out because the call site
-     *       passes {@code status = undefined}, so WA's
-     *       {@code OPTIONAL(CUSTOM_STRING, undefined)} omits it from the wire.</li>
-     *   <li><b>Persist locally</b> — WA Web calls
-     *       {@code WAWebSetPushnameLocallyAction.setPushnameLocally(_)}, which
-     *       writes {@code WAWebConnModel.Conn.pushname = _} and
-     *       {@code WAWebUserPrefsGeneral.setPushname(_)} (the
-     *       {@code LAST_PUSHNAME} user pref). Cobalt collapses both writes
-     *       into {@link com.github.auties00.cobalt.store.WhatsAppStore#setName(String)},
-     *       which is the single source of truth for the broadcast pushname.</li>
-     *   <li><b>Mirror into self-contact</b> — Cobalt-only side effect: when a
-     *       {@code Contact} entry exists for the local user (Cobalt models the
-     *       self-jid in the contacts map), its {@code chosenName} is updated
-     *       so downstream consumers reading from the self-contact stay in
-     *       sync with {@code store.name()}.</li>
-     *   <li><b>Notify listeners</b> — Cobalt fires
-     *       {@code onNameChanged(client, oldName, newName)} on every registered
-     *       {@code WhatsAppClientListener}, mirroring the
-     *       {@link LocaleSettingHandler#applyMutation} pattern of
-     *       converting WA Web frontend IPC into Cobalt event broadcasts.</li>
-     *   <li><b>Success</b> — returns {@link MutationApplicationResult#success()}.</li>
+     *   <li>only {@link SyncdOperation#SET} is accepted;</li>
+     *   <li>the resolved pushname is read via the optional
+     *       {@link PushNameSetting#name()} accessor; missing or empty
+     *       defaults to {@code ""} and triggers a
+     *       {@link BootstrapAppStateDataStageCode#PUSHNAME_INVALID}
+     *       WAM stage emission;</li>
+     *   <li>a {@code <presence name="..."/>} stanza is dispatched via
+     *       {@link WhatsAppClient#sendNodeWithNoResponse(com.github.auties00.cobalt.node.Node)}
+     *       (no {@code type} attribute, mirroring WA Web's
+     *       {@code OPTIONAL(CUSTOM_STRING, undefined)} omission);</li>
+     *   <li>the new name is persisted via
+     *       {@code WhatsAppStore.setName} (the single source of truth
+     *       for the broadcast pushname);</li>
+     *   <li>the self-contact's
+     *       {@link com.github.auties00.cobalt.model.contact.Contact#setChosenName(String)}
+     *       is updated when present;</li>
+     *   <li>{@link com.github.auties00.cobalt.client.WhatsAppClientListener#onNameChanged}
+     *       is dispatched on every registered listener via a fresh
+     *       virtual thread per listener;</li>
+     *   <li>a
+     *       {@link BootstrapAppStateDataStageCode#PUSHNAME_APPLIED}
+     *       WAM stage is emitted on success;</li>
+     *   <li>returns {@link MutationApplicationResult#success()}.</li>
      * </ol>
-     *
-     * <p>WA Web also performs critical-bootstrap state coordination here: if
-     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess()} returns
-     * {@code true}, it awaits {@code setSyncDCriticalSynced()} and
-     * {@code setSyncDCriticalDataSyncCompleted()} to mark the
-     * {@code syncdCritical} flag in the bootstrap tracker. Cobalt's bootstrap
-     * coordination happens at a different layer
-     * ({@code WebAppStateService}/{@code SyncCollectionMetadata.bootstrapped})
-     * driven per-collection by the broader sync flow, so this handler does
-     * not need to flip a global flag.
-     *
-     * <p>WA Web increments local telemetry counters ({@code a}, {@code i}),
-     * emits {@code WALogger.LOG}/{@code WALogger.WARN} messages and logs
-     * critical-bootstrap WAM stages ({@code PUSHNAME_INVALID},
-     * {@code PUSHNAME_APPLIED}). These are intentionally omitted in Cobalt
-     * as telemetry/logging noise with no behavioral impact.
-     *
-     * <p>WA Web wraps the whole per-mutation body in a {@code try/catch} that
-     * swallows any exception, logs {@code PUSHNAME_INVALID}, and returns
-     * {@code {actionState: Failed}}. In Cobalt, exceptions are allowed to
-     * propagate and the configured {@code WhatsAppClientErrorHandler} decides
-     * recovery, per Cobalt's pluggable error model.
-     * @param client   the WhatsApp client the mutation is being applied to
-     * @param mutation the trusted, decoded mutation to apply
-     * @return {@link MutationApplicationResult#unsupported()} for non-{@code SET}
-     *         operations; {@link MutationApplicationResult#success()} otherwise
+     * The {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess}
+     * coordination and the {@code WALogger} traces are dropped:
+     * Cobalt tracks bootstrap state per-collection at the
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService}
+     * layer. WA Web's outer try/catch ({@code Failed} on exception)
+     * is NOT mirrored: Cobalt lets exceptions propagate so the
+     * configured {@code WhatsAppClientErrorHandler} decides recovery.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -185,7 +157,6 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        // Cobalt: read the optional name from the decoded action; treat missing pushNameSetting the same as a missing name (WA Web's optional chain).
         var resolvedName = mutation.value().action()
                 .filter(PushNameSetting.class::isInstance)
                 .map(PushNameSetting.class::cast)
@@ -199,63 +170,54 @@ public final class PushNameSettingHandler implements WebAppStateActionHandler {
             name = resolvedName;
         }
 
-        // -> WASmaxOutPresenceAvailabilityRequest.makeAvailabilityRequest({presenceType: undefined, presenceName: _})
-        // -> smax("presence", {type: OPTIONAL(CUSTOM_STRING, undefined), name: OPTIONAL(CUSTOM_STRING, _)})
-        // -> WAComms.castSmaxStanza(...)
         client.sendNodeWithNoResponse(new NodeBuilder()
-                .description("presence") // WASmaxOutPresenceAvailabilityRequest.makeAvailabilityRequest: smax("presence", {...})
-                .attribute("name", name) // WASmaxOutPresenceAvailabilityRequest.makeAvailabilityRequest: name: OPTIONAL(CUSTOM_STRING, n)
+                .description("presence")
+                .attribute("name", name)
                 .build());
 
-        // -> WAWebConnModel.Conn.pushname = _ + WAWebUserPrefsGeneral.setPushname(_)
-        // Cobalt collapses both writes into store.setName(), the single source of truth for the broadcast pushname.
         var oldName = client.store().name();
         client.store().setName(name);
 
-        // ADAPTED: Cobalt-only — keep the self-contact's chosenName aligned with the broadcast pushname
-        // so downstream consumers that read the self-jid contact stay consistent. WA Web does not touch
-        // the contact collection here because it stores Conn.pushname separately from contacts.
         client.store()
                 .jid()
                 .flatMap(self -> client.store().findContactByJid(self.withoutData()))
-                .ifPresent(contact -> contact.setChosenName(name)); // ADAPTED: keep Cobalt's self-contact in sync
+                .ifPresent(contact -> contact.setChosenName(name));
 
-        // ADAPTED: WAWebPushNameSync.applyMutations — Cobalt notifies registered listeners on virtual threads
-        // instead of relying on WA Web's BackendEventBus / Conn observable propagation.
         for (var listener : client.store().listeners()) {
             Thread.startVirtualThread(() -> listener.onNameChanged(client, oldName, name));
         }
 
         logCriticalBootstrapStageIfNecessary(client, BootstrapAppStateDataStageCode.PUSHNAME_APPLIED);
 
-        // NO_WA_BASIS: the following WA Web telemetry/logging is intentionally dropped:
-        //   - a/i counters and the trailing WALogger.LOG/WARN calls
-        // ADAPTED: WAWebPushNameSync.applyMutations:
-        //   if (WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess()) {
-        //     yield WAWebSyncBootstrap.setSyncDCriticalSynced();
-        //     yield WAWebSyncBootstrap.setSyncDCriticalDataSyncCompleted();
-        //   }
-        // Cobalt's bootstrap tracking lives at the collection level
-        // (SyncCollectionMetadata.bootstrapped) and is flipped by
-        // WebAppStateService/MutationRequestBuilder, not by individual
-        // setting handlers. There is no global syncdCritical flag to flip here.
         return MutationApplicationResult.success();
     }
 
     /**
-     * Emits a {@code MdBootstrapAppStateCriticalDataProcessingEvent} for the
-     * supplied bootstrap stage when the critical data sync is still in progress.
+     * Emits an
+     * {@link com.github.auties00.cobalt.wam.event.MdBootstrapAppStateCriticalDataProcessingEvent}
+     * for the given bootstrap stage when the critical data sync is
+     * still in progress.
      *
-     * <p>Per WhatsApp Web
-     * {@code WAWebSyncdCriticalBootstrapProcessingApi.logCriticalBootstrapStageIfNecessary}:
-     * the event is gated on
-     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess()}. In Cobalt that
-     * global state machine is approximated by checking whether the
-     * {@link SyncPatchType#CRITICAL_BLOCK}
-     * collection has been bootstrapped yet, matching
-     * {@link com.github.auties00.cobalt.sync.WebAppStateService}.
-     * @param client     the WhatsApp client whose store is queried for bootstrap state
-     * @param stage      the bootstrap stage reached; never {@code null}
+     * @apiNote
+     * Internal helper consumed by
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)};
+     * not used outside this class. The stage code identifies the
+     * sub-step within the critical-block bootstrap (e.g.
+     * {@link BootstrapAppStateDataStageCode#PUSHNAME_INVALID},
+     * {@link BootstrapAppStateDataStageCode#PUSHNAME_APPLIED}).
+     *
+     * @implNote
+     * This implementation gates the WAM emission on the
+     * {@link SyncPatchType#CRITICAL_BLOCK} app state's
+     * {@code bootstrapped} flag; WA Web instead consults the global
+     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess()}
+     * state machine. Cobalt approximates the same gate by checking
+     * whether the critical-block collection has completed its initial
+     * sync: once bootstrapped, no further stage events are emitted.
+     *
+     * @param client the {@link WhatsAppClient} whose store is queried
+     *               for bootstrap state
+     * @param stage  the bootstrap stage reached
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdCriticalBootstrapProcessingApi", exports = "logCriticalBootstrapStageIfNecessary", adaptation = WhatsAppAdaptation.ADAPTED)
     private void logCriticalBootstrapStageIfNecessary(WhatsAppClient client, BootstrapAppStateDataStageCode stage) {

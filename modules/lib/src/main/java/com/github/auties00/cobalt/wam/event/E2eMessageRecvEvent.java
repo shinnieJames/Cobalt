@@ -19,7 +19,9 @@ import com.github.auties00.cobalt.wam.type.GroupEncryptionType;
 import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageDistributionEnumType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.StanzaType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
@@ -92,14 +94,23 @@ public interface E2eMessageRecvEvent extends WamEventSpec {
     @WamProperty(index = 9, type = WamType.BOOLEAN)
     Optional<Boolean> offline();
 
+    @WamProperty(index = 29, type = WamType.BOOLEAN)
+    Optional<Boolean> processingDeferred();
+
     @WamProperty(index = 3, type = WamType.INTEGER)
     OptionalInt retryCount();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<RevokeType> revokeType();
 
+    @WamProperty(index = 30, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
+
     @WamProperty(index = 18, type = WamType.ENUM)
     Optional<AddressingMode> serverAddressingMode();
+
+    @WamProperty(index = 28, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 14, type = WamType.ENUM)
     Optional<StanzaType> stanzaType();

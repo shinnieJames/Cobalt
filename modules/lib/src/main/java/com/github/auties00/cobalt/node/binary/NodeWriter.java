@@ -8,7 +8,6 @@ import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeAttribute;
 import com.github.auties00.cobalt.util.DataUtils;
-import com.github.auties00.cobalt.util.SizedOutputStream;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -20,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.SequencedCollection;
 import java.util.SequencedMap;
+import java.util.function.Supplier;
 
 import static com.github.auties00.cobalt.node.binary.NodeTags.*;
 import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
@@ -28,38 +28,44 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
  * Serialises {@link Node} trees into WhatsApp's compact binary stanza
  * format.
  *
- * <p>Strings are replaced with dictionary tokens when possible, short
- * numeric strings are packed as nibble or hex sequences, binary blobs
- * are length prefixed with 8, 20, or 32 bit widths, and JIDs are written
- * in one of four shapes ({@link NodeTags#JID_PAIR},
+ * <p>Outbound stanzas are produced through a {@link Node} tree (typically
+ * built with {@link com.github.auties00.cobalt.node.NodeBuilder}); this
+ * class converts the tree into the wire byte sequence consumed by the
+ * WhatsApp socket. Strings pass through the {@link NodeTokens}
+ * compression ladder (single-byte token, extension dictionary, packed
+ * nibble or hex, length-prefixed UTF-8); binary blobs use 8/20/32-bit
+ * length prefixes; JIDs pick one of {@link NodeTags#JID_PAIR},
  * {@link NodeTags#AD_JID}, {@link NodeTags#JID_INTEROP},
- * {@link NodeTags#JID_FB}) depending on their server and device.
+ * {@link NodeTags#JID_FB} based on their server and device.
  *
- * <p>This is an abstract base. The tree-traversal logic lives here once;
- * each subclass provides only the four primitive write operations
- * ({@link #writeByte(int)}, {@link #writeShort(int)},
+ * <p>The class is an abstract template: the tree-traversal logic lives
+ * here once and each subclass provides only the four primitive write
+ * operations ({@link #writeByte(int)}, {@link #writeShort(int)},
  * {@link #writeInt(int)}, {@link #writeBytes(byte[], int, int)})
  * specialised for the backing sink. Four sinks are supported via
- * static factory methods:
+ * static factories:
  *
  * <ul>
- *   <li>{@link #toBytes(byte[], int)} — writes into a caller-supplied
- *       {@code byte[]} starting at a given offset.
- *   <li>{@link #toBuffer(ByteBuffer)} — writes into a writable
- *       {@link ByteBuffer}, advancing its position as it writes.
- *   <li>{@link #toSegment(MemorySegment, long)} — writes into a
- *       {@link MemorySegment} starting at the given byte offset.
- *   <li>{@link #toStream(OutputStream)} — streams each encoded token
- *       byte directly to the underlying {@link OutputStream} via
- *       single-byte and bulk {@code write} calls. No intermediate
- *       buffer is allocated; callers that want write batching should
- *       wrap the underlying stream in a
- *       {@link java.io.BufferedOutputStream} before passing it in.
+ *   <li>{@link #toBytes(byte[], int)} writes into a caller-supplied
+ *       {@code byte[]} starting at a given offset
+ *   <li>{@link #toBuffer(ByteBuffer)} writes into a {@link ByteBuffer},
+ *       advancing its position
+ *   <li>{@link #toSegment(MemorySegment, long)} writes into a
+ *       {@link MemorySegment} starting at the given byte offset
+ *   <li>{@link #toStream(OutputStream)} streams each encoded byte
+ *       directly to the underlying stream; the encoder allocates no
+ *       intermediate buffer, so callers that want write batching
+ *       should wrap the stream in
+ *       {@link java.io.BufferedOutputStream} before passing it in
  * </ul>
  *
- * <p>Encoders are {@link AutoCloseable}; closing a streaming encoder
- * flushes the downstream stream, while closing a buffer-backed encoder
- * is a no-op.
+ * <p>Encoders are {@link AutoCloseable}: a buffer-backed encoder is a
+ * no-op on close; the streaming encoder flushes the downstream when
+ * the stream is caller-owned and closes it when the encoder owns it
+ * (factory variant {@link #toStream(Supplier)}).
+ *
+ * <p>Pre-sizing a fixed sink through {@link NodeSizer#sizeOf(Node)} lets most
+ * stanzas serialise into a single allocation without any growth.
  *
  * @see Node
  * @see NodeReader
@@ -71,38 +77,53 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
 public abstract class NodeWriter implements AutoCloseable {
 
     /**
-     * Exclusive upper bound for values that fit in an unsigned byte.
+     * Holds the exclusive upper bound for values that fit in an unsigned byte.
+     *
+     * <p>Serves as the decision threshold between {@link NodeTags#LIST_8} and
+     * {@link NodeTags#LIST_16} for list sizes, and between
+     * {@link NodeTags#BINARY_8} and {@link NodeTags#BINARY_20} for payload
+     * lengths, mirroring the threshold in {@link NodeSizer}.
      */
     private static final int UNSIGNED_BYTE_MAX_VALUE = 256;
 
     /**
-     * Exclusive upper bound for values that fit in an unsigned short.
+     * Holds the exclusive upper bound for values that fit in an unsigned
+     * short.
+     *
+     * <p>Serves as the decision threshold above which a list cannot be
+     * encoded.
      */
     private static final int UNSIGNED_SHORT_MAX_VALUE = 65536;
 
     /**
-     * Exclusive upper bound for values that fit in 20 bits.
+     * Holds the exclusive upper bound for values that fit in 20 bits.
+     *
+     * <p>Serves as the decision threshold between {@link NodeTags#BINARY_20}
+     * and {@link NodeTags#BINARY_32} for payload lengths.
      */
     private static final int INT_20_MAX_VALUE = 1048576;
 
     /**
-     * Sole constructor, accessible only to package-internal subclasses.
+     * Constructs a new encoder for a package-internal subclass.
+     *
+     * <p>The hierarchy is closed within this package; the constructor exists
+     * only to satisfy {@code javac} for the inner subclasses.
      */
     NodeWriter() {
 
     }
 
     /**
-     * Returns an encoder that writes a node into the supplied byte
-     * array starting at {@code offset}.
+     * Returns an encoder that writes a node into the supplied byte array
+     * starting at {@code offset}.
      *
-     * <p>The array must be at least
-     * {@code offset + NodeSizer.sizeOf(node)} bytes long. The returned
-     * encoder is single-use; create a new one per node.
+     * <p>The array must be at least {@code offset + NodeSizer.sizeOf(node)}
+     * bytes long, sized with {@link NodeSizer#sizeOf(Node)} before allocating.
+     * Encoders are single-use; each node needs a fresh one.
      *
      * @param output the destination byte array
      * @param offset the starting offset
-     * @return a {@code byte[]} backed encoder
+     * @return a {@code byte[]}-backed encoder
      */
     public static NodeWriter toBytes(byte[] output, int offset) {
         return new ByteArrayWriter(output, offset);
@@ -112,12 +133,11 @@ public abstract class NodeWriter implements AutoCloseable {
      * Returns an encoder that writes a node into the supplied
      * {@link ByteBuffer} starting at its current position.
      *
-     * <p>The buffer must have at least {@code NodeSizer.sizeOf(node)}
-     * bytes remaining. The returned encoder advances the buffer's
-     * position as it writes.
+     * <p>The buffer must have at least {@link NodeSizer#sizeOf(Node)} bytes
+     * remaining; the encoder advances the buffer's position as it writes.
      *
      * @param output the destination buffer
-     * @return a {@link ByteBuffer} backed encoder
+     * @return a {@link ByteBuffer}-backed encoder
      */
     public static NodeWriter toBuffer(ByteBuffer output) {
         return new ByteBufferWriter(output);
@@ -127,36 +147,62 @@ public abstract class NodeWriter implements AutoCloseable {
      * Returns an encoder that writes a node into the supplied
      * {@link MemorySegment} starting at {@code offset}.
      *
-     * <p>The segment must have at least
-     * {@code offset + NodeSizer.sizeOf(node)} bytes of space.
+     * <p>The segment must have at least {@code offset + NodeSizer.sizeOf(node)}
+     * bytes of space. Used by callers writing into off-heap memory such as a
+     * mapped file or a foreign socket buffer.
      *
      * @param output the destination segment
      * @param offset the starting byte offset within the segment
-     * @return a {@link MemorySegment} backed encoder
+     * @return a {@link MemorySegment}-backed encoder
      */
     public static NodeWriter toSegment(MemorySegment output, long offset) {
         return new MemorySegmentWriter(output, offset);
     }
 
     /**
-     * Returns an encoder that streams a node directly to an
+     * Returns an encoder that streams a node directly to a caller-owned
      * {@link OutputStream}.
      *
-     * <p>Every encoded token is forwarded to the underlying stream as
-     * it is produced via single-byte and bulk {@code write} calls; no
-     * intermediate buffer is allocated. Callers that want write
-     * batching should wrap the underlying stream in a
-     * {@link java.io.BufferedOutputStream} before passing it in.
+     * <p>Every encoded token is forwarded to the underlying stream as it is
+     * produced through single-byte and bulk {@code write} calls; no
+     * intermediate buffer is allocated, so callers that want write batching
+     * wrap the underlying stream in {@link java.io.BufferedOutputStream} before
+     * passing it in. The encoder does not close {@code output} on
+     * {@link #close()}; it only flushes any deferred bytes, leaving the caller
+     * lifecycle control over the long-lived stream (typically a socket output
+     * stream shared across many encoded nodes). The {@link #toStream(Supplier)}
+     * variant transfers stream ownership to the encoder.
      *
      * @param output the destination stream
-     * @return an {@link OutputStream} backed streaming encoder
+     * @return an {@link OutputStream}-backed streaming encoder that flushes but
+     *         does not close {@code output}
      */
     public static NodeWriter toStream(OutputStream output) {
-        return new StreamWriter(output);
+        return new StreamWriter(output, false);
+    }
+
+    /**
+     * Returns an encoder that streams a node into an {@link OutputStream}
+     * resolved from {@code supplier} and owned by the encoder.
+     *
+     * <p>The supplier is resolved eagerly at this call; the returned encoder
+     * closes the resolved stream when {@link #close()} runs.
+     *
+     * @param supplier the source of the destination stream; resolved eagerly
+     * @return an {@link OutputStream}-backed streaming encoder that closes the
+     *         resolved stream
+     */
+    public static NodeWriter toStream(Supplier<? extends OutputStream> supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        return new StreamWriter(supplier.get(), true);
     }
 
     /**
      * Writes one byte at the current encoder position.
+     *
+     * @implSpec
+     * Subclasses must write the low 8 bits of {@code b} to the
+     * sink and advance the position by one.
      *
      * @param b the byte value; only the low 8 bits are used
      * @throws IOException if the underlying sink rejects the write
@@ -167,6 +213,10 @@ public abstract class NodeWriter implements AutoCloseable {
      * Writes two bytes at the current encoder position in big-endian
      * order.
      *
+     * @implSpec
+     * Subclasses must write the 16-bit value in big-endian order
+     * and advance the position by two.
+     *
      * @param v the 16-bit value to write
      * @throws IOException if the underlying sink rejects the write
      */
@@ -175,6 +225,10 @@ public abstract class NodeWriter implements AutoCloseable {
     /**
      * Writes four bytes at the current encoder position in big-endian
      * order.
+     *
+     * @implSpec
+     * Subclasses must write the 32-bit value in big-endian order
+     * and advance the position by four.
      *
      * @param v the 32-bit value to write
      * @throws IOException if the underlying sink rejects the write
@@ -185,6 +239,11 @@ public abstract class NodeWriter implements AutoCloseable {
      * Writes {@code len} bytes from {@code src} starting at {@code off}
      * to the current encoder position.
      *
+     * @implSpec
+     * Subclasses must copy {@code len} bytes from {@code src}
+     * starting at {@code off} into the sink and advance the
+     * position by {@code len}.
+     *
      * @param src the source array
      * @param off the starting offset in {@code src}
      * @param len the number of bytes to write
@@ -193,21 +252,18 @@ public abstract class NodeWriter implements AutoCloseable {
     abstract void writeBytes(byte[] src, int off, int len) throws IOException;
 
     /**
-     * Closes this encoder, releasing any resources it holds and
-     * flushing any deferred output to the underlying sink.
+     * Closes this encoder, releasing any resources it holds and flushing any
+     * deferred output to the underlying sink.
      *
-     * <p>The default implementation is a no-op; the buffer-backed
-     * subclasses ({@link ByteArrayWriter}, {@link ByteBufferWriter},
-     * {@link MemorySegmentWriter}) hold no resources beyond the
-     * caller-owned sink and inherit this default. The
-     * {@link StreamWriter} overrides it to flush the downstream
-     * {@link OutputStream} so the last writes reach the network
-     * promptly.
+     * <p>The default is a no-op because the buffer-backed subclasses hold no
+     * resources beyond the caller-owned sink. The streaming subclass overrides
+     * to flush a caller-owned stream or close an encoder-owned stream.
      *
-     * @throws IOException if the underlying sink fails to close or
-     *         flush; the narrowed throws clause overrides the looser
-     *         {@code Exception} declared by
-     *         {@link AutoCloseable#close()}
+     * @implNote
+     * This implementation narrows the throws clause from {@link Exception} on
+     * {@link AutoCloseable#close()} to {@link IOException}.
+     *
+     * @throws IOException if the underlying sink fails to close or flush
      */
     @Override
     public void close() throws IOException {
@@ -215,8 +271,12 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes the leading flags byte ({@code 0x00}, no compression)
-     * followed by the supplied node's encoding.
+     * Writes the leading flags byte ({@code 0x00}, no compression) followed by
+     * the supplied node's encoding.
+     *
+     * <p>The encode side always emits the uncompressed flags byte; compression
+     * is only relevant for inbound stanzas. The companion
+     * {@link NodeSizer#sizeOf(Node)} accounts for this leading byte.
      *
      * @param node the node to encode
      * @throws IOException if the underlying sink rejects a write
@@ -231,8 +291,12 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a single node (size header, description, attributes,
-     * content) without the leading flags byte.
+     * Writes a single node (size header, description, attributes, content)
+     * without the leading flags byte.
+     *
+     * <p>Recurses from both {@link #writeNode(Node)} and
+     * {@link #writeChildren(SequencedCollection)}; the second caller has
+     * already written the parent's flags byte.
      *
      * @param input the node to write
      * @throws IOException if the underlying sink rejects a write
@@ -245,12 +309,15 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a list size tag followed by the size value, picking the
-     * narrowest representation that fits.
+     * Writes a list size tag followed by the size value, picking the narrowest
+     * representation that fits.
+     *
+     * <p>Picks {@link NodeTags#LIST_8} for sizes below 256 and
+     * {@link NodeTags#LIST_16} for sizes below 65536. Sizes at or above the
+     * 16-bit limit are protocol overflows and throw.
      *
      * @param size the list size
-     * @throws IllegalArgumentException if the size exceeds the 16 bit
-     *         maximum
+     * @throws IllegalArgumentException if the size exceeds the 16-bit maximum
      * @throws IOException if the underlying sink rejects a write
      */
     private void writeList(int size) throws IOException {
@@ -266,9 +333,14 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a string under the most efficient applicable strategy
-     * (single-byte token, dictionary token, packed nibble/hex, or
-     * length-prefixed UTF-8).
+     * Writes a string under the most efficient applicable strategy.
+     *
+     * <p>The strategy ladder mirrors {@link NodeSizer#stringLength(String)}
+     * step-for-step: empty string ({@link NodeTags#BINARY_8} plus
+     * {@link NodeTags#LIST_EMPTY}), single-byte token, each extension
+     * dictionary in turn, packed nibble or hex for short strings
+     * ({@code utf8Length < 128}) whose alphabet fits, and finally a
+     * length-prefixed UTF-8 blob.
      *
      * @param input the string to write
      * @throws IOException if the underlying sink rejects a write
@@ -332,8 +404,12 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a binary length prefix tag followed by the length using
-     * the narrowest tag that fits.
+     * Writes a binary-blob length prefix tag followed by the length, using the
+     * narrowest tag that fits.
+     *
+     * <p>Selects {@link NodeTags#BINARY_8}, {@link NodeTags#BINARY_20}, or
+     * {@link NodeTags#BINARY_32} for the same thresholds used in
+     * {@link NodeSizer#binaryLength(long)}.
      *
      * @param input the length value
      * @throws IOException if the underlying sink rejects a write
@@ -354,8 +430,14 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a string in nibble or hex packed form (4 bits per
-     * character).
+     * Writes a string in nibble or hex packed form (4 bits per character).
+     *
+     * <p>The length byte's high bit signals whether the last byte carries one
+     * character with a filler nibble or two characters.
+     *
+     * @implNote
+     * This implementation uses {@code 0x0F} as the filler nibble for the odd
+     * trailing character, matching the sentinel the protocol expects.
      *
      * @param input the string to encode
      * @param tag   {@link NodeTags#NIBBLE_8} or {@link NodeTags#HEX_8}
@@ -380,8 +462,10 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes every entry of the supplied attribute map as a key value
-     * pair.
+     * Writes every entry of the supplied attribute map as a key value pair.
+     *
+     * <p>Iteration follows the map's insertion order so re-encoded stanzas
+     * round-trip stably.
      *
      * @param attributes the attributes to write
      * @throws IOException if the underlying sink rejects a write
@@ -394,7 +478,12 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a single attribute value under its variant specific shape.
+     * Writes a single attribute value under its variant-specific shape.
+     *
+     * <p>{@link NodeAttribute.TextAttribute} goes through the full string
+     * compression ladder; {@link NodeAttribute.BytesAttribute} always uses a
+     * length-prefixed binary shape; {@link NodeAttribute.JidAttribute}
+     * dispatches through {@link #writeJid(Jid)}.
      *
      * @param attribute the attribute to write
      * @throws IOException if the underlying sink rejects a write
@@ -409,6 +498,10 @@ public abstract class NodeWriter implements AutoCloseable {
 
     /**
      * Writes the content slot of a node based on its concrete variant.
+     *
+     * <p>{@link Node.EmptyNode} contributes nothing because the leading size
+     * header already encodes the missing content slot; every other variant
+     * writes its payload through the appropriate writer.
      *
      * @param content the node whose content to write
      * @throws IOException if the underlying sink rejects a write
@@ -425,8 +518,10 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a list size header followed by the encoding of every child
-     * node.
+     * Writes a list size header followed by the encoding of every child node.
+     *
+     * <p>Recurses through {@link #writeNodeBody(Node)} for each child; the
+     * parent's flags byte has already been written by {@link #writeNode(Node)}.
      *
      * @param values the child nodes to write
      * @throws IOException if the underlying sink rejects a write
@@ -451,8 +546,14 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Writes a JID under the shape appropriate for its server and
-     * device.
+     * Writes a JID under the wire shape appropriate for its server and device.
+     *
+     * <p>Messenger JIDs become {@link NodeTags#JID_FB}; interoperability JIDs
+     * become {@link NodeTags#JID_INTEROP} after splitting a
+     * {@code "integrator-user"} compound; device-bearing JIDs become
+     * {@link NodeTags#AD_JID}; everything else becomes {@link NodeTags#JID_PAIR}
+     * with a {@link NodeTags#LIST_EMPTY} user placeholder when the user
+     * component is absent.
      *
      * @param jid the JID to write
      * @throws IOException if the underlying sink rejects a write
@@ -495,7 +596,11 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Maps a {@link JidServer} to its multi device JID domain code.
+     * Maps a {@link JidServer} to its multi-device JID domain code.
+     *
+     * <p>Used only by the {@link NodeTags#AD_JID} branch of
+     * {@link #writeJid(Jid)} to project the server enum into one of the
+     * wire-level {@code DOMAIN_*} constants.
      *
      * @param server the server to translate
      * @return one of the {@code DOMAIN_*} constants in {@link NodeTags}
@@ -510,17 +615,17 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Encoder that writes into a caller-supplied {@code byte[]}.
+     * Encodes into a caller-supplied {@code byte[]}.
      */
     private static final class ByteArrayWriter extends NodeWriter {
 
         /**
-         * The destination byte array.
+         * Holds the destination byte array.
          */
         private final byte[] output;
 
         /**
-         * The current write position into {@link #output}.
+         * Holds the current write position into {@link #output}.
          */
         private int position;
 
@@ -535,23 +640,35 @@ public abstract class NodeWriter implements AutoCloseable {
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeByte(int b) {
             output[position++] = (byte) b;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeShort(int v) {
             DataUtils.putShort(output, position, (short) v, ByteOrder.BIG_ENDIAN);
             position += 2;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeInt(int v) {
             DataUtils.putInt(output, position, v, ByteOrder.BIG_ENDIAN);
             position += 4;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeBytes(byte[] src, int off, int len) {
             System.arraycopy(src, off, output, position, len);
@@ -560,19 +677,24 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Encoder that writes into a {@link ByteBuffer}, advancing its
-     * position as it writes.
+     * Encodes into a {@link ByteBuffer}, advancing its position as it writes.
+     *
+     * <p>Forces big-endian order on the buffer at construction so the
+     * {@code putShort} and {@code putInt} primitives write multi-byte values in
+     * wire order.
      */
     private static final class ByteBufferWriter extends NodeWriter {
 
         /**
-         * The destination buffer.
+         * Holds the destination buffer.
          */
         private final ByteBuffer output;
 
         /**
-         * Constructs a new {@link ByteBuffer}-backed encoder. Forces
-         * big-endian order on the buffer.
+         * Constructs a new {@link ByteBuffer}-backed encoder.
+         *
+         * <p>Forces big-endian order on the buffer so multi-byte primitives
+         * write in wire order.
          *
          * @param output the destination buffer
          */
@@ -580,21 +702,33 @@ public abstract class NodeWriter implements AutoCloseable {
             this.output = output.order(ByteOrder.BIG_ENDIAN);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeByte(int b) {
             output.put((byte) b);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeShort(int v) {
             output.putShort((short) v);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeInt(int v) {
             output.putInt(v);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeBytes(byte[] src, int off, int len) {
             output.put(src, off, len);
@@ -602,29 +736,29 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Encoder that writes into a {@link MemorySegment} via the FFM API.
+     * Encodes into a {@link MemorySegment} via the FFM API.
      */
     private static final class MemorySegmentWriter extends NodeWriter {
 
         /**
-         * Big-endian short layout reused across writes.
+         * Holds the big-endian short layout reused across writes.
          */
         private static final ValueLayout.OfShort BE_SHORT =
                 ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
 
         /**
-         * Big-endian int layout reused across writes.
+         * Holds the big-endian int layout reused across writes.
          */
         private static final ValueLayout.OfInt BE_INT =
                 ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
 
         /**
-         * The destination segment.
+         * Holds the destination segment.
          */
         private final MemorySegment output;
 
         /**
-         * The current write offset within {@link #output}.
+         * Holds the current write offset within {@link #output}.
          */
         private long position;
 
@@ -639,23 +773,35 @@ public abstract class NodeWriter implements AutoCloseable {
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeByte(int b) {
             output.set(ValueLayout.JAVA_BYTE, position++, (byte) b);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeShort(int v) {
             output.set(BE_SHORT, position, (short) v);
             position += 2;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeInt(int v) {
             output.set(BE_INT, position, v);
             position += 4;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeBytes(byte[] src, int off, int len) {
             MemorySegment.copy(src, off, output, ValueLayout.JAVA_BYTE, position, len);
@@ -664,66 +810,63 @@ public abstract class NodeWriter implements AutoCloseable {
     }
 
     /**
-     * Encoder that streams encoded tokens directly to an
-     * {@link OutputStream} with no intermediate buffer.
+     * Streams encoded tokens directly to an {@link OutputStream} with no
+     * intermediate buffer.
      *
-     * <p>Each call to {@link #writeByte(int)}, {@link #writeShort(int)}
-     * and {@link #writeInt(int)} forwards the resulting bytes through
-     * one or more {@link OutputStream#write(int)} calls; bulk payloads
-     * pass through a single {@link OutputStream#write(byte[], int, int)}
-     * call. The encoder allocates nothing per node.
+     * <p>Each call to a primitive writer translates to one or more
+     * {@link OutputStream#write(int)} calls; bulk payloads pass through a
+     * single {@link OutputStream#write(byte[], int, int)} call. The encoder
+     * allocates nothing per node.
      */
     private static final class StreamWriter extends NodeWriter {
 
         /**
-         * The downstream output stream.
+         * Holds the downstream output stream.
          */
         private final OutputStream output;
 
         /**
-         * Constructs a new {@link OutputStream}-backed streaming
-         * encoder.
+         * Indicates whether this encoder owns {@link #output} and so must close
+         * it during {@link #close()}.
+         *
+         * <p>When {@code false}, the stream is caller-owned and {@link #close()}
+         * only flushes it.
+         */
+        private final boolean owned;
+
+        /**
+         * Constructs a new {@link OutputStream}-backed streaming encoder.
          *
          * @param output the downstream stream
+         * @param owned  {@code true} when the encoder owns {@code output} and
+         *               must close it on {@link #close()}; {@code false} when
+         *               the stream is caller-owned and should only be flushed
          */
-        StreamWriter(OutputStream output) {
+        StreamWriter(OutputStream output, boolean owned) {
             this.output = output;
+            this.owned = owned;
         }
 
         /**
-         * Announces the encoded size to the downstream stream when it
-         * implements {@link SizedOutputStream}, then delegates to the
-         * base implementation to encode the node's bytes.
-         *
-         * <p>The downstream typically uses the hint to emit its
-         * length-prefixed frame header up front so the encoded bytes
-         * stream straight to the wire with no intermediate buffer.
-         *
-         * @param node the node to encode
-         * @throws IOException          if the size announcement or any
-         *                              encoded write fails
-         * @throws NullPointerException if {@code node} is {@code null}
+         * {@inheritDoc}
          */
-        @Override
-        public void writeNode(Node node) throws IOException {
-            Objects.requireNonNull(node, "node");
-            if (output instanceof SizedOutputStream sized) {
-                sized.beginMessage(NodeSizer.sizeOf(node));
-            }
-            super.writeNode(node);
-        }
-
         @Override
         void writeByte(int b) throws IOException {
             output.write(b);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeShort(int v) throws IOException {
             output.write(v >>> 8);
             output.write(v);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeInt(int v) throws IOException {
             output.write(v >>> 24);
@@ -732,19 +875,29 @@ public abstract class NodeWriter implements AutoCloseable {
             output.write(v);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void writeBytes(byte[] src, int off, int len) throws IOException {
             output.write(src, off, len);
         }
 
         /**
-         * Closes the downstream output stream
+         * Closes the downstream output stream when the encoder owns
+         * it; otherwise only flushes it so the last bytes written
+         * through this encoder reach the network without waiting
+         * for a later write to amortise the flush.
          *
-         * @throws IOException if the downstream stream doesn't close
+         * @throws IOException if the downstream flush or close fails
          */
         @Override
         public void close() throws IOException {
-            output.close();
+            if (owned) {
+                output.close();
+            } else {
+                output.flush();
+            }
         }
     }
 }

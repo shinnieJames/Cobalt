@@ -18,52 +18,59 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Handles business broadcast insights sync actions.
+ * Maintains per-campaign delivery statistics from {@code business_broadcast_insights_sync} sync mutations.
  *
- * <p>Per WhatsApp Web, this handler processes mutations for business
- * broadcast campaign delivery statistics (recipient, delivered, read,
- * replied, and quick reply counts). It is synced via the {@code REGULAR}
- * collection. The handler supports both SET (upsert) and REMOVE operations,
- * and tracks per-batch counters for SET, REMOVE, and malformed mutations.
+ * @apiNote
+ * Drives the Business Manager broadcast-campaign analytics surface
+ * (recipient, delivered, read, replied, and quick-reply counts per
+ * campaign). When the server publishes updated insights for a
+ * campaign, the mutation lands here. Cobalt embedders observe the
+ * result through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findBusinessBroadcastInsight(String)}.
  *
- * <p>Index format: {@code ["business_broadcast_insights_sync", campaignId]}
+ * @implNote
+ * This implementation drops two WA Web side effects: the
+ * {@code isBizBroadcastSendWebEnabledNoExposure()} AB-prop gate that
+ * short-circuits the entire batch and the post-batch
+ * {@code refreshBroadcastCampaignState} fire-and-forget event. The
+ * per-batch SET, REMOVE, and malformed counter logging is preserved
+ * to mirror WA Web's diagnostics.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessBroadcastInsightsSync")
 public final class BusinessBroadcastInsightsHandler implements WebAppStateActionHandler {
     /**
-     * Logger for broadcast insights sync operations.
+     * The handler-scoped {@link Logger} used to record per-batch counter summaries.
+     *
+     * @apiNote
+     * Records the SET, REMOVE, and malformed counts per batch
+     * matching WA Web's three {@code WALogger.WARN} lines.
      */
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastInsightsHandler.class.getName());
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs the singleton broadcast-insights handler.
+     *
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public BusinessBroadcastInsightsHandler() {
 
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return BusinessBroadcastInsightsAction.ACTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return BusinessBroadcastInsightsAction.COLLECTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -71,33 +78,26 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
     }
 
     /**
-     * Applies a business broadcast insights mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web ({@code WAWebBusinessBroadcastInsightsSync.applyMutations}),
-     * the per-mutation logic:
-     * <ol>
-     *   <li>Extracts {@code campaignId} from {@code indexParts[1]}; returns
-     *       {@code malformedActionIndex()} if missing</li>
-     *   <li>For SET operations: extracts the {@code businessBroadcastInsightsAction}
-     *       value; returns {@code malformedActionValue(collectionName)} if absent;
-     *       otherwise calls {@code upsertInsightsStorage(campaignId, action, timestamp)}</li>
-     *   <li>For REMOVE operations: calls
-     *       {@code removeInsightsStorage(campaignId)}</li>
-     *   <li>For unrecognised operations: throws an error (caught by outer try/catch
-     *       returning {@code Failed})</li>
-     *   <li>Wraps the entire logic in try/catch, returning {@code Failed} on error</li>
-     * </ol>
-     * @param client   the WhatsApp client
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @apiNote
+     * For SET mutations, upserts a
+     * {@link com.github.auties00.cobalt.model.business.BusinessBroadcastInsight}
+     * keyed by {@code campaignId} from {@code indexParts[1]} carrying
+     * the delivery counters from the action value. For REMOVE
+     * mutations, drops the insights record by id. Returns
+     * {@link SyncdIndexUtils#malformedActionIndex(String, String)} when
+     * the index slot is empty,
+     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
+     * required value is missing, and
+     * {@link MutationApplicationResult#failed()} for unknown operations
+     * or any thrown exception.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
-            var indexArray = JSON.parseArray(mutation.index()); // ADAPTED: WAWebBusinessBroadcastInsightsSync uses e.indexParts (pre-parsed); Cobalt parses from JSON string
-            // WAWebBusinessBroadcastInsightsSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return r.malformedActionIndex().
-            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            var indexArray = JSON.parseArray(mutation.index());
             if (indexArray.size() <= 1) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
@@ -118,12 +118,12 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
                         .readCount(action.readCount().isPresent() ? action.readCount().getAsInt() : null)
                         .repliedCount(action.repliedCount().isPresent() ? action.repliedCount().getAsInt() : null)
                         .quickReplyCount(action.quickReplyCount().isPresent() ? action.quickReplyCount().getAsInt() : null)
-                        .build()); // ADAPTED: WAWebBusinessBroadcastInsightsSync.applyMutations: yield o("WAWebBizBroadcastInsightsStorageUtils").upsertInsightsStorage(n, {...}, c)
+                        .build());
                 return MutationApplicationResult.success();
             }
 
             if (mutation.operation() == SyncdOperation.REMOVE) {
-                client.store().removeBusinessBroadcastInsight(campaignId); // ADAPTED: WAWebBusinessBroadcastInsightsSync.applyMutations: yield o("WAWebBizBroadcastInsightsStorageUtils").removeInsightsStorage(n)
+                client.store().removeBusinessBroadcastInsight(campaignId);
                 return MutationApplicationResult.success();
             }
 
@@ -134,36 +134,31 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
     }
 
     /**
-     * Applies a batch of business broadcast insights mutations.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web ({@code WAWebBusinessBroadcastInsightsSync.applyMutations}), the batch
-     * handler first checks the {@code isBizBroadcastSendWebEnabledNoExposure()} gating flag.
-     * If the feature is not enabled, all mutations are returned as {@code Unsupported}.
-     * Otherwise, each mutation is processed individually and counters are maintained for
-     * SET operations, REMOVE operations, and malformed mutations. After the batch, warnings
-     * are logged for each non-zero counter, and a {@code refreshBroadcastCampaignState}
-     * event is fired if any SET or REMOVE operations succeeded.
+     * @apiNote
+     * Iterates the batch, applying each mutation and aggregating the
+     * SET, REMOVE, and malformed counters for the per-batch warning
+     * log.
      *
-     * <p>In Cobalt, the AB prop gating check and the frontend fire-and-forget call are
-     * intentionally omitted (AB props and frontend API are not replicated). The malformed,
-     * SET, and REMOVE count warnings are preserved via logging.
-     * @param client    the WhatsAppClient instance linked to the mutations
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation omits WA Web's
+     * {@code isBizBroadcastSendWebEnabledNoExposure()} short-circuit
+     * and the post-batch {@code refreshBroadcastCampaignState}
+     * fire-and-forget event. The malformed counter is incremented only
+     * for {@link SyncdOperation#SET} results to mirror WA Web's logic
+     * where the {@code malformedActionValue} branch is the only place
+     * the counter increments.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessBroadcastInsightsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<MutationApplicationResult> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
-        // ADAPTED: WAWebBusinessBroadcastInsightsSync.applyMutations checks isBizBroadcastSendWebEnabledNoExposure()
-        // and returns all Unsupported if false — Cobalt omits AB prop gating
         var malformedCount = 0;
         var setCount = 0;
         var removeCount = 0;
         var results = new ArrayList<MutationApplicationResult>(mutations.size());
-        for (var mutation : mutations) { // ADAPTED: WAWebBusinessBroadcastInsightsSync.applyMutations uses Promise.all(t.map(...))
+        for (var mutation : mutations) {
             var result = applyMutation(client, mutation);
-            // when `p` (businessBroadcastInsightsAction) is missing — i.e. malformedActionValue path.
-            // The malformedActionIndex path (missing indexParts[1]) returns without bumping `a`.
             if (result.actionState() == SyncActionState.MALFORMED && mutation.operation() == SyncdOperation.SET) {
                 malformedCount++;
             }
@@ -184,8 +179,6 @@ public final class BusinessBroadcastInsightsHandler implements WebAppStateAction
         if (malformedCount > 0) {
             LOGGER.warning("BBI sync: " + malformedCount + " malformed mutations");
         }
-        // ADAPTED: WAWebBusinessBroadcastInsightsSync.applyMutations: (i > 0 || d > 0) && o("WAWebBackendApi").frontendFireAndForget("refreshBroadcastCampaignState", {broadcastJids: []})
-        // — frontend UI refresh omitted, no Cobalt equivalent
         return results;
     }
 }

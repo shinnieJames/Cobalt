@@ -15,11 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Tests for {@link LidMigrationService#changeLid(Jid, Jid, Jid)} and
  * {@link LidMigrationService#registerOriginalLid(Jid, Jid)}.
  *
- * <p>{@code changeLid} keeps the primary cache, the bidirectional
- * store mapping, the contact LID, and any phone-keyed chat in sync when
- * a contact's LID rotates. {@code registerOriginalLid} populates the
- * fallback cache that the migration cascade consults when neither the
- * primary mapping nor a local mapping is known.
+ * @apiNote
+ * Pins the two LID-rotation entry points: {@code changeLid} keeps the
+ * primary cache, the bidirectional store mapping, the contact LID,
+ * and any phone-keyed chat in sync when a contact's LID rotates;
+ * {@code registerOriginalLid} populates the fallback cache that the
+ * migration cascade consults when neither the primary mapping nor a
+ * local mapping is known.
+ *
+ * @implNote
+ * This implementation uses an isolated harness per test through
+ * {@link MigrationFixtures#temporaryStore(Jid, Jid)} so no rotation
+ * bleeds across cases.
  */
 @DisplayName("LidMigrationService.changeLid / registerOriginalLid")
 class LidMigrationServiceChangeLidTest {
@@ -30,8 +37,20 @@ class LidMigrationServiceChangeLidTest {
     private static final Jid PEER_LID_OLD = Jid.of("258252122116273@lid");
     private static final Jid PEER_LID_NEW = Jid.of("999999999999999@lid");
 
+    /**
+     * Bundles the test client and the service under test.
+     *
+     * @param client  the test client harness
+     * @param service the service under test
+     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
+    /**
+     * Builds a fresh harness with a default
+     * {@link TestABPropsService}.
+     *
+     * @return a fresh {@link Harness}
+     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -41,6 +60,9 @@ class LidMigrationServiceChangeLidTest {
         return new Harness(client, service);
     }
 
+    /**
+     * Verifies that changeLid is a no-op when phoneJid is null.
+     */
     @Test
     @DisplayName("changeLid is a no-op when phoneJid is null")
     void changeLidNullPhoneJid() {
@@ -50,6 +72,9 @@ class LidMigrationServiceChangeLidTest {
         assertFalse(h.client.store().findLidByPhone(PEER_PN).isPresent());
     }
 
+    /**
+     * Verifies that changeLid is a no-op when newLid is null.
+     */
     @Test
     @DisplayName("changeLid is a no-op when newLid is null")
     void changeLidNullNewLid() {
@@ -58,6 +83,9 @@ class LidMigrationServiceChangeLidTest {
         assertFalse(h.client.store().findLidByPhone(PEER_PN).isPresent());
     }
 
+    /**
+     * Verifies that changeLid mirrors the new LID onto store, contact, chat, and lookupLid cache.
+     */
     @Test
     @DisplayName("changeLid mirrors the new LID onto store, contact, chat, and lookupLid cache")
     void changeLidPropagatesNewLid() {
@@ -86,6 +114,9 @@ class LidMigrationServiceChangeLidTest {
         assertEquals(PEER_LID_NEW, h.service.lookupLid(PEER_PN).orElseThrow());
     }
 
+    /**
+     * Verifies that changeLid still works when only the contact is pre-existing (no chat).
+     */
     @Test
     @DisplayName("changeLid still works when only the contact is pre-existing (no chat)")
     void changeLidContactOnly() {
@@ -99,6 +130,9 @@ class LidMigrationServiceChangeLidTest {
         assertFalse(h.client.store().findChatByJid(PEER_PN).isPresent());
     }
 
+    /**
+     * Verifies that registerOriginalLid is a no-op when phoneJid is null.
+     */
     @Test
     @DisplayName("registerOriginalLid is a no-op when phoneJid is null")
     void registerOriginalLidNullPhone() {
@@ -107,6 +141,9 @@ class LidMigrationServiceChangeLidTest {
         // No observable change; resolveThread fallback cannot find this.
     }
 
+    /**
+     * Verifies that registerOriginalLid is a no-op when lid is null.
+     */
     @Test
     @DisplayName("registerOriginalLid is a no-op when lid is null")
     void registerOriginalLidNullLid() {
@@ -115,13 +152,16 @@ class LidMigrationServiceChangeLidTest {
         // Same: nothing observable.
     }
 
+    /**
+     * Verifies that registerOriginalLid populates the originalLidCache for use by resolveThread.
+     */
     @Test
     @DisplayName("registerOriginalLid populates the originalLidCache for use by resolveThread")
     void registerOriginalLidPopulatesFallback() {
         var h = build();
         var store = h.client.store();
 
-        // Pre-existing state: PN-only chat, no primary cache hit, no localLid → fallback should kick in.
+        // Pre-existing state: PN-only chat, no primary cache hit, no localLid -> fallback should kick in.
         store.addNewChat(PEER_PN);
         h.service.registerOriginalLid(PEER_PN, PEER_LID_OLD);
 
@@ -131,6 +171,16 @@ class LidMigrationServiceChangeLidTest {
         assertInstanceOfMigrate(resolution, PEER_LID_OLD.toUserJid());
     }
 
+    /**
+     * Asserts that the resolution is a
+     * {@link LidMigrationResolution.Migrate} whose
+     * {@link LidMigrationResolution.Migrate#targetLid()} equals the
+     * expected value.
+     *
+     * @param resolution        the resolution returned by
+     *                          {@link LidMigrationService#resolveThread}
+     * @param expectedTargetLid the expected target LID at user level
+     */
     private static void assertInstanceOfMigrate(LidMigrationResolution resolution, Jid expectedTargetLid) {
         assertTrue(resolution instanceof LidMigrationResolution.Migrate,
                 "expected Migrate, got " + resolution);

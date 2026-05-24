@@ -1,6 +1,5 @@
 package com.github.auties00.cobalt.sync.handler;
 
-import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -21,47 +20,28 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Handles status privacy sync actions.
+ * Updates the audience that may view the local user's status updates when
+ * another linked device changes the status-privacy setting.
  *
- * <p>This handler processes mutations that control who can see the local user's
- * status updates. The supported distribution modes are:
- * <ul>
- *   <li>{@code CONTACTS} — share with all contacts (mapped to
- *       {@link PrivacySettingValue#CONTACTS}, no excluded list).</li>
- *   <li>{@code ALLOW_LIST} — share only with a whitelist of contacts (mapped to
- *       {@link PrivacySettingValue#CONTACTS_ONLY} with the JID list filtered to
- *       user-server JIDs).</li>
- *   <li>{@code DENY_LIST} — share with all contacts except a blacklist (mapped
- *       to {@link PrivacySettingValue#CONTACTS_EXCEPT} with the JID list filtered
- *       to user-server JIDs).</li>
- *   <li>{@code CLOSE_FRIENDS} and {@code CUSTOM_LIST} — accepted but applied as
- *       a no-op, mirroring WA Web which simply breaks out of the dispatch switch
- *       without writing any IndexedDB entries.</li>
- * </ul>
- *
- * <p>Per WhatsApp Web {@code WAWebStatusPrivacySettingSync.applyMutations}: the
- * batch must contain exactly one mutation; otherwise every mutation in the batch
- * is reported as {@link MutationApplicationResult#malformed() Malformed}. The
- * single mutation must have operation {@code SET}, must carry a non-{@code null}
- * {@code statusPrivacy} value, and must have a non-{@code null} distribution
- * mode. Any failure in the application logic is reported as
- * {@link MutationApplicationResult#failed() Failed}.
- *
- * <p>The crossposting branch (gated by
- * {@code WAWebCrosspostingBackendGatingUtils.crosspostSettingsSyncReceiverEnabled})
- * persists {@code shareToFB} / {@code shareToIG} preferences via WA Web's
- * {@code WAWebUserPrefsStatus} module. Cobalt's {@link StatusPrivacyAction}
- * carries these fields on the protobuf, but the Cobalt store does not expose a
- * dedicated FB/IG cross-posting persistence layer, so the receiver branch is a
- * no-op.
- *
- * <p>Index format: {@code ["status_privacy"]}.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * routes incoming {@code status_privacy} mutations here whenever the user
+ * changes the status audience on another device (typical trigger: Privacy
+ * Settings -> Status -> "My contacts", "My contacts except...", "Only
+ * share with..."). The handler rewrites the
+ * {@link PrivacySettingType#STATUS} entry on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so subsequent
+ * status posts use the new audience.
  */
 @WhatsAppWebModule(moduleName = "WAWebStatusPrivacySettingSync")
 public final class StatusPrivacyHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs the singleton instance.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public StatusPrivacyHandler() {
@@ -98,26 +78,18 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebStatusPrivacySettingSync.applyMutations}:
-     * <ol>
-     *   <li>If the batch contains anything other than exactly one mutation, every
-     *       mutation in the batch is reported as
-     *       {@link MutationApplicationResult#malformed() Malformed}. WA Web
-     *       additionally logs {@code "[syncd] unexpected mutation count %s for
-     *       status privacy sync"}; Cobalt omits the WALogger telemetry.</li>
-     *   <li>Reads the last mutation from the batch
-     *       ({@code var a = t[t.length - 1]}) and dispatches to the
-     *       single-mutation pipeline.</li>
-     *   <li>Wraps the single-mutation logic in a try/catch that maps any thrown
-     *       error to {@link MutationApplicationResult#failed() Failed} for every
-     *       mutation in the batch (WA Web logs
-     *       {@code "[syncd] status privacy IDB write failed %s"}).</li>
-     *   <li>If the operation is not {@code SET}, returns
-     *       {@link MutationApplicationResult#unsupported() Unsupported}.</li>
-     * </ol>
-     * @param client    the WhatsApp client instance
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebStatusPrivacySettingSync.applyMutations} which strictly
+     * requires the batch to contain exactly one mutation. A batch with
+     * anything other than one mutation maps every entry to
+     * {@link MutationApplicationResult#malformed()}; the singleton
+     * mutation is then delegated to
+     * {@link #applySetMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * inside a {@code try/catch} that turns any exception into
+     * {@link MutationApplicationResult#failed()}. WA Web's
+     * {@code WALogger} messages around the count check and the IDB write
+     * failure are omitted as telemetry.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -143,36 +115,15 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single status privacy mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebStatusPrivacySettingSync.applyMutations}
-     * (single-mutation path within the batch):
-     * <ol>
-     *   <li>If the operation is not {@code SET}, returns
-     *       {@link MutationApplicationResult#unsupported() Unsupported}.</li>
-     *   <li>Wraps the application in a try/catch and returns
-     *       {@link MutationApplicationResult#failed() Failed} on any exception
-     *       (WA Web logs the failure to {@code WALogger.ERROR}).</li>
-     *   <li>If the value is missing, the {@code statusPrivacy} sub-message is
-     *       missing, or the distribution {@code mode} is {@code null}, returns
-     *       {@link #malformedActionValue()} ({@code Malformed}).</li>
-     *   <li>For {@code CONTACTS}, persists a {@link PrivacySettingType#STATUS}
-     *       entry with value {@link PrivacySettingValue#CONTACTS} and an empty
-     *       JID list.</li>
-     *   <li>For {@code ALLOW_LIST}, filters {@code userJid} to user-server JIDs
-     *       and persists an entry with value
-     *       {@link PrivacySettingValue#CONTACTS_ONLY} and the filtered list.</li>
-     *   <li>For {@code DENY_LIST}, filters {@code userJid} to user-server JIDs
-     *       and persists an entry with value
-     *       {@link PrivacySettingValue#CONTACTS_EXCEPT} and the filtered list.</li>
-     *   <li>For {@code CLOSE_FRIENDS} (and the missing {@code CUSTOM_LIST}
-     *       variant), no entries are written and {@code Success} is returned —
-     *       WA Web breaks out of the dispatch switch without populating any
-     *       IDB key list.</li>
-     * </ol>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation is the single-mutation entry point used when
+     * the caller already knows the batch contains exactly one mutation
+     * (e.g. tests). It applies the same {@code SET}-only filter and
+     * try/catch wrapper as
+     * {@link #applyMutationBatch(WhatsAppClient, List)} and delegates to
+     * {@link #applySetMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -189,14 +140,33 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single SET mutation, mirroring WA Web's switch dispatch on
-     * {@code StatusDistributionMode}.
+     * Translates the decoded status-privacy mode into a
+     * {@link PrivacySettingEntry} and writes it to the store.
      *
-     * <p>The caller is responsible for the operation check and the try/catch
-     * wrapper; this helper handles only the value validation and the per-mode
-     * dispatch.
-     * @param client   the WhatsApp client instance
-     * @param mutation the SET mutation to apply
+     * @apiNote
+     * The caller is responsible for the {@link SyncdOperation#SET} check
+     * and the surrounding {@code try/catch}; this helper handles only
+     * value validation and the per-mode dispatch.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code switch} on {@code StatusDistributionMode}: {@code CONTACTS}
+     * writes a {@link PrivacySettingValue#CONTACTS} entry with an empty
+     * JID list; {@code ALLOW_LIST} and {@code DENY_LIST} write a
+     * {@link PrivacySettingValue#CONTACTS_ONLY} /
+     * {@link PrivacySettingValue#CONTACTS_EXCEPT} entry whose
+     * {@code excluded} list is the input
+     * {@link StatusPrivacyAction#userJid()} filtered through
+     * {@link #filterUserJids(List)}; {@code CLOSE_FRIENDS} and
+     * {@code CUSTOM_LIST} are accepted as no-ops, matching WA Web which
+     * breaks out of the dispatch switch without writing any IDB entries.
+     * The crossposting branch
+     * ({@code WAWebCrosspostingBackendGatingUtils.crosspostSettingsSyncReceiverEnabled})
+     * is dropped because Cobalt's {@link StatusPrivacyAction} model does
+     * not carry the {@code shareToFB} / {@code shareToIG} fields.
+     *
+     * @param client   the {@link WhatsAppClient} whose store receives the entry
+     * @param mutation the {@code SET} mutation to apply
      * @return the detailed application result
      */
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -210,59 +180,63 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        // Cobalt's StatusPrivacyAction model does not carry shareToFB/shareToIG; the crossposting receiver branch is intentionally omitted (see report).
         var userJid = action.userJid();
 
         PrivacySettingEntry entry = null;
         switch (mode) {
             case CONTACTS -> {
                 entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS) // ADAPTED: WAWebUserPrefsKeys.BACKEND_ONLY_KEYS.STATUS_PRIVACY_SETTING -> Cobalt PrivacySettingEntry.type
-                        .value(PrivacySettingValue.CONTACTS) // ADAPTED: StatusPrivacySettingType.Contact ("contact") -> PrivacySettingValue.CONTACTS
-                        .excluded(List.of()) // ADAPTED: no allowList/denyList written by WA Web for the Contact setting
+                        .type(PrivacySettingType.STATUS)
+                        .value(PrivacySettingValue.CONTACTS)
+                        .excluded(List.of())
                         .build();
             }
             case ALLOW_LIST -> {
                 var allowList = filterUserJids(userJid);
                 entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS) // ADAPTED: STATUS_PRIVACY_SETTING -> PrivacySettingEntry.type
-                        .value(PrivacySettingValue.CONTACTS_ONLY) // ADAPTED: StatusPrivacySettingType.AllowList ("allow-list") -> PrivacySettingValue.CONTACTS_ONLY ("contact_whitelist")
-                        .excluded(allowList) // ADAPTED: STATUS_ALLOW_LIST -> PrivacySettingEntry.excluded (Cobalt overloads excluded for both allow and deny lists)
+                        .type(PrivacySettingType.STATUS)
+                        .value(PrivacySettingValue.CONTACTS_ONLY)
+                        .excluded(allowList)
                         .build();
             }
             case DENY_LIST -> {
                 var denyList = filterUserJids(userJid);
                 entry = new PrivacySettingEntryBuilder()
-                        .type(PrivacySettingType.STATUS) // ADAPTED: STATUS_PRIVACY_SETTING -> PrivacySettingEntry.type
-                        .value(PrivacySettingValue.CONTACTS_EXCEPT) // ADAPTED: StatusPrivacySettingType.DenyList ("deny-list") -> PrivacySettingValue.CONTACTS_EXCEPT ("contact_blacklist")
-                        .excluded(denyList) // ADAPTED: STATUS_DENY_LIST -> PrivacySettingEntry.excluded
+                        .type(PrivacySettingType.STATUS)
+                        .value(PrivacySettingValue.CONTACTS_EXCEPT)
+                        .excluded(denyList)
                         .build();
             }
             case CLOSE_FRIENDS, CUSTOM_LIST -> {
             }
         }
 
-        // Crossposting receiver branch intentionally omitted: shareToFB/shareToIG fields are not in Cobalt's StatusPrivacyAction protobuf model.
         if (entry != null) {
-            client.store().addPrivacySetting(entry); // ADAPTED: bulkSetItemsToIndexedDB -> WhatsAppStore.addPrivacySetting (Cobalt collapses STATUS_PRIVACY_SETTING/STATUS_ALLOW_LIST/STATUS_DENY_LIST into one PrivacySettingEntry)
+            client.store().addPrivacySetting(entry);
         }
         return MutationApplicationResult.success();
     }
 
     /**
-     * Filters a JID list to those whose server is a user-server domain,
-     * mirroring WA Web's {@code wid.isUser()} predicate after
-     * {@code WAWebWidFactory.createWid} normalization.
+     * Filters a JID list to those whose server is a user-server domain.
      *
-     * <p>WA Web's {@code Wid.prototype.isUser} returns {@code true} for the
-     * {@code c.us}, {@code lid}, {@code bot}, {@code hosted}, and
-     * {@code hosted.lid} server domains. Cobalt's {@link Jid#hasUserServer()}
-     * only matches the standard ({@code s.whatsapp.net}) and legacy
-     * ({@code c.us}) user domains; for full WA Web parity, this helper also
-     * accepts {@code lid}, {@code bot}, {@code hosted}, and {@code hosted.lid}.
+     * @apiNote
+     * The status-privacy allow-list and deny-list payloads may contain
+     * any JID type on the wire; this helper drops non-user JIDs to match
+     * WA Web's
+     * {@code p.map(WAWebWidFactory.createWid).filter(function(e){return e.isUser()})}
+     * predicate so only user-addressable contacts end up in the persisted
+     * privacy entry.
+     *
+     * @implNote
+     * This implementation defers the predicate to {@link #isUserWid(Jid)}
+     * and tolerates {@code null} entries defensively. WA Web's
+     * {@code createWid} would throw on a null input; Cobalt's iterator
+     * skips them so the surrounding handler does not bubble up an
+     * unexpected exception.
+     *
      * @param jids the input JID list
-     * @return an unmodifiable list containing only user-server JIDs in the
-     *         original order
+     * @return an unmodifiable list of user-server JIDs in input order
      */
     @WhatsAppWebExport(moduleName = "WAWebWid", exports = "isUser", adaptation = WhatsAppAdaptation.ADAPTED)
     private static List<Jid> filterUserJids(List<Jid> jids) {
@@ -271,7 +245,7 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
         }
         var filtered = new ArrayList<Jid>(jids.size());
         for (var jid : jids) {
-            if (jid == null) { // ADAPTED: defensive null check; WA Web's createWid throws on null
+            if (jid == null) {
                 continue;
             }
             if (isUserWid(jid)) {
@@ -282,8 +256,20 @@ public final class StatusPrivacyHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns whether the given JID belongs to a user-server domain matching
-     * WA Web's {@code Wid.prototype.isUser} predicate.
+     * Reports whether the given JID belongs to a user-server domain.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code Wid.prototype.isUser} predicate: the JID's
+     * server must be one of {@code c.us}, {@code lid}, {@code bot},
+     * {@code hosted}, or {@code hosted.lid}. Used by
+     * {@link #filterUserJids(List)} to drop non-addressable contacts
+     * from a privacy list.
+     *
+     * @implNote
+     * This implementation reads the {@link JidServer.Type} discriminator
+     * directly because {@link Jid#hasUserServer()} alone only covers the
+     * standard and legacy user domains, missing LID / hosted / bot.
+     *
      * @param jid the JID to test
      * @return {@code true} if the JID's server is a user-server domain
      */

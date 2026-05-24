@@ -7,26 +7,29 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.OptionalInt;
 
 /**
- * Thrown for failures during media operations (uploads, downloads,
- * media-server connection bring-up, and the local processing that
- * happens around them).
+ * Sealed root for failures during media operations: uploads, downloads,
+ * media-server connection bring-up, and the local processing around
+ * them.
  *
- * <p>WhatsApp media (images, videos, audio messages, documents,
- * stickers) travels over a separate set of CDN endpoints from the main
- * messaging WebSocket. The flow is: ask the server for a fresh media
- * connection, encrypt and upload the bytes (or fetch and decrypt them
- * during a download), then run any local processing (thumbnailing,
- * format conversion, integrity checks). Each of those steps can fail
- * independently, and each failure is surfaced through one of the four
- * nested subtypes.
+ * @apiNote
+ * WhatsApp media (images, videos, audio messages, documents, stickers)
+ * travels over a separate set of CDN endpoints from the main messaging
+ * WebSocket. The flow asks the server for a fresh media connection,
+ * encrypts and uploads the bytes (or fetches and decrypts them during a
+ * download), then runs any local processing (thumbnailing, format
+ * conversion, integrity checks). Each step surfaces through one of the
+ * nested subtypes. When the failure originated from an HTTP response,
+ * the originating status code is preserved on {@link #httpStatusCode()}
+ * so the configurable error handler can react differently to a 401
+ * (auth refresh needed) versus a 413 (payload too large) versus a 507
+ * (server throttling). Mirrors WA Web's
+ * {@code WAWebMmsClientErrors}/{@code WAWebHttpErrors} hierarchy where
+ * each {@code MMS*Error} maps to one of the {@code HTTP_*} constants.
  *
- * <p>Media exceptions are never fatal: a failed transfer is local to a
- * single piece of content and the messaging session keeps running.
- * When the failure originated from an HTTP response, the originating
- * status code is preserved on {@link #httpStatusCode()} so the
- * configurable error handler can react differently to a 401 (auth
- * refresh needed) versus a 413 (payload too large) versus a 507
- * (server throttling).
+ * @implNote
+ * This implementation always reports the failure as non-fatal: media
+ * operations are isolated from the main messaging channel and a failed
+ * transfer is local to a single piece of content.
  *
  * @see Connection
  * @see Upload
@@ -42,26 +45,33 @@ public sealed class WhatsAppMediaException extends WhatsAppException
                 WhatsAppMediaException.Connection {
 
     /**
-     * HTTP {@code 401} returned by the media CDN when the upload or
-     * download authentication token has expired.
+     * The {@code 401} status raised by the media CDN when the upload or
+     * download authentication token has expired; mirrors WA Web's
+     * {@code MMSUnauthorizedError}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientErrors", exports = "MMSUnauthorizedError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
     public static final int HTTP_UNAUTHORIZED = 401;
 
     /**
-     * HTTP {@code 403} returned by the media CDN when access to the
-     * resource is denied. When the response body indicates an expired
-     * URL signature, the server-side classification reclassifies this
-     * as a not-found error instead.
+     * The {@code 403} status raised by the media CDN when access to the
+     * resource is denied; mirrors WA Web's {@code MMSForbiddenError}.
+     *
+     * @apiNote
+     * When the response body indicates an expired URL signature, the
+     * server-side classification reclassifies this as a not-found error
+     * instead.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientErrors", exports = "MMSForbiddenError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
     public static final int HTTP_FORBIDDEN = 403;
 
     /**
-     * HTTP {@code 404} returned by the media CDN when the file is not
-     * available, either because it has been deleted or because the
+     * The {@code 404} status raised by the media CDN when the file is
+     * not available; mirrors WA Web's {@code MediaNotFoundError}.
+     *
+     * @apiNote
+     * Raised either because the file has been deleted or because the
      * download URL has expired. HTTP {@code 410 Gone} is treated
      * identically.
      */
@@ -70,26 +80,31 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     public static final int HTTP_NOT_FOUND = 404;
 
     /**
-     * HTTP {@code 413} returned by the media CDN when the uploaded
-     * payload exceeds the server-side size limit.
+     * The {@code 413} status raised by the media CDN when the uploaded
+     * payload exceeds the server-side size limit; mirrors WA Web's
+     * {@code MediaTooLargeError}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientErrors", exports = "MediaTooLargeError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
     public static final int HTTP_TOO_LARGE = 413;
 
     /**
-     * HTTP {@code 415} returned by the media CDN when the media format
-     * is invalid or the ciphertext hash does not match the value the
-     * client computed.
+     * The {@code 415} status raised by the media CDN when the media
+     * format is invalid or the ciphertext hash does not match the value
+     * the client computed; mirrors WA Web's {@code MediaInvalidError}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientErrors", exports = "MediaInvalidError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
     public static final int HTTP_INVALID_MEDIA = 415;
 
     /**
-     * HTTP {@code 507} returned by the media CDN when the server is
-     * throttling traffic from this client. WhatsApp explicitly does
-     * not retry on this code.
+     * The {@code 507} status raised by the media CDN when the server is
+     * throttling traffic from this client; mirrors WA Web's
+     * {@code MMSThrottleError}.
+     *
+     * @apiNote
+     * WA Web explicitly does not retry on this code; embedders should
+     * back off rather than re-attempt the transfer.
      */
     @WhatsAppWebExport(moduleName = "WAWebMmsClientErrors", exports = "MMSThrottleError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -146,12 +161,12 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>Media operations are isolated from the main messaging
-     * channel; their failures never tear the session down.
-     *
-     * @return {@code false}
+     * @implNote
+     * This implementation always returns {@code false}: media operations
+     * are isolated from the main messaging channel and their failures
+     * never tear the session down.
      */
     @Override
     public boolean isFatal() {
@@ -159,31 +174,34 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     }
 
     /**
-     * Returns the HTTP status code returned by the media CDN, when
-     * the failure originated from an HTTP response.
+     * Returns the HTTP status code returned by the media CDN, when the
+     * failure originated from an HTTP response.
      *
-     * <p>Callers can match the returned value against the
-     * {@code HTTP_*} constants on this class to decide how to react
-     * (refresh auth on 401, re-request a URL on 404, give up on 413,
-     * back off on 507, and so on).
+     * @apiNote
+     * Match the returned value against the {@code HTTP_*} constants on
+     * this class to decide how to react (refresh auth on
+     * {@link #HTTP_UNAUTHORIZED}, re-request a URL on
+     * {@link #HTTP_NOT_FOUND}, give up on {@link #HTTP_TOO_LARGE}, back
+     * off on {@link #HTTP_THROTTLE}).
      *
-     * @return the HTTP status code wrapped in an {@link OptionalInt},
-     *         or empty when the failure was not produced by an HTTP
-     *         response
+     * @return the HTTP status code wrapped in an {@link OptionalInt}, or
+     *         empty when the failure was not produced by an HTTP response
      */
     public OptionalInt httpStatusCode() {
         return httpStatusCode == -1 ? OptionalInt.empty() : OptionalInt.of(httpStatusCode);
     }
 
     /**
-     * Thrown when the media-server connection cannot be established
-     * or is no longer usable.
+     * Thrown when the media-server connection cannot be established or
+     * is no longer usable.
      *
-     * <p>WhatsApp serves media through endpoints that are negotiated
-     * dynamically and have a limited lifetime. This exception covers
-     * the case where the negotiation failed, the connection expired
-     * during a transfer, the server returned no usable hosts, or the
-     * TLS handshake to the chosen host failed.
+     * @apiNote
+     * WhatsApp serves media through endpoints negotiated dynamically and
+     * with a limited lifetime; WA Web's {@code WAWebMediaHostsErrors}
+     * reports the same condition through {@code NoMediaHostsError}.
+     * Triggered when the negotiation failed, the connection expired
+     * during a transfer, the server returned no usable hosts, or the TLS
+     * handshake to the chosen host failed.
      */
     @WhatsAppWebModule(moduleName = "WAWebMediaHostsErrors")
     public static final class Connection extends WhatsAppMediaException {
@@ -226,12 +244,13 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     /**
      * Thrown when fetching a media file from the WhatsApp CDN fails.
      *
-     * <p>The transfer can fail because the URL has expired, the
-     * network call could not complete, the server returned an error
-     * status (commonly {@link #HTTP_NOT_FOUND} for deleted files,
-     * {@link #HTTP_UNAUTHORIZED} for an expired auth token, or
-     * {@link #HTTP_THROTTLE} when the server is rate-limiting), or
-     * because the bytes that did arrive failed integrity validation
+     * @apiNote
+     * Aggregates the conditions WA Web's {@code WAWebMmsClientMmsDownload}
+     * pipeline reports as {@code MediaNotFoundError} (deleted files),
+     * {@code MMSUnauthorizedError} (expired auth token),
+     * {@code MMSThrottleError} (rate limiting), {@code HttpNetworkError}
+     * (transport failure), or {@code HttpTimedOutError} (deadline
+     * exceeded), plus integrity-validation failures Cobalt detects
      * during decryption.
      */
     @WhatsAppWebModule(moduleName = "WAWebMmsClientErrors")
@@ -283,13 +302,14 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     /**
      * Thrown when uploading a media file to the WhatsApp CDN fails.
      *
-     * <p>The upload can fail because the media connection is no
-     * longer valid, the network call could not complete, or the
-     * server rejected the upload. Common server-side rejections are
-     * {@link #HTTP_TOO_LARGE} for oversize content,
-     * {@link #HTTP_INVALID_MEDIA} for a hash or format mismatch,
-     * {@link #HTTP_UNAUTHORIZED} for an expired auth token, and
-     * {@link #HTTP_THROTTLE} for rate limiting.
+     * @apiNote
+     * Triggered when the media connection is no longer valid, the
+     * network call could not complete, or the server rejected the
+     * upload. Common server-side rejections from WA Web's
+     * {@code WAWebMmsClientErrors} are {@link #HTTP_TOO_LARGE} for
+     * oversize content, {@link #HTTP_INVALID_MEDIA} for a hash or format
+     * mismatch, {@link #HTTP_UNAUTHORIZED} for an expired auth token,
+     * and {@link #HTTP_THROTTLE} for rate limiting.
      */
     @WhatsAppWebModule(moduleName = "WAWebMmsClientErrors")
     public static final class Upload extends WhatsAppMediaException {
@@ -335,11 +355,13 @@ public sealed class WhatsAppMediaException extends WhatsAppException
     /**
      * Thrown when local processing of a media file fails.
      *
-     * <p>Processing covers everything that happens around the
-     * transfer itself: encryption and decryption, thumbnail and
-     * waveform generation, format conversion, metadata extraction,
-     * and integrity checks on responses that parsed but contain
-     * unusable content.
+     * @apiNote
+     * Processing covers everything around the transfer itself:
+     * encryption and decryption, thumbnail and waveform generation,
+     * format conversion, metadata extraction, and integrity checks on
+     * responses that parsed but contain unusable content. Mirrors WA
+     * Web's {@code HttpInvalidResponseError} and
+     * {@code MmsDownloadFilehashMismatchError}.
      */
     @WhatsAppWebModule(moduleName = "WAWebHttpErrors")
     public static final class Processing extends WhatsAppMediaException {

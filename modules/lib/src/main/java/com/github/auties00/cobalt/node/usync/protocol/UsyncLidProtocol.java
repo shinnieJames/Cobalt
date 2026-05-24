@@ -13,8 +13,14 @@ import com.github.auties00.cobalt.node.usync.result.LidResult;
 import java.util.Optional;
 
 /**
- * USync {@code lid} protocol descriptor. Asks the relay to resolve each peer's
- * LID identifier or to confirm a hint the client already holds.
+ * USync {@code lid} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay to resolve each peer's LID identifier or to confirm a hint
+ * the client already holds. Used in the LID migration pipeline (see
+ * {@code WAWebContactSyncUtils.constructUsyncDeltaQuery}) and added
+ * idempotently to many other USync queries via
+ * {@link com.github.auties00.cobalt.node.usync.UsyncQuery#withLidProtocol()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncLid")
 public final class UsyncLidProtocol implements UsyncProtocol {
@@ -24,7 +30,12 @@ public final class UsyncLidProtocol implements UsyncProtocol {
     public static final String NAME = "lid";
 
     /**
-     * Constructs a default LID-protocol descriptor.
+     * Builds a default LID-protocol descriptor.
+     *
+     * @apiNote
+     * The descriptor is stateless; per-user state lives on each
+     * {@link UsyncUser} (specifically the optional LID hint set through
+     * {@link UsyncUser#withLid(com.github.auties00.cobalt.model.jid.Jid)}).
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
             exports = "USyncLidProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -32,9 +43,7 @@ public final class UsyncLidProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
@@ -44,9 +53,11 @@ public final class UsyncLidProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds an empty {@code <lid/>} query element.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation emits an empty {@code <lid/>} element, matching
+     * the JS {@code wap("lid", null)} shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
@@ -56,12 +67,13 @@ public final class UsyncLidProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds a per-user {@code <lid jid="..."/>} child carrying the LID hint
-     * the user entry was pre-populated with. Returns empty when the user has
-     * no LID hint.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return the per-user element, or empty
+     * @implNote
+     * This implementation only emits the per-user element when the user
+     * carries a LID hint, matching the JS {@code null} return when
+     * {@code getLid()} is empty. The hint is shipped on the {@code jid}
+     * attribute of the per-user {@code <lid>} element.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",
@@ -74,12 +86,11 @@ public final class UsyncLidProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <lid>} child of a {@code <user>} response into a
-     * {@link LidResult} or a per-protocol error.
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation reads the resolved LID from the {@code val}
+     * attribute, matching the JS {@code maybeAttrLidUserJid("val")} call.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncLid",

@@ -14,51 +14,74 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Publishes or clears the authenticated user's ephemeral text status entry.
+ * Builds the MEX IQ stanza that publishes or clears the user's ephemeral
+ * text status entry.
  *
- * <p>The mutation takes the serialised status payload (text body, optional emoji and ephemeral duration) and commits
- * it as the current status for the account. Setting an empty input clears any existing status.
+ * @apiNote Powers the Status tab "Add to my status" composer. WA Web's
+ * {@code WAWebUpdateTextStatusJob} calls this mutation under a
+ * {@code GraphQlPerfTracker("update-text-status")} span and inspects
+ * {@code xwa2_update_text_status.result} to drive the post-submit UI
+ * state. Pair the dispatched stanza with {@link UpdateTextStatusMexResponse}
+ * to consume the reply.
+ *
+ * @see UpdateTextStatusMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateTextStatusJob")
 public final class UpdateTextStatusMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL mutation.
+     * The compiled-document id the relay maps to the persisted mutation.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexUpdateTextStatusJobMutation.graphql} for the snapshot
+     * this file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9152604461510864";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this mutation is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexUpdateTextStatusJobMutation.graphql}; WA Web tags the
+     * value to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJobMutation.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexUpdateTextStatus";
 
     /**
-     * The body of the text status, or {@code null} / empty to clear it.
+     * The body text of the status, possibly {@code null}.
      */
     private final String text;
 
     /**
-     * The optional emoji decoration shown next to the text status.
+     * The optional emoji decoration, possibly {@code null}.
      */
     private final String emoji;
 
     /**
-     * The ephemeral duration in seconds after which the status expires.
+     * The ephemeral duration in seconds.
      */
     private final long ephemeralDurationSec;
 
     /**
-     * Constructs a new request with the three status components. Applies the same normalisation as
-     * {@code WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest}. An empty {@code text} string is coerced
-     * to {@code null}. A {@code null} {@code emoji} is omitted from the variables payload entirely. When both
-     * {@code text} and {@code emoji} are absent the ephemeral duration is silently reset to {@code 0}.
+     * Constructs an update-text-status mutation request.
      *
-     * @param text the text body of the status, or {@code null} or empty to clear it
-     * @param emoji the optional emoji decoration of the status, or {@code null} to omit
-     * @param ephemeralDurationSec the ephemeral duration in seconds, or {@code 0} for no expiry
+     * @apiNote The normalisation mirrors WA Web's
+     * {@code WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest}:
+     * an empty {@code text} string is coerced to {@code null}, a {@code null}
+     * {@code emoji} is omitted from the variables payload entirely, and when
+     * both {@code text} and {@code emoji} are absent the duration is reset
+     * to {@code 0} (publishing the empty status that clears any existing
+     * entry).
+     *
+     * @param text the text body of the status, or {@code null} or empty
+     *             to clear it
+     * @param emoji the optional emoji decoration, or {@code null} to omit
+     * @param ephemeralDurationSec the ephemeral duration in seconds, or
+     *                             {@code 0} for no expiry
      */
     public UpdateTextStatusMexRequest(String text, String emoji, long ephemeralDurationSec) {
         this.text = text;
@@ -67,9 +90,7 @@ public final class UpdateTextStatusMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -77,9 +98,7 @@ public final class UpdateTextStatusMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -87,18 +106,22 @@ public final class UpdateTextStatusMexRequest implements MexOperation.Request.Js
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza. The {@code input} variable
-     * carries the structured status payload of shape {@code {text, emoji?: {content}, ephemeral_duration_sec}}.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits
+     * {@code {"variables": {"input": {"text": ..., "emoji"?: {"content": ...}, "ephemeral_duration_sec": ...}}}}
+     * after applying the WA Web normalisation rules described on the
+     * constructor; the {@code emoji} sub-object is emitted only when an
+     * emoji decoration is supplied, and {@code text} is serialised as JSON
+     * {@code null} when the normalised value is empty. Envelope
+     * construction is delegated to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJob", exports = "mexUpdateTextStatus",
             adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
     public NodeBuilder toNode() {
-        // Coerce empty text to null per WAWebTextStatusParseUtils.createTextStatusObjectForUpdateRequest.
         var normalisedText = (text == null || text.isEmpty()) ? null : text;
-        // Reset duration to zero when both text and emoji are absent.
         var normalisedDuration = ephemeralDurationSec;
         if (normalisedText == null && emoji == null && normalisedDuration != 0L) {
             normalisedDuration = 0L;
@@ -118,7 +141,6 @@ public final class UpdateTextStatusMexRequest implements MexOperation.Request.Js
             } else {
                 writer.writeString(normalisedText);
             }
-            // The emoji object is only emitted when an emoji decoration is supplied.
             if (emoji != null) {
                 writer.writeName("emoji");
                 writer.writeColon();

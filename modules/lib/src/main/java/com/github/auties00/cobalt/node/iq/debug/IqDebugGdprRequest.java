@@ -9,43 +9,63 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant — wraps a single
- * {@code <gdpr action="delete" [report_type=...]/>} child in the
- * canonical {@code <iq xmlns="urn:xmpp:whatsapp:account"
- * type="get"/>} envelope.
+ * Outbound {@code <iq xmlns="urn:xmpp:whatsapp:account" type="get">} stanza that cancels an
+ * in-flight GDPR data-export request for the bound report type.
+ *
+ * @apiNote
+ * Use this to surface WA Web's "cancel pending GDPR request" debug action; it backs
+ * {@code WAWebDebugGDPR.cancelGDPRRequest}, the only public caller in the bundle. The
+ * payload is a {@code <gdpr action="delete" [report_type=?]/>} child where
+ * {@code report_type} is the {@link IqDebugGdprReportType#wire()} value (omitted entirely
+ * for {@link IqDebugGdprReportType#ACCOUNT}). The relay reply is parsed by
+ * {@link IqDebugGdprResponse}.
+ *
+ * @implNote
+ * This implementation routes the outbound stanza to {@link JidServer#user()} and fixes
+ * {@code type="get"}, matching WA Web's {@code WAWebGdprHookUtils.getGdprIq} verbatim.
+ * The IQ id is omitted here and assigned by the dispatch layer.
  */
 @WhatsAppWebModule(moduleName = "WAWebGdprHookUtils")
 public final class IqDebugGdprRequest implements IqOperation.Request {
     /**
-     * The report type to cancel.
+     * Holds the {@link IqDebugGdprReportType} whose export is being cancelled.
      */
     private final IqDebugGdprReportType reportType;
 
     /**
-     * Constructs a new request.
+     * Constructs a new cancel-GDPR request bound to the given report type.
      *
-     * @param reportType the report type; never {@code null}
-     * @throws NullPointerException if {@code reportType} is
-     *                              {@code null}
+     * @apiNote
+     * The {@code reportType} parameter must match the report type of the previously
+     * issued GDPR request; cancelling with a mismatched type produces a {@code 404}
+     * surfaced as {@link IqDebugGdprResponse.ClientError}.
+     *
+     * @param reportType the report type to cancel; never {@code null}
+     * @throws NullPointerException if {@code reportType} is {@code null}
      */
     public IqDebugGdprRequest(IqDebugGdprReportType reportType) {
         this.reportType = Objects.requireNonNull(reportType, "reportType cannot be null");
     }
 
     /**
-     * Returns the report type being cancelled.
+     * Returns the bound {@link IqDebugGdprReportType}.
      *
-     * @return the report type; never {@code null}
+     * @return the report type being cancelled; never {@code null}
      */
     public IqDebugGdprReportType reportType() {
         return reportType;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza wrapping the
+     * {@code <gdpr action="delete" [report_type=?]/>} payload.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <gdpr>} payload
+     * @apiNote
+     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
+     * attribute, which the dispatch layer assigns.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <gdpr>}
+     *         payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDebugGDPR",
@@ -53,7 +73,6 @@ public final class IqDebugGdprRequest implements IqOperation.Request {
     @WhatsAppWebExport(moduleName = "WAWebGdprHookUtils",
             exports = "getGdprIq", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebGdprHookUtils.getGdprIq: wap("gdpr",{action:"delete", report_type? })
         var gdprBuilder = new NodeBuilder()
                 .description("gdpr")
                 .attribute("action", "delete");
@@ -61,7 +80,6 @@ public final class IqDebugGdprRequest implements IqOperation.Request {
         if (wireType != null) {
             gdprBuilder.attribute("report_type", wireType);
         }
-        // WAWebGdprHookUtils.getGdprIq: wap("iq",{xmlns:"urn:xmpp:whatsapp:account",to:S_WHATSAPP_NET,type:"get",id}, ...)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "urn:xmpp:whatsapp:account")

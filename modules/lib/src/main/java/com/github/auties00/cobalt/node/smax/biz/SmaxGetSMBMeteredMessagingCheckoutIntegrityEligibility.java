@@ -17,28 +17,58 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Documented {@code is_eligible} enum carried by the
- * {@code <integrity/>} child of the success response. Boolean
- * surfaced as the literal {@code "true"}/{@code "false"} pair.
+ * The {@code is_eligible} boolean enum carried by the
+ * {@code <integrity/>} child of the SMB metered-messaging
+ * checkout success reply.
+ *
+ * @apiNote
+ * Surfaces the integrity-review verdict on the checkout quote
+ * returned by
+ * {@code WAWebGetSMBMeteredMessagingCheckoutJob}; the WA Web
+ * compose surface blocks the broadcast send when this value is
+ * {@link #FALSE} and admits it when {@link #TRUE}.
+ *
+ * @implNote
+ * This implementation accepts only the case-insensitive literals
+ * {@code "TRUE"} and {@code "FALSE"} surfaced by
+ * {@code WASmaxInSmbMeteredMessagingAccountEnums.ENUM_FALSE_TRUE}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountEnums")
 public enum SmaxGetSMBMeteredMessagingCheckoutIntegrityEligibility {
     /**
-     * Literal {@code "false"}. Campaign held back by integrity
-     * review.
+     * Wire form {@code "false"}.
+     *
+     * @apiNote
+     * The campaign is held back by integrity review; the compose
+     * surface disables the send action.
      */
     FALSE,
     /**
-     * Literal {@code "true"}. Campaign cleared.
+     * Wire form {@code "true"}.
+     *
+     * @apiNote
+     * The campaign has cleared integrity review.
      */
     TRUE;
 
     /**
-     * Tries to parse a wire-form attribute string.
+     * Resolves a wire-form attribute string into the matching enum
+     * constant.
+     *
+     * @apiNote
+     * Invoked while parsing the {@code <integrity is_eligible>}
+     * attribute on the metered messaging checkout success reply.
+     *
+     * @implNote
+     * This implementation upper-cases the input under
+     * {@link Locale#ROOT} before delegating to
+     * {@link #valueOf(String)} and swallows the resulting
+     * {@link IllegalArgumentException} as an empty result.
      *
      * @param value the attribute value; may be {@code null}
      * @return an {@link Optional} carrying the matching enum
-     *         constant, or empty
+     *         constant, or empty when the value is {@code null} or
+     *         does not match a documented literal
      */
     public static Optional<SmaxGetSMBMeteredMessagingCheckoutIntegrityEligibility> of(String value) {
         if (value == null) {

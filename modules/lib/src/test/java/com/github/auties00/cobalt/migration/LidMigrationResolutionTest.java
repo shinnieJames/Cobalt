@@ -4,6 +4,10 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,18 +15,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for {@link LidMigrationResolution}.
  *
- * <p>The sealed interface has three permitted variants — {@link LidMigrationResolution.Migrate},
- * {@link LidMigrationResolution.Keep}, {@link LidMigrationResolution.Delete} — each
- * carrying its own reason metadata. These tests pin the public surface so
- * callers (e.g. the executor in {@code LidMigrationService.executeResolutions})
- * can pattern-match exhaustively.
+ * @apiNote
+ * Pins the public surface of the sealed
+ * {@link LidMigrationResolution} interface so callers (notably
+ * {@code LidMigrationService.executeResolutions}) can pattern-match
+ * against {@link LidMigrationResolution.Migrate},
+ * {@link LidMigrationResolution.Keep}, and
+ * {@link LidMigrationResolution.Delete} exhaustively, and pins the
+ * {@link LidMigrationResolution.KeepReason} and
+ * {@link LidMigrationResolution.DeleteReason} enum membership against
+ * WA Web's branches in {@code getResolvedThreadAccountLid}.
+ *
+ * @implNote
+ * This implementation is a Cobalt-internal pin; no MCP-side oracle exists
+ * because WA Web models the same shape as an untyped object literal.
  */
 @DisplayName("LidMigrationResolution")
 class LidMigrationResolutionTest {
 
+    /**
+     * Synthetic phone-number JID drawn from the Italian number block.
+     */
     private static final Jid PN = Jid.of("393495089819@s.whatsapp.net");
+
+    /**
+     * Synthetic LID; arbitrary but stable.
+     */
     private static final Jid LID = Jid.of("258252122116273@lid");
 
+    /**
+     * The {@code Migrate} record exposes both {@code originalJid} and
+     * {@code targetLid}.
+     */
     @Test
     @DisplayName("Migrate carries originalJid and targetLid")
     void migrateAccessors() {
@@ -31,6 +55,10 @@ class LidMigrationResolutionTest {
         assertEquals(LID, resolution.targetLid());
     }
 
+    /**
+     * The {@code Keep} record exposes both {@code originalJid} and
+     * {@code reason}.
+     */
     @Test
     @DisplayName("Keep carries originalJid and reason")
     void keepAccessors() {
@@ -39,6 +67,10 @@ class LidMigrationResolutionTest {
         assertEquals(LidMigrationResolution.KeepReason.ALREADY_LID, resolution.reason());
     }
 
+    /**
+     * The {@code Delete} record exposes both {@code originalJid} and
+     * {@code reason}.
+     */
     @Test
     @DisplayName("Delete carries originalJid and reason")
     void deleteAccessors() {
@@ -47,13 +79,17 @@ class LidMigrationResolutionTest {
         assertEquals(LidMigrationResolution.DeleteReason.NO_LID_MAPPING, resolution.reason());
     }
 
+    /**
+     * {@link LidMigrationResolution.KeepReason} exposes every documented
+     * variant.
+     */
     @Test
     @DisplayName("KeepReason exposes every documented variant")
     void keepReasonVariants() {
         var reasons = LidMigrationResolution.KeepReason.values();
         assertEquals(7, reasons.length);
-        assertTrue(java.util.Arrays.asList(reasons)
-                .containsAll(java.util.List.of(
+        assertTrue(Arrays.asList(reasons)
+                .containsAll(List.of(
                         LidMigrationResolution.KeepReason.ALREADY_LID,
                         LidMigrationResolution.KeepReason.GROUP_OR_COMMUNITY,
                         LidMigrationResolution.KeepReason.NEWSLETTER,
@@ -64,19 +100,27 @@ class LidMigrationResolutionTest {
                 )));
     }
 
+    /**
+     * {@link LidMigrationResolution.DeleteReason} exposes every documented
+     * variant.
+     */
     @Test
     @DisplayName("DeleteReason exposes every documented variant")
     void deleteReasonVariants() {
         var reasons = LidMigrationResolution.DeleteReason.values();
         assertEquals(3, reasons.length);
-        assertTrue(java.util.Arrays.asList(reasons)
-                .containsAll(java.util.List.of(
+        assertTrue(Arrays.asList(reasons)
+                .containsAll(List.of(
                         LidMigrationResolution.DeleteReason.NO_LID_MAPPING,
                         LidMigrationResolution.DeleteReason.CONTACT_NOT_MIGRATED,
                         LidMigrationResolution.DeleteReason.SPLIT_THREAD_MISMATCH
                 )));
     }
 
+    /**
+     * The three records implement value-based equality and hash codes
+     * derived from their components.
+     */
     @Test
     @DisplayName("records implement equals/hashCode by value")
     void recordEquality() {
@@ -99,12 +143,21 @@ class LidMigrationResolutionTest {
         assertNotEquals(keepA, delA);
     }
 
+    /**
+     * The sealed type permits exactly {@code Migrate}, {@code Keep}, and
+     * {@code Delete}.
+     *
+     * @implNote
+     * Reflects on {@link Class#getPermittedSubclasses()} so a future
+     * addition of a fourth variant would fail this test and force a
+     * conscious update to the pattern-match call sites.
+     */
     @Test
     @DisplayName("sealed permits exactly Migrate/Keep/Delete")
     void sealedPermits() {
         var permitted = LidMigrationResolution.class.getPermittedSubclasses();
         assertEquals(3, permitted.length);
-        var permittedSet = java.util.Set.of(permitted);
+        var permittedSet = Set.of(permitted);
         assertTrue(permittedSet.contains(LidMigrationResolution.Migrate.class));
         assertTrue(permittedSet.contains(LidMigrationResolution.Keep.class));
         assertTrue(permittedSet.contains(LidMigrationResolution.Delete.class));

@@ -13,5 +13,6 @@ public enum EngagementCardVariant {
     @WamEnumConstant(3) CREATIVE_TOOLS,
     @WamEnumConstant(4) CONTINUE_CHAIN,
     @WamEnumConstant(5) MIMICRY_UPDATES_TAB,
-    @WamEnumConstant(6) AD4AD_BOOST_POPULAR_ALL_STATUSES
+    @WamEnumConstant(6) AD4AD_BOOST_POPULAR_ALL_STATUSES,
+    @WamEnumConstant(7) CHANNEL_PROMO
 }

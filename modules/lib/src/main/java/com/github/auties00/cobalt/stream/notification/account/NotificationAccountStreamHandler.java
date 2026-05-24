@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClientListener;
 import com.github.auties00.cobalt.device.DeviceService;
@@ -23,49 +25,106 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Handles incoming account-sync notifications for the authenticated user's own
- * account state, including status, text status, privacy settings, devices,
- * blocklist, profile picture, disappearing mode, TOS notices, user flags,
- * and business opt-out list updates.
+ * Handles {@code type="account_sync"} notifications carrying server-side
+ * mutations to the authenticated account's own settings.
+ *
+ * @apiNote
+ * Dispatched to by {@link NotificationAccountDispatcher}. Each notification
+ * carries exactly one typed child element ({@code status}, {@code text_status},
+ * {@code privacy}, {@code devices}, {@code blocklist}, {@code picture},
+ * {@code disappearing_mode}, {@code tos}, {@code notice}, {@code user},
+ * {@code biz_opt_out_list}) that selects the side-effect: an about refresh,
+ * a text-status upsert, an app-state pull, an inline device-list update,
+ * a blocklist reconciliation, a profile-picture refresh, a global ephemeral
+ * timer change, a TOS notice acknowledgement, an AI-availability flag set,
+ * or a business opt-out list reconciliation.
+ *
+ * @implNote
+ * This implementation surfaces every mutation through the typed Cobalt
+ * store API and fires listener callbacks; WA Web fans the same parsed
+ * data out to its frontend pipeline through {@code frontendSendAndReceive}
+ * and {@code BackendEventBus} calls. The protocol ACK is always sent in
+ * the {@code finally} block of {@link #handle(Node)} regardless of
+ * mutation success.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleAccountSyncNotification")
 final class NotificationAccountStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger for diagnostic messages related to account sync notification handling.
+     * Logger used for warnings about unhandled notifications and debug
+     * messages about ignored child elements.
      */
     private static final System.Logger LOGGER = System.getLogger(NotificationAccountStreamHandler.class.getName());
 
     /**
-     * The PDFN (Privacy Disclosure For Notices) accepted stage value.
+     * The {@code PDFN_ACCEPTED} notice-stage value used by the {@code notice}
+     * child path to distinguish accepted policy disclosures from pending ones.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebPDFNTypes.NOTICE_STAGES.PDFN_ACCEPTED}
+     * literal {@code "5"}. A {@code notice} stanza whose {@code stage}
+     * attribute equals this value is recorded as an accepted notice id;
+     * any other stage is ignored.
      */
     private static final String PDFN_ACCEPTED_STAGE = "5";
 
     /**
-     * The WhatsApp client instance used for queries and sending nodes.
+     * The {@link WhatsAppClient} used for store reads, queries (about,
+     * picture, blocklist), node sends, and listener notifications.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The device service used for syncing device lists.
+     * The {@link DeviceService} used by the {@code devices} child path to
+     * apply the inline device list against the authenticated user's own
+     * device cache.
      */
     private final DeviceService deviceService;
 
     /**
-     * Constructs a new account sync notification handler.
-     * @param whatsapp the WhatsApp client instance, must not be {@code null}
-     * @param deviceService the device service for device list operations, must not be {@code null}
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification" type="account_sync"/>} stanza.
      */
-    NotificationAccountStreamHandler(WhatsAppClient whatsapp, DeviceService deviceService) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with shared dependencies.
+     *
+     * @apiNote
+     * Called once by {@link NotificationAccountDispatcher} during
+     * construction; embedders do not instantiate this handler directly.
+     *
+     * @param whatsapp      the non-{@code null} client used for store and network access
+     * @param deviceService the non-{@code null} device service used for device list mutations
+     * @param ackSender     the non-{@code null} ack sender used for the
+     *                      protocol-level {@code <ack>} response
+     */
+    NotificationAccountStreamHandler(WhatsAppClient whatsapp, DeviceService deviceService, AckSender ackSender) {
         this.whatsapp = whatsapp;
         this.deviceService = Objects.requireNonNull(deviceService, "deviceService cannot be null");
+        this.ackSender = Objects.requireNonNull(ackSender, "ackSender cannot be null");
     }
 
     /**
-     * Handles an incoming node by verifying it is an account-sync notification,
-     * dispatching to the appropriate sub-handler, and sending an acknowledgment.
+     * Validates the stanza shape, dispatches to {@link #handleNotification(Node)},
+     * logs any thrown exception, and always sends the protocol-level ACK.
      *
-     * @param node the incoming stanza node
+     * @apiNote
+     * Invoked by {@link NotificationAccountDispatcher}. Stanzas whose
+     * description is not {@code notification} or whose {@code type} is
+     * not {@code account_sync} are dropped without ACK; valid stanzas
+     * are always ACKed even when handling throws.
+     *
+     * @implNote
+     * This implementation swallows {@link Throwable} from the mutation
+     * branch and logs it; WA Web rejects the underlying job promise so
+     * that the orchestrator can NACK the stanza. Cobalt ACKs
+     * unconditionally to match the WA Web ack-promise return path of
+     * {@code WAWebHandleAccountSyncNotification.handleAccountSyncNotification}
+     * which constructs the ack node at the top of the wrapper before
+     * dispatching to the per-type branch.
+     *
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -85,12 +144,22 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Dispatches the notification to the appropriate handler based on the first
-     * recognized child element type.
+     * Selects the per-type branch by iterating the notification children
+     * until a recognised tag is found, then delegates to the matching
+     * helper.
      *
-     * <p>Each child tag maps to a specific {@code AccountSyncType} in WA Web's
-     * parser and is handled by the corresponding switch case in the main handler function.
-     * @param node the notification node containing one or more typed child elements
+     * @apiNote
+     * Mirrors WA Web's {@code incomingAccountSyncNotification} parser
+     * which checks each known child tag in order and produces a typed
+     * record with an {@code AccountSyncType} discriminator.
+     *
+     * @implNote
+     * This implementation returns after the first recognised child so a
+     * stanza never triggers more than one branch, matching WA Web's
+     * {@code if-else} chain. Unrecognised children are logged at
+     * {@code DEBUG} when no branch matched at all.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handleNotification(Node node) {
         for (var child : node.children()) {
@@ -113,7 +182,7 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
                 }
                 case "blocklist" -> {
                     applyBlocklistUsernames(child);
-                    refreshBlockList();
+                    whatsapp.refreshBlockList();
                     return;
                 }
                 case "picture" -> {
@@ -141,7 +210,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
                     return;
                 }
                 default -> {
-                    // NO_WA_BASIS
                 }
             }
         }
@@ -152,12 +220,21 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes the authenticated user's about (status) text by querying the server
-     * and updating the local store if changed.
+     * Refreshes the authenticated user's about text by querying the server
+     * and notifying listeners when the value changed.
      *
-     * <p>WA Web queries the about status, and if non-empty, sends it to the frontend
-     * via {@code frontendSendAndReceive("setMyStatus")}. Cobalt instead directly
-     * updates the store and fires listeners.
+     * @apiNote
+     * Triggered by a {@code <status/>} child on an {@code account_sync}
+     * notification, meaning the user changed their about on another
+     * device. Drives the {@link WhatsAppClientListener#onAboutChanged}
+     * callback.
+     *
+     * @implNote
+     * This implementation compares the stored about against the queried
+     * value before writing, avoiding a redundant listener fire when the
+     * server pushes the same value Cobalt already has. WA Web does not
+     * compare; it fires {@code frontendSendAndReceive("setMyStatus", ...)}
+     * unconditionally when the queried status is non-empty.
      */
     void refreshOwnAbout() {
         var self = whatsapp.store().jid().orElse(null);
@@ -165,34 +242,43 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        var oldAbout = whatsapp.store().selfTextStatus().flatMap(ContactTextStatus::text).orElse(""); // NO_WA_BASIS - defensive comparison
+        var oldAbout = whatsapp.store().selfTextStatus().flatMap(ContactTextStatus::text).orElse("");
         var newAbout = whatsapp.queryAbout(self).orElse("");
         if (Objects.equals(oldAbout, newAbout)) {
-            return; // NO_WA_BASIS - Cobalt optimization to avoid redundant updates
+            return;
         }
 
         var newStatus = new ContactTextStatusBuilder()
                 .text(newAbout)
                 .build();
         whatsapp.store().setSelfTextStatus(newStatus);
-        fireListeners(listener -> listener.onAboutChanged(whatsapp, oldAbout, newAbout)); // ADAPTED: Cobalt listener pattern
+        fireListeners(listener -> listener.onAboutChanged(whatsapp, oldAbout, newAbout));
     }
 
     /**
-     * Handles a text status account sync notification.
+     * Applies a text-status change carried inside the {@code <text_status>}
+     * child to the local store for the originating user.
      *
-     * <p>When the action is {@code "modify"}, WA Web fetches the text status from the
-     * server. Otherwise, it uses the values directly from the stanza. The non-modify
-     * path is what Cobalt implements. The modify path is handled identically since
-     * both end up updating the local text status for the contact.
-     * @param node the parent notification node
-     * @param textStatusNode the {@code text_status} child element
+     * @apiNote
+     * Drives the {@link WhatsAppClientListener#onContactTextStatus}
+     * callback for the changed contact (which may be self or a paired
+     * user). When the stanza's {@code action} is {@code "modify"} the
+     * change applies to the authenticated user; otherwise it applies to
+     * the user named in the stanza's {@code from} attribute.
+     *
+     * @implNote
+     * This implementation collapses the WA Web {@code action === "modify"}
+     * path (which re-queries the text status via
+     * {@code WAWebContactTextStatusBridge.getTextStatus}) into the same
+     * stanza-driven update used for the non-modify case, because Cobalt
+     * does not maintain a dedicated text-status server query.
+     *
+     * @param node           the {@code <notification>} stanza
+     * @param textStatusNode the {@code <text_status>} child carrying the new values
      */
     private void handleTextStatusNotification(Node node, Node textStatusNode) {
         var action = textStatusNode.getAttributeAsString("action", null);
         if ("modify".equals(action)) {
-            // ADAPTED: Cobalt does not have a dedicated text status query API yet,
-            // so the modify case is treated the same as the default case (stanza values)
             updateOwnTextStatus(textStatusNode);
         } else {
             var from = getUserJid(node, "from");
@@ -219,10 +305,22 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Updates the own text status using values from the stanza child node.
-     * Used for the {@code action === "modify"} case as a fallback when
-     * no dedicated text status query API is available.
-     * @param textStatusNode the {@code text_status} child element
+     * Applies the {@code action="modify"} text-status path by reading the
+     * stanza's inline fields and writing them to the authenticated user's
+     * text-status record.
+     *
+     * @apiNote
+     * Used only on the {@code modify} action branch of
+     * {@link #handleTextStatusNotification}. Reads the same attributes
+     * the non-modify path reads.
+     *
+     * @implNote
+     * This implementation duplicates the stanza-attribute parsing rather
+     * than calling {@link #handleTextStatusNotification} reflexively
+     * because the {@code from} resolution differs (self only) and the
+     * parent path also fans out to the from-derived JID.
+     *
+     * @param textStatusNode the {@code <text_status>} child node
      */
     private void updateOwnTextStatus(Node textStatusNode) {
         var self = whatsapp.store().jid().orElse(null);
@@ -247,9 +345,27 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes the authenticated user's device list by performing a device
-     * list sync with the server.
-     * @param node the parent notification node containing the {@code from} attribute
+     * Replaces the authenticated user's cached device list with the inline
+     * list carried by the notification's {@code <devices>} child.
+     *
+     * @apiNote
+     * Drives Signal-session establishment for new companion devices and
+     * Signal-session cleanup for removed companion devices. The inline
+     * list also carries the server-computed {@code dhash} which Cobalt
+     * stores so future device-list IQs can short-circuit when the hash
+     * matches.
+     *
+     * @implNote
+     * This implementation reads the inline {@code <device jid=...
+     * key-index=.../>} children rather than firing a fresh USync device
+     * query, because the server does not respond to a USync issued
+     * immediately after an inline {@code devices} notification (the
+     * server treats the inline payload as authoritative). An earlier
+     * Cobalt version called {@link DeviceService#getDeviceLists} here
+     * and blocked for 60 seconds on the silent response before timing
+     * out.
+     *
+     * @param node the {@code <notification>} stanza carrying the {@code devices} child and {@code from} attribute
      */
     private void refreshOwnDevices(Node node) {
         var self = whatsapp.store().jid()
@@ -259,11 +375,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        // The notification already carries the full device list inline as <device jid=... key-index=.../>
-        // children of the <devices> child, along with the server-computed dhash. The earlier
-        // implementation kicked off a fresh USync device query for self, but the server does not
-        // respond to that redundant request (we already have the data), so the sendNode call
-        // blocked for 60s and timed out. Parse the inline list directly instead.
         var devicesChild = node.getChild("devices").orElse(null);
         if (devicesChild == null) {
             return;
@@ -291,14 +402,23 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Applies the usernames contained in a {@code blocklist} child's {@code <item>}
-     * entries to the local contact store.
+     * Writes the {@code username} field of every {@code <item>} child of
+     * a {@code <blocklist>} notification to the matching contact record.
      *
-     * <p>WA Web gates this on {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled()}
-     * and iterates each {@code item}, collecting pairs of {@code (userJid, username)}
-     * that it then forwards to {@code WAWebSetUsernameJob.setUsernamesJob}. Cobalt
-     * applies the username directly to the matching contact record.
-     * @param blocklistNode the {@code blocklist} child element
+     * @apiNote
+     * Drives username display next to a blocked contact's row in the
+     * blocklist UI. WA Web reaches this path only when the AB prop
+     * {@code WAWebUsernameGatingUtils.usernameDisplayedEnabled()} is
+     * enabled; Cobalt applies the usernames unconditionally because the
+     * Cobalt store has no equivalent gating prop wired here.
+     *
+     * @implNote
+     * This implementation creates a new {@code Contact} when no record
+     * exists for the JID, matching WA Web's
+     * {@code WAWebSetUsernameJob.setUsernamesJob} which calls
+     * {@code WAWebContactCollection.set} unconditionally.
+     *
+     * @param blocklistNode the {@code <blocklist>} child carrying {@code <item jid=... username=.../>} entries
      */
     private void applyBlocklistUsernames(Node blocklistNode) {
         for (var item : blocklistNode.getChildren("item")) {
@@ -312,7 +432,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
             if (userJid == null) {
                 continue;
             }
-            // Cobalt updates the contact's username directly on the local store.
             var contact = whatsapp.store()
                     .findContactByJid(userJid)
                     .orElseGet(() -> whatsapp.store().addNewContact(userJid));
@@ -322,36 +441,20 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Refreshes the block list by querying the server and updating local
-     * contact records accordingly.
-     */
-    private void refreshBlockList() {
-        // Cobalt queries blocklist and updates contact records directly
-        var blockedJids = new HashSet<>(whatsapp.queryBlockList());
-        for (var contact : whatsapp.store().contacts()) {
-            var blocked = blockedJids.remove(contact.jid());
-            if (contact.blocked() == blocked) {
-                continue;
-            }
-
-            contact.setBlocked(blocked);
-            whatsapp.store().addContact(contact);
-            fireListeners(listener -> listener.onContactBlocked(whatsapp, contact.jid()));
-        }
-
-        for (var blockedJid : blockedJids) {
-            var contact = whatsapp.store()
-                    .findContactByJid(blockedJid)
-                    .orElseGet(() -> whatsapp.store().addNewContact(blockedJid));
-            contact.setBlocked(true);
-            whatsapp.store().addContact(contact);
-            fireListeners(listener -> listener.onContactBlocked(whatsapp, blockedJid));
-        }
-    }
-
-    /**
-     * Refreshes the authenticated user's profile picture by querying the server
-     * and updating the local store if changed.
+     * Refreshes the authenticated user's profile-picture URI by querying
+     * the server and firing
+     * {@link WhatsAppClientListener#onProfilePictureChanged} when the URI
+     * changed.
+     *
+     * @apiNote
+     * Triggered when the user updates their profile picture on another
+     * paired device.
+     *
+     * @implNote
+     * This implementation short-circuits when the queried URI equals the
+     * stored URI; WA Web's
+     * {@code WAWebAccountSyncJob.getAndUpdateProfilePicture} always
+     * dispatches the frontend event.
      */
     private void refreshOwnPicture() {
         var self = whatsapp.store().jid().orElse(null);
@@ -359,37 +462,41 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
             return;
         }
 
-        var oldPicture = whatsapp.store().profilePicture().orElse(null); // NO_WA_BASIS - defensive comparison
+        var oldPicture = whatsapp.store().profilePicture().orElse(null);
         var newPicture = whatsapp.queryPicture(self).orElse(null);
         if (Objects.equals(oldPicture, newPicture)) {
-            return; // NO_WA_BASIS - Cobalt optimization to avoid redundant updates
+            return;
         }
 
         whatsapp.store().setProfilePicture(newPicture);
-        fireListeners(listener -> listener.onProfilePictureChanged(whatsapp, self)); // ADAPTED: Cobalt listener pattern
+        fireListeners(listener -> listener.onProfilePictureChanged(whatsapp, self));
     }
 
     /**
-     * Handles a disappearing mode account sync notification.
+     * Applies the global "new chats" ephemeral timer encoded inside the
+     * {@code <disappearing_mode>} child of an {@code account_sync}
+     * notification.
      *
-     * <p>WA Web distinguishes between two sub-cases:
-     * <ul>
-     *   <li>If the {@code action} attribute is present (e.g. {@code "modify"}), it queries
-     *       the disappearing mode from the server to get the latest duration and timestamp.</li>
-     *   <li>Otherwise, it reads {@code duration} and {@code t} (setting timestamp) directly
-     *       from the stanza child.</li>
-     * </ul>
+     * @apiNote
+     * Sets the default ephemeral duration applied to new chats created
+     * after this point; existing chats retain their per-chat setting.
      *
-     * <p>The update only proceeds if both duration and setting timestamp are non-{@code null}.
-     * @param node the parent notification node containing the {@code from} attribute
-     * @param disappearingMode the {@code disappearing_mode} child element
+     * @implNote
+     * This implementation only consumes the inline {@code duration} and
+     * {@code t} attributes; WA Web's {@code modify} action would also
+     * fire {@code WAWebGetDisappearingModeJob.getDisappearingMode} to
+     * re-query the server. Cobalt has no equivalent
+     * disappearing-mode query, so the {@code modify} branch falls
+     * through and waits for the next full app-state sync to converge.
+     *
+     * @param node             the {@code <notification>} stanza
+     * @param disappearingMode the {@code <disappearing_mode>} child
      */
     private void handleDisappearingModeNotification(Node node, Node disappearingMode) {
         var action = disappearingMode.getAttributeAsString("action", null);
         Integer duration;
         Integer settingTimestamp;
         if (action != null) {
-            // When action is present, duration and timestamp are not in the stanza
             duration = null;
             settingTimestamp = null;
         } else {
@@ -398,31 +505,33 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
         }
 
         if ("modify".equals(action)) {
-            // ADAPTED: Cobalt queries disappearing mode via the store's default timer
-            // The server query would return the latest duration and timestamp
-            // For now, we use the store's current setting if available
+            // TODO: implement a disappearing-mode server query; today the modify branch waits for the next full app-state sync to converge.
             var selfJid = getUserJid(node, "from");
             if (selfJid != null) {
-                // Cobalt does not have a dedicated disappearing mode query;
-                // the duration update will be handled by the next full sync
+                LOGGER.log(System.Logger.Level.DEBUG,
+                        "Deferring disappearing_mode modify for {0} to next app-state sync",
+                        selfJid);
             }
         }
 
         if (duration != null) {
-            // Cobalt stores this as the global new-chats ephemeral timer
             whatsapp.store().setNewChatsEphemeralTimer(ChatEphemeralTimer.of(duration));
         }
     }
 
     /**
-     * Handles a TOS (Terms of Service) account sync notification by updating
-     * the stored notice IDs and their acceptance state.
+     * Records every {@code <notice id=... state=.../>} entry under a
+     * {@code <tos>} child whose state is anything other than
+     * {@code "false"} as an accepted notice id.
      *
-     * <p>WA Web parses each {@code <notice>} child, reading its {@code id} and
-     * {@code state} (where state != "false" means accepted), then calls
-     * {@code updateTosStateFromAccountSync} which sets the TOS state via
-     * {@code TosManager.setState}.
-     * @param tosNode the {@code tos} child element containing notice children
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebAccountSyncJob.updateTosStateFromAccountSync} which
+     * feeds the same {@code (id, state)} pairs to
+     * {@code TosManager.setState}. The accepted ids gate UI elements
+     * (banner dismissal, settings copy).
+     *
+     * @param tosNode the {@code <tos>} child containing one or more {@code <notice/>} entries
      */
     private void handleTosNotification(Node tosNode) {
         var notices = new HashSet<String>();
@@ -434,7 +543,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
                 notices.add(id);
             }
         }
-        // ADAPTED: Cobalt stores accepted notice IDs in the store
         if (!notices.isEmpty()) {
             var currentNotices = new HashSet<>(whatsapp.store().tosNoticeIds());
             currentNotices.addAll(notices);
@@ -443,14 +551,25 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a notice account sync notification by updating the user disclosure
-     * collection and TOS state.
+     * Records a single {@code <notice/>} child whose stage equals
+     * {@link #PDFN_ACCEPTED_STAGE} as an accepted notice id.
      *
-     * <p>WA Web validates that {@code noticeId}, {@code noticeStage}, {@code noticeVersion},
-     * and {@code noticeTimestamp} are all present. It determines acceptance by comparing
-     * the stage to {@code PDFN_ACCEPTED} ("5"). Then it updates the
-     * {@code UserDisclosureCollection} and calls {@code updateTosStateFromAccountSync}.
-     * @param noticeNode the {@code notice} child element
+     * @apiNote
+     * Mirrors WA Web's path through
+     * {@code WAWebUserDisclosureCollection.updateNoticeStage} followed
+     * by {@code updateTosStateFromAccountSync}. The {@code <notice/>}
+     * stanza arrives independently of the {@code <tos/>} batch path
+     * and carries the additional {@code stage}, {@code version}, and
+     * {@code t} fields.
+     *
+     * @implNote
+     * This implementation only persists the notice id when the stage
+     * equals {@link #PDFN_ACCEPTED_STAGE}; WA Web also stores the
+     * policy version on
+     * {@code UserDisclosureCollection.updateNoticeStage}. Cobalt's
+     * store keeps only the accepted-id set.
+     *
+     * @param noticeNode the {@code <notice/>} child node
      */
     private void handleNoticeNotification(Node noticeNode) {
         var noticeId = noticeNode.getAttributeAsString("id", null);
@@ -464,7 +583,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
 
         var accepted = PDFN_ACCEPTED_STAGE.equals(noticeStage);
 
-        // ADAPTED: Cobalt stores accepted notice IDs in the store
         if (accepted) {
             var currentNotices = new HashSet<>(whatsapp.store().tosNoticeIds());
             currentNotices.add(noticeId);
@@ -473,37 +591,55 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a user account sync notification by updating the AI availability flag.
+     * Writes the {@code isAiAvailable} boolean derived from the
+     * {@code <user state="AI available"/>} child to the store.
      *
-     * <p>WA Web checks if {@code isAiAvailable === true} and logs a message.
-     * Cobalt additionally persists the flag in the store.
-     * @param userNode the {@code user} child element
+     * @apiNote
+     * Gates the in-chat Meta AI affordances when WA Web's server-side
+     * eligibility flips on.
+     *
+     * @implNote
+     * This implementation persists the flag; WA Web only logs
+     * {@code "Receieved account sync notification for Ai Available"}
+     * via {@code WALogger.LOG} and relies on the next AB-prop sync to
+     * surface the value to the UI.
+     *
+     * @param userNode the {@code <user/>} child node
      */
     private void handleUserNotification(Node userNode) {
         var isAiAvailable = "AI available".equals(userNode.getAttributeAsString("state", null));
-        whatsapp.store().setAiAvailable(isAiAvailable); // ADAPTED: Cobalt persists the flag; WA Web only logs
+        whatsapp.store().setAiAvailable(isAiAvailable);
     }
 
     /**
-     * Handles a business opt-out list account sync notification by checking the
-     * previous hash, processing list updates, and storing the new hash.
+     * Reconciles the local business-opt-out blocklist against the
+     * {@code <biz_opt_out_list>} child, applying each {@code <item
+     * action=... biz_jid=.../>} entry and updating the stored hash on
+     * success.
      *
-     * <p>WA Web compares the {@code prev_dhash} against the stored hash. If they
-     * don't match, it triggers a full opt-out list refresh. If they match and a
-     * new {@code dhash} is present, it processes individual list items and updates
-     * the stored hash.
-     * @param optOutListNode the {@code biz_opt_out_list} child element
+     * @apiNote
+     * Drives the per-contact blocked flag for business JIDs the user
+     * has opted out of receiving messages from. Fires
+     * {@link WhatsAppClientListener#onContactBlocked} for any change.
+     *
+     * @implNote
+     * This implementation skips the full opt-out list refresh when
+     * {@code prev_dhash} does not match the stored hash. WA Web fires
+     * {@code workerSafeFireAndForget("updateOptOutList")} in that case
+     * to trigger a full server-side refresh; Cobalt has no equivalent
+     * batch endpoint and relies on the next app-state sync to converge.
+     * The stored hash is intentionally left untouched on mismatch to
+     * match WA Web semantics (mismatch implies do-not-persist).
+     *
+     * @param optOutListNode the {@code <biz_opt_out_list>} child carrying {@code dhash}, {@code prev_dhash}, and item children
      */
     private void handleBizOptOutListNotification(Node optOutListNode) {
         var dhash = optOutListNode.getAttributeAsString("dhash", null);
         var prevDhash = optOutListNode.getAttributeAsString("prev_dhash", null);
         var storedHash = whatsapp.store().businessOptOutListHash().orElse(null);
 
-        // Hash mismatch triggers a full refresh and does NOT update the stored hash.
         if (!Objects.equals(storedHash, prevDhash)) {
-            // Cobalt does not have a dedicated full opt-out list refresh job; the next
-            // sync will bring the store back in line. The hash is deliberately left
-            // untouched to match WA Web semantics (mismatch -> do not persist L).
+            // TODO: trigger a full opt-out list refresh when prev_dhash mismatches; today Cobalt waits for the next app-state sync to converge.
             return;
         }
 
@@ -515,7 +651,6 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
                     continue;
                 }
                 var isBlocked = "block".equals(action);
-                // Cobalt flips the blocked flag on the contact record directly.
                 var userJid = bizJid.toUserJid();
                 var contact = whatsapp.store()
                         .findContactByJid(userJid)
@@ -531,10 +666,16 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts a user JID from the specified attribute of the given node.
-     * @param node the node to extract the JID from
-     * @param key the attribute key containing the JID
-     * @return the extracted user JID, or {@code null} if not present
+     * Reads a JID-valued attribute and reduces it to its user-form
+     * (server-only, no device, no agent).
+     *
+     * @apiNote
+     * Internal helper for the per-child branches that need to address a
+     * user record rather than a device record.
+     *
+     * @param node the node to read from
+     * @param key  the attribute name
+     * @return the parsed user JID, or {@code null} if the attribute is absent or unparsable
      */
     private Jid getUserJid(Node node, String key) {
         return node.getAttributeAsJid(key)
@@ -543,8 +684,15 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Fires a listener callback on all registered listeners using virtual threads.
-     * @param consumer the callback to execute for each listener
+     * Fans the given callback out to every registered listener on its own
+     * virtual thread so a slow listener cannot block the notification
+     * stream.
+     *
+     * @apiNote
+     * Internal helper used by every branch that surfaces a change to
+     * embedders.
+     *
+     * @param consumer the callback to invoke against each listener
      */
     private void fireListeners(Consumer<WhatsAppClientListener> consumer) {
         for (var listener : whatsapp.store().listeners()) {
@@ -553,14 +701,19 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Creates or updates the text status for a contact in the store.
+     * Creates or merges a {@link ContactTextStatus} record for the given
+     * contact and fires the change to listeners.
      *
-     * @param contactJid the JID of the contact whose text status is being updated
-     * @param text the text status string, may be {@code null}
-     * @param emoji the emoji associated with the text status, may be {@code null}
-     * @param ephemeralDurationSeconds the ephemeral duration in seconds, may be {@code null}
-     * @param lastUpdateTime the last update time, may be {@code null}
-     * @return the updated {@link ContactTextStatus} instance
+     * @apiNote
+     * Shared between the {@code text_status} child path (both
+     * {@code modify} and inline) and the MEX text-status update path.
+     *
+     * @param contactJid              the JID of the contact whose record is being updated
+     * @param text                    the new about text, or {@code null} to clear
+     * @param emoji                   the new emoji, or {@code null} to clear
+     * @param ephemeralDurationSeconds the per-text ephemeral duration in seconds, or {@code null}
+     * @param lastUpdateTime          the server-reported last update time, or {@code null}
+     * @return the merged {@link ContactTextStatus} now stored in the local store
      */
     private ContactTextStatus upsertContactTextStatus(
             Jid contactJid,
@@ -583,9 +736,14 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners about a contact text status change.
-     * @param contactJid the JID of the contact whose text status changed
-     * @param status the updated text status
+     * Fires {@link WhatsAppClientListener#onContactTextStatus} on every
+     * registered listener.
+     *
+     * @apiNote
+     * Internal helper used by {@link #upsertContactTextStatus} only.
+     *
+     * @param contactJid the JID whose text status changed
+     * @param status     the updated text-status record
      */
     private void notifyContactTextStatusChanged(Jid contactJid, ContactTextStatus status) {
         for (var listener : whatsapp.store().listeners()) {
@@ -594,25 +752,19 @@ final class NotificationAccountStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends an acknowledgment stanza for the received notification.
+     * Sends the {@code <ack class="notification" type="account_sync"/>}
+     * stanza required by the server to mark this notification as
+     * delivered.
      *
-     * <p>The ack stanza mirrors the incoming notification's ID, source, class, and type
-     * attributes as required by the protocol.
-     * @param node the notification node to acknowledge
+     * @apiNote
+     * The ack is fire-and-forget: a closed socket surfaces as a
+     * {@link com.github.auties00.cobalt.exception.WhatsAppSessionException.Closed}
+     * which the surrounding {@link #handle(Node)} {@code finally} block
+     * already isolates from the mutation path.
+     *
+     * @param node the original {@code <notification>} stanza
      */
     private void sendNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", stanzaFrom)
-                .attribute("type", "account_sync")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("account_sync").send();
     }
 }

@@ -62,6 +62,12 @@ public interface PaidMessageVpvImpressionEvent extends WamEventSpec {
     @WamProperty(index = 25, type = WamType.ENUM)
     Optional<MessageBodyTypeEnum> messageBodyType();
 
+    @WamProperty(index = 27, type = WamType.INTEGER)
+    OptionalInt messageBubbleHeightPx();
+
+    @WamProperty(index = 28, type = WamType.INTEGER)
+    OptionalInt messageBubbleWidthPx();
+
     @WamProperty(index = 15, type = WamType.STRING)
     Optional<String> messageFieldJsonArray();
 

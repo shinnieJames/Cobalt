@@ -17,22 +17,33 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles delete chat sync actions.
+ * Applies the {@code deleteChat} app-state sync action that removes a chat
+ * across the user's linked devices.
  *
- * <p>This handler processes mutations that delete entire chats.
- * Per WhatsApp Web, the delete chat handler extends
- * {@code ChatMessageRangeSyncdActionBase} and uses message-range-based
- * conflict resolution.
+ * @apiNote
+ * Drives the chat-list "Delete chat" affordance that the primary device fans
+ * out to its companions through the {@link SyncPatchType#REGULAR_HIGH}
+ * collection. The mutation index encodes the target chat and a
+ * {@code deleteMedia} flag selecting whether attached media should be erased
+ * alongside the messages, formatted as
+ * {@snippet :
+ *     ["deleteChat", chatJid, deleteMedia]   // deleteMedia = "0" keeps media, "1" deletes
+ * }
  *
- * <p>Index format: {@code ["deleteChat", chatJid, deleteMedia]}
- * where {@code deleteMedia} is {@code "0"} (delete media) or {@code "1"}
- * (keep media).
+ * @implNote
+ * This implementation derives from
+ * {@link WebAppStateActionHandler} rather than WA Web's
+ * {@code ChatMessageRangeSyncdActionBase}, so the handler does not maintain
+ * an active-message-range cache and {@link #applyMutation} performs a full
+ * chat removal regardless of the message-range comparison; partial
+ * deletions, history-sync boundary updates, AI-thread cleanup and
+ * {@code coexHostedDevices} bookkeeping are not modelled.
  */
 @WhatsAppWebModule(moduleName = "WAWebDeleteChatSync")
 public final class DeleteChatHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs a new singleton {@link DeleteChatHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public DeleteChatHandler() {
@@ -40,8 +51,7 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for delete chat actions.
-     * @return the action name {@code "deleteChat"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -50,11 +60,7 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for delete chat actions.
-     *
-     * <p>Per WhatsApp Web, the delete chat handler's {@code collectionName} is set to
-     * {@code WASyncdConst.CollectionName.RegularHigh} in the constructor.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -63,8 +69,7 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for delete chat actions.
-     * @return the version number {@code 6}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -73,29 +78,21 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a delete chat mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebDeleteChatSync.applyMutations}, for each
-     * mutation with {@code operation === "set"}:
-     * <ol>
-     *   <li>Extracts the index parts: {@code [action, chatJid, deleteMedia]}</li>
-     *   <li>Validates all index parts exist and the chat JID is valid via
-     *       {@code WAWebWid.isWid}</li>
-     *   <li>Validates the message range via
-     *       {@code WAWebMessageRangeUtils.validateMessageRange}</li>
-     *   <li>Resolves the chat via
-     *       {@code WAWebSyncdGetChat.resolveChatForMutationIndex}</li>
-     *   <li>Replaces remote JIDs in the message range and compares ranges
-     *       via {@code $DeleteChatSync$p_1}</li>
-     *   <li>Based on the range comparison, either deletes all messages
-     *       (full delete) or deletes messages within the range (partial delete)</li>
-     * </ol>
-     *
-     * <p>Non-{@code SET} operations return {@code Unsupported}. Exceptions are
-     * caught and return {@code Failed}.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation parses the mutation index, validates the embedded
+     * {@link Jid} and the {@link DeleteChatAction#messageRange()} payload,
+     * and then removes the entire chat from
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} when the chat is
+     * present. WA Web's {@code $DeleteChatSync$p_1} compares the incoming
+     * range against the local chat's current range and emits either a
+     * partial {@code queryAndRemoveMessagesInMessageRange} or a full
+     * {@code deleteFromStorage}; Cobalt always performs a full removal because
+     * the {@link com.github.auties00.cobalt.model.chat.Chat} abstraction does
+     * not expose per-range deletion. Any thrown exception is mapped to
+     * {@link MutationApplicationResult#failed()} mirroring WA Web's
+     * try/catch shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = {"applyMutations", "getMessageRange", "$DeleteChatSync$p_1", "deleteChat"}, adaptation = WhatsAppAdaptation.ADAPTED)
@@ -118,10 +115,10 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
             try {
                 chatJid = Jid.of(chatJidString);
             } catch (Exception e) {
-                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName()); // ADAPTED: Jid.of throws for invalid JIDs; WA Web uses isWid() upfront
+                return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
-            if (chatJid == null) { // ADAPTED: Jid.of returns null for null input
+            if (chatJid == null) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
@@ -139,22 +136,11 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
                 return MutationApplicationResult.orphan(chatJidString, "Chat");
             }
 
-            //   encodes the SyncActionValue, adds active message range,
-            //   constructs local message range, compares with incoming range:
-            //   - RangeAEnclosesRangeB or RangesNotEnclosing: deleteChat(wid, messageRange) (partial delete)
-            //   - RangeBEnclosesRangeA or RangesAreEqual: deleteChat(wid) (full delete)
-            //
-            //   - With messageRange: queryAndRemoveMessagesInMessageRange (partial)
-            //   - Without messageRange: deleteFromStorage (full delete)
-            //
-            // ADAPTED: WAWebDeleteChatSync.$DeleteChatSync$p_1 performs message-range comparison
-            // against the local chat's current message range to decide between partial and full delete.
-            // Cobalt simplifies to a full chat removal because:
-            // 1. addActiveMessageRange is an IndexedDB-specific optimization (browser concern)
-            // 2. constructMessageRange requires querying per-message timestamps from storage
-            // 3. Partial message deletion within a range is not yet supported by the Chat abstraction
-            // 4. Thread deletion, add-on cleanup, and AI thread deletion are browser-specific UI concerns
-            // 5. deleteChatFromInitialSyncBoundary is a history sync boundary concern
+            // TODO: support partial chat deletion when the local message range only
+            //       overlaps the incoming one. WA Web's $DeleteChatSync$p_1 calls
+            //       queryAndRemoveMessagesInMessageRange in that branch; Cobalt
+            //       currently falls through to a full removal and loses the messages
+            //       outside the incoming range.
             client.store().removeChat(chat.get());
 
             return MutationApplicationResult.success();
@@ -164,29 +150,19 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Resolves conflicts between a local pending delete chat mutation and an
-     * incoming remote delete chat mutation using message range comparison.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebDeleteChatSync.resolveConflicts}:
-     * <ol>
-     *   <li>Decodes the local and remote {@code deleteChatAction} values</li>
-     *   <li>Compares their message ranges via
-     *       {@code WAWebMessageRangeUtils.compareMessageRanges(remote, local)}</li>
-     *   <li>Resolves based on the enclosure type:
-     *     <ul>
-     *       <li>{@code RangeAEnclosesRangeB} (remote encloses local): apply remote, drop local</li>
-     *       <li>{@code RangeBEnclosesRangeA} (local encloses remote): skip remote</li>
-     *       <li>{@code RangesAreEqual}: timestamp tiebreaker ({@code local <= remote}
-     *           means apply remote)</li>
-     *       <li>{@code RangesNotEnclosing}: merge the two ranges, apply the merged mutation
-     *           to local state via {@code lockForMessageRangeSync}, and return
-     *           {@code SKIP_REMOTE_DROP_LOCAL} with the merged mutation</li>
-     *     </ul>
-     *   </li>
-     * </ol>
-     * @param localMutation  the local pending mutation
-     * @param remoteMutation the incoming remote mutation
-     * @return the conflict resolution indicating which mutation to keep
+     * @implNote
+     * This implementation decodes both {@link DeleteChatAction} payloads and
+     * delegates the four-way enclosure decision to
+     * {@link MessageRangeUtils#compareMessageRanges}. When neither range
+     * encloses the other, a merged {@link DeleteChatAction} is returned via
+     * {@link ConflictResolution#merged} for the caller to apply, separating
+     * resolution from application; WA Web instead applies the merged
+     * mutation immediately under {@code lockForMessageRangeSync}. A
+     * {@code null} action or {@code messageRange} on either side defaults
+     * to {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} where WA
+     * Web would throw via {@code WANullthrows}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = "resolveConflicts", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -200,15 +176,15 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
                 .map(a -> (DeleteChatAction) a)
                 .orElse(null);
 
-        if (localAction == null || remoteAction == null) { // ADAPTED: WA Web uses nullthrows which would throw; Cobalt gracefully falls back to apply remote
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL); // ADAPTED: defensive fallback
+        if (localAction == null || remoteAction == null) {
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
-        if (localRange == null || remoteRange == null) { // ADAPTED: WA Web uses nullthrows; Cobalt gracefully falls back
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL); // ADAPTED: defensive fallback
+        if (localRange == null || remoteRange == null) {
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
@@ -236,9 +212,6 @@ public final class DeleteChatHandler implements WebAppStateActionHandler {
                         localMutation.timestamp(),
                         localMutation.actionVersion()
                 );
-                // ADAPTED: In WA Web, the merged mutation is applied to the chat DB immediately
-                // during conflict resolution via lockForMessageRangeSync. In Cobalt, the merged
-                // mutation is returned for the caller to apply, separating resolution from application.
                 yield ConflictResolution.merged(merged);
             }
         };

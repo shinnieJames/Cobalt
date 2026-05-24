@@ -8,31 +8,51 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code <localised_*>} projection. Value plus localisation
- * metadata. Used by all three of {@code <localised_heading/>},
- * {@code <localised_body/>} and {@code <localised_highlight/>}.
+ * The shared shape of every {@code <localised_*>} parallel under the CTWA
+ * banner-suggestion {@code <content/>}, pairing the translated copy with its
+ * {@link SmaxBannerSuggestionLocalisationMetadata translation metadata}.
+ *
+ * @apiNote
+ * Used as the projection for {@code <localised_heading/>},
+ * {@code <localised_body/>}, and {@code <localised_highlight/>}. The
+ * surrounding {@link SmaxBannerSuggestionContent} carries the
+ * source-language copy on its mandatory {@code <heading/>}, {@code <body/>},
+ * {@code <highlight/>} children; each {@code <localised_*>} parallel
+ * captures the same copy after localisation plus the metadata downstream
+ * translation telemetry needs to attribute it.
+ *
+ * @implNote
+ * This implementation is a single class shared across the three parallels
+ * because WA Web ships three near-identical parsers
+ * ({@code parseBannerSuggestionRequestCtwaSuggestionBannerContentLocalised{Heading,Body,Highlight}})
+ * that differ only by the expected tag name; the {@code expectedTag}
+ * parameter to {@link #of(Node, String)} picks which one is in play.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest")
 public final class SmaxBannerSuggestionLocalisedString {
     /**
-     * The {@code value} attribute. The localised string.
+     * The mandatory {@code value} attribute (the localised string).
      */
     private final String value;
 
     /**
-     * The mandatory localisation-metadata projection.
+     * The mandatory {@link SmaxBannerSuggestionLocalisationMetadata}
+     * projection extracted from the {@code <localisation_metadata/>}
+     * grandchild.
      */
     private final SmaxBannerSuggestionLocalisationMetadata localisationMetadata;
 
     /**
-     * Constructs a new localised-string projection.
+     * Constructs a projection from already-validated wire values.
      *
-     * @param value                the localised string; never
-     *                             {@code null}
-     * @param localisationMetadata the metadata projection; never
-     *                             {@code null}
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote
+     * Cobalt callers normally obtain a projection by parsing a node via
+     * {@link #of(Node, String)}; this constructor is exposed for tests
+     * and for hand-built fixtures.
+     *
+     * @param value                the localised string; never {@code null}
+     * @param localisationMetadata the localisation metadata projection; never {@code null}
+     * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxBannerSuggestionLocalisedString(String value, SmaxBannerSuggestionLocalisationMetadata localisationMetadata) {
         this.value = Objects.requireNonNull(value, "value cannot be null");
@@ -43,7 +63,12 @@ public final class SmaxBannerSuggestionLocalisedString {
     /**
      * Returns the localised string.
      *
-     * @return the value; never {@code null}
+     * @apiNote
+     * The post-translation copy that the banner-view component would
+     * render instead of the source-language copy when the client locale
+     * matches.
+     *
+     * @return the localised value; never {@code null}
      */
     public String value() {
         return value;
@@ -52,22 +77,42 @@ public final class SmaxBannerSuggestionLocalisedString {
     /**
      * Returns the localisation metadata.
      *
-     * @return the metadata; never {@code null}
+     * @apiNote
+     * Carries the translation-unit identifier, owning translation
+     * project, and runtime placeholder substitutions for downstream
+     * translation telemetry.
+     *
+     * @return the metadata projection; never {@code null}
      */
     public SmaxBannerSuggestionLocalisationMetadata localisationMetadata() {
         return localisationMetadata;
     }
 
     /**
-     * Tries to parse the projection from the given node.
+     * Parses the projection from a {@code <localised_*>} node, asserting
+     * the supplied tag.
      *
-     * @param node        the {@code <localised_*>} node
-     * @param expectedTag the expected tag name (one of
-     *                    {@code "localised_heading"},
-     *                    {@code "localised_body"},
-     *                    {@code "localised_highlight"})
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the node does not match the documented schema
+     * @apiNote
+     * Returns empty when the node tag does not match {@code expectedTag},
+     * when the mandatory {@code value} attribute is missing, when the
+     * mandatory {@code <localisation_metadata/>} grandchild is missing,
+     * or when that grandchild fails to parse. Callers pass one of
+     * {@code "localised_heading"}, {@code "localised_body"}, or
+     * {@code "localised_highlight"} depending on which parallel they are
+     * parsing.
+     *
+     * @implNote
+     * This implementation collapses WA Web's three sibling parsers
+     * (heading/body/highlight) into a single helper switched on the
+     * {@code expectedTag} parameter; the underlying steps (tag assertion,
+     * {@code value} attribute extraction, metadata grandchild lookup) are
+     * identical.
+     *
+     * @param node        the candidate {@code <localised_*>} node; never {@code null}
+     * @param expectedTag the expected tag name; never {@code null}
+     * @return an {@link Optional} carrying the projection, or empty when
+     *         parsing fails at any step
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaActionBannerSuggestionRequest",
             exports = "parseBannerSuggestionRequestCtwaSuggestionBannerContentLocalisedHeading",
@@ -99,6 +144,14 @@ public final class SmaxBannerSuggestionLocalisedString {
         return Optional.of(new SmaxBannerSuggestionLocalisedString(value, metadata));
     }
 
+    /**
+     * Compares this projection to {@code obj} for structural equality on
+     * value and metadata.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a {@link SmaxBannerSuggestionLocalisedString}
+     *         with matching {@link #value()} and {@link #localisationMetadata()}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -112,11 +165,21 @@ public final class SmaxBannerSuggestionLocalisedString {
                 && Objects.equals(this.localisationMetadata, that.localisationMetadata);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash of value and metadata
+     */
     @Override
     public int hashCode() {
         return Objects.hash(value, localisationMetadata);
     }
 
+    /**
+     * Returns a debug-friendly rendering naming value and metadata.
+     *
+     * @return a record-style string with value and metadata
+     */
     @Override
     public String toString() {
         return "SmaxBannerSuggestionLocalisedString[value=" + value

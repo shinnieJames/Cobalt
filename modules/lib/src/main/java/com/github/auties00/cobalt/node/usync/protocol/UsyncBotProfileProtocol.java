@@ -15,9 +15,15 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * USync {@code bot} protocol descriptor. Wraps a {@code <bot>} query carrying
- * an inner {@code <profile v="1"/>} child to request the peer's bot profile
- * metadata.
+ * USync {@code bot} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay for each peer's bot profile metadata (display name,
+ * description, prompts, slash-commands, creator block, persona id). Used by
+ * {@code WAWebRequestBotProfiles.requestBotProfiles}; pair each
+ * {@link UsyncUser} with a persona id through
+ * {@link UsyncUser#withPersonaId(String)} when the bot exposes multiple
+ * personas.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncBotProfile")
 public final class UsyncBotProfileProtocol implements UsyncProtocol {
@@ -33,7 +39,11 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     public static final String PROFILE_VERSION = "1";
 
     /**
-     * Constructs a default bot-profile-protocol descriptor.
+     * Builds a default bot-profile-protocol descriptor.
+     *
+     * @apiNote
+     * The descriptor is stateless; per-user state lives on each
+     * {@link UsyncUser} (specifically the persona id).
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
             exports = "USyncBotProfileProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -41,9 +51,7 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -53,10 +61,12 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds the {@code <bot>} query element wrapping a versioned
-     * {@code <profile/>} child.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation wraps a versioned {@code <profile v="1"/>} child
+     * inside the {@code <bot>} element, matching the JS
+     * {@code wap("bot", null, wap("profile", {v: "1"}))} shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -72,11 +82,15 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds the per-user {@code <bot>} child wrapping a {@code <profile/>}
-     * element optionally carrying the {@code persona_id} attribute.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return the per-user element
+     * @implNote
+     * This implementation always attaches a per-user {@code <bot>} child
+     * carrying an inner {@code <profile/>} with the optional
+     * {@code persona_id} attribute, matching the JS
+     * {@code USyncBotProfileProtocol.getUserElement} shape (the JS path
+     * returns the same wrap unconditionally, whether or not a persona id
+     * is set).
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -91,12 +105,16 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <bot>} child of a {@code <user>} response into a
-     * {@link BotProfileResult} or a per-protocol error.
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation reads every optional sub-element the JS
+     * {@code botProfileParser} reads (name, attributes, description,
+     * category, default flag, prompts, persona id, commands block with its
+     * description header, meta-created flag, creator block,
+     * posing-as-professional type) and projects them into the typed
+     * {@link BotProfileResult} record. Missing nodes fall back to empty
+     * strings or {@code null} per the JS optional-chaining defaults.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncBotProfile",
@@ -120,7 +138,7 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
         var personaId = profile.getAttributeAsString("persona_id", "");
         var commandsParsed = parseCommands(profile.getChild("commands"));
         var isMetaCreatedNode = profile.getChild("is_meta_created");
-        Boolean isMetaCreated = isMetaCreatedNode.map(n -> "true".equals(textOf(n, ""))).orElse(null);
+        var isMetaCreated = isMetaCreatedNode.map(n -> "true".equals(textOf(n, ""))).orElse(null);
         var creatorNode = profile.getChild("creator");
         var creatorName = creatorNode
                 .flatMap(n -> n.getChild("name"))
@@ -139,8 +157,12 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Reads the inline text content of the supplied node, falling back to
-     * {@code defaultValue} when the node is {@code null} or carries no text.
+     * Reads a node's inline text content, falling back when the node is
+     * absent or empty.
+     *
+     * @apiNote
+     * Used by the bot-profile parser to mirror the JS
+     * {@code (node?.contentString()) ?? default} pattern in one place.
      *
      * @param node         the node to read
      * @param defaultValue the value to return when the node is {@code null}
@@ -152,8 +174,13 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the optional {@code <prompts>} child into a list of
+     * Parses the optional {@code <prompts>} child into a list of typed
      * {@link BotProfileResult.Prompt} entries.
+     *
+     * @apiNote
+     * Each prompt carries an {@code <emoji>} and a {@code <text>}; both
+     * fall back to the empty string when absent, matching the JS
+     * coalescing in {@code parsePrompts}.
      *
      * @param promptsChild the optional {@code <prompts>} child
      * @return the parsed prompts, never {@code null}
@@ -172,8 +199,13 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the optional {@code <commands>} child into a list of
-     * {@link BotProfileResult.Command} entries plus a descriptive header.
+     * Parses the optional {@code <commands>} child into a list of typed
+     * {@link BotProfileResult.Command} entries plus the block's descriptive
+     * header.
+     *
+     * @apiNote
+     * The header lives on a {@code <description>} sibling of the
+     * {@code <command>} entries, not inside each command.
      *
      * @param commandsChild the optional {@code <commands>} child
      * @return the parsed commands and their header
@@ -195,7 +227,12 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
 
     /**
      * Maps the {@code type} attribute on the {@code <posing_as_professional>}
-     * child to the corresponding {@link BotProfileResult.PosingAsProfessional}.
+     * child to its typed enum value.
+     *
+     * @apiNote
+     * Returns {@link BotProfileResult.PosingAsProfessional#UNKNOWN} for any
+     * value other than {@code "yes"} or {@code "no"}, matching the JS
+     * fall-through default.
      *
      * @param wire the wire literal
      * @return the matching enum value
@@ -209,11 +246,14 @@ public final class UsyncBotProfileProtocol implements UsyncProtocol {
     }
 
     /**
-     * Internal pair returned by {@link #parseCommands(Optional)} that bundles
-     * the parsed command list with its descriptive header.
+     * Pair of the parsed command list and its descriptive header.
+     *
+     * @apiNote
+     * Internal carrier returned by {@link #parseCommands(Optional)}; kept
+     * private because callers always destructure both values together.
      *
      * @param commands            the parsed command list
-     * @param commandsDescription the free-form header above the command list
+     * @param commandsDescription the free-form header above the list
      */
     private record CommandsParsed(List<BotProfileResult.Command> commands, String commandsDescription) {
     }

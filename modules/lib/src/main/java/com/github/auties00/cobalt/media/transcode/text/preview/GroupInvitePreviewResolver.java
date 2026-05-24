@@ -1,0 +1,178 @@
+package com.github.auties00.cobalt.media.transcode.text.preview;
+
+import com.github.auties00.cobalt.client.WhatsAppClient;
+import com.github.auties00.cobalt.media.transcode.text.link.DeepLinkParser;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
+import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
+import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
+import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
+import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.JidProvider;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+/**
+ * The per-source resolver that builds preview cards for
+ * {@code chat.whatsapp.com} group-invite deep links.
+ *
+ * @apiNote
+ * Mirrors {@code WAWebLinkPreviewGroupUtils.getGroupInviteLinkPreview};
+ * invoked from {@link com.github.auties00.cobalt.media.transcode.text.TextPipeline#run} on the
+ * {@link DeepLinkParser.DeepLink.GroupInvite} branch.
+ */
+@WhatsAppWebModule(moduleName = "WAWebLinkPreviewGroupUtils")
+public final class GroupInvitePreviewResolver {
+    /**
+     * The default description rendered when no community or
+     * sub-group hint applies.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebLinkPreviewGroupUtils.GROUP_INVITE_DEFAULT_DESCRIPTION}
+     * which is the fbt-localised {@code "Group chat invite"}
+     * string; surfaced when the invite points at a plain group
+     * outside a community.
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLinkPreviewGroupUtils", exports = "GROUP_INVITE_DEFAULT_DESCRIPTION",
+            adaptation = WhatsAppAdaptation.DIRECT)
+    private static final String GROUP_INVITE_DEFAULT_DESCRIPTION = "Group chat invite";
+
+    /**
+     * The hidden constructor of the utility class.
+     *
+     * @throws UnsupportedOperationException always
+     */
+    private GroupInvitePreviewResolver() {
+        throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
+    }
+
+    /**
+     * Resolves the preview for a group-invite URL and stamps the
+     * result onto {@code message}.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebLinkPreviewGroupUtils.getGroupInviteLinkPreview};
+     * queries the server for the target group's metadata via
+     * {@link WhatsAppClient#queryInviteGroupInfo(String)} and
+     * downloads the group's profile picture as the inline JPEG
+     * thumbnail. On a successful resolve the {@code title},
+     * {@code description}, {@code previewType},
+     * {@code doNotPlayInline}, and {@code jpegThumbnail} fields are
+     * written onto {@code message} in place.
+     *
+     * @implNote
+     * This implementation embeds the server-supplied picture bytes
+     * verbatim; {@link PreviewThumbnailFetcher#download} resizes
+     * them to 100x100 when {@code java.desktop} is on the runtime
+     * path and otherwise embeds the source bytes unchanged.
+     *
+     * @param client     the WhatsApp client used to query the server
+     * @param code       the invite code parsed from the URL
+     * @param httpClient the HTTP client used to download the group
+     *                   profile picture
+     * @param timeout    the per-download timeout, derived from
+     *                   {@code link_preview_wait_time}
+     * @param message    the outgoing message to enrich; mutated in
+     *                   place
+     * @return {@code true} when a preview was applied
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLinkPreviewGroupUtils", exports = "getGroupInviteLinkPreview",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    public static boolean resolve(WhatsAppClient client, String code, HttpClient httpClient,
+                                  Duration timeout, ExtendedTextMessage message) {
+        if (client == null || code == null || code.isEmpty() || message == null) {
+            return false;
+        }
+        GroupMetadata metadata;
+        try {
+            metadata = client.queryInviteGroupInfo(code).orElse(null);
+        } catch (RuntimeException _) {
+            return false;
+        }
+        if (metadata == null) {
+            return false;
+        }
+        message.setTitle(metadata.subject());
+        message.setDescription(inviteLinkDescription(client, metadata));
+        message.setPreviewType(ExtendedTextMessage.PreviewType.NONE);
+        message.setDoNotPlayInline(Boolean.TRUE);
+        var thumbnailBytes = downloadGroupPicture(client, metadata.jid(), httpClient, timeout);
+        if (thumbnailBytes != null) {
+            message.setJpegThumbnail(thumbnailBytes);
+        }
+        return true;
+    }
+
+    /**
+     * Resolves the group profile picture URL through
+     * {@link WhatsAppClient#queryPicture(JidProvider)} and downloads
+     * its bytes.
+     *
+     * @apiNote
+     * Called from {@link #resolve}; returns {@code null} when the
+     * group has no picture set or when the download failed, so the
+     * caller can still attach a preview without an inline thumbnail.
+     *
+     * @param client     the WhatsApp client used to resolve the URL
+     * @param groupJid   the group whose picture is requested
+     * @param httpClient the HTTP client used for the download
+     * @param timeout    the per-download timeout
+     * @return the downloaded JPEG bytes, or {@code null} when no
+     *         picture was set or the download failed
+     */
+    private static byte[] downloadGroupPicture(WhatsAppClient client,
+                                               Jid groupJid,
+                                               HttpClient httpClient,
+                                               Duration timeout) {
+        if (groupJid == null) {
+            return null;
+        }
+        try {
+            var pictureUri = client.queryPicture(groupJid).orElse(null);
+            if (pictureUri == null) {
+                return null;
+            }
+            return PreviewThumbnailFetcher.download(httpClient, pictureUri, timeout);
+        } catch (RuntimeException _) {
+            return null;
+        }
+    }
+
+    /**
+     * Picks the preview description based on the group's type.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebLinkPreviewGroupUtils.getInviteLinkDescription}:
+     * the default-subgroup branch surfaces "Announcements"; the
+     * sub-group branch surfaces "Group in \"{community title}\"";
+     * everything else falls back to
+     * {@link #GROUP_INVITE_DEFAULT_DESCRIPTION}.
+     *
+     * @param client   the WhatsApp client used to resolve the parent
+     *                 community's display title when the invite
+     *                 points at a sub-group
+     * @param metadata the resolved group metadata
+     * @return the preview description string
+     */
+    @WhatsAppWebExport(moduleName = "WAWebLinkPreviewGroupUtils", exports = "getInviteLinkDescription",
+            adaptation = WhatsAppAdaptation.ADAPTED)
+    private static String inviteLinkDescription(WhatsAppClient client,
+                                                GroupMetadata metadata) {
+        if (metadata.isDefaultSubgroup()) {
+            return "Announcements";
+        }
+        var parentCommunity = metadata.parentCommunityJid().orElse(null);
+        if (parentCommunity != null) {
+            var parentTitle = client.store().findChatMetadata(parentCommunity)
+                    .filter(GroupMetadata.class::isInstance)
+                    .map(GroupMetadata.class::cast)
+                    .map(GroupMetadata::subject)
+                    .orElse(null);
+            if (parentTitle != null && !parentTitle.isEmpty()) {
+                return "Group in \"" + parentTitle + "\"";
+            }
+        }
+        return GROUP_INVITE_DEFAULT_DESCRIPTION;
+    }
+}

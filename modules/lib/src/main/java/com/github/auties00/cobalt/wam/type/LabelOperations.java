@@ -22,5 +22,6 @@ public enum LabelOperations {
     @WamEnumConstant(12) MUTE,
     @WamEnumConstant(13) UNMUTE,
     @WamEnumConstant(14) SUGGESTION_CLICKED,
-    @WamEnumConstant(15) UPDATED_COLOR
+    @WamEnumConstant(15) UPDATED_COLOR,
+    @WamEnumConstant(16) SWIPE
 }

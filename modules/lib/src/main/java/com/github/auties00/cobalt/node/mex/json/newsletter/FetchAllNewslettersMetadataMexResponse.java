@@ -19,22 +19,49 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Response variant for {@link FetchAllNewslettersMetadataMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the fetch-all-newsletters-metadata query built
+ * by {@link FetchAllNewslettersMetadataMexRequest}.
+ *
+ * @apiNote
+ * Exposes one {@link Item} per newsletter the local user follows, drawn from
+ * the {@code data.xwa2_newsletter_subscribed} array. {@link #partition()}
+ * splits the items into active and deleted buckets the way WA Web's
+ * {@code handleMexGetAllNewsletters} does, so callers can hydrate the active
+ * list and evict cached entries for the deleted ones in a single pass.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAllNewslettersMetadataJob")
 public final class FetchAllNewslettersMetadataMexResponse implements MexOperation.Response.Json {
+    /**
+     * The parsed list of subscribed newsletters; ordered as returned by the
+     * relay.
+     */
     private final List<Item> items;
 
+    /**
+     * Constructs a response wrapping the parsed item list.
+     *
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param items the parsed list of subscribed newsletters
+     */
     private FetchAllNewslettersMetadataMexResponse(List<Item> items) {
         this.items = items;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletter_subscribed} array.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<FetchAllNewslettersMetadataMexResponse> of(Node node) {
         return node.getChild("result")
@@ -43,9 +70,16 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
     }
 
     /**
-     * Returns the list of items in this response.
+     * Returns the parsed list of subscribed newsletters.
      *
-     * @return the list of items, empty if absent
+     * @apiNote
+     * The list is ordered as returned by the relay and may include items
+     * whose {@code state.type} is {@code "DELETED"}; prefer
+     * {@link #partition()} to separate active from deleted entries in a
+     * single pass.
+     *
+     * @return the parsed item list, empty when the {@code xwa2_newsletter_subscribed}
+     *         array was missing or empty
      */
     public List<Item> items() {
         return items;
@@ -53,18 +87,26 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
 
     /**
      * Splits the items in this response into active newsletters and the
-     * subset that the relay reported as deleted.
+     * subset the relay reported as deleted.
      *
-     * <p>Mirrors the WA Web {@code handleMexGetAllNewsletters} helper that
+     * @apiNote
+     * Mirrors the WA Web {@code handleMexGetAllNewsletters} helper that
      * forwards the response from {@code mexFetchAllNewsletters} to the
-     * Newsletter Collections layer. WA Web filters out {@code null}
-     * entries, parses each surviving item through
+     * Newsletter Collections layer. WA Web filters {@code null} entries,
+     * parses each surviving item through
      * {@code WAWebMexNewsletterParseUtils.parseMexNewsletterResponse} and
-     * routes any item whose {@code state.type} equals
-     * {@code "DELETED"} into the {@code deletedNewsletters} bucket. Cobalt
-     * surfaces the same partition without invoking the JS-only parser:
-     * callers map the active items into their domain objects and use the
-     * deleted bucket to evict cached newsletters.
+     * routes any item whose {@code state.type} equals {@code "DELETED"}
+     * into the {@code deletedNewsletters} bucket. Cobalt surfaces the same
+     * partition without invoking the JS-only parser: callers map the
+     * active items into their domain objects and use the deleted bucket to
+     * evict cached newsletters.
+     *
+     * @implNote
+     * This implementation short-circuits the empty case with two
+     * {@link List#of()} sentinels, and otherwise materialises the buckets
+     * as unmodifiable copies so callers cannot mutate the shared response
+     * state.
+     *
      * @return a {@link Partitioned} carrying the active and deleted item
      *         lists; both lists are unmodifiable
      */
@@ -93,28 +135,73 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
     }
 
     /**
-     * Carries the result of {@link FetchAllNewslettersMetadataMexResponse#partition()}: the active
-     * newsletters surfaced to the UI and the subset that the relay
-     * reported as deleted.
+     * Carries the result of
+     * {@link FetchAllNewslettersMetadataMexResponse#partition()}: the active
+     * newsletters surfaced to the UI and the subset the relay reported as
+     * deleted.
      *
-     * @param newsletters         the items whose {@code state.type} is not
-     *                            {@code "DELETED"}, in server-defined order
-     * @param deletedNewsletters  the items whose {@code state.type} is
-     *                            {@code "DELETED"}, in server-defined order
+     * @apiNote
+     * Both lists are returned in server-defined order; consumers typically
+     * hydrate the active list and evict cached newsletter entries for the
+     * deleted ones.
+     *
+     * @param newsletters        the items whose {@code state.type} is not
+     *                           {@code "DELETED"}
+     * @param deletedNewsletters the items whose {@code state.type} is
+     *                           {@code "DELETED"}
      */
     public record Partitioned(List<Item> newsletters, List<Item> deletedNewsletters) {
     }
 
     /**
-     * A parsed {@code Item} object.
+     * Wraps a single subscribed-newsletter entry of the
+     * {@code xwa2_newsletter_subscribed} array.
+     *
+     * @apiNote
+     * Carries the newsletter id, the lifecycle {@link State} (used by
+     * {@link #partition()} to detect deleted entries), the
+     * {@link ThreadMetadata} hydrated profile fields and the
+     * {@link ViewerMetadata} per-viewer state; {@link StatusMetadata} is
+     * populated only when the request set {@code fetch_status_metadata=true}.
      */
     public static final class Item {
+        /**
+         * The newsletter Jid string.
+         */
         private final String id;
+
+        /**
+         * The lifecycle state object.
+         */
         private final State state;
+
+        /**
+         * The hydrated thread metadata.
+         */
         private final ThreadMetadata threadMetadata;
+
+        /**
+         * The viewer-side metadata.
+         */
         private final ViewerMetadata viewerMetadata;
+
+        /**
+         * The optional status metadata fragment.
+         */
         private final StatusMetadata statusMetadata;
 
+        /**
+         * Constructs an item wrapping the parsed sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param id             the newsletter Jid string
+         * @param state          the lifecycle state object
+         * @param threadMetadata the hydrated thread metadata
+         * @param viewerMetadata the viewer-side metadata
+         * @param statusMetadata the optional status metadata fragment
+         */
         private Item(String id, State state, ThreadMetadata threadMetadata, ViewerMetadata viewerMetadata, StatusMetadata statusMetadata) {
             this.id = id;
             this.state = state;
@@ -124,75 +211,111 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * Returns the {@code id} field.
+         * Returns the newsletter Jid string.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @return the newsletter id, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> id() {
             return Optional.ofNullable(id);
         }
 
         /**
-         * Returns the {@code state} field.
+         * Returns the lifecycle state object.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @apiNote
+         * Used by {@link #partition()} to detect items the relay reports
+         * as deleted.
+         *
+         * @return the parsed {@link State}, or empty when the relay
+         *         omitted the field
          */
         public Optional<State> state() {
             return Optional.ofNullable(state);
         }
 
         /**
-         * Returns the {@code thread_metadata} field.
+         * Returns the hydrated thread metadata.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link ThreadMetadata}, or empty when the
+         *         relay omitted the field
          */
         public Optional<ThreadMetadata> threadMetadata() {
             return Optional.ofNullable(threadMetadata);
         }
 
         /**
-         * Returns the {@code viewer_metadata} field.
+         * Returns the viewer-side metadata.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link ViewerMetadata}, or empty when the
+         *         relay omitted the field
          */
         public Optional<ViewerMetadata> viewerMetadata() {
             return Optional.ofNullable(viewerMetadata);
         }
 
         /**
-         * Returns the {@code status_metadata} field, populated only when
-         * the request set {@code fetch_status_metadata=true}.
+         * Returns the optional status metadata fragment.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @apiNote
+         * Populated only when the request set
+         * {@code fetch_status_metadata=true}; otherwise the relay omits
+         * the fragment entirely.
+         *
+         * @return the parsed {@link StatusMetadata}, or empty when the
+         *         relay omitted the field
          */
         public Optional<StatusMetadata> statusMetadata() {
             return Optional.ofNullable(statusMetadata);
         }
 
         /**
-         * A parsed {@code State} object.
+         * Wraps the {@code state} sub-object embedded in an
+         * {@code xwa2_newsletter_subscribed} item.
+         *
+         * @apiNote
+         * The {@code type} value of {@code "DELETED"} signals the relay
+         * has removed the newsletter; consumers route such items into the
+         * eviction bucket via {@link #partition()}.
          */
         public static final class State {
+            /**
+             * The textual state identifier.
+             */
             private final String type;
 
+            /**
+             * Constructs a state wrapping the textual type.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param type the raw state identifier returned by the relay
+             */
             private State(String type) {
                 this.type = type;
             }
 
             /**
-             * Returns the {@code type} field.
+             * Returns the textual state identifier.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the state type, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> type() {
                 return Optional.ofNullable(type);
             }
 
             /**
-             * Parses a {@code State} from the given JSON object.
+             * Parses a {@link State} from the given JSON object.
              *
-     * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @apiNote
+             * Used by {@link Item#of(JSONObject)} to hydrate the
+             * {@code state} entry.
+             *
+             * @param obj the JSON object to parse
+             * @return the parsed {@link State}, or empty when {@code obj}
+             *         is {@code null}
              */
             static Optional<State> of(JSONObject obj) {
                 if (obj == null) {
@@ -204,10 +327,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code State} from the given JSON array.
+             * Parses a list of {@link State} entries from the given JSON
+             * array.
              *
-     * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @apiNote
+             * Provided for symmetry.
+             *
+             * @param arr the JSON array to parse
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<State> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -223,20 +351,84 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code ThreadMetadata} object.
+         * Wraps the {@code thread_metadata} sub-object embedded in an
+         * {@code xwa2_newsletter_subscribed} item.
+         *
+         * @apiNote
+         * Carries the hydrated profile (creation timestamp, name,
+         * picture, preview, description, invite, handle, verification),
+         * the per-channel reaction-code {@link Settings} and the optional
+         * {@link WamoSub} subscription identifier.
          */
         public static final class ThreadMetadata {
+            /**
+             * The unix-second creation timestamp.
+             */
             private final Long creationTime;
+
+            /**
+             * The display-name sub-object.
+             */
             private final Name name;
+
+            /**
+             * The full-resolution picture sub-object.
+             */
             private final Picture picture;
+
+            /**
+             * The preview-resolution picture sub-object.
+             */
             private final Preview preview;
+
+            /**
+             * The description sub-object.
+             */
             private final Description description;
+
+            /**
+             * The shareable invite identifier.
+             */
             private final String invite;
+
+            /**
+             * The reserved handle (vanity URL slug).
+             */
             private final String handle;
+
+            /**
+             * The verification tier label.
+             */
             private final String verification;
+
+            /**
+             * The per-channel settings sub-object.
+             */
             private final Settings settings;
+
+            /**
+             * The optional WAMo paid-subscription identifier sub-object.
+             */
             private final WamoSub wamoSub;
 
+            /**
+             * Constructs a thread-metadata wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param creationTime the unix-second creation timestamp
+             * @param name         the display-name sub-object
+             * @param picture      the picture sub-object
+             * @param preview      the preview sub-object
+             * @param description  the description sub-object
+             * @param invite       the shareable invite identifier
+             * @param handle       the reserved handle
+             * @param verification the verification tier label
+             * @param settings     the per-channel settings sub-object
+             * @param wamoSub      the optional WAMo subscription sub-object
+             */
             private ThreadMetadata(Long creationTime, Name name, Picture picture, Preview preview, Description description, String invite, String handle, String verification, Settings settings, WamoSub wamoSub) {
                 this.creationTime = creationTime;
                 this.name = name;
@@ -251,103 +443,148 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code creation_time} field.
+             * Returns the creation timestamp.
              *
-     * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @apiNote
+             * Carried by the relay as a unix-second integer.
+             *
+             * @return the parsed {@link Instant}, or empty when the relay
+             *         omitted the field
              */
             public Optional<Instant> creationTime() {
                 return Optional.ofNullable(creationTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Returns the {@code name} field.
+             * Returns the display-name sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link Name}, or empty when the relay
+             *         omitted the field
              */
             public Optional<Name> name() {
                 return Optional.ofNullable(name);
             }
 
             /**
-             * Returns the {@code picture} field.
+             * Returns the full-resolution picture sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link Picture}, or empty when the relay
+             *         omitted the field
              */
             public Optional<Picture> picture() {
                 return Optional.ofNullable(picture);
             }
 
             /**
-             * Returns the {@code preview} field.
+             * Returns the preview-resolution picture sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link Preview}, or empty when the relay
+             *         omitted the field
              */
             public Optional<Preview> preview() {
                 return Optional.ofNullable(preview);
             }
 
             /**
-             * Returns the {@code description} field.
+             * Returns the description sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link Description}, or empty when the
+             *         relay omitted the field
              */
             public Optional<Description> description() {
                 return Optional.ofNullable(description);
             }
 
             /**
-             * Returns the {@code invite} field.
+             * Returns the shareable invite identifier.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the invite token, or empty when the relay omitted
+             *         the field
              */
             public Optional<String> invite() {
                 return Optional.ofNullable(invite);
             }
 
             /**
-             * Returns the {@code handle} field.
+             * Returns the reserved handle (vanity URL slug).
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the handle, or empty when the relay omitted the
+             *         field
              */
             public Optional<String> handle() {
                 return Optional.ofNullable(handle);
             }
 
             /**
-             * Returns the {@code verification} field.
+             * Returns the verification tier label.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the verification label, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> verification() {
                 return Optional.ofNullable(verification);
             }
 
             /**
-             * Returns the {@code settings} field.
+             * Returns the per-channel settings sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the parsed {@link Settings}, or empty when the
+             *         relay omitted the field
              */
             public Optional<Settings> settings() {
                 return Optional.ofNullable(settings);
             }
 
             /**
-             * Returns the {@code wamo_sub} field.
+             * Returns the optional WAMo paid-subscription sub-object.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @apiNote
+             * Populated only when the request set
+             * {@code fetch_wamo_sub=true} and the newsletter actually
+             * carries a paid subscription plan.
+             *
+             * @return the parsed {@link WamoSub}, or empty when the relay
+             *         omitted the field
              */
             public Optional<WamoSub> wamoSub() {
                 return Optional.ofNullable(wamoSub);
             }
 
             /**
-             * A parsed {@code Name} object.
+             * Wraps the {@code name} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Models a renameable scalar as (server-side id, text, update
+             * timestamp) so consumers can detect stale local copies during
+             * sync reconciliation.
              */
             public static final class Name {
+                /**
+                 * The server-side identifier of this name revision.
+                 */
                 private final String id;
+
+                /**
+                 * The textual display name.
+                 */
                 private final String text;
+
+                /**
+                 * The unix-second timestamp of the last name update.
+                 */
                 private final Long updateTime;
 
+                /**
+                 * Constructs a name wrapper from the parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param id         the server-side revision identifier
+                 * @param text       the textual display name
+                 * @param updateTime the unix-second update timestamp
+                 */
                 private Name(String id, String text, Long updateTime) {
                     this.id = id;
                     this.text = text;
@@ -355,37 +592,46 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code id} field.
+                 * Returns the server-side identifier of this name
+                 * revision.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the revision id, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
                 }
 
                 /**
-                 * Returns the {@code text} field.
+                 * Returns the textual display name.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the display name, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> text() {
                     return Optional.ofNullable(text);
                 }
 
                 /**
-                 * Returns the {@code update_time} field.
+                 * Returns the timestamp of the last name update.
                  *
-     * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+                 * @return the parsed {@link Instant}, or empty when the
+                 *         relay omitted the field
                  */
                 public Optional<Instant> updateTime() {
                     return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
                 }
 
                 /**
-                 * Parses a {@code Name} from the given JSON object.
+                 * Parses a {@link Name} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code name} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Name}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Name> of(JSONObject obj) {
                     if (obj == null) {
@@ -399,10 +645,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Name} from the given JSON array.
+                 * Parses a list of {@link Name} entries from the given
+                 * JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Name> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -418,13 +669,40 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code Picture} object.
+             * Wraps the {@code picture} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Carries (id, type, direct_path) so the client can download
+             * the full-resolution newsletter avatar from the media CDN.
              */
             public static final class Picture {
+                /**
+                 * The opaque server-side identifier of the picture
+                 * revision.
+                 */
                 private final String id;
+
+                /**
+                 * The picture type discriminator.
+                 */
                 private final String type;
+
+                /**
+                 * The CDN direct-path used to fetch the picture bytes.
+                 */
                 private final String directPath;
 
+                /**
+                 * Constructs a picture wrapper from the parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param id         the server-side revision identifier
+                 * @param type       the picture type discriminator
+                 * @param directPath the CDN direct-path
+                 */
                 private Picture(String id, String type, String directPath) {
                     this.id = id;
                     this.type = type;
@@ -432,37 +710,47 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code id} field.
+                 * Returns the server-side identifier of this picture
+                 * revision.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the revision id, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
                 }
 
                 /**
-                 * Returns the {@code type} field.
+                 * Returns the picture type discriminator.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the picture type, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> type() {
                     return Optional.ofNullable(type);
                 }
 
                 /**
-                 * Returns the {@code direct_path} field.
+                 * Returns the CDN direct-path used to fetch the picture
+                 * bytes.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the direct-path, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> directPath() {
                     return Optional.ofNullable(directPath);
                 }
 
                 /**
-                 * Parses a {@code Picture} from the given JSON object.
+                 * Parses a {@link Picture} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code picture} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Picture}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Picture> of(JSONObject obj) {
                     if (obj == null) {
@@ -476,10 +764,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Picture} from the given JSON array.
+                 * Parses a list of {@link Picture} entries from the given
+                 * JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Picture> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -495,13 +788,40 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code Preview} object.
+             * Wraps the {@code preview} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Mirrors {@link Picture} but points at the preview-resolution
+             * avatar used in chat-list rendering paths.
              */
             public static final class Preview {
+                /**
+                 * The opaque server-side identifier of the preview
+                 * revision.
+                 */
                 private final String id;
+
+                /**
+                 * The preview type discriminator.
+                 */
                 private final String type;
+
+                /**
+                 * The CDN direct-path used to fetch the preview bytes.
+                 */
                 private final String directPath;
 
+                /**
+                 * Constructs a preview wrapper from the parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param id         the server-side revision identifier
+                 * @param type       the preview type discriminator
+                 * @param directPath the CDN direct-path
+                 */
                 private Preview(String id, String type, String directPath) {
                     this.id = id;
                     this.type = type;
@@ -509,37 +829,47 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code id} field.
+                 * Returns the server-side identifier of this preview
+                 * revision.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the revision id, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
                 }
 
                 /**
-                 * Returns the {@code type} field.
+                 * Returns the preview type discriminator.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the preview type, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> type() {
                     return Optional.ofNullable(type);
                 }
 
                 /**
-                 * Returns the {@code direct_path} field.
+                 * Returns the CDN direct-path used to fetch the preview
+                 * bytes.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the direct-path, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> directPath() {
                     return Optional.ofNullable(directPath);
                 }
 
                 /**
-                 * Parses a {@code Preview} from the given JSON object.
+                 * Parses a {@link Preview} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code preview} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Preview}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Preview> of(JSONObject obj) {
                     if (obj == null) {
@@ -553,10 +883,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Preview} from the given JSON array.
+                 * Parses a list of {@link Preview} entries from the given
+                 * JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Preview> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -572,13 +907,41 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code Description} object.
+             * Wraps the {@code description} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Models the (id, text, update_time) tuple so consumers can
+             * detect stale local copies during sync reconciliation.
              */
             public static final class Description {
+                /**
+                 * The server-side identifier of this description revision.
+                 */
                 private final String id;
+
+                /**
+                 * The textual description.
+                 */
                 private final String text;
+
+                /**
+                 * The unix-second timestamp of the last description
+                 * update.
+                 */
                 private final Long updateTime;
 
+                /**
+                 * Constructs a description wrapper from the parsed
+                 * sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param id         the server-side revision identifier
+                 * @param text       the textual description
+                 * @param updateTime the unix-second update timestamp
+                 */
                 private Description(String id, String text, Long updateTime) {
                     this.id = id;
                     this.text = text;
@@ -586,37 +949,47 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Returns the {@code id} field.
+                 * Returns the server-side identifier of this description
+                 * revision.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the revision id, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> id() {
                     return Optional.ofNullable(id);
                 }
 
                 /**
-                 * Returns the {@code text} field.
+                 * Returns the textual description.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the description, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> text() {
                     return Optional.ofNullable(text);
                 }
 
                 /**
-                 * Returns the {@code update_time} field.
+                 * Returns the timestamp of the last description update.
                  *
-     * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+                 * @return the parsed {@link Instant}, or empty when the
+                 *         relay omitted the field
                  */
                 public Optional<Instant> updateTime() {
                     return Optional.ofNullable(updateTime).map(Instant::ofEpochSecond);
                 }
 
                 /**
-                 * Parses a {@code Description} from the given JSON object.
+                 * Parses a {@link Description} from the given JSON
+                 * object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code description} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Description}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Description> of(JSONObject obj) {
                     if (obj == null) {
@@ -630,10 +1003,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Description} from the given JSON array.
+                 * Parses a list of {@link Description} entries from the
+                 * given JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Description> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -649,48 +1027,91 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code Settings} object.
+             * Wraps the {@code settings} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Holds the per-channel reaction-code policy that gates which
+             * emojis followers may use as message reactions.
              */
             public static final class Settings {
+                /**
+                 * The reaction-code policy sub-object.
+                 */
                 private final ReactionCodes reactionCodes;
 
+                /**
+                 * Constructs a settings wrapper from the parsed
+                 * sub-field.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param reactionCodes the reaction-code policy sub-object
+                 */
                 private Settings(ReactionCodes reactionCodes) {
                     this.reactionCodes = reactionCodes;
                 }
 
                 /**
-                 * Returns the {@code reaction_codes} field.
+                 * Returns the reaction-code policy sub-object.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link ReactionCodes}, or empty
+                 *         when the relay omitted the field
                  */
                 public Optional<ReactionCodes> reactionCodes() {
                     return Optional.ofNullable(reactionCodes);
                 }
 
                 /**
-                 * A parsed {@code ReactionCodes} object.
+                 * Wraps the {@code reaction_codes} sub-object embedded
+                 * in {@code settings}.
+                 *
+                 * @apiNote
+                 * Exposes the policy value verbatim; consumers map it to
+                 * the corresponding {@code WAWebNewsletterReactionCodes}
+                 * enum themselves.
                  */
                 public static final class ReactionCodes {
+                    /**
+                     * The textual policy value.
+                     */
                     private final String value;
 
+                    /**
+                     * Constructs a reaction-codes wrapper from the
+                     * parsed sub-field.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param value the textual policy value
+                     */
                     private ReactionCodes(String value) {
                         this.value = value;
                     }
 
                     /**
-                     * Returns the {@code value} field.
+                     * Returns the textual policy value.
                      *
-     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the value, or empty when the relay
+                     *         omitted the field
                      */
                     public Optional<String> value() {
                         return Optional.ofNullable(value);
                     }
 
                     /**
-                     * Parses a {@code ReactionCodes} from the given JSON object.
+                     * Parses a {@link ReactionCodes} from the given
+                     * JSON object.
                      *
-     * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @apiNote
+                     * Used by {@link Settings#of(JSONObject)} to hydrate
+                     * the nested {@code reaction_codes} entry.
+                     *
+                     * @param obj the JSON object to parse
+                     * @return the parsed {@link ReactionCodes}, or
+                     *         empty when {@code obj} is {@code null}
                      */
                     static Optional<ReactionCodes> of(JSONObject obj) {
                         if (obj == null) {
@@ -702,10 +1123,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                     }
 
                     /**
-                     * Parses a list of {@code ReactionCodes} from the given JSON array.
+                     * Parses a list of {@link ReactionCodes} entries
+                     * from the given JSON array.
                      *
-     * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @apiNote
+                     * Provided for symmetry.
+                     *
+                     * @param arr the JSON array to parse
+                     * @return the parsed list, empty when {@code arr}
+                     *         is {@code null}
                      */
                     static List<ReactionCodes> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -721,10 +1147,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a {@code Settings} from the given JSON object.
+                 * Parses a {@link Settings} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code settings} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Settings}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Settings> of(JSONObject obj) {
                     if (obj == null) {
@@ -736,10 +1167,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Settings} from the given JSON array.
+                 * Parses a list of {@link Settings} entries from the
+                 * given JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Settings> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -755,29 +1191,53 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * A parsed {@code WamoSub} object.
+             * Wraps the {@code wamo_sub} sub-object embedded in
+             * {@code thread_metadata}.
+             *
+             * @apiNote
+             * Carries the WhatsApp Monetisation paid-subscription plan
+             * identifier; populated only when the request set
+             * {@code fetch_wamo_sub=true}.
              */
             public static final class WamoSub {
+                /**
+                 * The subscription plan identifier.
+                 */
                 private final String planId;
 
+                /**
+                 * Constructs a WAMo-subscription wrapper from the parsed
+                 * sub-field.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param planId the subscription plan identifier
+                 */
                 private WamoSub(String planId) {
                     this.planId = planId;
                 }
 
                 /**
-                 * Returns the {@code plan_id} field.
+                 * Returns the subscription plan identifier.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the plan id, or empty when the relay omitted
+                 *         the field
                  */
                 public Optional<String> planId() {
                     return Optional.ofNullable(planId);
                 }
 
                 /**
-                 * Parses a {@code WamoSub} from the given JSON object.
+                 * Parses a {@link WamoSub} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link ThreadMetadata#of(JSONObject)} to
+                 * hydrate the nested {@code wamo_sub} entry.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link WamoSub}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<WamoSub> of(JSONObject obj) {
                     if (obj == null) {
@@ -789,10 +1249,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code WamoSub} from the given JSON array.
+                 * Parses a list of {@link WamoSub} entries from the given
+                 * JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Provided for symmetry.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<WamoSub> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -808,10 +1273,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code ThreadMetadata} from the given JSON object.
+             * Parses a {@link ThreadMetadata} from the given JSON object.
              *
-     * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @apiNote
+             * Used by {@link Item#of(JSONObject)} to hydrate the
+             * {@code thread_metadata} entry.
+             *
+             * @param obj the JSON object to parse
+             * @return the parsed {@link ThreadMetadata}, or empty when
+             *         {@code obj} is {@code null}
              */
             static Optional<ThreadMetadata> of(JSONObject obj) {
                 if (obj == null) {
@@ -832,10 +1302,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code ThreadMetadata} from the given JSON array.
+             * Parses a list of {@link ThreadMetadata} entries from the
+             * given JSON array.
              *
-     * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @apiNote
+             * Provided for symmetry.
+             *
+             * @param arr the JSON array to parse
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<ThreadMetadata> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -851,13 +1326,41 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code ViewerMetadata} object.
+         * Wraps the {@code viewer_metadata} sub-object embedded in an
+         * {@code xwa2_newsletter_subscribed} item.
+         *
+         * @apiNote
+         * Records per-viewer state: opaque settings entries, the local
+         * user's role on the channel, and the WAMo subscription status
+         * label.
          */
         public static final class ViewerMetadata {
+            /**
+             * The viewer-side settings list (type/value pairs).
+             */
             private final List<Settings> settings;
+
+            /**
+             * The viewer's role on the newsletter.
+             */
             private final String role;
+
+            /**
+             * The WAMo subscription status label.
+             */
             private final String wamoSubStatus;
 
+            /**
+             * Constructs a viewer-metadata wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param settings      the viewer-side settings list
+             * @param role          the viewer's role on the newsletter
+             * @param wamoSubStatus the WAMo subscription status label
+             */
             private ViewerMetadata(List<Settings> settings, String role, String wamoSubStatus) {
                 this.settings = settings;
                 this.role = role;
@@ -865,67 +1368,100 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Returns the {@code settings} field.
+             * Returns the viewer-side settings.
              *
-     * @return the list of values, empty if absent
+             * @return the settings list, empty when the relay omitted the
+             *         field
              */
             public List<Settings> settings() {
                 return settings;
             }
 
             /**
-             * Returns the {@code role} field.
+             * Returns the viewer's role on the newsletter.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the role, or empty when the relay omitted the field
              */
             public Optional<String> role() {
                 return Optional.ofNullable(role);
             }
 
             /**
-             * Returns the {@code wamo_sub_status} field.
+             * Returns the WAMo subscription status label.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the status label, or empty when the relay omitted
+             *         the field
              */
             public Optional<String> wamoSubStatus() {
                 return Optional.ofNullable(wamoSubStatus);
             }
 
             /**
-             * A parsed {@code Settings} object.
+             * Wraps an entry of the viewer-side {@code settings} list.
+             *
+             * @apiNote
+             * Each entry is a (type, value) pair; the type discriminates
+             * which UI preference the value applies to.
              */
             public static final class Settings {
+                /**
+                 * The discriminator identifying which viewer preference
+                 * this entry represents.
+                 */
                 private final String type;
+
+                /**
+                 * The textual value associated with {@link #type}.
+                 */
                 private final String value;
 
+                /**
+                 * Constructs a settings entry from the parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param type  the discriminator
+                 * @param value the textual value
+                 */
                 private Settings(String type, String value) {
                     this.type = type;
                     this.value = value;
                 }
 
                 /**
-                 * Returns the {@code type} field.
+                 * Returns the discriminator identifying which viewer
+                 * preference this entry represents.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the discriminator, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<String> type() {
                     return Optional.ofNullable(type);
                 }
 
                 /**
-                 * Returns the {@code value} field.
+                 * Returns the textual value associated with
+                 * {@link #type()}.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the value, or empty when the relay omitted the
+                 *         field
                  */
                 public Optional<String> value() {
                     return Optional.ofNullable(value);
                 }
 
                 /**
-                 * Parses a {@code Settings} from the given JSON object.
+                 * Parses a {@link Settings} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link Settings#ofArray(JSONArray)} when
+                 * hydrating the {@code settings} array under
+                 * {@code viewer_metadata}.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed {@link Settings}, or empty when
+                 *         {@code obj} is {@code null}
                  */
                 static Optional<Settings> of(JSONObject obj) {
                     if (obj == null) {
@@ -938,10 +1474,16 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
                 }
 
                 /**
-                 * Parses a list of {@code Settings} from the given JSON array.
+                 * Parses a list of {@link Settings} entries from the
+                 * given JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Drives hydration of the {@code settings} array under
+                 * {@code viewer_metadata}.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Settings> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -957,10 +1499,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a {@code ViewerMetadata} from the given JSON object.
+             * Parses a {@link ViewerMetadata} from the given JSON object.
              *
-     * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @apiNote
+             * Used by {@link Item#of(JSONObject)} to hydrate the
+             * {@code viewer_metadata} entry.
+             *
+             * @param obj the JSON object to parse
+             * @return the parsed {@link ViewerMetadata}, or empty when
+             *         {@code obj} is {@code null}
              */
             static Optional<ViewerMetadata> of(JSONObject obj) {
                 if (obj == null) {
@@ -974,10 +1521,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
             }
 
             /**
-             * Parses a list of {@code ViewerMetadata} from the given JSON array.
+             * Parses a list of {@link ViewerMetadata} entries from the
+             * given JSON array.
              *
-     * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @apiNote
+             * Provided for symmetry.
+             *
+             * @param arr the JSON array to parse
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<ViewerMetadata> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -993,43 +1545,77 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * A parsed {@code StatusMetadata} object that exposes the
-         * {@code last_status_server_id} and {@code last_status_sent_time}
-         * scalars described by the GraphQL fragment under the
-         * {@code XWA2NewsletterStatusMetadata} concrete type.
+         * Wraps the {@code status_metadata} sub-object embedded in an
+         * {@code xwa2_newsletter_subscribed} item.
+         *
+         * @apiNote
+         * Exposes the {@code last_status_server_id} and
+         * {@code last_status_sent_time} scalars described by the
+         * {@code XWA2NewsletterStatusMetadata} concrete type. Populated
+         * only when the request set {@code fetch_status_metadata=true}.
          */
         public static final class StatusMetadata {
+            /**
+             * The server-side identifier of the most recent newsletter
+             * status post.
+             */
             private final String lastStatusServerId;
+
+            /**
+             * The unix-second timestamp of the most recent newsletter
+             * status post.
+             */
             private final Long lastStatusSentTime;
 
+            /**
+             * Constructs a status-metadata wrapper from the parsed
+             * sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param lastStatusServerId the server-side identifier of
+             *                           the last status post
+             * @param lastStatusSentTime the unix-second timestamp of the
+             *                           last status post
+             */
             private StatusMetadata(String lastStatusServerId, Long lastStatusSentTime) {
                 this.lastStatusServerId = lastStatusServerId;
                 this.lastStatusSentTime = lastStatusSentTime;
             }
 
             /**
-             * Returns the {@code last_status_server_id} field.
+             * Returns the server-side identifier of the most recent
+             * newsletter status post.
              *
-     * @return an {@link Optional} containing the value, or empty if absent
+             * @return the status server id, or empty when the relay
+             *         omitted the field
              */
             public Optional<String> lastStatusServerId() {
                 return Optional.ofNullable(lastStatusServerId);
             }
 
             /**
-             * Returns the {@code last_status_sent_time} field.
+             * Returns the timestamp of the most recent newsletter status
+             * post.
              *
-     * @return an {@link Optional} containing the value as an {@link Instant}, or empty if absent
+             * @return the parsed {@link Instant}, or empty when the
+             *         relay omitted the field
              */
             public Optional<Instant> lastStatusSentTime() {
                 return Optional.ofNullable(lastStatusSentTime).map(Instant::ofEpochSecond);
             }
 
             /**
-             * Parses a {@code StatusMetadata} from the given JSON object.
+             * Parses a {@link StatusMetadata} from the given JSON object.
              *
-     * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @apiNote
+             * Used by {@link Item#of(JSONObject)} to hydrate the
+             * optional {@code status_metadata} entry.
+             *
+             * @param obj the JSON object to parse
+             * @return the parsed {@link StatusMetadata}, or empty when
+             *         {@code obj} is {@code null}
              */
             static Optional<StatusMetadata> of(JSONObject obj) {
                 if (obj == null) {
@@ -1043,10 +1629,15 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a {@code Item} from the given JSON object.
+         * Parses an {@link Item} from the given JSON object.
          *
-     * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @apiNote
+         * Used by {@link Item#ofArray(JSONArray)} to hydrate each entry
+         * of the {@code xwa2_newsletter_subscribed} array.
+         *
+         * @param obj the JSON object to parse
+         * @return the parsed {@link Item}, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -1062,10 +1653,14 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
         }
 
         /**
-         * Parses a list of {@code Item} from the given JSON array.
+         * Parses a list of {@link Item} entries from the given JSON array.
          *
-     * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @apiNote
+         * Drives hydration of the {@code xwa2_newsletter_subscribed}
+         * array; entries that fail to parse are silently dropped.
+         *
+         * @param arr the JSON array to parse
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -1081,12 +1676,23 @@ public final class FetchAllNewslettersMetadataMexResponse implements MexOperatio
     }
 
     /**
-     * Parses a {@link FetchAllNewslettersMetadataMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception. WA Web raises a {@code ServerStatusCodeError(500)} when
+     * the relay returns a null {@code xwa2_newsletter_subscribed} array;
+     * here that condition surfaces as an empty {@link Item} list rather
+     * than an exception.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data} root
      */
     private static Optional<FetchAllNewslettersMetadataMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

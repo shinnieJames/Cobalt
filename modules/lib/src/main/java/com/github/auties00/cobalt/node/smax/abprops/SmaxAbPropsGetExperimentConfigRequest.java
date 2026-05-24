@@ -13,34 +13,54 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <props/>} payload in
- * the canonical {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound {@code <iq xmlns="abt" type="get" to="s.whatsapp.net">}
+ * AB-props bundle fetch.
+ *
+ * @apiNote
+ * Drives WA Web's
+ * {@code WASmaxAbPropsGetExperimentConfigRPC.sendGetExperimentConfigRPC},
+ * invoked by {@code WAWebAbPropsSyncJob} on session bootstrap and on
+ * every server-pushed {@code <notification type="abprops">} bump; the
+ * reply populates the local AB-prop store consumed by
+ * {@code WAWebABPropsParseConfigValue} and the runtime feature gates.
+ * Cobalt embedders dispatch one of these to mirror WA Web's
+ * experiment-config sync.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsGetExperimentConfigRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutAbPropsBaseIQGetRequestMixin")
 public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperation.Request {
     /**
-     * The optional content hash echoed back to the relay so it can
-     * short-circuit the reply to a delta when the client's snapshot is
-     * already up to date.
+     * The optional content hash echoed back to the relay.
+     *
+     * @apiNote
+     * Mirrors {@code WAWebABPropsLocalStorage.getHash()} when WA Web
+     * dispatches the request; the relay short-circuits the reply to a
+     * delta when the supplied hash matches its current bundle.
      */
     private final String propsHash;
 
     /**
-     * The optional refresh id echoed back to the relay so it can
-     * correlate this fetch with a prior server-pushed
+     * The optional refresh id echoed back to the relay.
+     *
+     * @apiNote
+     * Carried when the {@code 3330} gate is on and the client wants
+     * the relay to correlate this fetch with a prior server-pushed
      * {@code <notification type="abprops">} bump.
      */
     private final Integer propsRefreshId;
 
     /**
-     * Constructs a request for the given hash and refresh id.
+     * Constructs a conditional request.
      *
-     * @param propsHash      the client's currently-cached props hash;
-     *                       may be {@code null} on the first fetch
-     * @param propsRefreshId the client's currently-cached refresh id;
-     *                       may be {@code null} on the first fetch
+     * @apiNote
+     * Use this overload when the client already has a cached bundle
+     * and wants the relay to short-circuit on a hash or refresh-id
+     * match.
+     *
+     * @param propsHash      the cached props hash; may be
+     *                       {@code null}
+     * @param propsRefreshId the cached refresh id; may be
+     *                       {@code null}
      */
     public SmaxAbPropsGetExperimentConfigRequest(String propsHash, Integer propsRefreshId) {
         this.propsHash = propsHash;
@@ -48,28 +68,36 @@ public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperatio
     }
 
     /**
-     * Constructs an unconditional request. The relay always replies
-     * with the full props bundle.
+     * Constructs an unconditional request.
+     *
+     * @apiNote
+     * Use this overload on the first fetch of a session, when no
+     * cached bundle exists and the relay should always return the
+     * full props bundle.
      */
     public SmaxAbPropsGetExperimentConfigRequest() {
         this(null, null);
     }
 
     /**
-     * Returns the client's currently-cached props hash, when set.
+     * Returns the cached props hash, when set.
      *
-     * @return an {@link Optional} carrying the hash, or empty when not
-     *         supplied
+     * @apiNote
+     * Empty on the first fetch of a session.
+     *
+     * @return an {@link Optional} carrying the hash
      */
     public Optional<String> propsHash() {
         return Optional.ofNullable(propsHash);
     }
 
     /**
-     * Returns the client's currently-cached refresh id, when set.
+     * Returns the cached refresh id, when set.
      *
-     * @return an {@link Optional} carrying the refresh id, or empty
-     *         when not supplied
+     * @apiNote
+     * Empty when the client did not receive a prior refresh-id bump.
+     *
+     * @return an {@link Optional} carrying the refresh id
      */
     public Optional<Integer> propsRefreshId() {
         return Optional.ofNullable(propsRefreshId);
@@ -77,6 +105,12 @@ public final class SmaxAbPropsGetExperimentConfigRequest implements SmaxOperatio
 
     /**
      * Builds the outbound IQ stanza ready for dispatch.
+     *
+     * @apiNote
+     * Returned unbuilt so the dispatch path can stamp a fresh IQ id
+     * before flushing; mirrors
+     * {@code WASmaxOutAbPropsGetExperimentConfigRequest.makeGetExperimentConfigRequest}
+     * composed with the IQ-get merge mixin.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <props/>} payload

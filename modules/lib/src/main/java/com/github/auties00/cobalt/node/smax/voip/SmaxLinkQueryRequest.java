@@ -12,27 +12,42 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps a {@code <link_query token
- * media action/>} payload in the {@code <call to="call">} envelope.
+ * The outbound {@code <call><link_query/></call>} request that resolves an
+ * existing call-link token to its metadata (creator, media, scheduled-event
+ * presence, waiting-room state).
+ *
+ * @apiNote
+ * Drives the "Open call link" surface: when a user follows a
+ * {@code https://call.whatsapp.com/{voice|video}/<token>} URL the client
+ * issues this RPC to discover the link's owner and waiting-room flag before
+ * joining or asking for approval.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipLinkQueryRequest")
 public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
     /**
-     * The shareable call-link token to resolve.
+     * The call-link token to resolve.
+     *
+     * @apiNote
+     * The same opaque suffix carried by the public
+     * {@code https://call.whatsapp.com/{voice|video}/<token>} URL.
      */
     private final String linkQueryToken;
 
     /**
-     * The media type the caller intends to use; either {@code "audio"}
-     * or {@code "video"} on the wire. Required by the relay so it can
-     * gate-check the join attempt against the link's configured media.
+     * The media type the caller plans to use, carried by the {@code media}
+     * attribute.
+     *
+     * @apiNote
+     * Either {@code "audio"} or {@code "video"} on the wire; the relay
+     * uses this to confirm the link's configured media matches the caller's
+     * intent before authorising the join.
      */
     private final String linkQueryMedia;
 
     /**
-     * The optional action the caller is performing. Typically
-     * {@code "preview"} for a passive resolve and {@code "edit"} for
-     * a creator-side metadata edit.
+     * The optional action attribute. Either {@code "preview"} for a passive
+     * resolve or {@code "edit"} for a creator-side metadata edit; absent for
+     * the default resolve.
      */
     private final String linkQueryAction;
 
@@ -42,9 +57,7 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
      * @param linkQueryToken  the call-link token; never {@code null}
      * @param linkQueryMedia  the media type; never {@code null}
      * @param linkQueryAction the optional action; may be {@code null}
-     * @throws NullPointerException if {@code linkQueryToken} or
-     *                              {@code linkQueryMedia} is
-     *                              {@code null}
+     * @throws NullPointerException if {@code linkQueryToken} or {@code linkQueryMedia} is {@code null}
      */
     public SmaxLinkQueryRequest(String linkQueryToken, String linkQueryMedia, String linkQueryAction) {
         this.linkQueryToken = Objects.requireNonNull(linkQueryToken, "linkQueryToken cannot be null");
@@ -53,7 +66,7 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the call-link token.
+     * Returns the call-link token to resolve.
      *
      * @return the token; never {@code null}
      */
@@ -62,7 +75,7 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the media type.
+     * Returns the media type the caller plans to use.
      *
      * @return the media type; never {@code null}
      */
@@ -73,18 +86,24 @@ public final class SmaxLinkQueryRequest implements SmaxOperation.Request {
     /**
      * Returns the optional action.
      *
-     * @return an {@link Optional} carrying the action, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the action, or empty when omitted
      */
     public Optional<String> linkQueryAction() {
         return Optional.ofNullable(linkQueryAction);
     }
 
     /**
-     * Builds the outbound stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the {@code <call>}
-     *         envelope around a {@code <link_query/>} payload
+     * @implNote
+     * This implementation emits a {@code <call to="call">} envelope around a
+     * {@code <link_query>} child, mirroring
+     * {@code WASmaxOutVoipLinkQueryRequest.makeLinkQueryRequest}. The
+     * {@code action} attribute is omitted when {@link #linkQueryAction()}
+     * is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <call><link_query/></call>}
+     *         stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutVoipLinkQueryRequest",

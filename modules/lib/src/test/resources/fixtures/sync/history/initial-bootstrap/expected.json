@@ -42,7 +42,7 @@
                   "participant": "67035899928806@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Yo"
+                    "conversation": ""
                   },
                   "expiration": 604800,
                   "disappearingMode": {
@@ -1470,7 +1470,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ci riesci a dare qualche slot per la settimana in cui sei 100% a casa davanti al computer",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1518,7 +1518,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "anche perché vanno a tempo queste cose",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1566,7 +1566,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "c’è mi devi dire tu quando stai precisamente davanti al computer",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1614,7 +1614,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "bro aspettavo tuo ok",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1681,7 +1681,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ti sei dimenticato?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1723,7 +1723,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ok top",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1790,7 +1790,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Mentre torno a casa sono le 20",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1865,7 +1865,7 @@
                   "participant": "241368689549344@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "ciao ale riesci a. darci un orario prima di cena in cui ci sei domani"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -1912,7 +1912,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "??",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -1960,7 +1960,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "??",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2008,7 +2008,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "e anche se riesci a ritrovare le credenziali per accedere",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2056,7 +2056,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ciao ale riesci a. darci un orario prima di cena in cui ci sei domani",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2104,7 +2104,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "e se riesci a dare uno slot lunedì prima di cena in cui se ti arrivano i codici",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2152,7 +2152,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "sì se riesci a rimandarle faresti un favore",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2219,7 +2219,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Pensvao di avertele mandate",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2287,7 +2287,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Your new api-key is: \"KQTRVX_sandbox\". Now you can follow the instructions from our docs!"
+              "conversation": ""
             },
             "messageTimestamp": 1778538477,
             "bizPrivacyStatus": 2,
@@ -2363,7 +2363,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "START",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2477,7 +2477,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "START",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2529,7 +2529,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "a",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2698,7 +2698,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "a",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -2992,7 +2992,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "https://chat.whatsapp.com/L8K38pub1Oi0AeqBjiL7nN",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3044,7 +3044,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Cobalt test 2 — to be edited then revoked",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3109,7 +3109,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Cobalt test 1 — text",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3161,7 +3161,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "cobalt warmup via live chat",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3564,7 +3564,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "hi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3746,7 +3746,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Cobalt CAG test — text",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3886,7 +3886,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Cobalt test — small group",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -3938,7 +3938,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "hello world",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4037,7 +4037,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "non si e' mai fatto vivo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4084,7 +4084,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "a boh",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4141,7 +4141,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ma fede",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4183,7 +4183,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "famo doma",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4230,7 +4230,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "non c'era nessuno",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4287,7 +4287,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Andò state che mi sono messo a fare altro",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4329,7 +4329,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "oi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4376,7 +4376,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "pirupiru",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4433,7 +4433,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Test",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4477,7 +4477,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "(non ho capito bene che giorno esatto, però) la sua tipa torna a casa per qualche giorno, quindi quel gay di fede potrà lockare in con noi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4524,7 +4524,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "update da fede",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4571,7 +4571,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "elo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4628,7 +4628,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Eccomi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4670,7 +4670,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "okok",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4717,7 +4717,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ah lol",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4811,7 +4811,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Prego",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4859,7 +4859,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "grazieree",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -4942,7 +4942,7 @@
                   "participant": "163320426410179@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "sii grazie"
+                    "conversation": ""
                   },
                   "pairedMediaType": 0,
                   "quotedType": 0
@@ -5124,7 +5124,7 @@
                   "participant": "131576524488885@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Non so se ti interessa, se vuoi ti mando gli appunti che ho preso io"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -5270,7 +5270,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Non abbiamo ancora finito la partita",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5332,7 +5332,7 @@
                   "participant": "163320426410179@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "com'è andata la lexioneee"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -5385,7 +5385,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Non so se ti interessa, se vuoi ti mando gli appunti che ho preso io",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5433,7 +5433,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "E ha detto di esercitarsi sugli attacci doppi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5481,7 +5481,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Oggi a scacchia a spiegato il concetto di pezzi “sospesi” e in presa e i vari casi in cui si applica la patta",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5529,7 +5529,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "com'è andata la lexioneee",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5577,7 +5577,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "a top",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5639,7 +5639,7 @@
                   "participant": "163320426410179@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "cose più specifiche?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -5692,7 +5692,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "cose più specifiche?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5766,7 +5766,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "toppi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5823,7 +5823,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Yes",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5865,7 +5865,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ti andrebbe per le 18.15/30?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5912,7 +5912,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "oki top grazie ti dico stasera quando sono a casa",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -5969,7 +5969,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Me lo puoi dire anche sta sera / domani l'orario, tanto devo solo studiare e andare in palestra ma posso farlo prima/dopo che ci vediamo senza problemi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6011,7 +6011,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "che orari prefersci tu? io stavo cercando di organizzarmi ma non ho dietro l’agenda e non mi ricordo nulla",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6068,7 +6068,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "domani pomeriggio per me va bene",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6111,7 +6111,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "io potrei o domani pome oppure giovedì mattina a colazione dimmi tu se può andarti bene",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6158,7 +6158,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ciao ale",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6226,7 +6226,7 @@
                 "type": 14,
                 "editedMessage": {
                   "$$unknownFieldCount": 0,
-                  "conversation": "stavo cercando di spiegare perché ti ho scritto ora, che se ci penso é veramente un momento a caso, ma non riesco a esprimerlo in maniera sincera e/o concisa. penso sia scortese farti svegliare con un papiro, anche perché magari hai già deciso che non vuoi parlarne e, se prima scrivo che capisco, e poi invece scrivo un papiro indesiderato mi sembra un po' una contraddizione. se effettivamente vuoi parlarne possiamo farlo quando decidiamo insieme."
+                  "conversation": ""
                 },
                 "timestampMs": 1778460770457
               },
@@ -6282,7 +6282,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "In realtà ti avevo chiamato giusto per accordarci su un giorno in cui vederci",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6334,7 +6334,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Se ci hai ripensato sul parlarci/vederci mi dispiace, ma ovviamente capisco",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6386,7 +6386,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ciao Benni, scusa se ti riscrivo, logicamente avrei dovuto aspettare che mi richiamassi tu, ma é passata una settimana da quando ho provato a chiamarti e non so cosa pensare",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6429,7 +6429,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "ti chiamo in un altro momento ora non riesco",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6486,7 +6486,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Dimme tu quando",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6661,7 +6661,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Test",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6789,7 +6789,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "che alle 9 ceno",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6851,7 +6851,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Comunque io 9 cu sono"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -6904,7 +6904,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "boh",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -6971,7 +6971,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Comunque io 9 cu sono",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7124,7 +7124,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "lol",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7255,7 +7255,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "oggi a che ora famo? @all",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7303,7 +7303,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Solo chrome",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7351,7 +7351,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "E penso nemmeno Firefox",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7399,7 +7399,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Perché tipo su Safari non si può fare",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7461,7 +7461,7 @@
                   "participant": "188415937118238@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "probabilmente e' una roba che dipende da chrome e netflix e prime non possono farci nulla"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -7514,7 +7514,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "quindi sono gay e si arrangiano",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7562,7 +7562,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "essendo l'openai dei browser, non e' open",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7610,7 +7610,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "probabilmente e' una roba che dipende da chrome e netflix e prime non possono farci nulla",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7684,7 +7684,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Brazy",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -7746,7 +7746,7 @@
                   "participant": "10720271962176@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "In italia?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -7813,7 +7813,7 @@
                   "participant": "176046464831615@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Full time"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8003,7 +8003,7 @@
                   "participant": "10720271962176@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma intern ship o full time?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8056,7 +8056,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ma intern ship o full time?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -8278,7 +8278,7 @@
                   "participant": "188415937118238@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "mi sa che lo fanno solo ai gay"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8345,7 +8345,7 @@
                   "participant": "176046464831615@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Forse dipende dalla posizione"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8412,7 +8412,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ovvero la STAR attitude"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8465,7 +8465,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Idk",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -8527,7 +8527,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Solo che non so perché dicono che hanno scelto di movare forward"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -8716,7 +8716,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Pensavo fosse automatico l'OA tecnico di Amazon o quasi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -8894,7 +8894,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Solo che non so perché dicono che hanno scelto di movare forward",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -8976,7 +8976,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Cioè io non ho mai capito se esiste un modo giusto di rispondere"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -9038,7 +9038,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Cioè io non ho mai capito se esiste un modo giusto di rispondere",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9094,7 +9094,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ah quelle sono legit culo"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -9156,7 +9156,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ah quelle sono legit culo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9198,7 +9198,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "La roba sullo stile di lavoro invece?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9255,7 +9255,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "2 settimane di studio e le sai fare",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9307,7 +9307,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Leet code medio era",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9349,7 +9349,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Sono alla leetcode o roba sgravata?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9410,7 +9410,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Assumo sia system design"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -9472,7 +9472,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Assumo sia system design",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9524,7 +9524,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "2 non c'era",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -9780,7 +9780,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Bho su cosa lo vuoi fare lo scritto di C++"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -9836,7 +9836,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ma lo scritto é un progetto",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -10214,7 +10214,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie brodis",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -10278,7 +10278,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma se uno stronzo lavora da anni deve comunque fare lo stage o si può balzare?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10347,7 +10347,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Puoi anche essere Linus torvalds ma I joblab e stage sono obbligatori",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -10409,7 +10409,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma se uno stronzo lavora da anni deve comunque fare lo stage o si può balzare?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10676,7 +10676,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "(Importante che sia stronzo)"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10743,7 +10743,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma se uno stronzo lavora da anni deve comunque fare lo stage o si può balzare?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10796,7 +10796,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Zioporco",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -10858,7 +10858,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma se uno stronzo lavora da anni deve comunque fare lo stage o si può balzare?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10925,7 +10925,7 @@
                   "participant": "235222557798637@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Ma se uno stronzo lavora da anni deve comunque fare lo stage o si può balzare?"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -10978,7 +10978,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "devi farlo ugualmente",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11052,7 +11052,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Avevo letto un affare su twitter non ricordo cosa fosse alla fine c’era questo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11099,7 +11099,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Stavo per addormentarmi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11156,7 +11156,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Forse serve qualche chiave che sta on device tipo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11208,7 +11208,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Non ho mai capito perché nessuno abbia reversato quella shit",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11260,7 +11260,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Eh sì che gli ipa sono criptati con fair-play",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11391,7 +11391,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Quando dicevo che questo nrand sono solo marketing",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11514,7 +11514,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "lol",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11561,7 +11561,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "crazy senza chiederglielo mi ha fatto un html che calcoal e estrae in automatico l'hash",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11608,7 +11608,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Claude sta reversando come funziona",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11655,7 +11655,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "È un hash che viene generato da js",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11726,7 +11726,7 @@
                   "participant": "10720271962176@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Io devo calcolare il picasso hash"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -11773,7 +11773,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ma non ho mica voglia di farlo",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11820,7 +11820,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Io devo calcolare il picasso hash",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11901,7 +11901,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Take care Milos",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -11974,7 +11974,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "I'm not feeling well since yesterday evening, I'll try to rest in the morning and hopefully back in the afternoon",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12123,7 +12123,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "We should do something like that hahaha",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12171,7 +12171,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "My son went to laser tag. Soo many memories for me",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12244,7 +12244,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Fire alarm in the block, afk for now",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12292,7 +12292,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Only the best team 👌",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12505,7 +12505,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "We are in front of cuccina",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -12566,7 +12566,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Proper stuck in m50 exit ramp, might be a tiny bit late for standup",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13009,7 +13009,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Boot in chef's choice area",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13083,7 +13083,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Hello",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13196,7 +13196,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ong",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13287,7 +13287,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Fuck stavo facendo un test",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13517,7 +13517,7 @@
                   "participant": "266013262225420@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "IT19Z0301503200000006411585"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -13590,7 +13590,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Spero siano per me!",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13674,7 +13674,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Presi io",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13750,7 +13750,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Leg curl \n60kg 7/8 reps \n60kg 6/7 reps\n60kg 6/7 reps",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -13919,7 +13919,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Stavo dormendo lol",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14160,7 +14160,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Stavo a parlare di tutt'altro e l'ho trovata",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14228,7 +14228,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie ale",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14302,7 +14302,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Niente",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14493,7 +14493,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Bro se non avete trovato sto parcheggio",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14569,7 +14569,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "La birra mi farà venire idee",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14653,7 +14653,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Quindi dovremmo farcela",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14729,7 +14729,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "E mi sono dimenticata",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -14853,7 +14853,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Veramente molto bella",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15044,7 +15044,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Sì",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15118,7 +15118,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "gli riferisco",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15212,7 +15212,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Heyy, il 9 maggio festeggio il mio compleanno a casa mia in via cesare cesariano 8. Sarà dalle 21.30 in poi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15293,7 +15293,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Vabbè tranqui",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15763,7 +15763,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Thx",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -15863,7 +15863,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie di nuovo per il passaggio 🙏",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16076,7 +16076,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "io vado comunque ovviamente",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16152,7 +16152,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Certo grazie",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16243,7 +16243,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie mille",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16319,7 +16319,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Gentile ALESSANDRO AUTIERO, si sta avvicinando la data della seduta di igiene. L'appuntamento è fissato il 29/05/2026 alle ore 10.15.\nQualora volesse modificarlo la preghiamo di avvertirci il prima possibile.\n\nStudio Dottoressa Polacco",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16407,7 +16407,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Yeah my friend tried to apply but its his final year so they rejected it",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16585,7 +16585,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "prova. a chiamarmi tu questa sera quando puoi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16754,7 +16754,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "💪🤗",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16830,7 +16830,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Perché volevo usarle con clawdbot",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16905,7 +16905,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Hello",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -16979,7 +16979,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Era da tanto che non sparavamo/facevamo cazzate per Milano",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -17054,7 +17054,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "non succede nulla",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -17274,7 +17274,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie a tutti per essere venuti, spero vi siate divertiti, tornate a casa sani e salvi",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -17549,7 +17549,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Quando ho frequentato il corso mi sembrava avesse detto che per chi fa informatica é possibile",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -17639,7 +17639,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "Sono felice per te :)"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -17819,7 +17819,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Oks",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -17944,7 +17944,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Comunque se vuoi fare cose più puoi farle, però se sbagli ti incula",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -18030,7 +18030,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie 🙏🙏",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -18107,7 +18107,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "*Auto Reply *\r\n\r\nCiao, grazie per averci contattato.\r\n\r\nIl servizio Whatsapp in questo momento non è attivo e la tua richiesta non può essere gestita.\r\n\r\nPuoi consultare gli orari festivi del servizio a questo link:<https://www.santagostino.it/it/news/chiusure-festivit-natalizie-2025-2026>\r\n\r\nPrenota online qui: https://santagostino.it/it/prenota <https://santagostino.it/it/prenota> o sull'App mySantagostino.\r\n\r\nSe hai necessità di cancellare/spostare un appuntamento ti ricordiamo che puoi farlo dal nostro sito o tramite App direttamente dal tuo profilo online.\r\n\r\n \r\n\r\nPer quanto riguarda i termini di cancellazione li puoi trovare a questo link:<https://www.santagostino.it/it/termini-e-condizioni-generali>\r\n\r\nTi ricordiamo inoltre che se sei in ritardo il Santagostino non garantisce l'erogazione della prestazione.\r\n\r\nGrazie!"
+              "conversation": ""
             },
             "messageTimestamp": 1769530665,
             "isMentionedInStatus": false
@@ -18462,7 +18462,7 @@
                   "participant": "393495089819@s.whatsapp.net",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "In ogni caso grazie mille per gli auguri e buone lezioni/tirocinio"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -18553,7 +18553,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Bene spero",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -18755,7 +18755,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ma prego!!!! Buona festa",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -18841,7 +18841,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie ludo ✨✨",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -18929,7 +18929,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ok im coming",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19006,7 +19006,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Top grazie",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19321,7 +19321,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Vi ringrazia molto",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19390,7 +19390,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Ciao Gennaro, è arrivato il DUNS dall’Apple, ora è in review l’app. Nel frattempo ci è arrivato l’EIN, codice per poter aprire un conto americano. Così possiamo finalmente mandarti l’equity. Ti va se ci aggiorniamo quando puoi tu? Anche solo io e te per evitare di dover combaciare 5 slot diversi.",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19469,7 +19469,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie mille",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19546,7 +19546,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Pagliaccio",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19622,7 +19622,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Quanto ti manca?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -19698,7 +19698,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Sisì va bene",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20241,7 +20241,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Sybau",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20328,7 +20328,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie mille 🙏",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20405,7 +20405,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "gentilissimo, buona giornata"
+              "conversation": ""
             },
             "messageTimestamp": 1764588709,
             "isMentionedInStatus": false
@@ -20471,7 +20471,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Di nulla, grazie per aver votato :)",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20560,7 +20560,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Avete caricato tutti le foto su google?",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20639,7 +20639,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Let's talk then",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20848,7 +20848,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Grazie",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -20917,7 +20917,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "non ti preoccupare grazie lo stesso 💪🏻",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -21012,7 +21012,7 @@
                   "participant": "54379084304609@lid",
                   "quotedMessage": {
                     "$$unknownFieldCount": 0,
-                    "conversation": "We can call sometime during the weekend"
+                    "conversation": ""
                   },
                   "quotedType": 0
                 },
@@ -21100,7 +21100,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "Sarò sincero no ma quando ho guardato ero di corsa, se uno di sti giorni sei in zona andiamo jnsjeme",
+              "conversation": "",
               "messageContextInfo": {
                 "$$unknownFieldCount": 0,
                 "threadId": [],
@@ -21214,7 +21214,7 @@
             },
             "message": {
               "$$unknownFieldCount": 0,
-              "conversation": "thanks for inviting us giorgioo🫶"
+              "conversation": ""
             },
             "messageTimestamp": 1760260200,
             "participant": "259081084350546@lid",

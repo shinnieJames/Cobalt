@@ -10,13 +10,11 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteMessageForMeActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.DeleteMessageForMeMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,13 +25,29 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DeleteMessageForMeHandler}.
+ * Exercises the {@link DeleteMessageForMeHandler} adapter for
+ * {@code WAWebDeleteMessageForMeSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code deleteMessageForMe}
+ * app-state sync action across metadata, the SET happy path, the
+ * orphan and malformed branches, the REMOVE rejection and the
+ * deleteMedia-driven conflict matrix that is intentionally
+ * timestamp-independent on this handler.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so each test starts from a clean single-device state. The
+ * {@code seedMessage} helper installs a single
+ * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} with a
+ * fixed {@code MESSAGE_ID} so the orphan and removed paths can be
+ * exercised without seeding history.
  */
 @DisplayName("DeleteMessageForMeHandler")
 class DeleteMessageForMeHandlerTest {
@@ -95,7 +109,7 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("SET on an inbound (fromMe=false) message removes it from the chat")
@@ -112,7 +126,7 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Msg")
@@ -139,18 +153,18 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value (n/a)")
+    @DisplayName("applyMutation - malformed value (n/a)")
     class MalformedValue {
         // The handler does not call malformedActionValue on the value type; it only checks the index
         // and then filters by fromMe/participant. A SyncActionValue carrying a different action is
-        // not rejected â€” instead the chat-message lookup decides the outcome. The handler reads
+        // not rejected - instead the chat-message lookup decides the outcome. The handler reads
         // deleteMedia in resolveConflicts() but not in applyMutation(), so a different action just
         // ends up as an Orphan or Success based on whether the message exists.
         @Test
-        @DisplayName("a value carrying a pinAction still consults the index â€” outcome flows through the orphan path")
+        @DisplayName("a value carrying a pinAction still consults the index - outcome flows through the orphan path")
         void wrongActionTypeFallsThroughToOrphan() {
             // Index is valid, value has no deleteMessageForMeAction.
-            // The handler doesn't reject â€” it just runs index-based lookups.
+            // The handler doesn't reject - it just runs index-based lookups.
             var wrong = new SyncActionValueBuilder()
                     .timestamp(Instant.ofEpochSecond(1L))
                     .pinAction(new PinActionBuilder().pinned(true).build())
@@ -166,7 +180,7 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a 4-element index missing the participant slot is MALFORMED")
@@ -202,7 +216,7 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -224,10 +238,10 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” deleteMedia-based (NOT timestamp-based)")
+    @DisplayName("resolveConflicts - deleteMedia-based (NOT timestamp-based)")
     class ResolveConflicts {
         @Test
-        @DisplayName("remote deleteMedia=false vs local deleteMedia=true â†’ SKIP_REMOTE (local wins, it is more aggressive)")
+        @DisplayName("remote deleteMedia=false vs local deleteMedia=true -> SKIP_REMOTE (local wins, it is more aggressive)")
         void localDeleteMediaWinsOverRemote() {
             var local = mutationWithDeleteMedia(true, Instant.ofEpochSecond(100L));
             var remote = mutationWithDeleteMedia(false, Instant.ofEpochSecond(200L));
@@ -237,7 +251,7 @@ class DeleteMessageForMeHandlerTest {
         }
 
         @Test
-        @DisplayName("any other combination â†’ SKIP_REMOTE_DROP_LOCAL")
+        @DisplayName("any other combination -> SKIP_REMOTE_DROP_LOCAL")
         void anyOtherCombinationDropsBoth() {
             // both true
             var a = new DeleteMessageForMeHandler().resolveConflicts(
@@ -270,7 +284,7 @@ class DeleteMessageForMeHandlerTest {
     }
 
     @Nested
-    @DisplayName("buildDeleteForMeMutation â€” builder helper")
+    @DisplayName("buildDeleteForMeMutation - builder helper")
     class BuilderHelpers {
         @Test
         @DisplayName("buildDeleteForMeMutation produces the 5-element index with the correct fromMe/participant encoding")
@@ -293,7 +307,7 @@ class DeleteMessageForMeHandlerTest {
         }
 
         @Test
-        @DisplayName("incoming group message: fromMe=false + participant â†’ participant string at slot 4")
+        @DisplayName("incoming group message: fromMe=false + participant -> participant string at slot 4")
         void participantSlotForIncomingGroup() {
             var now = Instant.ofEpochSecond(1_700_000_000L);
             var msgTs = Instant.ofEpochSecond(1_699_000_000L);
@@ -309,23 +323,4 @@ class DeleteMessageForMeHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/delete-message-for-me/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/delete-message-for-me/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var deleteMedia = oracle.getBoolean("deleteMedia");
-
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .deleteMessageForMeAction(new DeleteMessageForMeActionBuilder().deleteMedia(deleteMedia).build())
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

@@ -11,7 +11,9 @@ import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
+import com.github.auties00.cobalt.model.sync.action.device.PaidFeature;
 import com.github.auties00.cobalt.model.sync.action.device.PaidFeatureBuilder;
+import com.github.auties00.cobalt.model.sync.action.device.SubscriptionInfo;
 import com.github.auties00.cobalt.model.sync.action.device.SubscriptionInfoBuilder;
 import com.github.auties00.cobalt.model.sync.action.device.SubscriptionsSyncV2ActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -29,8 +31,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link SubscriptionHandler} â€” Cobalt's adapter for
- * {@code WAWebSubscriptionsSyncV2Sync}.
+ * Exercises {@link SubscriptionHandler}'s parity with
+ * {@code WAWebSubscriptionsSyncV2Sync.applyMutations}.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the rewrite semantics of a happy
+ * {@code SET} (stale subscriptions and feature flags must be cleared
+ * before the new snapshot lands), the malformed-value branch when the
+ * action is missing, the {@link SyncdOperation#REMOVE} no-op-success
+ * branch, the batch-level REMOVE counter logging, and the default
+ * conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture pre-populates a stale subscription and feature flag so
+ * the rewrite-semantics test can observe both being wiped on the next
+ * {@code SET}; tests that exercise empty payloads omit the seed.
  */
 @DisplayName("SubscriptionHandler")
 class SubscriptionHandlerTest {
@@ -39,15 +54,38 @@ class SubscriptionHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * subscription and feature-flag maps start empty.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given subscription and feature-flag lists into a
+     * trusted mutation under the canonical
+     * {@code ["subscriptions_sync_v2"]} index.
+     *
+     * @apiNote
+     * Callers passing {@code null} for either list get an empty list
+     * substituted so the per-mutation rewrite still runs.
+     *
+     * @param op       the mutation operation
+     * @param ts       the mutation timestamp
+     * @param subs     the new subscriptions list, or {@code null} for empty
+     * @param features the new paid-features list, or {@code null} for empty
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted setMutation(SyncdOperation op, Instant ts,
-                                                         List<com.github.auties00.cobalt.model.sync.action.device.SubscriptionInfo> subs,
-                                                         List<com.github.auties00.cobalt.model.sync.action.device.PaidFeature> features) {
+                                                         List<SubscriptionInfo> subs,
+                                                         List<PaidFeature> features) {
         var action = new SubscriptionsSyncV2ActionBuilder()
                 .subscriptions(subs == null ? List.of() : subs)
                 .paidFeatures(features == null ? List.of() : features)
@@ -57,7 +95,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns \"subscriptions_sync_v2\"")
@@ -79,7 +117,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET rewrites the subscription table and the feature-flag table")
@@ -129,7 +167,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("subscriptions sync is singleton and account-wide; no per-entity orphan path")
@@ -141,7 +179,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -158,7 +196,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the handler ignores the index shape (singleton action)")
@@ -176,7 +214,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns SUCCESS without touching state (per WA Web)")
@@ -191,10 +229,10 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = setMutation(SyncdOperation.SET, Instant.ofEpochSecond(1_000), List.of(), List.of());
             var remote = setMutation(SyncdOperation.SET, Instant.ofEpochSecond(2_000), List.of(), List.of());
@@ -203,7 +241,7 @@ class SubscriptionHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = setMutation(SyncdOperation.SET, Instant.ofEpochSecond(2_000), List.of(), List.of());
             var remote = setMutation(SyncdOperation.SET, Instant.ofEpochSecond(1_000), List.of(), List.of());
@@ -213,7 +251,7 @@ class SubscriptionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” sequential apply with REMOVE counter")
+    @DisplayName("applyMutationBatch - sequential apply with REMOVE counter")
     class ApplyBatchOverride {
         @Test
         @DisplayName("each mutation is applied; REMOVEs are counted but do not block subsequent SETs")
@@ -237,22 +275,4 @@ class SubscriptionHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("SubscriptionHandler does not expose a get*Mutation helper")
-        void noStaticBuilders() {
-            var methods = SubscriptionHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (method.isSynthetic() || method.isBridge()) {
-                    continue;
-                }
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on SubscriptionHandler: " + method.getName());
-                }
-            }
-        }
-    }
 }

@@ -17,24 +17,58 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGetSMBMeteredMessagingCheckoutRequest}.
+ * The sealed family of inbound reply variants produced by the relay
+ * in response to a {@link SmaxGetSMBMeteredMessagingCheckoutRequest}.
+ *
+ * @apiNote
+ * Surfaced by the SMB metered-messaging checkout flow whose JS
+ * caller
+ * {@code WAWebGetSMBMeteredMessagingCheckoutJob.getSMBMeteredMessagingCheckout}
+ * fetches the cost projection, integrity-eligibility marker,
+ * account-balance triple and optional quota state before a small
+ * business confirms a paid-conversation purchase; the three variants
+ * split the wire outcome into {@link Success} (full checkout
+ * projection), {@link ClientError} (relay rejected the lookup with a
+ * documented {@code 4xx} envelope; the JS caller throws a
+ * {@code ServerStatusCodeError}) and {@link ServerError} (transient
+ * {@code 5xx} relay failure).
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code WASmaxSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRPC.sendGetSMBMeteredMessagingCheckoutRPC}
+ * by trying each variant in priority order via {@link #of} and
+ * returning the first successful parse.
  */
 public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxOperation.Response
         permits SmaxGetSMBMeteredMessagingCheckoutResponse.Success, SmaxGetSMBMeteredMessagingCheckoutResponse.ClientError, SmaxGetSMBMeteredMessagingCheckoutResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetSMBMeteredMessagingCheckoutResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Tries each {@link SmaxGetSMBMeteredMessagingCheckoutResponse}
+     * variant in priority order and returns the first that parses
+     * cleanly.
+     *
+     * @apiNote
+     * Invoked by the smax reply pump after dispatching a
+     * {@link SmaxGetSMBMeteredMessagingCheckoutRequest}; the
+     * priority order matches WA Web's {@code parsing} dispatch
+     * table so that a malformed {@code Success} stanza falls
+     * through to {@link ClientError} rather than masking an error.
+     *
+     * @implNote
+     * This implementation invokes {@link Success#of(Node, Node)}
+     * first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
+     * shape returns {@link Optional#empty()}.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
+     * @param request the original outbound stanza, used to validate
      *                echoed identifiers; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant
      *         matched the stanza shape
-     * @throws NullPointerException if either argument is {@code null}
+     * @throws NullPointerException if either argument is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRPC",
             exports = "sendGetSMBMeteredMessagingCheckoutRPC",
@@ -54,41 +88,60 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
     }
 
     /**
-     * The {@code Success} reply variant. Carries the projected
-     * cost, optional discounts, integrity-eligibility marker,
-     * account-balance triple and optional quota state.
+     * The {@code Success} reply variant carrying the full SMB
+     * metered-messaging checkout projection.
+     *
+     * @apiNote
+     * Projected by
+     * {@link SmaxGetSMBMeteredMessagingCheckoutResponse#of(Node, Node)}
+     * when the relay returns the documented
+     * {@code <cost>/<integrity>/<account_balance>/<quota>} tree;
+     * WA Web's {@code getSMBMeteredMessagingCheckout} flattens the
+     * fields into the {@code accountBalanceAvailable},
+     * {@code costBase}, {@code costBeforeTax}, {@code costCurrency},
+     * {@code costOffset}, {@code costTax}, {@code discounts},
+     * {@code quotaRemaining}, {@code totalAvailableCredits} shape
+     * consumed by the checkout UI.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
     final class Success implements SmaxGetSMBMeteredMessagingCheckoutResponse {
         /**
-         * The mandatory cost projection.
+         * The mandatory cost projection drawn from the
+         * {@code <cost>} child.
          */
         private final Cost cost;
 
         /**
-         * The mandatory integrity-eligibility marker.
+         * The mandatory integrity-eligibility marker drawn from the
+         * {@code <integrity is_eligible="..."/>} child.
          */
         private final SmaxGetSMBMeteredMessagingCheckoutIntegrityEligibility integrityIsEligible;
 
         /**
-         * The mandatory account-balance projection.
+         * The mandatory account-balance projection drawn from the
+         * {@code <account_balance>} child.
          */
         private final AccountBalance accountBalance;
 
         /**
-         * The optional quota projection.
+         * The optional quota projection drawn from the {@code <quota>}
+         * child; {@code null} when the relay omitted the child.
          */
         private final Quota quota;
 
         /**
          * Constructs a new successful reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after all four child
+         * projections have been validated.
+         *
          * @param cost                the cost projection; never
          *                            {@code null}
-         * @param integrityIsEligible the eligibility marker; never
-         *                            {@code null}
-         * @param accountBalance      the balance projection; never
-         *                            {@code null}
+         * @param integrityIsEligible the integrity-eligibility
+         *                            marker; never {@code null}
+         * @param accountBalance      the account-balance projection;
+         *                            never {@code null}
          * @param quota               the optional quota projection;
          *                            may be {@code null}
          * @throws NullPointerException if any of {@code cost},
@@ -116,6 +169,11 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
 
         /**
          * Returns the integrity-eligibility marker.
+         *
+         * @apiNote
+         * Reflects whether the business satisfies the integrity
+         * checks WA Web requires before allowing a paid-conversation
+         * purchase.
          *
          * @return the marker; never {@code null}
          */
@@ -146,6 +204,18 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
+         *
+         * @implNote
+         * This implementation enforces the
+         * {@link SmaxIqResultResponseMixin} envelope check, then
+         * locates the {@code <cost>}, {@code <integrity>} and
+         * {@code <account_balance>} children (any of which is
+         * required) and the optional {@code <quota>} child. The
+         * integrity attribute is admitted via
+         * {@link SmaxGetSMBMeteredMessagingCheckoutIntegrityEligibility#of(String)}
+         * (the {@code ENUM_FALSE_TRUE} dictionary); the per-child
+         * parses delegate to {@link Cost#of(Node)},
+         * {@link AccountBalance#of(Node)} and {@link Quota#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -199,6 +269,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             return Optional.of(new Success(cost, integrity, balance, quota));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -214,11 +287,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                     && Objects.equals(this.quota, that.quota);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(cost, integrityIsEligible, accountBalance, quota);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetSMBMeteredMessagingCheckoutResponse.Success[cost=" + cost
@@ -228,72 +307,107 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         }
 
         /**
-         * The {@code <cost/>} child projection. Full cost
-         * breakdown.
+         * The {@code <cost/>} child projection carrying the full
+         * cost breakdown for the metered-messaging checkout.
+         *
+         * @apiNote
+         * Aggregates the mandatory pre-tax cost, tax amount,
+         * currency offset and currency identifier with the optional
+         * pre-discount {@code base}, {@code base_formatted},
+         * {@code discount_percent}, {@code before_discount},
+         * {@code before_discount_formatted} fields and the optional
+         * list of applied discounts; WA Web's
+         * {@code getSMBMeteredMessagingCheckout} unwraps the
+         * structure field-by-field into the projected
+         * {@code costBeforeTax}/{@code costTax}/etc. record.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class Cost {
             /**
-             * The pre-tax cost (currency-minor units).
+             * The mandatory pre-tax cost expressed in
+             * currency-minor units.
              */
             private final int beforeTax;
 
             /**
-             * The tax amount (currency-minor units).
+             * The mandatory tax amount expressed in currency-minor
+             * units.
              */
             private final int tax;
 
             /**
-             * The currency offset (decimal places).
+             * The mandatory currency offset (number of decimal
+             * places to shift the minor-unit integers by).
              */
             private final int offset;
 
             /**
-             * The currency identifier.
+             * The mandatory currency identifier (ISO-4217 code).
              */
             private final String currency;
 
             /**
-             * The optional pre-discount base (currency-minor units).
+             * The optional pre-discount base expressed in
+             * currency-minor units; {@code null} when the relay
+             * omitted the attribute.
              */
             private final Integer base;
 
             /**
-             * The optional pre-discount base formatted.
+             * The optional formatted pre-discount base for direct
+             * UI display; {@code null} when the relay omitted the
+             * attribute.
              */
             private final String baseFormatted;
 
             /**
-             * The optional discount-percent.
+             * The optional discount percent; {@code null} when the
+             * relay omitted the attribute.
              */
             private final Integer discountPercent;
 
             /**
-             * The optional pre-discount cost (currency-minor units).
+             * The optional pre-discount cost expressed in
+             * currency-minor units; {@code null} when the relay
+             * omitted the attribute.
              */
             private final Integer beforeDiscount;
 
             /**
-             * The optional pre-discount cost formatted.
+             * The optional formatted pre-discount cost for direct
+             * UI display; {@code null} when the relay omitted the
+             * attribute.
              */
             private final String beforeDiscountFormatted;
 
             /**
-             * The optional list of applied discounts (0..10
-             * entries).
+             * The optional list of applied discount entries
+             * ({@code 0..10} per the
+             * {@code mapChildrenWithTag(..., 0, 10, ...)} contract);
+             * empty when the relay omitted the
+             * {@code <discounts/>} child or when the child was
+             * empty.
              */
             private final List<Discount> discounts;
 
             /**
              * Constructs a new cost projection.
              *
-             * @param beforeTax               the pre-tax cost
-             * @param tax                     the tax amount
+             * @apiNote
+             * Invoked by {@link #of(Node)} after every mandatory
+             * attribute has been read and the optional pre-discount
+             * and discount-list fields have been resolved.
+             *
+             * @param beforeTax               the pre-tax cost in
+             *                                currency-minor units
+             * @param tax                     the tax in
+             *                                currency-minor units
              * @param offset                  the currency offset
-             * @param currency                the currency
-             *                                identifier; never
-             *                                {@code null}
-             * @param base                    the optional base; may
+             *                                (decimal places)
+             * @param currency                the currency code;
+             *                                never {@code null}
+             * @param base                    the optional
+             *                                pre-discount base; may
              *                                be {@code null}
              * @param baseFormatted           the optional formatted
              *                                base; may be
@@ -305,8 +419,8 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              *                                pre-discount cost; may
              *                                be {@code null}
              * @param beforeDiscountFormatted the optional formatted
-             *                                pre-discount cost; may
-             *                                be {@code null}
+             *                                pre-discount cost;
+             *                                may be {@code null}
              * @param discounts               the optional list of
              *                                applied discounts; may
              *                                be {@code null}
@@ -352,7 +466,12 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Returns the currency offset.
              *
-             * @return the offset in decimal places
+             * @apiNote
+             * Apply by shifting the minor-unit integers
+             * {@link #beforeTax()} and {@link #tax()} right by this
+             * many decimal places when rendering to the UI.
+             *
+             * @return the offset (number of decimal places)
              */
             public int offset() {
                 return offset;
@@ -361,27 +480,28 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Returns the currency identifier.
              *
-             * @return the currency code; never {@code null}
+             * @return the currency code (ISO-4217); never
+             *         {@code null}
              */
             public String currency() {
                 return currency;
             }
 
             /**
-             * Returns the optional base cost.
+             * Returns the optional pre-discount base cost.
              *
              * @return an {@link OptionalInt} carrying the value, or
-             *         empty
+             *         empty when the relay omitted the attribute
              */
             public OptionalInt base() {
                 return base == null ? OptionalInt.empty() : OptionalInt.of(base);
             }
 
             /**
-             * Returns the optional formatted base cost.
+             * Returns the optional formatted pre-discount base cost.
              *
              * @return an {@link Optional} carrying the value, or
-             *         empty
+             *         empty when the relay omitted the attribute
              */
             public Optional<String> baseFormatted() {
                 return Optional.ofNullable(baseFormatted);
@@ -391,7 +511,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              * Returns the optional discount percent.
              *
              * @return an {@link OptionalInt} carrying the value, or
-             *         empty
+             *         empty when the relay omitted the attribute
              */
             public OptionalInt discountPercent() {
                 return discountPercent == null ? OptionalInt.empty() : OptionalInt.of(discountPercent);
@@ -401,7 +521,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              * Returns the optional pre-discount cost.
              *
              * @return an {@link OptionalInt} carrying the value, or
-             *         empty
+             *         empty when the relay omitted the attribute
              */
             public OptionalInt beforeDiscount() {
                 return beforeDiscount == null ? OptionalInt.empty() : OptionalInt.of(beforeDiscount);
@@ -411,24 +531,45 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              * Returns the optional formatted pre-discount cost.
              *
              * @return an {@link Optional} carrying the value, or
-             *         empty
+             *         empty when the relay omitted the attribute
              */
             public Optional<String> beforeDiscountFormatted() {
                 return Optional.ofNullable(beforeDiscountFormatted);
             }
 
             /**
-             * Returns the optional list of applied discounts.
+             * Returns the list of applied discount entries.
              *
-             * @return an unmodifiable list of 0..10 entries; never
-             *         {@code null}
+             * @return an unmodifiable list of {@code 0..10}
+             *         entries; never {@code null}
              */
             public List<Discount> discounts() {
                 return discounts;
             }
 
             /**
-             * Tries to parse the projection from the given node.
+             * Tries to parse the cost projection from the given
+             * {@code <cost/>} node.
+             *
+             * @apiNote
+             * Used internally by {@link Success#of(Node, Node)} to
+             * decode the {@code <cost>} child of the
+             * checkout-response stanza.
+             *
+             * @implNote
+             * This implementation reads the four mandatory
+             * attributes ({@code before_tax}, {@code tax},
+             * {@code offset}, {@code currency}) followed by the
+             * five optional attributes ({@code base},
+             * {@code base_formatted}, {@code discount_percent},
+             * {@code before_discount},
+             * {@code before_discount_formatted}); any mandatory
+             * attribute missing yields {@link Optional#empty()}.
+             * The optional {@code <discounts>} child is decoded
+             * via {@link Discount#of(Node)}, with the
+             * {@code 0..10} cap from
+             * {@code mapChildrenWithTag(t, "discount", 0, 10, e)}
+             * enforced as a rejection of the parse when exceeded.
              *
              * @param node the {@code <cost/>} node
              * @return an {@link Optional} carrying the projection,
@@ -493,6 +634,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                         beforeDiscountFormatted, discounts));
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -514,12 +658,18 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                         && Objects.equals(this.discounts, that.discounts);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(beforeTax, tax, offset, currency, base, baseFormatted,
                         discountPercent, beforeDiscount, beforeDiscountFormatted, discounts);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public String toString() {
                 return "SmaxGetSMBMeteredMessagingCheckoutResponse.Success.Cost[beforeTax=" + beforeTax
@@ -535,39 +685,57 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             }
 
             /**
-             * Single applied discount entry.
+             * A single applied discount entry under the
+             * {@code <discounts><discount/></discounts>} subtree.
+             *
+             * @apiNote
+             * Projects the {@code (type, percentage, amount,
+             * amountFormatted)} record WA Web's
+             * {@code getSMBMeteredMessagingCheckout} maps into the
+             * {@code discounts[]} array passed to the checkout UI.
              */
             @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
             public static final class Discount {
                 /**
-                 * The discount type.
+                 * The mandatory discount type drawn from the
+                 * {@code ENUM_FREEMSG_PERCENTAGE} dictionary
+                 * ({@code "freemsg"} or {@code "percentage"}).
                  */
                 private final SmaxGetSMBMeteredMessagingCheckoutDiscountType type;
 
                 /**
-                 * The optional percentage value (only meaningful for
-                 * {@link SmaxGetSMBMeteredMessagingCheckoutDiscountType#PERCENTAGE}).
+                 * The optional percentage value; only meaningful
+                 * when {@link #type} is
+                 * {@link SmaxGetSMBMeteredMessagingCheckoutDiscountType#PERCENTAGE}.
                  */
                 private final Integer percentage;
 
                 /**
-                 * The discount amount (currency-minor units).
+                 * The mandatory discount amount in
+                 * currency-minor units.
                  */
                 private final int amount;
 
                 /**
-                 * The formatted discount amount.
+                 * The mandatory formatted discount amount for
+                 * direct UI display.
                  */
                 private final String amountFormatted;
 
                 /**
                  * Constructs a new discount entry.
                  *
+                 * @apiNote
+                 * Invoked by {@link #of(Node)} after every
+                 * mandatory attribute has been read and the
+                 * optional {@code percentage} has been resolved.
+                 *
                  * @param type            the discount type; never
                  *                        {@code null}
-                 * @param percentage      the optional percentage
-                 *                        value; may be {@code null}
-                 * @param amount          the discount amount
+                 * @param percentage      the optional percentage;
+                 *                        may be {@code null}
+                 * @param amount          the discount amount in
+                 *                        currency-minor units
                  * @param amountFormatted the formatted amount;
                  *                        never {@code null}
                  * @throws NullPointerException if {@code type} or
@@ -593,10 +761,11 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                 }
 
                 /**
-                 * Returns the optional percentage.
+                 * Returns the optional percentage value.
                  *
                  * @return an {@link OptionalInt} carrying the
-                 *         value, or empty
+                 *         percentage, or empty when the relay
+                 *         omitted the attribute
                  */
                 public OptionalInt percentage() {
                     return percentage == null ? OptionalInt.empty() : OptionalInt.of(percentage);
@@ -612,7 +781,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                 }
 
                 /**
-                 * Returns the formatted amount.
+                 * Returns the formatted discount amount.
                  *
                  * @return the formatted string; never {@code null}
                  */
@@ -621,7 +790,24 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                 }
 
                 /**
-                 * Tries to parse the entry from the given node.
+                 * Tries to parse a discount entry from the given
+                 * {@code <discount/>} node.
+                 *
+                 * @apiNote
+                 * Used internally by {@link Cost#of(Node)} to
+                 * decode each child of the {@code <discounts>}
+                 * grandchild.
+                 *
+                 * @implNote
+                 * This implementation requires the {@code type}
+                 * attribute to match the
+                 * {@code ENUM_FREEMSG_PERCENTAGE} dictionary via
+                 * {@link SmaxGetSMBMeteredMessagingCheckoutDiscountType#of(String)},
+                 * reads the optional {@code percentage} attribute,
+                 * the mandatory {@code amount} attribute, and the
+                 * mandatory {@code amount_formatted} attribute;
+                 * any mandatory attribute missing yields
+                 * {@link Optional#empty()}.
                  *
                  * @param node the {@code <discount/>} node
                  * @return an {@link Optional} carrying the parsed
@@ -654,6 +840,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                     return Optional.of(new Discount(type, percentage, amountOpt.getAsInt(), amountFormatted));
                 }
 
+                /**
+                 * {@inheritDoc}
+                 */
                 @Override
                 public boolean equals(Object obj) {
                     if (obj == this) {
@@ -669,11 +858,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                             && Objects.equals(this.amountFormatted, that.amountFormatted);
                 }
 
+                /**
+                 * {@inheritDoc}
+                 */
                 @Override
                 public int hashCode() {
                     return Objects.hash(type, percentage, amount, amountFormatted);
                 }
 
+                /**
+                 * {@inheritDoc}
+                 */
                 @Override
                 public String toString() {
                     return "SmaxGetSMBMeteredMessagingCheckoutResponse.Success.Cost.Discount[type=" + type
@@ -685,33 +880,49 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         }
 
         /**
-         * The {@code <account_balance/>} child projection. The
-         * billing / available / offset triple for the calling
+         * The {@code <account_balance/>} child projection carrying
+         * the billing / available / offset triple for the calling
          * business's metered-messaging wallet.
+         *
+         * @apiNote
+         * WA Web's {@code getSMBMeteredMessagingCheckout} forwards
+         * the {@code accountBalanceAvailable} field to the checkout
+         * UI to show "available balance" alongside the cost
+         * breakdown; the {@code billing} and {@code offset} fields
+         * support consistent minor-unit rendering.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class AccountBalance {
             /**
-             * The total billed-to-date balance.
+             * The mandatory total billed-to-date balance in
+             * currency-minor units.
              */
             private final int billing;
 
             /**
-             * The currently-available balance.
+             * The mandatory currently-available balance in
+             * currency-minor units.
              */
             private final int available;
 
             /**
-             * The currency offset (decimal places).
+             * The mandatory currency offset (decimal places).
              */
             private final int offset;
 
             /**
              * Constructs a new balance projection.
              *
-             * @param billing   the billed balance
-             * @param available the available balance
-             * @param offset    the currency offset
+             * @apiNote
+             * Invoked by {@link #of(Node)} after every mandatory
+             * attribute has been read.
+             *
+             * @param billing   the billed-to-date balance in
+             *                  currency-minor units
+             * @param available the available balance in
+             *                  currency-minor units
+             * @param offset    the currency offset (decimal
+             *                  places)
              */
             public AccountBalance(int billing, int available, int offset) {
                 this.billing = billing;
@@ -740,14 +951,26 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             /**
              * Returns the currency offset.
              *
-             * @return the offset in decimal places
+             * @return the offset (number of decimal places)
              */
             public int offset() {
                 return offset;
             }
 
             /**
-             * Tries to parse the projection from the given node.
+             * Tries to parse the balance projection from the given
+             * {@code <account_balance/>} node.
+             *
+             * @apiNote
+             * Used internally by {@link Success#of(Node, Node)} to
+             * decode the {@code <account_balance>} child of the
+             * checkout-response stanza.
+             *
+             * @implNote
+             * This implementation requires the three mandatory
+             * integer attributes ({@code billing},
+             * {@code available}, {@code offset}); any attribute
+             * missing yields {@link Optional#empty()}.
              *
              * @param node the {@code <account_balance/>} node
              * @return an {@link Optional} carrying the projection,
@@ -774,6 +997,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                 return Optional.of(new AccountBalance(billing.getAsInt(), available.getAsInt(), offset.getAsInt()));
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -788,11 +1014,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                         && this.offset == that.offset;
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(billing, available, offset);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public String toString() {
                 return "SmaxGetSMBMeteredMessagingCheckoutResponse.Success.AccountBalance[billing=" + billing
@@ -802,42 +1034,59 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         }
 
         /**
-         * The {@code <quota/>} child projection. The calling
-         * business's monthly free-message quota state.
+         * The optional {@code <quota/>} child projection carrying
+         * the calling business's free-message quota state.
+         *
+         * @apiNote
+         * Projects the {@code (remaining, totalMonthly,
+         * singleCredits, totalAvailableCredits)} quadruple WA Web's
+         * {@code getSMBMeteredMessagingCheckout} forwards as
+         * {@code quotaRemaining} and {@code totalAvailableCredits}
+         * to the checkout UI for the "free messages remaining this
+         * month" disclosure.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseSuccess")
         public static final class Quota {
             /**
-             * The remaining message quota.
+             * The mandatory remaining-message quota.
              */
             private final int remaining;
 
             /**
-             * The total monthly quota.
+             * The mandatory total monthly quota.
              */
             private final int totalMonthly;
 
             /**
-             * The optional one-shot single-credits balance.
+             * The optional one-shot single-credits balance;
+             * {@code null} when the relay omitted the attribute.
              */
             private final Integer singleCredits;
 
             /**
-             * The optional total-available-credits projection.
+             * The optional total-available-credits projection;
+             * {@code null} when the relay omitted the attribute.
              */
             private final Integer totalAvailableCredits;
 
             /**
              * Constructs a new quota projection.
              *
-             * @param remaining             the remaining quota
+             * @apiNote
+             * Invoked by {@link #of(Node)} after the two mandatory
+             * attributes have been read and the two optional
+             * attributes have been resolved.
+             *
+             * @param remaining             the remaining-message
+             *                              quota
              * @param totalMonthly          the total monthly quota
              * @param singleCredits         the optional
              *                              single-credits balance;
              *                              may be {@code null}
-             * @param totalAvailableCredits the optional total
-             *                              available credits; may
-             *                              be {@code null}
+             * @param totalAvailableCredits the optional
+             *                              total-available-credits
+             *                              projection; may be
+             *                              {@code null}
              */
             public Quota(int remaining, int totalMonthly,
                          Integer singleCredits, Integer totalAvailableCredits) {
@@ -848,7 +1097,7 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             }
 
             /**
-             * Returns the remaining quota.
+             * Returns the remaining-message quota.
              *
              * @return the remaining count
              */
@@ -869,17 +1118,20 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
              * Returns the optional single-credits balance.
              *
              * @return an {@link OptionalInt} carrying the value,
-             *         or empty
+             *         or empty when the relay omitted the
+             *         attribute
              */
             public OptionalInt singleCredits() {
                 return singleCredits == null ? OptionalInt.empty() : OptionalInt.of(singleCredits);
             }
 
             /**
-             * Returns the optional total-available-credits.
+             * Returns the optional total-available-credits
+             * projection.
              *
              * @return an {@link OptionalInt} carrying the value,
-             *         or empty
+             *         or empty when the relay omitted the
+             *         attribute
              */
             public OptionalInt totalAvailableCredits() {
                 return totalAvailableCredits == null
@@ -888,7 +1140,21 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             }
 
             /**
-             * Tries to parse the projection from the given node.
+             * Tries to parse the quota projection from the given
+             * {@code <quota/>} node.
+             *
+             * @apiNote
+             * Used internally by {@link Success#of(Node, Node)} to
+             * decode the optional {@code <quota>} child of the
+             * checkout-response stanza.
+             *
+             * @implNote
+             * This implementation reads the two mandatory integer
+             * attributes ({@code remaining}, {@code total_monthly})
+             * and the two optional integer attributes
+             * ({@code single_credits},
+             * {@code total_available_credits}); any mandatory
+             * attribute missing yields {@link Optional#empty()}.
              *
              * @param node the {@code <quota/>} node
              * @return an {@link Optional} carrying the projection,
@@ -922,6 +1188,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                         singleCredits, totalAvailableCredits));
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -937,11 +1206,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
                         && Objects.equals(this.totalAvailableCredits, that.totalAvailableCredits);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(remaining, totalMonthly, singleCredits, totalAvailableCredits);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public String toString() {
                 return "SmaxGetSMBMeteredMessagingCheckoutResponse.Success.Quota[remaining=" + remaining
@@ -953,15 +1228,23 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request with a documented {@code 4xx} error code drawn from
-     * the SMB metered-messaging error catalogue.
+     * The {@code ClientError} reply variant carrying a documented
+     * {@code 4xx} SMB-metered-messaging rejection.
+     *
+     * @apiNote
+     * Surfaced when the relay rejected the checkout lookup via one
+     * of the {@code WASmaxInSmbMeteredMessagingAccountGetSmbMeteredMessagingCheckoutIqErrors}
+     * mixin arms; WA Web's {@code getSMBMeteredMessagingCheckout}
+     * unwraps the {@code (code, text)} pair and throws a
+     * {@code WAWebBackendErrors.ServerStatusCodeError} to the
+     * checkout UI rather than retrying.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSmbMeteredMessagingCheckoutIqErrors")
     final class ClientError implements SmaxGetSMBMeteredMessagingCheckoutResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code in the {@code 4xx}
+         * range.
          */
         private final int errorCode;
 
@@ -974,9 +1257,13 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Constructs a new client-error reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code 4xx}
+         * envelope has been validated.
+         *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may
+         *                  be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1006,6 +1293,15 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
          * Tries to parse a {@link ClientError} variant from the
          * given inbound stanza.
          *
+         * @implNote
+         * This implementation routes the {@code <iq>}/{@code <error>}
+         * extraction through
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * and admits the full {@code 4xx} range as a catch-all,
+         * matching WA Web's
+         * {@code parseGetSmbMeteredMessagingCheckoutIqErrors}
+         * disjunction.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant,
@@ -1023,6 +1319,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -1035,11 +1334,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetSMBMeteredMessagingCheckoutResponse.ClientError[errorCode=" + errorCode
@@ -1048,13 +1353,19 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered
-     * a transient internal failure ({@code 5xx}).
+     * The {@code ServerError} reply variant carrying a transient
+     * {@code 5xx} relay failure.
+     *
+     * @apiNote
+     * Surfaced when the relay returned a transient internal failure
+     * while computing the checkout projection; the caller can
+     * re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutResponseError")
     final class ServerError implements SmaxGetSMBMeteredMessagingCheckoutResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code in the {@code 5xx}
+         * range.
          */
         private final int errorCode;
 
@@ -1067,9 +1378,13 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
         /**
          * Constructs a new server-error reply.
          *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code 5xx}
+         * envelope has been validated.
+         *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may
+         *                  be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -1099,6 +1414,13 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
          * Tries to parse a {@link ServerError} variant from the
          * given inbound stanza.
          *
+         * @implNote
+         * This implementation delegates the {@code 5xx} range
+         * check to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
+         * any stanza outside the {@code 5xx} range yields
+         * {@link Optional#empty()}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant,
@@ -1113,6 +1435,9 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -1125,11 +1450,17 @@ public sealed interface SmaxGetSMBMeteredMessagingCheckoutResponse extends SmaxO
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxGetSMBMeteredMessagingCheckoutResponse.ServerError[errorCode=" + errorCode

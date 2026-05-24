@@ -4,6 +4,7 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
@@ -12,10 +13,9 @@ import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodB
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.CustomPaymentMethodsMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +27,6 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Tests for {@link CustomPaymentMethodsHandler}, Cobalt's adapter for
@@ -50,8 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *   <li>Default conflict resolution.</li>
  *   <li>Default batch dispatch.</li>
  *   <li>{@code getCustomPaymentMethodSetMutation} builder.</li>
- *   <li>Malformed index (n/a — handler does not parse indexParts).</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
+ *   <li>Malformed index (n/a - handler does not parse indexParts).</li>
  * </ul>
  */
 @DisplayName("CustomPaymentMethodsHandler")
@@ -123,7 +121,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() is custom_payment_methods")
@@ -149,7 +147,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — platform gating")
+    @DisplayName("applyMutation - platform gating")
     class PlatformGating {
         @Test
         @DisplayName("default WEB platform short-circuits to UNSUPPORTED")
@@ -187,7 +185,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — AB-prop gate")
+    @DisplayName("applyMutation - AB-prop gate")
     class AbPropGating {
         @Test
         @DisplayName("disabled payments_br_pix_phase_1_seller_sync_enabled AB prop returns UNSUPPORTED")
@@ -203,7 +201,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — non-SET operation")
+    @DisplayName("applyMutation - non-SET operation")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation past the gates is UNSUPPORTED")
@@ -222,7 +220,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("missing customPaymentMethodsAction sub-message is MALFORMED")
@@ -236,7 +234,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET path")
+    @DisplayName("applyMutation - happy SET path")
     class HappySet {
         @Test
         @DisplayName("SET stores the payment-method list and reports SUCCESS")
@@ -272,7 +270,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index (n/a)")
+    @DisplayName("applyMutation - malformed index (n/a)")
     class MalformedIndex {
         @Test
         @DisplayName("the handler does not parse indexParts beyond position 0, so index malformations are not exercised")
@@ -292,7 +290,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -306,13 +304,13 @@ class CustomPaymentMethodsHandlerTest {
                     .build();
             var remote = new DecryptedMutation.Trusted("[\"custom_payment_methods\"]", remoteValue,
                     SyncdOperation.SET, remoteTs, 7);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — default per-item dispatch (n/a override)")
+    @DisplayName("applyMutationBatch - default per-item dispatch (n/a override)")
     class BatchDispatch {
         @Test
         @DisplayName("the handler does not override applyMutationBatch")
@@ -329,7 +327,7 @@ class CustomPaymentMethodsHandlerTest {
     }
 
     @Nested
-    @DisplayName("getCustomPaymentMethodSetMutation — pending mutation builder")
+    @DisplayName("getCustomPaymentMethodSetMutation - pending mutation builder")
     class Builder {
         @Test
         @DisplayName("builder emits a SET pending mutation at [\"custom_payment_methods\"]")
@@ -355,17 +353,4 @@ class CustomPaymentMethodsHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/custom-payment-methods/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/custom-payment-methods/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

@@ -17,26 +17,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * anchored to {@code <message>} stanzas captured from a live WhatsApp Web
  * session and committed under {@code fixtures/message/send/}.
  *
- * <p>Each test:
- * <ol>
- *   <li>Loads a captured {@code <message>} node from a {@code .jsonl}
- *       fixture via {@link MessageFixtures#loadEvents(String)} +
- *       {@link MessageFixtures#buildNodeFromEvent}.</li>
- *   <li>Asserts the wire invariants WA Web emitted: outer attribute set,
- *       child topology (single-{@code <enc>} vs {@code <participants>}),
- *       per-participant {@code <enc>} version + type, addressing-mode
- *       projection.</li>
- * </ol>
+ * @apiNote
+ * Each test loads one captured {@code <message>} from a {@code .jsonl}
+ * fixture via {@link MessageFixtures#loadEvents(String)} plus
+ * {@link MessageFixtures#buildNodeFromEvent}, then asserts the wire
+ * invariants WA Web emits: outer attribute set, child topology
+ * (single-{@code <enc>} vs {@code <participants>}), per-participant
+ * {@code <enc>} version and type, and the addressing-mode projection.
+ * Cross-references {@link ChatFanoutStanza}; if the captured shape
+ * drifts, regenerate the corpus via
+ * {@code src/test/resources/fixtures/message/generate.mjs}.
  *
- * <p>These invariants are what Cobalt's {@link ChatFanoutStanza} must
- * reproduce; if the captured shape ever drifts, regenerate the corpus via
- * {@code tools/web/mcp-server/scripts/capture-message-corpus.mjs}.
+ * @implNote
+ * This implementation skips each test when its topic fixture is not
+ * available locally; the {@link #loadMessageStanza(String)} helper
+ * centralises the load+rebuild sequence for the single-message topics.
  */
 @DisplayName("ChatFanoutStanza live wire oracle")
 class ChatFanoutLiveOracleTest {
 
+    /**
+     * Peer LID send: outer {@code <message>} carries
+     * {@code peer_recipient_pn} and every participant is LID-form;
+     * pre-fix the server rejected PN-form participants with error 479.
+     */
     @Test
-    @DisplayName("479 oracle: 1:1 peer LID send — every participant <to jid=…> is @lid")
+    @DisplayName("479 oracle: 1:1 peer LID send - every participant <to jid=...> is @lid")
     void peerTextAllParticipantsAreLid() {
         var topic = "send/peer-text";
         if (!MessageFixtures.isAvailable(topic)) return;
@@ -47,7 +53,7 @@ class ChatFanoutLiveOracleTest {
                 "peer-text fixture must carry type=text");
         var to = message.getAttributeAsString("to").orElseThrow();
         assertTrue(to.endsWith("@lid"),
-                "peer LID send: outer <message to=…> must be LID, got " + to);
+                "peer LID send: outer <message to=...> must be LID, got " + to);
         assertTrue(message.getAttributeAsString("peer_recipient_pn").isPresent(),
                 "peer LID send must carry peer_recipient_pn for the legacy device");
 
@@ -57,25 +63,28 @@ class ChatFanoutLiveOracleTest {
         assertTrue(tos.size() >= 2,
                 "1:1 send fans out across companion devices, expected >=2 participants, got " + tos.size());
 
-        // The 479 regression guard: every participant <to jid=…> must be LID-form.
         for (var participantTo : tos) {
             var jid = participantTo.getAttributeAsString("jid").orElseThrow();
             assertTrue(jid.endsWith("@lid"),
-                    "participant <to jid=…> must be @lid (479 guard), got " + jid);
+                    "participant <to jid=...> must be @lid (479 guard), got " + jid);
             assertFalse(jid.endsWith("@s.whatsapp.net"),
-                    "participant <to jid=…> must NOT be @s.whatsapp.net when outer is LID: " + jid);
+                    "participant <to jid=...> must NOT be @s.whatsapp.net when outer is LID: " + jid);
             var enc = participantTo.getChild("enc").orElseThrow();
             assertEquals("2", enc.getAttributeAsString("v").orElseThrow(),
                     "<enc> must carry CIPHERTEXT_VERSION v=2");
             var encType = enc.getAttributeAsString("type").orElseThrow();
             assertTrue(List.of("pkmsg", "msg").contains(encType),
-                    "<enc type=…> must be pkmsg or msg for 1:1 send, got " + encType);
+                    "<enc type=...> must be pkmsg or msg for 1:1 send, got " + encType);
         }
 
         assertTrue(message.getChild("device-identity").isPresent(),
                 "PKMSG-bearing fanout must include <device-identity>");
     }
 
+    /**
+     * Peer reactions wire-type as {@code "reaction"} and inherit the 1:1
+     * fanout topology.
+     */
     @Test
     @DisplayName("peer reaction: <message type=\"reaction\"> with same fanout shape")
     void peerReactionShape() {
@@ -85,20 +94,23 @@ class ChatFanoutLiveOracleTest {
 
         assertEquals("reaction", message.getAttributeAsString("type").orElseThrow(),
                 "reaction fixture must carry type=reaction");
-        // Reactions inherit the 1:1 fanout shape.
         assertTrue(message.getChild("participants").isPresent()
                         || message.getChild("enc").isPresent(),
                 "reaction must have either <participants> or a bare <enc>");
     }
 
+    /**
+     * The edit/revoke capture contains three outgoing {@code <message>}
+     * stanzas to the same peer: the initial send (no edit attr), the
+     * edit ({@code edit=1}), and the revoke ({@code edit=7}). Every send
+     * in the flow must still satisfy the 479 LID-participant invariant.
+     */
     @Test
     @DisplayName("peer edit + revoke: capture contains initial send + edit (edit=1) + revoke (edit=7)")
     void peerEditRevokeShape() {
         var topic = "send/peer-edit-revoke";
         if (!MessageFixtures.isAvailable(topic)) return;
 
-        // Capture window may pick up unrelated outgoing messages addressed to
-        // other chats. The flow we care about goes to the locked peer LID.
         var peerLid = "83116928594056@lid";
         var flowMessages = MessageFixtures.loadEvents(topic).stream()
                 .filter(e -> "out".equals(e.getString("direction")))
@@ -114,7 +126,6 @@ class ChatFanoutLiveOracleTest {
                 .map(n -> n.getAttributeAsString("edit").orElse(null))
                 .toList();
 
-        // Initial send: no edit attr. Edit: edit=1. Revoke: edit=7 (peer revoke).
         assertTrue(editValues.contains("1"),
                 "edit fanout must include a <message edit=\"1\"> stanza; got " + editValues);
         assertTrue(editValues.contains("7"),
@@ -122,7 +133,6 @@ class ChatFanoutLiveOracleTest {
         assertTrue(editValues.contains(null),
                 "initial send must NOT carry edit attribute; got " + editValues);
 
-        // 479 invariant must hold for every send in the flow.
         for (var msg : flowMessages) {
             assertTrue(msg.getChild("participants").isPresent(),
                     "multi-device fanout wraps <enc> in <participants> for every send/edit/revoke");
@@ -130,11 +140,16 @@ class ChatFanoutLiveOracleTest {
             for (var to : participants.streamChildren("to").toList()) {
                 var jid = to.getAttributeAsString("jid").orElseThrow();
                 assertTrue(jid.endsWith("@lid"),
-                        "479 invariant: every participant <to jid=…> must be @lid for LID chat, got " + jid);
+                        "479 invariant: every participant <to jid=...> must be @lid for LID chat, got " + jid);
             }
         }
     }
 
+    /**
+     * Location sends wire-type as {@code "media"} and at least one
+     * participant {@code <enc>} carries
+     * {@code mediatype="location"}.
+     */
     @Test
     @DisplayName("location send: <message type=\"media\"> with <enc mediatype=\"location\">")
     void locationShape() {
@@ -153,6 +168,10 @@ class ChatFanoutLiveOracleTest {
                 "at least one <enc mediatype=\"location\"> required, got " + encsWithLocation);
     }
 
+    /**
+     * Group-invite-link sends are wire-type {@code "text"} (the URL
+     * itself is the body) and fan out under {@code <participants>}.
+     */
     @Test
     @DisplayName("group invite link send: outgoing text <message> with participants")
     void groupInviteLinkShape() {
@@ -166,6 +185,10 @@ class ChatFanoutLiveOracleTest {
                 "1:1 send must wrap <enc> in <participants>");
     }
 
+    /**
+     * Bot text sends carry an outer {@code @bot} chat JID and at least
+     * one participant {@code <to jid="...@bot">}.
+     */
     @Test
     @DisplayName("bot text (MSMSG): participants include @bot device with <enc type=pkmsg>")
     void botTextShape() {
@@ -180,9 +203,13 @@ class ChatFanoutLiveOracleTest {
         var participants = message.getChild("participants").orElseThrow();
         var hasBotParticipant = participants.streamChildren("to")
                 .anyMatch(t -> t.getAttributeAsString("jid").orElse("").endsWith("@bot"));
-        assertTrue(hasBotParticipant, "bot fanout must include a <to jid=…@bot> participant");
+        assertTrue(hasBotParticipant, "bot fanout must include a <to jid=...@bot> participant");
     }
 
+    /**
+     * Hosted business sends route as LID with a
+     * {@code peer_recipient_pn} fallback for legacy-routing.
+     */
     @Test
     @DisplayName("hosted business send: participants list with @lid devices, includes peer_recipient_pn")
     void hostedBizShape() {
@@ -201,11 +228,14 @@ class ChatFanoutLiveOracleTest {
         var to = message.getAttributeAsString("to").orElseThrow();
         assertTrue(to.endsWith("@lid"),
                 "hosted business send: outer to must be @lid, got " + to);
-        // Hosted business sends carry the peer's PN for legacy-routing fallback.
         assertTrue(message.getAttributeAsString("peer_recipient_pn").isPresent(),
                 "hosted business send: peer_recipient_pn must be present");
     }
 
+    /**
+     * Every captured peer fanout carries the {@code <device-identity>}
+     * sibling WA Web emits for PKMSG-bearing sends.
+     */
     @Test
     @DisplayName("every captured peer fanout has the auxiliary nodes WA Web emits (device-identity)")
     void peerFanoutCarriesDeviceIdentity() {
@@ -226,11 +256,13 @@ class ChatFanoutLiveOracleTest {
     }
 
     /**
-     * Loads the first outgoing {@code <message>} from the topic and rebuilds
-     * it as a Cobalt {@link Node}. Asserts that exactly one such event is
-     * present in capture order — sufficient for fixtures where only one
-     * stanza is dispatched per topic (peer-text, peer-reaction, location,
-     * etc.).
+     * Loads the first outgoing {@code <message>} from the topic and
+     * rebuilds it as a Cobalt {@link Node}.
+     *
+     * @apiNote
+     * Helper for single-message topics (peer-text, peer-reaction,
+     * location, etc.); the multi-message edit/revoke topic loads its own
+     * stream inline.
      *
      * @param topic the fixture topic
      * @return the rebuilt outgoing {@code <message>} node

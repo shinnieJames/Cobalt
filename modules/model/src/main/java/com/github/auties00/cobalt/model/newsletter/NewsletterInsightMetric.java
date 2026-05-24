@@ -38,17 +38,37 @@ public final class NewsletterInsightMetric {
     List<Value> values;
 
     /**
+     * The instant the insights aggregation that produced this metric was
+     * last refreshed; older instants indicate the figures may be stale.
+     */
+    @ProtobufProperty(index = 3, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
+    Instant lastUpdateTime;
+
+    /**
+     * The freshness status label reported alongside this metric (for
+     * example a token signalling whether the figures are up to date or
+     * still being computed).
+     */
+    @ProtobufProperty(index = 4, type = ProtobufType.STRING)
+    String metricsStatus;
+
+    /**
      * Constructs a new {@code NewsletterInsightMetric}. Invoked by the
      * generated protobuf deserializer and by the converters that adapt
      * wire responses into the domain model.
      *
-     * @param identifier the metric identifier, may be {@code null}
-     * @param values     the values; defaulted to an empty list when
-     *                   {@code null}
+     * @param identifier     the metric identifier, may be {@code null}
+     * @param values         the values; defaulted to an empty list when
+     *                       {@code null}
+     * @param lastUpdateTime the last-refresh instant, may be {@code null}
+     * @param metricsStatus  the freshness status label, may be
+     *                       {@code null}
      */
-    NewsletterInsightMetric(String identifier, List<Value> values) {
+    NewsletterInsightMetric(String identifier, List<Value> values, Instant lastUpdateTime, String metricsStatus) {
         this.identifier = identifier;
         this.values = values == null ? List.of() : List.copyOf(values);
+        this.lastUpdateTime = lastUpdateTime;
+        this.metricsStatus = metricsStatus;
     }
 
     /**
@@ -71,6 +91,27 @@ public final class NewsletterInsightMetric {
     }
 
     /**
+     * Returns the instant the insights aggregation behind this metric was
+     * last refreshed.
+     *
+     * @return an {@link Optional} carrying the last-refresh instant, or
+     *         empty when not reported
+     */
+    public Optional<Instant> lastUpdateTime() {
+        return Optional.ofNullable(lastUpdateTime);
+    }
+
+    /**
+     * Returns the freshness status label reported alongside this metric.
+     *
+     * @return an {@link Optional} carrying the status label, or empty when
+     *         not reported
+     */
+    public Optional<String> metricsStatus() {
+        return Optional.ofNullable(metricsStatus);
+    }
+
+    /**
      * Returns whether this metric equals the supplied object.
      *
      * @param o the object to compare against
@@ -81,7 +122,9 @@ public final class NewsletterInsightMetric {
     public boolean equals(Object o) {
         return o == this || o instanceof NewsletterInsightMetric that
                 && Objects.equals(identifier, that.identifier)
-                && Objects.equals(values, that.values);
+                && Objects.equals(values, that.values)
+                && Objects.equals(lastUpdateTime, that.lastUpdateTime)
+                && Objects.equals(metricsStatus, that.metricsStatus);
     }
 
     /**
@@ -91,7 +134,7 @@ public final class NewsletterInsightMetric {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(identifier, values);
+        return Objects.hash(identifier, values, lastUpdateTime, metricsStatus);
     }
 
     /**
@@ -102,7 +145,9 @@ public final class NewsletterInsightMetric {
     @Override
     public String toString() {
         return "NewsletterInsightMetric[identifier=" + identifier +
-                ", values=" + values.size() + ']';
+                ", values=" + values.size() +
+                ", lastUpdateTime=" + lastUpdateTime +
+                ", metricsStatus=" + metricsStatus + ']';
     }
 
     /**

@@ -13,70 +13,71 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:biz" type="set">} stanza that mutates
- * the current merchant's business profile. Each non-{@code null} field
- * becomes one child of the {@code <business_profile/>} delta payload, so
- * callers can patch any subset of address, geo coordinates, description,
- * email, websites, categories, business hours, price tier or service
- * areas in a single round-trip.
+ * The typed outbound {@code <iq xmlns="w:biz" type="set">} stanza that mutates the current merchant's business profile.
+ *
+ * @apiNote
+ * Use this request from the SMB profile editor to patch any subset of the merchant's profile fields in a single round-trip; each non-{@code null} field is sent as one child of the {@code <business_profile/>} delta envelope, so callers can patch the address, the geo coordinates, the description, the email, the website slots, the category list, the business hours, the price tier or the service-area list without touching the other fields. Use {@link #builder()} for a fluent alternative when only a small subset of fields applies.
+ *
+ * @implNote
+ * This implementation matches {@code WAWebBusinessProfileJob.editBusinessProfile} which sends a {@code mutation_type="delta"} envelope: passing an empty website list clears all website slots, passing a {@code null} value for any field leaves the relay's cached value untouched, and the per-row payload mirrors the canonical wire shape produced by the WA Web profile editor.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     /**
-     * The optional address line.
+     * The optional address line emitted as the {@code <address/>} child content.
      */
     private final String address;
 
     /**
-     * The optional latitude.
+     * The optional latitude emitted as the {@code <latitude/>} child content.
      */
     private final Double latitude;
 
     /**
-     * The optional longitude.
+     * The optional longitude emitted as the {@code <longitude/>} child content.
      */
     private final Double longitude;
 
     /**
-     * The optional self-description.
+     * The optional self-description emitted as the {@code <description/>} child content.
      */
     private final String description;
 
     /**
-     * The optional contact email.
+     * The optional contact email emitted as the {@code <email/>} child content.
      */
     private final String email;
 
     /**
-     * The optional list of website slots — empty list clears all
-     * slots; non-null overrides whatever the relay had cached.
+     * The optional list of website slots; an empty list clears all slots and a non-{@code null} value overrides whatever the relay had cached.
      */
     private final List<IqEditBusinessProfileWebsite> websites;
 
     /**
-     * The optional list of category ids.
+     * The optional list of business-category identifiers emitted as {@code <categories><category id/></categories>} children.
      */
     private final List<String> categories;
 
     /**
-     * The optional business-hours payload.
+     * The optional business-hours payload emitted as the {@code <business_hours/>} child.
      */
     private final IqEditBusinessProfileBusinessHours businessHours;
 
     /**
-     * The optional price-tier id — non-null triggers the
-     * {@code <price_tier/>} child.
+     * The optional price-tier identifier; a non-{@code null} value triggers the {@code <price_tier/>} child.
      */
     private final String priceTierId;
 
     /**
-     * The optional list of service-area entries.
+     * The optional list of service-area entries emitted as the {@code <service_areas/>} child.
      */
     private final List<IqEditBusinessProfileServiceArea> serviceAreas;
 
     /**
-     * Constructs a request directly. Use {@link #builder()} for a
-     * fluent alternative.
+     * Constructs a typed request directly.
+     *
+     * @apiNote
+     * Call this constructor when every field is already in hand; pass {@code null} for any field that should keep the relay's cached value unchanged. Use {@link #builder()} for a fluent alternative when only a small subset of fields applies.
      *
      * @param address       see {@link #address()}
      * @param latitude      see {@link #latitude()}
@@ -112,7 +113,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the address.
+     * Returns the address line.
+     *
+     * @apiNote
+     * Use this getter to read back the address that the edit-profile mutation will stamp; the value is absent when the caller did not patch the address field.
      *
      * @return an {@link Optional} carrying the address
      */
@@ -123,6 +127,9 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     /**
      * Returns the latitude.
      *
+     * @apiNote
+     * Use this getter to read back the geo latitude that the edit-profile mutation will stamp; the value is absent when the caller did not patch the geo coordinates.
+     *
      * @return an {@link Optional} carrying the latitude
      */
     public Optional<Double> latitude() {
@@ -132,6 +139,9 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     /**
      * Returns the longitude.
      *
+     * @apiNote
+     * Use this getter to read back the geo longitude that the edit-profile mutation will stamp; the value is absent when the caller did not patch the geo coordinates.
+     *
      * @return an {@link Optional} carrying the longitude
      */
     public Optional<Double> longitude() {
@@ -139,7 +149,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the description.
+     * Returns the self-description.
+     *
+     * @apiNote
+     * Use this getter to read back the description that the edit-profile mutation will stamp; the value is absent when the caller did not patch the description.
      *
      * @return an {@link Optional} carrying the description
      */
@@ -148,7 +161,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the email.
+     * Returns the contact email.
+     *
+     * @apiNote
+     * Use this getter to read back the email that the edit-profile mutation will stamp; the value is absent when the caller did not patch the email.
      *
      * @return an {@link Optional} carrying the email
      */
@@ -157,7 +173,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the website slots.
+     * Returns the website slot list.
+     *
+     * @apiNote
+     * Use this getter to read back the website slot list; the value is absent when the caller did not patch the websites field. An empty list clears all slots; a non-empty list with one or two entries overrides the cached slots.
      *
      * @return an {@link Optional} carrying the list
      */
@@ -166,7 +185,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the category id list.
+     * Returns the business-category identifier list.
+     *
+     * @apiNote
+     * Use this getter to read back the category id list that the edit-profile mutation will stamp; each entry refers to a category from the WA Web {@code profile_typeahead} catalog.
      *
      * @return an {@link Optional} carrying the list
      */
@@ -177,6 +199,9 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     /**
      * Returns the business-hours payload.
      *
+     * @apiNote
+     * Use this getter to read back the schedule payload that the edit-profile mutation will stamp; the value is absent when the caller did not patch the schedule.
+     *
      * @return an {@link Optional} carrying the payload
      */
     public Optional<IqEditBusinessProfileBusinessHours> businessHours() {
@@ -184,9 +209,12 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the price-tier id.
+     * Returns the price-tier identifier.
      *
-     * @return an {@link Optional} carrying the id
+     * @apiNote
+     * Use this getter to read back the tier id that the edit-profile mutation will stamp; the value is absent when the caller did not patch the price tier.
+     *
+     * @return an {@link Optional} carrying the identifier
      */
     public Optional<String> priceTierId() {
         return Optional.ofNullable(priceTierId);
@@ -195,6 +223,9 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     /**
      * Returns the service-area list.
      *
+     * @apiNote
+     * Use this getter to read back the service-area list that the edit-profile mutation will stamp; the value is absent when the caller did not patch the service areas.
+     *
      * @return an {@link Optional} carrying the list
      */
     public Optional<List<IqEditBusinessProfileServiceArea>> serviceAreas() {
@@ -202,7 +233,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns a fresh builder.
+     * Returns a fresh {@link Builder}.
+     *
+     * @apiNote
+     * Use this entry to build a request fluently when only a small subset of the profile fields applies; the builder starts empty and every setter accepts {@code null} to leave the cached value untouched.
      *
      * @return a new {@link Builder}; never {@code null}
      */
@@ -211,9 +245,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by {@code WAWebBusinessProfileJob.editBusinessProfile}: the {@code <business_profile v="3" mutation_type="delta"/>} wrapper carries one child per non-{@code null} field, the website slots collapse into one or two {@code <website/>} children (an empty list emits a single empty {@code <website/>} sentinel that clears all slots), and the price tier emits a {@code <price_tier id symbol/>} with empty symbol because the description is not rendered through this stanza.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob",
@@ -323,10 +358,15 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the {@code <business_hours/>} child from the supplied
-     * payload.
+     * Builds the {@code <business_hours/>} child from the supplied payload.
      *
-     * @param hours the payload; never {@code null}
+     * @apiNote
+     * Used internally by {@link #toNode()} when the caller patches the business-hours field; folds the typed schedule rows into the canonical wire shape.
+     *
+     * @implNote
+     * This implementation emits one {@code <business_hours_config/>} child per schedule row and drops the {@code timezone} attribute when the payload does not stamp one; the optional note is emitted as the first child of the envelope when present and non-empty.
+     *
+     * @param hours the typed payload; never {@code null}
      * @return the built node; never {@code null}
      */
     private static Node buildBusinessHoursNode(IqEditBusinessProfileBusinessHours hours) {
@@ -361,67 +401,76 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
     }
 
     /**
-     * Fluent builder for {@link IqEditBusinessProfileRequest}.
+     * The fluent builder for {@link IqEditBusinessProfileRequest}.
+     *
+     * @apiNote
+     * Use this builder to assemble a typed request when only a small subset of the profile fields applies; every setter accepts {@code null} to leave the cached relay value untouched, and {@link #build()} produces the immutable request.
      */
     public static final class Builder {
         /**
-         * The optional address.
+         * The optional address staged for the next {@link #build()}.
          */
         private String address;
 
         /**
-         * The optional latitude.
+         * The optional latitude staged for the next {@link #build()}.
          */
         private Double latitude;
 
         /**
-         * The optional longitude.
+         * The optional longitude staged for the next {@link #build()}.
          */
         private Double longitude;
 
         /**
-         * The optional description.
+         * The optional description staged for the next {@link #build()}.
          */
         private String description;
 
         /**
-         * The optional email.
+         * The optional contact email staged for the next {@link #build()}.
          */
         private String email;
 
         /**
-         * The optional website slots.
+         * The optional website slot list staged for the next {@link #build()}.
          */
         private List<IqEditBusinessProfileWebsite> websites;
 
         /**
-         * The optional category id list.
+         * The optional business-category identifier list staged for the next {@link #build()}.
          */
         private List<String> categories;
 
         /**
-         * The optional business-hours payload.
+         * The optional business-hours payload staged for the next {@link #build()}.
          */
         private IqEditBusinessProfileBusinessHours businessHours;
 
         /**
-         * The optional price-tier id.
+         * The optional price-tier identifier staged for the next {@link #build()}.
          */
         private String priceTierId;
 
         /**
-         * The optional service-area list.
+         * The optional service-area list staged for the next {@link #build()}.
          */
         private List<IqEditBusinessProfileServiceArea> serviceAreas;
 
         /**
-         * Package-private — use {@link IqEditBusinessProfileRequest#builder()}.
+         * Constructs an empty builder.
+         *
+         * @apiNote
+         * Package-private constructor; call {@link IqEditBusinessProfileRequest#builder()} to obtain a builder instance.
          */
         Builder() {
         }
 
         /**
-         * Sets the address.
+         * Stages the address.
+         *
+         * @apiNote
+         * Use this setter to patch the address field of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param address the address; may be {@code null}
          * @return this builder; never {@code null}
@@ -432,7 +481,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the latitude.
+         * Stages the latitude.
+         *
+         * @apiNote
+         * Use this setter to patch the geo latitude of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param latitude the latitude; may be {@code null}
          * @return this builder; never {@code null}
@@ -443,7 +495,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the longitude.
+         * Stages the longitude.
+         *
+         * @apiNote
+         * Use this setter to patch the geo longitude of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param longitude the longitude; may be {@code null}
          * @return this builder; never {@code null}
@@ -454,7 +509,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the description.
+         * Stages the self-description.
+         *
+         * @apiNote
+         * Use this setter to patch the description field of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param description the description; may be {@code null}
          * @return this builder; never {@code null}
@@ -465,7 +523,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the email.
+         * Stages the contact email.
+         *
+         * @apiNote
+         * Use this setter to patch the contact email of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param email the email; may be {@code null}
          * @return this builder; never {@code null}
@@ -476,7 +537,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the website slot list.
+         * Stages the website slot list.
+         *
+         * @apiNote
+         * Use this setter to patch the website slots of the profile; pass an empty list to clear all slots, a list of one or two entries to override the slots, or {@code null} to leave the cached value untouched.
          *
          * @param websites the websites; may be {@code null}
          * @return this builder; never {@code null}
@@ -487,7 +551,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the category id list.
+         * Stages the business-category identifier list.
+         *
+         * @apiNote
+         * Use this setter to patch the categories of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param categories the categories; may be {@code null}
          * @return this builder; never {@code null}
@@ -498,7 +565,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the business-hours payload.
+         * Stages the business-hours payload.
+         *
+         * @apiNote
+         * Use this setter to patch the business-hours schedule of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param businessHours the payload; may be {@code null}
          * @return this builder; never {@code null}
@@ -509,9 +579,12 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the price-tier id.
+         * Stages the price-tier identifier.
          *
-         * @param priceTierId the id; may be {@code null}
+         * @apiNote
+         * Use this setter to patch the price tier of the profile; pass {@code null} to leave the cached value untouched.
+         *
+         * @param priceTierId the identifier; may be {@code null}
          * @return this builder; never {@code null}
          */
         public Builder priceTierId(String priceTierId) {
@@ -520,7 +593,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Sets the service-area list.
+         * Stages the service-area list.
+         *
+         * @apiNote
+         * Use this setter to patch the service areas of the profile; pass {@code null} to leave the cached value untouched.
          *
          * @param serviceAreas the areas; may be {@code null}
          * @return this builder; never {@code null}
@@ -531,7 +607,10 @@ public final class IqEditBusinessProfileRequest implements IqOperation.Request {
         }
 
         /**
-         * Builds a new {@link IqEditBusinessProfileRequest}.
+         * Builds the typed request.
+         *
+         * @apiNote
+         * Call this entry once every desired field has been staged through the setters; the returned request is immutable and ready to be dispatched.
          *
          * @return the built request; never {@code null}
          */

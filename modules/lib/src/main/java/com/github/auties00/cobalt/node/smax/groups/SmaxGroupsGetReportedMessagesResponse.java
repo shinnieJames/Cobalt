@@ -15,19 +15,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The sealed reply family for a {@link SmaxGroupsGetReportedMessagesRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's {@code Success}/{@code ClientError}/{@code ServerError}
+ * cases: {@link Success} carries the per-message {@link Report} rows that drive the admin moderation drawer, the two
+ * error variants surface the relay's reason codes. The {@code WAWebReportToAdminJob.getReportedMsgs} caller in WA Web
+ * uses the same dispatch shape and additionally folds the LID-to-PN mappings into
+ * {@code WAWebDBCreateLidPnMappings.createLidPnMappings}.
  */
 public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperation.Response
         permits SmaxGroupsGetReportedMessagesResponse.Success, SmaxGroupsGetReportedMessagesResponse.ClientError, SmaxGroupsGetReportedMessagesResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsGetReportedMessagesResponse} variant in priority order.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsGetReportedMessagesResponse} variant in priority order and
+     * returns the first that parses cleanly.
+     *
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsGetReportedMessagesRPC}:
+     * {@link Success} first, then {@link ClientError}, then {@link ServerError}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the three documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
      * @param request the original outbound request
-     * @return an {@link Optional} carrying the parsed variant
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsGetReportedMessagesRPC",
             exports = "sendGetReportedMessagesRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -46,23 +59,25 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * The {@code Success} reply variant — carries the list of
-     * pending {@link Report} entries.
+     * The reply variant emitted when the relay returned the pending moderation queue.
+     *
+     * @apiNote Surfaces as the {@code GetReportedMessagesResponseSuccess} case in {@code WAWebReportToAdminJob};
+     * each {@link Report} entry is keyed by the reported message id and the admin moderation drawer renders the
+     * matching reporter list.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsGetReportedMessagesResponse {
         /**
-         * The list of reported-message entries.
+         * The per-message report rows.
          */
         private final List<Report> reports;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success} reply.
          *
-         * @param reports the per-report entries; never {@code null}
-         * @throws NullPointerException if {@code reports} is
-         *                              {@code null}
+         * @param reports the per-message report rows; never {@code null}
+         * @throws NullPointerException if {@code reports} is {@code null}
          */
         public Success(List<Report> reports) {
             Objects.requireNonNull(reports, "reports cannot be null");
@@ -70,20 +85,23 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the per-report entries.
+         * Returns the per-message report rows.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable list of {@link Report}; never {@code null}
          */
         public List<Report> reports() {
             return reports;
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxIqResultResponseMixin#validate(Node, Node)} for envelope validation, then
+         * matches the {@code <reports>} wrapper holding zero or more {@code <report/>} entries.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetReportedMessagesResponseSuccess",
                 exports = "parseGetReportedMessagesResponseSuccess",
@@ -108,6 +126,12 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Optional.of(new Success(reports));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -120,11 +144,21 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Objects.equals(this.reports, that.reports);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(reports);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetReportedMessagesResponse.Success[reports=" + reports + ']';
@@ -132,32 +166,30 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * Per-report projection — carries the reported message stanza
-     * id alongside the list of reporters.
+     * Per-report projection carrying the reported message id and the non-empty reporter list.
+     *
+     * @apiNote Mirrors the {@code <report/>} child shape; the {@link #messageId()} corresponds to the stanza id of the
+     * original group message and the {@link #reporters()} list is guaranteed non-empty because the relay omits the
+     * row entirely when no reporters remain.
      */
     final class Report {
         /**
-         * The stanza-id of the reported group message.
+         * The stanza id of the reported group message.
          */
         private final String messageId;
 
         /**
-         * The reporters who filed reports against the message.
+         * The reporters who flagged the message.
          */
         private final List<Reporter> reporters;
 
         /**
-         * Constructs a report entry.
+         * Constructs a {@link Report} entry.
          *
-         * @param messageId the reported message stanza id; never
-         *                  {@code null}
-         * @param reporters the reporter list; never {@code null}
-         *                  and never empty
-         * @throws NullPointerException     if {@code messageId} or
-         *                                  {@code reporters} is
-         *                                  {@code null}
-         * @throws IllegalArgumentException if {@code reporters} is
-         *                                  empty
+         * @param messageId the reported message stanza id; never {@code null}
+         * @param reporters the reporter list; never {@code null} and never empty
+         * @throws NullPointerException     if {@code messageId} or {@code reporters} is {@code null}
+         * @throws IllegalArgumentException if {@code reporters} is empty
          */
         public Report(String messageId, List<Reporter> reporters) {
             this.messageId = Objects.requireNonNull(messageId, "messageId cannot be null");
@@ -171,7 +203,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         /**
          * Returns the reported message stanza id.
          *
-         * @return the id; never {@code null}
+         * @return the message id; never {@code null}
          */
         public String messageId() {
             return messageId;
@@ -180,20 +212,20 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         /**
          * Returns the reporter list.
          *
-         * @return an unmodifiable list of reporters; never empty
+         * @return an unmodifiable list of {@link Reporter}; never empty
          */
         public List<Reporter> reporters() {
             return reporters;
         }
 
         /**
-         * Tries to parse a {@link Report} from a {@code <report>}
-         * child.
+         * Tries to parse a {@link Report} from the given {@code <report/>} child.
          *
-         * @param node the {@code <report>} child node
-         * @return an {@link Optional} carrying the parsed report,
-         *         or empty when the child does not match the
-         *         schema
+         * @apiNote Matches when the child carries the {@code message_id} attribute and at least one
+         * {@code <reporter/>} grandchild; the relay never emits an empty report row.
+         *
+         * @param node the {@code <report/>} child node
+         * @return an {@link Optional} carrying the parsed report, or empty when the child does not match
          */
         public static Optional<Report> of(Node node) {
             Objects.requireNonNull(node, "node cannot be null");
@@ -219,6 +251,12 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Optional.of(new Report(messageId, reporters));
         }
 
+        /**
+         * Compares this report to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Report} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -232,11 +270,21 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
                     && Objects.equals(this.reporters, that.reporters);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(messageId, reporters);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetReportedMessagesResponse.Report[messageId=" + messageId
@@ -245,30 +293,31 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * Per-reporter projection — carries the reporting user's JID
-     * alongside the unix-time timestamp the report was filed at.
+     * Per-reporter projection carrying the reporting user's JID and the unix-seconds timestamp at which the report
+     * was filed.
+     *
+     * @apiNote Mirrors the {@code IdentityMixin} shape; WA Web folds the LID-to-PN identity mapping carried alongside
+     * into {@code WAWebDBCreateLidPnMappings.createLidPnMappings} as a side effect.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsIdentityMixin")
     final class Reporter {
         /**
-         * The reporter's user JID.
+         * The reporter's user {@link Jid}.
          */
         private final Jid jid;
 
         /**
-         * The unix-time timestamp at which the report was filed.
+         * The unix-seconds timestamp at which the report was filed.
          */
         private final long timestamp;
 
         /**
-         * Constructs a reporter entry.
+         * Constructs a {@link Reporter} entry.
          *
-         * @param jid       the reporter's JID; never {@code null}
-         * @param timestamp the report timestamp
-         * @throws NullPointerException     if {@code jid} is
-         *                                  {@code null}
-         * @throws IllegalArgumentException if {@code timestamp} is
-         *                                  negative
+         * @param jid       the reporter's {@link Jid}; never {@code null}
+         * @param timestamp the unix-seconds timestamp
+         * @throws NullPointerException     if {@code jid} is {@code null}
+         * @throws IllegalArgumentException if {@code timestamp} is negative
          */
         public Reporter(Jid jid, long timestamp) {
             this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -279,9 +328,9 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the reporter's JID.
+         * Returns the reporter's {@link Jid}.
          *
-         * @return the JID; never {@code null}
+         * @return the reporter JID; never {@code null}
          */
         public Jid jid() {
             return jid;
@@ -290,20 +339,19 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         /**
          * Returns the report timestamp.
          *
-         * @return the timestamp in unix-seconds
+         * @return the unix-seconds timestamp
          */
         public long timestamp() {
             return timestamp;
         }
 
         /**
-         * Tries to parse a {@link Reporter} from a
-         * {@code <reporter>} child.
+         * Tries to parse a {@link Reporter} from the given {@code <reporter/>} child.
          *
-         * @param node the {@code <reporter>} child node
-         * @return an {@link Optional} carrying the parsed reporter,
-         *         or empty when the child does not match the
-         *         schema
+         * @apiNote Matches when the child carries the {@code jid} and {@code timestamp} attributes.
+         *
+         * @param node the {@code <reporter/>} child node
+         * @return an {@link Optional} carrying the parsed reporter, or empty when the child does not match
          */
         public static Optional<Reporter> of(Node node) {
             Objects.requireNonNull(node, "node cannot be null");
@@ -321,6 +369,12 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Optional.of(new Reporter(jid, timestampOptional.getAsLong()));
         }
 
+        /**
+         * Compares this reporter to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Reporter} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -334,11 +388,21 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
                     && Objects.equals(this.jid, that.jid);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(jid, timestamp);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetReportedMessagesResponse.Reporter[jid=" + jid
@@ -347,27 +411,28 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The reply variant emitted when the relay rejected the moderation-queue query as malformed or unauthorised.
+     *
+     * @apiNote Surfaces as the {@code GetReportedMessagesResponseClientError} case in {@code WAWebReportToAdminJob},
+     * which logs the {@link #errorCode()} as the HTTP-style status passed back to the admin moderation drawer.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseClientError")
     final class ClientError implements SmaxGroupsGetReportedMessagesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -375,7 +440,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -384,20 +449,23 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetReportedMessagesResponseClientError",
                 exports = "parseGetReportedMessagesResponseClientError",
@@ -410,6 +478,12 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -422,11 +496,21 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetReportedMessagesResponse.ClientError[errorCode=" + errorCode
@@ -435,27 +519,29 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The reply variant emitted on transient relay-side failure.
+     *
+     * @apiNote Surfaces as the {@code GetReportedMessagesResponseServerError} case in {@code WAWebReportToAdminJob},
+     * where it is logged at the same severity as {@link ClientError} but typically signals retry-eligible relay
+     * outages rather than caller error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetReportedMessagesResponseServerError")
     final class ServerError implements SmaxGroupsGetReportedMessagesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -463,7 +549,7 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -472,20 +558,23 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetReportedMessagesResponseServerError",
                 exports = "parseGetReportedMessagesResponseServerError",
@@ -498,6 +587,12 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -510,11 +605,21 @@ public sealed interface SmaxGroupsGetReportedMessagesResponse extends SmaxOperat
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsGetReportedMessagesResponse.ServerError[errorCode=" + errorCode

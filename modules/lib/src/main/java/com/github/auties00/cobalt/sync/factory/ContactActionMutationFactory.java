@@ -15,38 +15,61 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing contact-sync mutations.
+ * Builds outgoing app-state mutations that sync an addressbook contact to or from the primary device.
  *
- * <p>The factory is the outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the contact-editor flow that WA Web exposes through
+ * {@code WAWebContactEditSync}: adding, editing, or removing a contact in
+ * the Web UI emits a contact-sync mutation that the primary device replays
+ * against its native addressbook so the contact stays consistent across
+ * linked devices. The factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.ContactActionHandler}.
+ *
+ * @implNote
+ * This implementation uses {@link Jid#toString()} for the index segment.
+ * WA Web's {@code WAWebContactSync.getContactSyncMutation} calls
+ * {@code e.toString({legacy: true})} to produce a legacy
+ * {@code @c.us}-suffixed encoding; Cobalt normalises JIDs to a single
+ * canonical form upstream so the legacy form is not reproduced. Receive-side
+ * indexing in WA Web also accepts the canonical form, so the wire is
+ * compatible.
  */
 public final class ContactActionMutationFactory {
     /**
-     * Constructs a contact-action mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public ContactActionMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for syncing a contact to the server.
+     * Returns a SET or REMOVE mutation that syncs the given contact, timestamped at the moment of the call.
      *
-     * <p>For {@code SET} operations (when {@code isDelete} is {@code false}), the mutation
-     * includes the contact's full name, first name, LID JID, address book sync preference,
-     * and username. For {@code REMOVE} operations (when {@code isDelete} is {@code true}),
-     * only the operation type is set.
+     * @apiNote
+     * Production code path. Delegates to
+     * {@link #getContactSyncMutation(Jid, String, String, boolean, Jid, Boolean, String, Instant)}
+     * with {@link Instant#now()}; tests that need byte-equality against a
+     * captured WA Web oracle should call the eight-arg overload directly
+     * with a pinned timestamp.
      *
-     * <p>The contact JID is serialized in legacy format for the index, matching
-     * WhatsApp Web's use of {@code e.toString({legacy: true})}.
+     * @implNote
+     * This implementation forwards {@code null} for any optional field
+     * (first name, full name, LID, username); the builder writes them as
+     * absent on the wire so a deletion ({@code isDelete == true}) still
+     * carries a valid empty {@link ContactAction} body.
      *
-     * @param contactJid          the JID of the contact being synced
-     * @param firstName           the contact's first name, or {@code null}
-     * @param fullName            the contact's full name, or {@code null}
-     * @param isDelete            whether this is a delete (REMOVE) operation
-     * @param lid                 the contact's LID JID, or {@code null}
-     * @param syncToAddressbook   whether to sync to primary address book, or {@code null}
-     * @param username            the contact's username, or {@code null}
-     * @return the pending mutation ready for submission to the sync pipeline
+     * @param contactJid        the contact's primary {@link Jid} (PN form)
+     * @param firstName         the user's first name, or {@code null} when unset
+     * @param fullName          the user's full display name, or {@code null} when unset
+     * @param isDelete          {@code true} to emit a {@link SyncdOperation#REMOVE}, {@code false} for {@link SyncdOperation#SET}
+     * @param lid               the LID-form {@link Jid} for the same contact, or {@code null}
+     * @param syncToAddressbook whether the primary device must sync the contact to its native addressbook, or {@code null} to leave it unchanged
+     * @param username          the contact's WhatsApp username (without leading {@code @}), or {@code null}
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebContactSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getContactSyncMutation(
@@ -62,22 +85,29 @@ public final class ContactActionMutationFactory {
     }
 
     /**
-     * Overload accepting an explicit {@link Instant} for the mutation
-     * timestamp. The public seven-arg call delegates here with
-     * {@link Instant#now()} so production callers behave unchanged; the
-     * explicit overload exists so tests can pin a deterministic timestamp
-     * and assert byte-equality against a captured WA Web oracle.
+     * Returns a SET or REMOVE mutation that syncs the given contact at a caller-supplied timestamp.
      *
-     * @param contactJid          the JID of the contact
-     * @param firstName           the contact's first name, or {@code null}
-     * @param fullName            the contact's full name, or {@code null}
-     * @param isDelete            whether this is a REMOVE operation
-     * @param lid                 the contact's LID JID, or {@code null}
-     * @param syncToAddressbook   whether to sync to the primary address book
-     * @param username            the contact's username, or {@code null}
-     * @param timestamp           the timestamp to seed into the action value
-     *                            and the pending mutation
-     * @return the pending mutation
+     * @apiNote
+     * The pinned-timestamp seam exists so byte-parity tests can re-encode
+     * the same {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
+     * that a WA Web capture pinned at a known time; callers that just want
+     * the production path should prefer the seven-arg overload.
+     *
+     * @implNote
+     * This implementation does not log or report when the contact is a LID;
+     * WA Web's {@code WAWebContactSync.getContactSyncMutation} warns and
+     * sends a Falco event in that case, but Cobalt does not run Falco and
+     * leaves the choice up to the caller.
+     *
+     * @param contactJid        the contact's primary {@link Jid} (PN form)
+     * @param firstName         the user's first name, or {@code null} when unset
+     * @param fullName          the user's full display name, or {@code null} when unset
+     * @param isDelete          {@code true} to emit a {@link SyncdOperation#REMOVE}, {@code false} for {@link SyncdOperation#SET}
+     * @param lid               the LID-form {@link Jid} for the same contact, or {@code null}
+     * @param syncToAddressbook whether the primary device must sync the contact to its native addressbook, or {@code null} to leave it unchanged
+     * @param username          the contact's WhatsApp username (without leading {@code @}), or {@code null}
+     * @param timestamp         the mutation timestamp seeded into both the action value and the pending mutation
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     public SyncPendingMutation getContactSyncMutation(
             Jid contactJid,
@@ -103,9 +133,6 @@ public final class ContactActionMutationFactory {
         var operation = isDelete
                 ? SyncdOperation.REMOVE
                 : SyncdOperation.SET;
-        // where indexArgs = [e.toString({legacy: true})] in WA Web.
-        // ADAPTED: Cobalt uses Jid.toString() canonical form; WA Web's legacy form is not mirrored
-        // because Cobalt normalizes JIDs to a single canonical representation.
         var index = JSON.toJSONString(List.of(ContactAction.ACTION_NAME, contactJid.toString()));
         var mutation = new DecryptedMutation.Trusted(
                 index,

@@ -15,37 +15,35 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the
- * {@code <links><link link_type="sub_group">...</link></links>} payload
- * in the canonical {@code <iq xmlns="w:g2" type="set" to="<parent>">}
- * envelope.
+ * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that links one or more existing groups as sub-groups of a
+ * community.
+ *
+ * @apiNote Drives the {@code WAWebGroupCommunityJob.sendLinkSubgroups} flow surfaced from the community admin
+ * "Manage groups" page: pass the community parent JID as {@link #parentGroupJid()} and the list of candidate
+ * sub-groups with their per-group hidden marker. The relay caps the batch at 1000 entries server-side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsLinkSubGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group JID to which the sub-groups are
-     * being linked. Routed verbatim into the IQ's {@code to}
-     * attribute.
+     * The parent (community) group {@link Jid} surfaced on the IQ's {@code to} attribute.
      */
     private final Jid parentGroupJid;
 
     /**
-     * The list of candidate groups, each with an optional hidden-group
-     * marker. Must be non-empty (1..1000 entries server-side).
+     * The list of candidate sub-groups, each with an optional hidden-group marker.
      */
     private final List<RequestedGroup> groups;
 
     /**
      * Constructs a request.
      *
-     * @param parentGroupJid the parent community JID; never
-     *                       {@code null}
-     * @param groups         the list of groups to link as sub-groups;
-     *                       never {@code null} and must be non-empty
-     * @throws NullPointerException     if either argument is
-     *                                  {@code null}
+     * @apiNote The relay rejects empty batches as a client error; build the list with at least one entry.
+     *
+     * @param parentGroupJid the parent community {@link Jid}; never {@code null}
+     * @param groups         the list of groups to link as sub-groups; never {@code null} and must be non-empty
+     * @throws NullPointerException     if either argument is {@code null}
      * @throws IllegalArgumentException when {@code groups} is empty
      */
     public SmaxGroupsLinkSubGroupsRequest(Jid parentGroupJid, List<RequestedGroup> groups) {
@@ -59,9 +57,9 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     }
 
     /**
-     * Returns the parent group JID.
+     * Returns the parent group {@link Jid}.
      *
-     * @return the parent group JID; never {@code null}
+     * @return the parent community {@link Jid}; never {@code null}
      */
     public Jid parentGroupJid() {
         return parentGroupJid;
@@ -70,17 +68,30 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     /**
      * Returns the list of candidate sub-groups.
      *
-     * @return an unmodifiable list; never {@code null} or empty
+     * @return an unmodifiable list of {@link RequestedGroup}; never {@code null} or empty
      */
     public List<RequestedGroup> groups() {
         return groups;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <links><link/></links>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
+     *         <links>
+     *             <link link_type="sub_group">
+     *                 <group jid="<jid>"><hidden_group/></group>
+     *                 ...
+     *             </link>
+     *         </links>
+     *     </iq>
+     * }
+     * where the {@code <hidden_group/>} marker is emitted per-group only when the {@link RequestedGroup#hiddenGroup()}
+     * flag is {@code true}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <links><link/></links>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsLinkSubGroupsRequest",
@@ -116,6 +127,12 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
                 .content(linksNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsLinkSubGroupsRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -129,11 +146,21 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
                 && Objects.equals(this.groups, that.groups);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid, groups);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsLinkSubGroupsRequest[parentGroupJid=" + parentGroupJid
@@ -141,33 +168,28 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
     }
 
     /**
-     * Single sub-group entry inside the outbound
-     * {@code <links><link/></links>} payload.
+     * Single sub-group entry inside the outbound {@code <links><link/></links>} payload.
      *
-     * <p>The {@code hiddenGroup} flag, when {@code true}, attaches a
-     * {@code <hidden_group/>} marker inside the {@code <group/>}
-     * child to indicate that the linked group is hidden from the
-     * community directory.
+     * @apiNote The {@link #hiddenGroup()} flag, when {@code true}, attaches a {@code <hidden_group/>} marker inside
+     * the matching {@code <group/>} child to indicate that the linked group is hidden from the community directory.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsLinkSubGroupsRequest")
     public static final class RequestedGroup {
         /**
-         * The candidate sub-group JID.
+         * The candidate sub-group {@link Jid}.
          */
         private final Jid jid;
 
         /**
-         * Whether to attach a {@code <hidden_group/>} marker inside
-         * the {@code <group/>} child.
+         * Whether to attach a {@code <hidden_group/>} marker inside the {@code <group/>} child.
          */
         private final boolean hiddenGroup;
 
         /**
-         * Constructs a requested-group entry.
+         * Constructs a {@link RequestedGroup} entry.
          *
-         * @param jid         the sub-group JID; never {@code null}
-         * @param hiddenGroup whether the sub-group is hidden from the
-         *                    community directory
+         * @param jid         the sub-group {@link Jid}; never {@code null}
+         * @param hiddenGroup whether the sub-group is hidden from the community directory
          * @throws NullPointerException if {@code jid} is {@code null}
          */
         public RequestedGroup(Jid jid, boolean hiddenGroup) {
@@ -176,17 +198,16 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
         }
 
         /**
-         * Returns the sub-group JID.
+         * Returns the sub-group {@link Jid}.
          *
-         * @return the sub-group JID; never {@code null}
+         * @return the sub-group {@link Jid}; never {@code null}
          */
         public Jid jid() {
             return jid;
         }
 
         /**
-         * Returns whether the {@code <hidden_group/>} marker is
-         * attached.
+         * Returns whether the {@code <hidden_group/>} marker is attached.
          *
          * @return {@code true} when the marker is emitted
          */
@@ -194,6 +215,12 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
             return hiddenGroup;
         }
 
+        /**
+         * Compares this entry to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link RequestedGroup} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -207,11 +234,21 @@ public final class SmaxGroupsLinkSubGroupsRequest implements SmaxOperation.Reque
                     && Objects.equals(this.jid, that.jid);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(jid, hiddenGroup);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsLinkSubGroupsRequest.RequestedGroup[jid=" + jid

@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.wam;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.wam.binary.WamEventEncoder;
 import com.github.auties00.cobalt.wam.binary.WamTags;
@@ -19,54 +20,55 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical agreement tests for {@link WamEventEncoder} against
- * vectors captured from the live WhatsApp Web bundle's
- * {@code WAWebWamLibProtocol} module.
+ * Byte-identical KAT for {@link WamEventEncoder} against vectors
+ * captured from {@code WAWebWamLibProtocol}'s three write helpers.
  *
- * <p>Each vector pins the wire output of a single call to one of:
+ * @apiNote
+ * Pins the wire output of a single call to one of:
  * <ul>
- *   <li>{@code writeGlobalAttribute(buf, fieldId, value)} — global
- *       attribute entry (role bits {@code 0}),</li>
- *   <li>{@code writeEvent(buf, eventId, weight, hasFields)} — event
- *       marker entry (role bits {@code 1}; weight is written as
- *       {@code -weight} per the JS contract),</li>
- *   <li>{@code writeField(buf, fieldId, value, hasFollowing)} — event
- *       field entry (role bits {@code 2}).</li>
+ *   <li>{@code writeGlobalAttribute(buf, fieldId, value)} (role bits
+ *       {@code 0});</li>
+ *   <li>{@code writeEvent(buf, eventId, weight, hasFields)} (role
+ *       bits {@code 1}; weight is written as {@code -weight} per the
+ *       JS contract);</li>
+ *   <li>{@code writeField(buf, fieldId, value, hasFollowing)} (role
+ *       bits {@code 2}).</li>
  * </ul>
+ * Agreement here is the strongest possible validation of the WAM tag
+ * byte protocol: any divergence in role bits, the {@code LAST} flag,
+ * the {@code WIDE_ID} flag, or the value-type mask surfaces as a hex
+ * mismatch. Vectors live in {@code fixtures/wam/wam-tags-roundtrip.json}
+ * and pin snapshot revision {@code 1039260921}.
  *
- * <p>Agreement on these vectors is the strongest possible validation of
- * the WAM tag-byte protocol: if any role bit, LAST flag, WIDE_ID flag,
- * or value-type mask diverges from the JavaScript reference, the
- * resulting bytes mismatch.
- *
- * <p>Vectors live in {@code fixtures/wam/wam-tags-roundtrip.json} and
- * were captured against snapshot revision {@code 1039260921} on
- * 2026-05-12 via the {@code mcp__whatsapp__web_live_debug_eval_to_file}
- * tool. Re-capture if the WA Web protocol changes — see
- * {@code tools/web/wam-fixtures/README.md}.
+ * @implNote
+ * Re-capture via {@code mcp__whatsapp__web_live_debug_eval_to_file}
+ * if the WA Web protocol changes; the recapture procedure lives in
+ * {@code src/test/resources/fixtures/wam/README.md}.
  */
 @DisplayName("WamTags KAT against live WhatsApp Web bundle")
 class WamTagsKatTest {
     /**
-     * Classpath-relative path of the captured-vectors fixture.
+     * The classpath-relative name of the captured-vectors fixture
+     * (without its {@code .expected.json} oracle suffix).
      */
     private static final String FIXTURE = "wam-tags-roundtrip.json";
 
     /**
-     * Snapshot revision the vectors were captured against; tested
-     * against the fixture header so divergence is loud, not silent.
+     * The snapshot revision the KAT vectors were captured against;
+     * compared against the fixture header so revision drift fails
+     * loudly.
      */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
     /**
-     * Maximum output buffer size, chosen to comfortably fit the
+     * The shared output buffer size, sized to comfortably hold the
      * 65 536-byte UTF-8 boundary case plus header overhead.
      */
     private static final int MAX_BUFFER = 70_000;
 
     /**
      * Returns one dynamic test per captured vector, named after the
-     * vector's {@code name} so failures point straight at the row.
+     * vector's {@code name} so failures point at the row.
      *
      * @return the test factory stream
      */
@@ -112,14 +114,16 @@ class WamTagsKatTest {
     }
 
     /**
-     * Dispatches a captured global-attribute call to the matching
-     * {@code encoder.writeXxx(fieldId, GLOBAL, value)} overload based
-     * on the runtime value type.
+     * Dispatches a captured {@code writeGlobalAttribute} call to the
+     * matching {@code encoder.writeXxx(fieldId, GLOBAL, value)}
+     * overload based on the runtime value type.
      *
      * @param encoder the destination encoder
-     * @param args    the {@code [fieldId, value]} captured arguments
+     * @param args    the {@code [fieldId, value]} arguments
+     * @throws IllegalStateException if {@code value} is of an
+     *                               unsupported runtime type
      */
-    private static void encodeGlobal(WamEventEncoder encoder, com.alibaba.fastjson2.JSONArray args) {
+    private static void encodeGlobal(WamEventEncoder encoder, JSONArray args) {
         var fieldId = args.getIntValue(0);
         var raw = args.get(1);
         if (raw == null) {
@@ -138,20 +142,23 @@ class WamTagsKatTest {
     }
 
     /**
-     * Dispatches a captured event-marker call to
+     * Dispatches a captured {@code writeEvent} call to
      * {@link WamEventEncoder#writeEventMarker(int, int, boolean)}.
      *
-     * <p>The captured JS arguments are {@code [eventId, weight, hasFields]},
-     * where {@code weight} is what the JS encoder writes as the marker
-     * payload (i.e. already negated). Cobalt's
-     * {@code writeEventMarker(eventId, w, hasFields)} writes {@code -w}
-     * to the payload, so this method passes {@code -capturedWeight} to
-     * recover identical bytes.
+     * @implNote
+     * The captured JS arguments are
+     * {@code [eventId, weight, hasFields]} where {@code weight} is
+     * already the value written into the marker payload (the JS
+     * writer applies {@code -weight} at the call site). Cobalt's
+     * {@link WamEventEncoder#writeEventMarker(int, int, boolean)}
+     * negates internally, so this method passes
+     * {@code -capturedWeight} to recover identical bytes.
      *
      * @param encoder the destination encoder
-     * @param args    the {@code [eventId, weight, hasFields]} arguments
+     * @param args    the {@code [eventId, weight, hasFields]}
+     *                arguments
      */
-    private static void encodeEvent(WamEventEncoder encoder, com.alibaba.fastjson2.JSONArray args) {
+    private static void encodeEvent(WamEventEncoder encoder, JSONArray args) {
         var eventId = args.getIntValue(0);
         var capturedWeight = args.getIntValue(1);
         var hasFields = args.getBooleanValue(2);
@@ -159,15 +166,18 @@ class WamTagsKatTest {
     }
 
     /**
-     * Dispatches a captured field call to the matching
+     * Dispatches a captured {@code writeField} call to the matching
      * {@code encoder.writeXxxField(...)} or
-     * {@code encoder.writeXxx(fieldId, FIELD | LAST, value)} primitive
-     * call based on the runtime value type.
+     * {@code encoder.writeXxx(fieldId, FIELD | LAST, value)}
+     * primitive based on the runtime value type.
      *
      * @param encoder the destination encoder
-     * @param args    the {@code [fieldId, value, hasFollowing]} arguments
+     * @param args    the {@code [fieldId, value, hasFollowing]}
+     *                arguments
+     * @throws IllegalStateException if {@code value} is of an
+     *                               unsupported runtime type
      */
-    private static void encodeField(WamEventEncoder encoder, com.alibaba.fastjson2.JSONArray args) {
+    private static void encodeField(WamEventEncoder encoder, JSONArray args) {
         var fieldId = args.getIntValue(0);
         var raw = args.get(1);
         var hasFollowing = args.getBooleanValue(2);
@@ -187,16 +197,20 @@ class WamTagsKatTest {
     }
 
     /**
-     * Reconstructs a string from its summarised form
-     * {@code {kind: "str", length: N, head: "aaaaaaaa"}}.
+     * Reconstructs a string from its summarised
+     * {@code {kind, length, head}} form.
      *
-     * <p>The fixture summarises long strings to keep the file size
-     * manageable. Every summarised string in the corpus is a repeat of
-     * its first character, so the head's first byte is sufficient to
-     * regenerate the original.
+     * @apiNote
+     * The fixture summarises long repeated-character strings to keep
+     * the on-disk corpus small; every summarised string in the
+     * corpus is a repeat of its first character, so the head's first
+     * byte is sufficient to regenerate the original.
      *
      * @param summary the summarised string descriptor
      * @return the reconstructed string
+     * @throws IllegalStateException if {@code summary} is not a
+     *                               {@code str}-kind object or its
+     *                               {@code head} is missing
      */
     private static String reconstructString(JSONObject summary) {
         if (!"str".equals(summary.getString("kind"))) {
@@ -212,10 +226,11 @@ class WamTagsKatTest {
 
     /**
      * Returns whether the given number can be represented exactly as
-     * a long without truncation.
+     * a {@code long} without truncation.
      *
      * @param n the captured numeric value
-     * @return {@code true} if {@code n} has no fractional part
+     * @return {@code true} if {@code n} has no fractional part and
+     *         fits in a {@code long}
      */
     private static boolean isWhole(Number n) {
         if (n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte) {
@@ -226,11 +241,17 @@ class WamTagsKatTest {
     }
 
     /**
-     * Smoke assertion that {@link WamTags#EVENT} / {@link WamTags#FIELD}
-     * / {@link WamTags#GLOBAL} / {@link WamTags#LAST} land on the
-     * expected wire bits.
+     * Smoke assertions that {@link WamTags#EVENT}, {@link WamTags#FIELD},
+     * {@link WamTags#GLOBAL}, and {@link WamTags#LAST} hold the
+     * expected wire bit patterns.
      *
-     * @return a single dynamic test asserting the tag constants
+     * @apiNote
+     * Guards against an accidental renumbering of the role / LAST
+     * constants that would silently break every event Cobalt emits;
+     * the per-vector KAT above would catch this too, but this single
+     * test fails faster and isolates the cause.
+     *
+     * @return the bit-pattern dynamic tests
      */
     @TestFactory
     List<DynamicTest> tagConstantsHaveExpectedWireBits() {

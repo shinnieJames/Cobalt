@@ -27,14 +27,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link FavoritesHandler} â€” Cobalt's adapter for
+ * Exercises the {@link FavoritesHandler} adapter for
  * {@code WAWebFavoritesSync}.
  *
- * <p>The handler manages the user's favorite chats collection. The test
- * matrix exercises metadata, the {@code applyMutation} validation surface,
- * the {@code applyMutationBatch} latest-by-timestamp dedup, the
- * {@code getFavoritesMutation} builder, and the default timestamp-based
- * conflict resolution.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code favorites} app-state
+ * sync action across metadata, the SET happy path, the
+ * {@code applyMutationBatch} latest-by-timestamp deduplication, the
+ * malformed-value branch, the
+ * {@link FavoritesMutationFactory}
+ * builder and the inherited timestamp-based conflict resolution.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#favoriteChats()}
+ * read-back can be asserted directly without round-tripping through
+ * the chat-table cache.
  */
 @DisplayName("FavoritesHandler")
 class FavoritesHandlerTest {
@@ -101,7 +111,7 @@ class FavoritesHandlerTest {
         }
 
         @Test
-        @DisplayName("an empty favorites list is still a valid SUCCESS â€” replaces with empty")
+        @DisplayName("an empty favorites list is still a valid SUCCESS - replaces with empty")
         void emptyFavoritesReplaces() {
             client.store().setFavoriteChats(List.of(FAVORITE_A));
 
@@ -145,7 +155,7 @@ class FavoritesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index â€” n/a (singleton index)")
+    @DisplayName("applyMutation: malformed index - n/a (singleton index)")
     class MalformedIndex {
         @Test
         @DisplayName("the singleton 'favorites' index has no second element to validate")
@@ -159,7 +169,7 @@ class FavoritesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” keeps only the latest by timestamp")
+    @DisplayName("applyMutationBatch - keeps only the latest by timestamp")
     class BatchDedup {
         @Test
         @DisplayName("two SET mutations: only the later timestamp's favorites land in the store")
@@ -208,7 +218,7 @@ class FavoritesHandlerTest {
     }
 
     @Nested
-    @DisplayName("getFavoritesMutation â€” builder helper")
+    @DisplayName("getFavoritesMutation - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the favorites encoded as Favorite entries")
@@ -228,7 +238,7 @@ class FavoritesHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")

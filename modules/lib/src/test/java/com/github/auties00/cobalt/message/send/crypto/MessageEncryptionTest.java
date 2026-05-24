@@ -4,9 +4,10 @@ import com.github.auties00.cobalt.message.MessageEncryptionType;
 import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.message.TestSignalSession;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
-import com.github.auties00.libsignal.protocol.SignalPreKeyMessageSpec;
+import com.github.auties00.libsignal.protocol.SignalPreKeyMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -18,29 +19,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MessageEncryption}, mirroring
- * {@code WAWebEncryptMsgProtobuf.encryptMsgProtobuf}.
+ * Round-trip and structural tests for {@link MessageEncryption}.
  *
- * <p>Uses {@link TestSignalSession} to establish a real libsignal
- * session between a synthetic sender and recipient. After that, the
- * encryption call is exercised end-to-end against the established
- * Signal session and the produced ciphertext is decrypted on the
- * recipient side via {@link SignalSessionCipher} to prove byte-equality.
- *
- * <p>Covers:
- * <ul>
- *   <li>First send: yields a {@link MessageEncryptionType#PKMSG}
- *       envelope tagged as a prekey message.</li>
- *   <li>Subsequent sends: switch to {@link MessageEncryptionType#MSG}
- *       once the session is established.</li>
- *   <li>{@code CIPHERTEXT_VERSION = 2} stamped on the wire envelope.</li>
- *   <li>Padding length stays in [1, 16] — the recovered plaintext
- *       length differs from the input by exactly that amount.</li>
- *   <li>Round-trip plaintext is recovered byte-for-byte after stripping
- *       the random padding.</li>
- *   <li>Each encrypt call produces a fresh ciphertext (different IVs).</li>
- *   <li>Null-arg coverage on both encryption entry points.</li>
- * </ul>
+ * @apiNote
+ * Mirrors WA Web's {@code WAWebEncryptMsgProtobuf.encryptMsgProtobuf} surface:
+ * a freshly-established Signal session must produce a PKMSG envelope, stamp
+ * {@link MessageEncryption#CIPHERTEXT_VERSION} on the wire, pad the plaintext
+ * by 1 to 16 bytes, and round-trip back to the original plaintext after the
+ * recipient decrypts and strips the padding. Subsequent encrypts must derive
+ * fresh ciphertexts as the Signal ratchet advances.
+ * @implNote
+ * Uses {@link TestSignalSession#establishSession} to set up a real libsignal
+ * session between two {@link MessageFixtures#temporaryStore} instances, then
+ * decrypts each produced ciphertext on the recipient side via a fresh
+ * {@link SignalSessionCipher} to prove byte equality. No mocks; the only
+ * synthesis is the two store instances.
  */
 @DisplayName("MessageEncryption")
 class MessageEncryptionTest {
@@ -48,6 +41,10 @@ class MessageEncryptionTest {
     private static final Jid SENDER_JID = Jid.of("12025550100:0@s.whatsapp.net");
     private static final Jid RECIPIENT_JID = Jid.of("19254863482:0@s.whatsapp.net");
 
+    /**
+     * Verifies that a first send to a freshly-established session yields a
+     * PKMSG envelope and stamps {@code CIPHERTEXT_VERSION = 2}.
+     */
     @Test
     @DisplayName("encryptForDevice: first send produces a PKMSG envelope with v=2")
     void firstSendIsPreKeyMessage() throws Exception {
@@ -65,8 +62,12 @@ class MessageEncryptionTest {
                 "CIPHERTEXT_VERSION is the v=2 wire attribute");
     }
 
+    /**
+     * Verifies that the ciphertext is larger than the input due to padding
+     * and Signal protocol overhead.
+     */
     @Test
-    @DisplayName("encryptForDevice: ciphertext is non-empty and longer than plaintext (padding + Signal overhead)")
+    @DisplayName("encryptForDevice: ciphertext is non-empty and longer than plaintext")
     void ciphertextLargerThanPlaintext() {
         var sender = MessageFixtures.temporaryStore(SENDER_JID, null);
         var recipient = MessageFixtures.temporaryStore(RECIPIENT_JID, null);
@@ -80,6 +81,16 @@ class MessageEncryptionTest {
                 "ciphertext must be larger than plaintext (random padding + Signal protocol overhead)");
     }
 
+    /**
+     * Verifies that an encrypt then decrypt cycle returns the plaintext
+     * modulo the 1..16 byte random padding.
+     *
+     * @implNote
+     * Uses {@link SignalPreKeyMessage#ofSerialized} so the 1-byte version
+     * prefix is stripped before protobuf decoding;
+     * {@code SignalPreKeyMessageSpec.decode} treats the prefix as protobuf
+     * and chokes on the wire type.
+     */
     @Test
     @DisplayName("encryptForDevice round-trip: recipient decrypts to plaintext modulo padding")
     void roundTripDecrypt() throws Exception {
@@ -91,24 +102,25 @@ class MessageEncryptionTest {
         var plaintext = "hello".getBytes();
         var payload = encryption.encryptForDevice(RECIPIENT_JID, plaintext);
 
-        // Decrypt on the recipient side. The first send is a PreKeyMessage.
-        var preKey = SignalPreKeyMessageSpec.decode(payload.ciphertext());
+        var preKey = SignalPreKeyMessage.ofSerialized(payload.ciphertext());
         var recipientCipher = new SignalSessionCipher(recipient);
         var recovered = recipientCipher.decrypt(SENDER_JID.toSignalAddress(), preKey);
 
-        // The recovered plaintext is plaintext + 1..16 random padding bytes.
         var padding = recovered.length - plaintext.length;
         assertTrue(padding >= 1 && padding <= 16,
                 "MessageEncryption.addPadding adds 1..16 bytes; got " + padding);
-        // Prefix is the original plaintext, byte-for-byte.
         var stripped = new byte[plaintext.length];
         System.arraycopy(recovered, 0, stripped, 0, plaintext.length);
         assertArrayEquals(plaintext, stripped,
                 "decrypted plaintext must equal the input (modulo trailing padding)");
     }
 
+    /**
+     * Verifies that repeated encrypts of the same plaintext yield distinct
+     * ciphertexts (Signal ratchet advance plus fresh padding sampling).
+     */
     @Test
-    @DisplayName("encryptForDevice: each call samples fresh padding/ratchet → different ciphertexts")
+    @DisplayName("encryptForDevice: each call samples fresh padding and ratchet, producing different ciphertexts")
     void ciphertextIsFresh() {
         var sender = MessageFixtures.temporaryStore(SENDER_JID, null);
         var recipient = MessageFixtures.temporaryStore(RECIPIENT_JID, null);
@@ -118,38 +130,43 @@ class MessageEncryptionTest {
         var first = encryption.encryptForDevice(RECIPIENT_JID, "x".getBytes());
         var second = encryption.encryptForDevice(RECIPIENT_JID, "x".getBytes());
         assertNotEquals(toHex(first.ciphertext()), toHex(second.ciphertext()),
-                "Signal ratchet advances per encrypt — even identical plaintext yields different ciphertext");
+                "Signal ratchet advances per encrypt; identical plaintext yields different ciphertext");
     }
 
+    /**
+     * Pins the wire behaviour that consecutive sends stay in PKMSG until the
+     * recipient processes the prekey.
+     *
+     * @apiNote
+     * The encryption call alone does not advance the session beyond PKMSG
+     * because libsignal tracks "has the recipient processed our prekey?" via
+     * session metadata. In WAWeb the type flips to MSG after the recipient
+     * replies; this test pins the until-then wire behaviour rather than
+     * fast-forwarding the session state artificially.
+     */
     @Test
-    @DisplayName("encryptForDevice: type switches PKMSG → MSG once the recipient processes the prekey")
+    @DisplayName("encryptForDevice: type stays PKMSG until the recipient processes the prekey")
     void typeSwitchesAfterFirstAck() {
-        // The encryption call alone does not advance the session beyond the
-        // PKMSG state because it tracks "has the recipient processed our
-        // prekey?" via session metadata. In practice WAWeb flips to MSG after
-        // the recipient sends back a reply. We approximate that by having the
-        // recipient decrypt + reply: after the recipient decrypts a PKMSG,
-        // any subsequent encrypt to the SAME session ratchets forward.
         var sender = MessageFixtures.temporaryStore(SENDER_JID, null);
         var recipient = MessageFixtures.temporaryStore(RECIPIENT_JID, null);
         TestSignalSession.establishSession(sender, RECIPIENT_JID, recipient);
         var encryption = encryption(sender);
 
-        // First send: PKMSG.
         var first = encryption.encryptForDevice(RECIPIENT_JID, "first".getBytes());
         assertEquals(MessageEncryptionType.PKMSG, first.type());
 
-        // Without the recipient decrypting, subsequent sends still carry
-        // PKMSG framing because the sender's session record marks it as
-        // "still pending prekey". This is intentional — pinning the wire
-        // behavior, not an artificial fast-forward.
         var secondBeforeAck = encryption.encryptForDevice(RECIPIENT_JID, "second".getBytes());
         assertEquals(MessageEncryptionType.PKMSG, secondBeforeAck.type(),
                 "encrypt-without-ack stays in PKMSG until the recipient processes the prekey");
     }
 
+    /**
+     * Verifies that {@code null} required arguments to
+     * {@link MessageEncryption#encryptForDevice} throw
+     * {@link NullPointerException}.
+     */
     @Test
-    @DisplayName("encryptForDevice: matching device JIDs are required (null throws NPE)")
+    @DisplayName("encryptForDevice: matching device JIDs are required (null throws NullPointerException)")
     void encryptForDeviceNullArgs() {
         var sender = MessageFixtures.temporaryStore(SENDER_JID, null);
         var encryption = encryption(sender);
@@ -159,13 +176,21 @@ class MessageEncryptionTest {
                 () -> encryption.encryptForDevice(RECIPIENT_JID, null));
     }
 
+    /**
+     * Verifies that {@link MessageEncryption#CIPHERTEXT_VERSION} is pinned at
+     * {@code 2}.
+     */
     @Test
-    @DisplayName("CIPHERTEXT_VERSION constant: pinned at 2 — drives the v=2 attribute on every <enc>")
+    @DisplayName("CIPHERTEXT_VERSION constant: pinned at 2; drives the v=2 attribute on every <enc>")
     void ciphertextVersionPinned() {
         assertEquals(2, MessageEncryption.CIPHERTEXT_VERSION,
                 "v=2 is the wire-byte invariant relied on by every stanza builder");
     }
 
+    /**
+     * Verifies that {@code null} collaborators on the
+     * {@link MessageEncryption} constructor throw {@link NullPointerException}.
+     */
     @Test
     @DisplayName("constructor: null collaborators throw NullPointerException")
     void constructorNullArgs() {
@@ -177,8 +202,12 @@ class MessageEncryptionTest {
         assertThrows(NullPointerException.class, () -> new MessageEncryption(store, session, null));
     }
 
+    /**
+     * Verifies that the per-payload {@code isPreKeyMessage}/
+     * {@code isSenderKeyMessage} predicates classify PKMSG correctly.
+     */
     @Test
-    @DisplayName("payload classification: PKMSG flagged as preKey, others not")
+    @DisplayName("payload classification: PKMSG flagged as preKey, not senderKey")
     void payloadFlagsConsistent() {
         var sender = MessageFixtures.temporaryStore(SENDER_JID, null);
         var recipient = MessageFixtures.temporaryStore(RECIPIENT_JID, null);
@@ -193,18 +222,28 @@ class MessageEncryptionTest {
     /**
      * Constructs a {@link MessageEncryption} bound to the supplied store.
      *
-     * @param store the SignalProtocolStore
-     * @return the encryption service
+     * @apiNote
+     * Test helper used by every per-method case to assemble the three
+     * collaborators ({@link WhatsAppStore},
+     * {@link SignalSessionCipher}, {@link SignalGroupCipher}) over the same
+     * backing store.
+     *
+     * @param store the backing {@link WhatsAppStore}
+     * @return the wired-up encryption service
      */
-    private static MessageEncryption encryption(com.github.auties00.cobalt.store.WhatsAppStore store) {
+    private static MessageEncryption encryption(WhatsAppStore store) {
         return new MessageEncryption(store, new SignalSessionCipher(store), new SignalGroupCipher(store));
     }
 
     /**
-     * Returns the lowercase hex of {@code bytes}.
+     * Returns the lowercase hex representation of the supplied bytes.
      *
-     * @param bytes the input
-     * @return the hex string
+     * @apiNote
+     * Test helper used to compare ciphertexts via string equality rather than
+     * {@code Arrays.equals}, so assertion failures print a readable diff.
+     *
+     * @param bytes the bytes to encode
+     * @return the lowercase hex string
      */
     private static String toHex(byte[] bytes) {
         var sb = new StringBuilder(bytes.length * 2);

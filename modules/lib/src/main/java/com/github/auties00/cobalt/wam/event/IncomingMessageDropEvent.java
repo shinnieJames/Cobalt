@@ -17,7 +17,9 @@ import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageDropReasonType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
@@ -74,11 +76,20 @@ public interface IncomingMessageDropEvent extends WamEventSpec {
     @WamProperty(index = 11, type = WamType.INTEGER)
     OptionalInt offlineCount();
 
+    @WamProperty(index = 22, type = WamType.BOOLEAN)
+    Optional<Boolean> processingDeferred();
+
     @WamProperty(index = 7, type = WamType.INTEGER)
     OptionalInt retryCount();
 
     @WamProperty(index = 8, type = WamType.ENUM)
     Optional<RevokeType> revokeType();
+
+    @WamProperty(index = 23, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
+
+    @WamProperty(index = 21, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 10, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

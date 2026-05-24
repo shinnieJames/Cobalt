@@ -3,35 +3,34 @@ package com.github.auties00.cobalt.wam.privatestats.ed25519;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 
 /**
- * Field arithmetic over {@code GF(2^255 - 19)}, the prime field
- * underlying Curve25519 and Ed25519.
+ * Performs field arithmetic over {@code GF(2^255 - 19)}, the prime
+ * field underlying Curve25519 and Ed25519.
  *
  * <p>Field elements are represented as 16 little-endian limbs in
- * radix {@code 2^16}, stored in a {@code long[16]}. This mirrors the
- * {@code Float64Array(16)} representation of the
- * {@code WACryptoPrimitives.lowlevel} object, a port of
- * {@code nacl.lowlevel} from {@code tweetnacl-js}. Keeping the limb
- * layout identical lets the port be diff-validated against the
- * JavaScript reference function-for-function.
+ * radix {@code 2^16}, stored in a {@code long[16]}. This is the same
+ * layout used by {@link WhatsAppWebModule WACryptoPrimitives}'s
+ * {@code lowlevel} object, itself a port of tweetnacl-js'
+ * {@code Float64Array(16)} model. Keeping the limb layout identical
+ * lets the port be diff-validated against the JavaScript reference
+ * function-for-function.
  *
- * <p>Limbs are signed. Subtraction may produce negative limbs, and
- * the carry chain implemented in {@link #car25519} normalises any
- * layout (including negative limbs and limbs up to {@code ~2^36})
- * back to {@code [0, 2^16)} after a multiplication.
- *
- * <p>All operations are constant time with respect to limb values.
- * No branch depends on the secret data being processed.
+ * <p>Limbs are signed; subtraction may produce negative limbs, and
+ * the carry chain in {@link #car25519} normalises any layout
+ * (including negative limbs and limbs up to {@code ~2^36}) back to
+ * {@code [0, 2^16)} after a multiplication. Every operation is
+ * constant time with respect to limb values; no branch depends on
+ * secret data.
  */
 @WhatsAppWebModule(moduleName = "WACryptoPrimitives")
 public final class Ed25519Field {
     /**
-     * Number of base-{@code 2^16} limbs in a field element.
+     * The number of base-{@code 2^16} limbs in a field element.
      */
     public static final int LIMBS = 16;
 
     /**
-     * Number of bytes in the canonical little-endian encoding of a field
-     * element.
+     * The number of bytes in the canonical little-endian encoding of
+     * a field element.
      */
     public static final int BYTES = 32;
 
@@ -47,16 +46,28 @@ public final class Ed25519Field {
     /**
      * Allocates a fresh, zero-initialised field element.
      *
-     * @return a new {@code long[LIMBS]} representing the additive identity
+     * @apiNote
+     * Mirrors the tweetnacl {@code gf()} factory used pervasively in
+     * the {@link WhatsAppWebModule WACryptoPrimitives} {@code lowlevel}
+     * routines.
+     *
+     * @return a new {@code long[LIMBS]} representing the additive
+     *         identity
      */
     public static long[] gf() {
         return new long[LIMBS];
     }
 
     /**
-     * Allocates a field element initialised to a small unsigned constant.
+     * Allocates a field element initialised to a small unsigned
+     * constant.
      *
-     * @param n the value, must satisfy {@code 0 <= n < 2^16}
+     * @apiNote
+     * Used to materialise the literal-valued field constants
+     * ({@code 0}, {@code 1}, {@code 2}) consumed by
+     * {@link Ed25519HashToPoint} and {@link Ed25519Point}.
+     *
+     * @param n the constant value, must satisfy {@code 0 <= n < 2^16}
      * @return a fresh field element equal to {@code n}
      */
     public static long[] gfFromSmall(int n) {
@@ -68,7 +79,9 @@ public final class Ed25519Field {
     /**
      * Copies a field element into an existing destination.
      *
-     * <p>Mirrors {@code lowlevel.set25519}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.set25519}.
      *
      * @param r the destination, overwritten in place
      * @param a the source element
@@ -80,13 +93,15 @@ public final class Ed25519Field {
     /**
      * Performs coordinate-wise addition: {@code o = a + b}.
      *
-     * <p>Limbs are added without reduction. Callers must invoke a reducing
-     * operation (the carry chain inside {@link #mul} or an explicit
-     * {@link #car25519}) before serialising via {@link #pack25519}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.A}. Limbs are added without reduction; callers
+     * must invoke a reducing operation (the carry chain inside
+     * {@link #mul} or an explicit {@link #car25519}) before
+     * serialising via {@link #pack25519}.
      *
-     * <p>Mirrors {@code lowlevel.A}.
-     *
-     * @param o the destination element (may alias {@code a} or {@code b})
+     * @param o the destination element (may alias {@code a} or
+     *          {@code b})
      * @param a the left operand
      * @param b the right operand
      */
@@ -99,9 +114,13 @@ public final class Ed25519Field {
     /**
      * Performs coordinate-wise subtraction: {@code o = a - b}.
      *
-     * <p>Mirrors {@code lowlevel.Z}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.Z}. Limbs may go negative; the next reducing
+     * operation normalises them.
      *
-     * @param o the destination element (may alias {@code a} or {@code b})
+     * @param o the destination element (may alias {@code a} or
+     *          {@code b})
      * @param a the left operand
      * @param b the right operand
      */
@@ -115,17 +134,24 @@ public final class Ed25519Field {
      * Multiplies two field elements modulo {@code 2^255 - 19}:
      * {@code o = (a * b) mod p}.
      *
-     * <p>Performs schoolbook multiplication into 31 accumulators, applies the
-     * {@code 2^256 ≡ 38 (mod p)} reduction that folds the high 15 limbs
-     * back into the low ones, then runs two {@link #car25519} passes to
-     * normalise every limb back into {@code [0, 2^16)}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.M}. Safe under output-input aliasing because
+     * the partial products are accumulated into local variables
+     * before being written back into {@code o}.
      *
-     * <p>The 16-by-16 partial-product expansion is fully unrolled to mirror
-     * {@code lowlevel.M} from {@code tweetnacl-js} line for line. The
-     * choice exists for diff-validatability against the reference, not
-     * performance.
+     * @implNote
+     * This implementation performs schoolbook multiplication into 31
+     * accumulators, applies the {@code 2^256 = 38 (mod p)} reduction
+     * that folds the 15 high limbs back into the low ones, then runs
+     * two {@link #car25519} passes to normalise every limb back into
+     * {@code [0, 2^16)}. The 16-by-16 partial-product expansion is
+     * fully unrolled to mirror tweetnacl's {@code M} routine line for
+     * line; the choice is for diff-validatability against the
+     * reference, not performance.
      *
-     * @param o the destination element (may alias {@code a} or {@code b})
+     * @param o the destination element (may alias {@code a} or
+     *          {@code b})
      * @param a the left operand
      * @param b the right operand
      */
@@ -233,8 +259,6 @@ public final class Ed25519Field {
         t23 += v * b8; t24 += v * b9; t25 += v * b10; t26 += v * b11;
         t27 += v * b12; t28 += v * b13; t29 += v * b14; t30 += v * b15;
 
-        // 2^256 is congruent to 38 modulo 2^255 - 19, so fold the
-        // 15 high limbs back into the low ones.
         t0 += 38 * t16;
         t1 += 38 * t17;
         t2 += 38 * t18;
@@ -273,9 +297,12 @@ public final class Ed25519Field {
     }
 
     /**
-     * Squares a field element modulo {@code 2^255 - 19}: {@code o = a^2 mod p}.
+     * Squares a field element modulo {@code 2^255 - 19}:
+     * {@code o = a^2 mod p}.
      *
-     * <p>Mirrors {@code lowlevel.S}, which delegates to {@code M(o, a, a)}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.S}, which delegates to {@code M(o, a, a)}.
      *
      * @param o the destination element (may alias {@code a})
      * @param a the operand
@@ -285,14 +312,22 @@ public final class Ed25519Field {
     }
 
     /**
-     * Propagates carries through one full limb pass, normalising every limb
-     * to {@code [0, 2^16)}.
+     * Propagates carries through one full limb pass, normalising
+     * every limb to {@code [0, 2^16)}.
      *
-     * <p>Mirrors {@code lowlevel.car25519}. The {@code +65535} bias allows
-     * negative limbs (produced by {@link #sub}) to flow naturally through
-     * arithmetic right shift; the final adjustment to {@code o[0]} folds the
-     * top carry back into the low limb via the {@code 2^256 ≡ 38} relation
-     * (the {@code 1 + 37 = 38} split removes the bias as it folds).
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.car25519}. Run after every multiplication or
+     * pair of additions to keep limbs in the layout that
+     * {@link #pack25519} expects.
+     *
+     * @implNote
+     * This implementation uses a {@code +65535} bias so that negative
+     * limbs produced by {@link #sub} flow correctly through Java's
+     * arithmetic right shift; the final adjustment to {@code o[0]}
+     * folds the top carry back into the low limb via the
+     * {@code 2^256 = 38} relation, with the {@code 1 + 37 = 38} split
+     * removing the bias as it folds.
      *
      * @param o the field element to normalise in place
      */
@@ -307,14 +342,18 @@ public final class Ed25519Field {
     }
 
     /**
-     * Constant-time conditional swap: if {@code b == 1} swaps {@code p} and
-     * {@code q}, otherwise leaves both unchanged.
+     * Performs a constant-time conditional swap: if {@code b == 1}
+     * swaps {@code p} and {@code q}, otherwise leaves both unchanged.
      *
-     * <p>Mirrors {@code lowlevel.sel25519}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.sel25519}. Used by the Montgomery ladder in
+     * {@link Ed25519Point#scalarMult} and by every other constant-time
+     * branch in this package.
      *
-     * @param p   the first element, possibly mutated
-     * @param q   the second element, possibly mutated
-     * @param b   the swap bit; must be exactly {@code 0} or {@code 1}
+     * @param p the first element, possibly mutated
+     * @param q the second element, possibly mutated
+     * @param b the swap bit; must be exactly {@code 0} or {@code 1}
      */
     public static void sel25519(long[] p, long[] q, long b) {
         var c = ~(b - 1);
@@ -328,12 +367,17 @@ public final class Ed25519Field {
     /**
      * Encodes a field element as 32 canonical little-endian bytes.
      *
-     * <p>Runs three carry passes to fully reduce the limbs, then performs a
-     * constant-time conditional subtraction of {@code p} (twice) using
-     * {@link #sel25519} to enforce the canonical representative in
-     * {@code [0, p)}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.pack25519}. The output is the canonical
+     * representative in {@code [0, p)}, suitable for wire transport
+     * or hashing.
      *
-     * <p>Mirrors {@code lowlevel.pack25519}.
+     * @implNote
+     * This implementation runs three carry passes to fully reduce the
+     * limbs, then performs two constant-time conditional subtractions
+     * of {@code p} via {@link #sel25519} to enforce the canonical
+     * representative.
      *
      * @param o the 32-byte destination buffer
      * @param n the field element to encode (read-only; not mutated)
@@ -364,9 +408,12 @@ public final class Ed25519Field {
     /**
      * Decodes 32 little-endian bytes into a field element.
      *
-     * <p>The high bit of the last byte (bit 255 of the stream) is masked off
-     * to match {@code lowlevel.unpack25519}; callers that need that bit (for
-     * Edwards-point sign recovery) must read it before invoking this method.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.unpack25519}. The high bit of byte 31 (bit 255
+     * of the stream) is masked off; callers that need that bit (for
+     * Edwards point sign recovery) must read it before invoking this
+     * method.
      *
      * @param o the destination field element ({@code long[LIMBS]})
      * @param n the 32-byte little-endian source
@@ -379,14 +426,18 @@ public final class Ed25519Field {
     }
 
     /**
-     * Computes {@code o = i^((p-5)/8) mod p}, used as part of the square-root
-     * computation in the Edwards-point decoding and the Elligator2 map.
+     * Computes {@code o = i^((p-5)/8) mod p}.
      *
-     * <p>Implemented as a 251-iteration square-and-multiply ladder; the
-     * single skip at {@code a == 1} matches the bit pattern of
-     * {@code (p - 5) / 8}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.pow2523}. Used as the canonical square-root
+     * helper in Edwards-point decoding ({@link Ed25519Point#unpackNeg})
+     * and in the Elligator2 map ({@link Ed25519HashToPoint}).
      *
-     * <p>Mirrors {@code lowlevel.pow2523}.
+     * @implNote
+     * This implementation runs a 251-iteration square-and-multiply
+     * ladder; the single skip at {@code a == 1} matches the bit
+     * pattern of {@code (p - 5) / 8}.
      *
      * @param o the destination element
      * @param i the base element
@@ -405,11 +456,16 @@ public final class Ed25519Field {
     /**
      * Computes the multiplicative inverse {@code o = i^(p-2) mod p}.
      *
-     * <p>Implemented as a 254-iteration square-and-multiply ladder; the two
-     * skips at {@code a == 2} and {@code a == 4} match the bit pattern of
-     * {@code p - 2 = 2^255 - 21}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.inv25519}. The caller is responsible for
+     * ensuring {@code i} is non-zero modulo {@code p}; passing zero
+     * silently yields the zero element rather than throwing.
      *
-     * <p>Mirrors {@code lowlevel.inv25519}.
+     * @implNote
+     * This implementation runs a 254-iteration square-and-multiply
+     * ladder; the two skips at {@code a == 2} and {@code a == 4}
+     * match the bit pattern of {@code p - 2 = 2^255 - 21}.
      *
      * @param o the destination element
      * @param i the base element; must be non-zero modulo {@code p}

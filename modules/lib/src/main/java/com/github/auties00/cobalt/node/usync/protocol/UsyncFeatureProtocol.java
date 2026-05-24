@@ -16,9 +16,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * USync {@code feature} protocol descriptor. Carries one empty child per
- * requested feature key inside the {@code <feature>} query element so the
- * relay reports which features the peer supports.
+ * USync {@code feature} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay which of the named features each peer supports. Used by
+ * VoIP capability checks (see {@code WAWebDebugUsync}, which queries the
+ * {@code voip} feature). The {@code <feature>} query element carries one
+ * empty child per requested feature key; the response carries a {@code value}
+ * attribute per supported key.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncFeature")
 public final class UsyncFeatureProtocol implements UsyncProtocol {
@@ -28,14 +33,21 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     public static final String NAME = "feature";
 
     /**
-     * Holds the features the relay is asked to report on. Never empty.
+     * Features the relay is asked to report on; never empty by
+     * construction.
      */
     private final List<FeatureQuery> queries;
 
     /**
-     * Creates a new feature-protocol descriptor for the given queries.
+     * Builds a feature-protocol descriptor for the given queries.
      *
-     * @param queries the features to request; must not be empty
+     * @apiNote
+     * Pass at least one feature key; an empty list is rejected with
+     * {@link IllegalArgumentException}, matching the JS
+     * {@code err("must specify at least one query")} throw.
+     *
+     * @param queries the features to request
+     * @throws NullPointerException     if {@code queries} is {@code null}
      * @throws IllegalArgumentException if {@code queries} is empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -49,9 +61,7 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -61,10 +71,13 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds the {@code <feature>} query element with one empty child per
-     * requested feature key.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation emits one empty child per requested feature key,
+     * keyed by {@link FeatureQuery#wireValue()}; the JS module ships the
+     * same shape pre-built in its {@code s} frozen-object dictionary so the
+     * Cobalt path stays closer to the request data.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -77,11 +90,13 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns no per-user element because the feature protocol carries no
-     * per-user payload on the request side.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return always {@link Optional#empty()}
+     * @implNote
+     * This implementation always returns {@link Optional#empty()} because
+     * the feature protocol has no per-user payload on the request side,
+     * matching the JS {@code null} return in
+     * {@code USyncFeaturesProtocol.getUserElement}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -91,12 +106,14 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <feature>} child of a {@code <user>} response into a
-     * {@link FeatureResult} or a per-protocol error.
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation walks every {@link FeatureQuery} constant rather
+     * than just the requested ones, mirroring the JS
+     * {@code Object.keys(s).forEach(...)} pass; the relay is allowed to
+     * return more keys than were asked for and the parser preserves
+     * whichever ones carry a {@code value} attribute.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncFeature",
@@ -118,8 +135,11 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
     }
 
     /**
-     * Enumerates every feature key the relay currently understands inside the
-     * {@code <feature>} query.
+     * Enumerates the feature keys the {@code <feature>} query understands.
+     *
+     * @apiNote
+     * Constants mirror the eleven keys hardcoded in the JS {@code s}
+     * dictionary; the relay ignores keys it does not recognise.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsyncFeature")
     public enum FeatureQuery {
@@ -140,7 +160,7 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
          */
         ENCRYPT_CONTACT("encrypt_contact"),
         /**
-         * Encrypted-group v2 support.
+         * Encrypted group v2 support.
          */
         ENCRYPT_GROUP_GEN2("encrypt_group_gen2"),
         /**
@@ -169,12 +189,12 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
         MULTI_AGENT("multi_agent");
 
         /**
-         * Holds the literal tag name on the wire.
+         * Literal tag name on the wire.
          */
         private final String wireValue;
 
         /**
-         * Creates a new feature key bound to the given wire string.
+         * Binds a new constant to its wire literal.
          *
          * @param wireValue the literal tag name on the wire
          */
@@ -185,7 +205,12 @@ public final class UsyncFeatureProtocol implements UsyncProtocol {
         /**
          * Returns the literal tag name on the wire.
          *
-         * @return the wire value
+         * @apiNote
+         * Used by {@link #buildQueryElement()} to name the per-feature
+         * empty child and by {@link #parseUserResult(Node)} to look up the
+         * matching response element.
+         *
+         * @return the wire literal
          */
         public String wireValue() {
             return wireValue;

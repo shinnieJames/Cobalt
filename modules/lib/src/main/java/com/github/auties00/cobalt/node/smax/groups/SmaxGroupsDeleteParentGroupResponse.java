@@ -13,18 +13,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * Sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGroupsDeleteParentGroupRequest}.
+ *
+ * @apiNote
+ * Pattern-match the result returned by {@link #of(Node, Node)} to drive UI surfaces equivalent to WA Web's
+ * {@code WAWebGroupCommunityJob.deleteParentGroup} switch: {@link Success} confirms the community was torn
+ * down, {@link ClientError} surfaces caller-side failures (permissions, malformed envelope), and
+ * {@link ServerError} surfaces relay-side transient failures that may be retried.
  */
 public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperation.Response
         permits SmaxGroupsDeleteParentGroupResponse.Success, SmaxGroupsDeleteParentGroupResponse.ClientError, SmaxGroupsDeleteParentGroupResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsDeleteParentGroupResponse} variant in priority order.
+     * Parses the inbound IQ stanza into the first matching {@link SmaxGroupsDeleteParentGroupResponse} variant.
      *
-     * @param node    the inbound IQ stanza
-     * @param request the original outbound request
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no variant matched
+     * @apiNote
+     * Mirrors WA Web's {@code WASmaxGroupsDeleteParentGroupRPC.sendDeleteParentGroupRPC} fall-through cascade:
+     * {@link Success}, {@link ClientError}, {@link ServerError}. An empty {@link Optional} signals a stanza
+     * shape outside the documented union and is treated by WA Web as a parsing failure
+     * ({@code WASmaxParsingFailure.SmaxParsingFailure}).
+     *
+     * @implNote
+     * This implementation runs the variant probes in the same priority order as WA Web; it does not throw
+     * a parsing-failure exception, leaving the recovery decision to the caller.
+     *
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound {@link SmaxGroupsDeleteParentGroupRequest} stanza; used to validate
+     *                the echoed {@code id} attribute; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no documented
+     *         variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsDeleteParentGroupRPC",
@@ -44,24 +62,42 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code Success} reply variant — the relay deactivated the
-     * community.
+     * The success variant returned when the relay tore down the targeted community.
+     *
+     * @apiNote
+     * Carries no payload; the absence of an error envelope and a matching {@code <iq type="result">} shell is
+     * the only signal callers receive that the community and its sub-groups have been deactivated. WA Web's
+     * {@code WAWebGroupCommunityJob.deleteParentGroup} switch maps this variant to the resolved
+     * {@code parent_group_jid} response object.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsDeleteParentGroupResponseSuccess")
     final class Success implements SmaxGroupsDeleteParentGroupResponse {
         /**
-         * Constructs a new successful reply.
+         * Constructs a success variant.
+         *
+         * @apiNote
+         * Typically created by {@link #of(Node, Node)}; embedders may construct it directly to seed
+         * test fixtures.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Parses the inbound stanza into a {@link Success} when the result envelope is well-formed.
+         *
+         * @apiNote
+         * Invoked by {@link SmaxGroupsDeleteParentGroupResponse#of(Node, Node)} as the first probe in the
+         * variant cascade.
+         *
+         * @implNote
+         * This implementation delegates the envelope shell check (description, {@code type="result"}, echoed
+         * {@code id}) to {@link SmaxIqResultResponseMixin#validate(Node, Node)} and accepts any payload
+         * shape; the relay does not include child elements on success.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not satisfy the result-shell contract
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsDeleteParentGroupResponseSuccess",
                 exports = "parseDeleteParentGroupResponseSuccess",
@@ -93,25 +129,35 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The client-error variant returned when the relay rejected the request as malformed, unauthorised, or
+     * targeting a non-community group.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebGroupCommunityJob.deleteParentGroup} forwards this variant as a
+     * {@code ServerStatusCodeError} carrying the numeric {@link #errorCode()} and {@link #errorText()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsDeleteParentGroupResponseClientError")
     final class ClientError implements SmaxGroupsDeleteParentGroupResponse {
         /**
-         * The numeric error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The optional error text.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -119,7 +165,10 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
+         *
+         * @apiNote
+         * Forwarded as the {@code Number} status code in WA Web's {@code ServerStatusCodeError}.
          *
          * @return the error code
          */
@@ -130,19 +179,32 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text
+         * @apiNote
+         * Forwarded as the message argument to WA Web's {@code ServerStatusCodeError}; empty when the relay
+         * omitted the {@code text} attribute.
+         *
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Parses the inbound stanza into a {@link ClientError} envelope.
+         *
+         * @apiNote
+         * Invoked as the second probe in the variant cascade by
+         * {@link SmaxGroupsDeleteParentGroupResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} so every SMAX response in the family
+         * shares the same client-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsDeleteParentGroupResponseClientError",
                 exports = "parseDeleteParentGroupResponseClientError",
@@ -180,25 +242,35 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The server-error variant returned when the relay encountered a transient internal failure.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebGroupCommunityJob.deleteParentGroup} forwards this variant as a
+     * {@code ServerStatusCodeError}; callers can decide whether to retry based on the surfaced
+     * {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsDeleteParentGroupResponseServerError")
     final class ServerError implements SmaxGroupsDeleteParentGroupResponse {
         /**
-         * The numeric error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The optional error text.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -206,7 +278,10 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
+         *
+         * @apiNote
+         * Forwarded as the {@code Number} status code in WA Web's {@code ServerStatusCodeError}.
          *
          * @return the error code
          */
@@ -217,19 +292,32 @@ public sealed interface SmaxGroupsDeleteParentGroupResponse extends SmaxOperatio
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text
+         * @apiNote
+         * Empty when the relay omitted the {@code text} attribute; WA Web forwards the value verbatim to its
+         * {@code ServerStatusCodeError} constructor.
+         *
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Parses the inbound stanza into a {@link ServerError} envelope.
+         *
+         * @apiNote
+         * Invoked as the terminal probe in the variant cascade by
+         * {@link SmaxGroupsDeleteParentGroupResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} so every SMAX response in the family
+         * shares the same server-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsDeleteParentGroupResponseServerError",
                 exports = "parseDeleteParentGroupResponseServerError",

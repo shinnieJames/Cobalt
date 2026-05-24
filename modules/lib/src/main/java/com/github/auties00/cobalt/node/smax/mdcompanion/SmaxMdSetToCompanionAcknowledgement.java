@@ -13,26 +13,55 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound ack stanza. Emitted by the companion back through
- * the socket pipeline after consuming the {@link SmaxMdSetToCompanionResponse} stanza.
+ * The outbound {@code <iq type="result"/>} stanza emitted by a
+ * companion after consuming a {@link SmaxMdSetToCompanionResponse}.
+ *
+ * @apiNote
+ * Sent by companions once the inbound pair-device refs have been
+ * accepted into the rotation timer, so the relay can mark the
+ * pair-device IQ delivered. WA Web's {@code WAWebHandlePairDevice}
+ * builds this stanza via the
+ * {@code makeSetToCompanionResponseClientResponse} thunk returned by
+ * {@code receiveSetToCompanionRPC}.
+ *
+ * @implNote
+ * This implementation emits the bare result envelope WA Web sends:
+ * {@code <iq id="..." to="..." type="result"/>} with no inner
+ * payload. The {@code to} attribute echoes the inbound {@code from}
+ * (always the {@code s.whatsapp.net} server domain) rather than
+ * pinning the literal in the builder.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetToCompanionResponseClientResponse")
 public final class SmaxMdSetToCompanionAcknowledgement implements SmaxOperation.Request {
     /**
-     * The id of the inbound IQ being acknowledged (echoed into
-     * {@code <iq id=…>}).
+     * The {@code id} of the inbound IQ being acknowledged.
+     *
+     * @apiNote
+     * Echoed into the outbound {@code <iq id="..."/>} attribute so
+     * the relay can pair the response with its pending request.
      */
     private final String iqId;
 
     /**
-     * The from of the inbound IQ (echoed into {@code <iq to=…>}).
+     * The destination JID, echoed from the inbound IQ's
+     * {@code from} attribute.
+     *
+     * @apiNote
+     * Becomes the ack's {@code to} attribute; always the
+     * {@code s.whatsapp.net} server domain for valid inbound stanzas.
      */
     private final Jid iqTo;
 
     /**
-     * Constructs a new ack response.
+     * Constructs an ack from already-resolved component fields.
      *
-     * @param iqId the IQ id; never {@code null}
+     * @apiNote
+     * Library code typically calls
+     * {@link #from(SmaxMdSetToCompanionResponse)} to derive both
+     * echoed fields from an already-parsed pair-device projection;
+     * this constructor is exposed for unit tests.
+     *
+     * @param iqId the inbound IQ id; never {@code null}
      * @param iqTo the destination JID; never {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
@@ -42,9 +71,16 @@ public final class SmaxMdSetToCompanionAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Constructs an ack from a parsed {@link SmaxMdSetToCompanionResponse} projection.
+     * Derives the ack from an already-parsed
+     * {@link SmaxMdSetToCompanionResponse} projection.
      *
-     * @param inbound the inbound projection; never {@code null}
+     * @apiNote
+     * Mirrors WA Web's pattern of obtaining the ack builder thunk
+     * directly from the {@code receiveSetToCompanionRPC} return
+     * value: the same two echoed fields are folded back into the
+     * outbound stanza without the caller having to copy them.
+     *
+     * @param inbound the parsed inbound pair-device projection
      * @return a new {@link SmaxMdSetToCompanionAcknowledgement}
      * @throws NullPointerException if {@code inbound} is {@code null}
      */
@@ -65,6 +101,9 @@ public final class SmaxMdSetToCompanionAcknowledgement implements SmaxOperation.
     /**
      * Returns the destination JID.
      *
+     * @apiNote
+     * Becomes the ack's {@code to} attribute.
+     *
      * @return the JID; never {@code null}
      */
     public Jid iqTo() {
@@ -74,7 +113,17 @@ public final class SmaxMdSetToCompanionAcknowledgement implements SmaxOperation.
     /**
      * Builds the outbound ack stanza.
      *
-     * @return a {@link NodeBuilder} carrying the ack envelope
+     * @apiNote
+     * Returns the unfinished {@link NodeBuilder} so the dispatch
+     * path can stamp the wire-level identifiers before flushing,
+     * matching {@link SmaxOperation.Request#toNode()}.
+     *
+     * @implNote
+     * This implementation emits an {@code <iq>} with no children,
+     * mirroring the bare-result shape produced by WA Web's
+     * {@code makeSetToCompanionResponseClientResponse}.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutMdSetToCompanionResponseClientResponse",

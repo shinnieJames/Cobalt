@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
-import java.util.stream.Stream;
 
 /**
  * Chunk of account history transferred from the primary device to a companion
@@ -71,22 +70,63 @@ public abstract sealed class HistorySync {
     List<Pushname> pushnames;
 
     /**
-     * Global account settings included with the transfer.
+     * Snapshot of account-wide user preferences (wallpapers,
+     * auto-download policies, notification preferences, font and quality
+     * settings, default disappearing-mode duration, security-notifications
+     * flag, chat-lock settings, and related toggles) emitted with the
+     * initial bootstrap chunk.
+     *
+     * <p>Decoded for protobuf parity only. WhatsApp Web does not read
+     * this field from the history-sync chunk: the authoritative sources
+     * for these preferences are the app-state (syncd) collections
+     * instead. The {@code chatLockSettings} sub-message lands via
+     * {@code WAWebChatLockSettingsSync}, the default disappearing-mode
+     * duration and security-notifications flag arrive through separate
+     * syncd / user-prefs flows, and no handler ever dereferences
+     * {@code historySync.globalSettings}. Cobalt mirrors that behaviour
+     * and exposes the field only so embedders can inspect the snapshot
+     * for diagnostics.
+     *
+     * <p>Wire field {@code globalSettings} on the WhatsApp Web
+     * history-sync proto.
      */
     @ProtobufProperty(index = 8, type = ProtobufType.MESSAGE)
     GlobalSettings globalSettings;
 
     /**
-     * Secret used as part of the thread identifier derivation for the user.
+     * Per-account HMAC seed for WhatsApp's Chat Thread Logging
+     * telemetry pipeline.
+     *
+     * <p>WhatsApp Web feeds this secret into the metadata store backing
+     * {@code WAWebChatThreadLogging}, where it is used to HMAC every
+     * chat identifier before the identifier is attached to an outgoing
+     * Chat Thread Logging analytics event. Routing the JID through an
+     * HMAC keyed by an account-private secret keeps the analytics
+     * pipeline able to correlate activity within one account without
+     * exposing the plaintext JID to the logging backend.
+     *
+     * <p>Wire field {@code threadIdUserSecret} on the WhatsApp Web
+     * history-sync proto.
      */
     @ProtobufProperty(index = 9, type = ProtobufType.BYTES)
-    byte[] threadIdUserSecret;
+    byte[] chatThreadLoggingSecret;
 
     /**
-     * Offset used when computing disappearing-mode thread windows.
+     * Disappearing-mode timeframe offset for WhatsApp's Chat Thread
+     * Logging telemetry pipeline.
+     *
+     * <p>WhatsApp Web feeds this offset into the same metadata store
+     * that holds {@link #chatThreadLoggingSecret}, where the Chat
+     * Thread Logging pipeline uses it to bucket per-thread activity
+     * into the same disappearing-mode time windows the user sees in
+     * their disappearing-messages settings, so that the analytics
+     * events line up with the user's privacy window.
+     *
+     * <p>Wire field {@code threadDsTimeframeOffset} on the WhatsApp Web
+     * history-sync proto.
      */
     @ProtobufProperty(index = 10, type = ProtobufType.UINT32)
-    Integer threadDsTimeframeOffset;
+    Integer chatThreadLoggingDisappearingOffset;
 
     /**
      * Recently used stickers transferred for the user.
@@ -107,7 +147,20 @@ public abstract sealed class HistorySync {
     List<CallLog> callLogs;
 
     /**
-     * Wait-list state for AI bot features.
+     * Vestigial wait-list state for Meta AI bot access.
+     *
+     * <p>The field is still emitted on the wire but has no runtime
+     * consumer on WhatsApp Web: the bundle exports the enum class
+     * ({@code l.HistorySync$BotAIWaitListState}) but no handler reads
+     * the value. Access to Meta AI is decided today by server-driven
+     * AB props ({@code isAskMetaAiEnabled},
+     * {@code isMetaAIChatInteractionEnabled} in {@code WAWebBotGating}),
+     * not by a history-sync flag, and this field is left over from the
+     * early Meta-AI access-gating phase. Decoded for protobuf parity
+     * only; no consumer should depend on its value.
+     *
+     * <p>Wire field {@code aiWaitListState} on the WhatsApp Web
+     * history-sync proto.
      */
     @ProtobufProperty(index = 14, type = ProtobufType.ENUM)
     BotAIWaitListState aiWaitListState;
@@ -119,19 +172,55 @@ public abstract sealed class HistorySync {
     List<PhoneNumberToLIDMapping> phoneNumberToLidMappings;
 
     /**
-     * Nonce used to authenticate companion metadata updates.
+     * Companion-issued nonce that authenticates this companion device
+     * against WhatsApp's MMS (Media Management Service) when asking it
+     * to release the history-sync blob from the CDN.
+     *
+     * <p>WhatsApp Web stores the nonce after the initial bootstrap and
+     * passes it back as the {@code companionUserSecret} parameter to
+     * {@code WAWebMmsClient.deleteMdHistorySyncBlob} the first time a
+     * history-sync chunk has been applied; the server uses it as proof
+     * that the same companion that received the blob is the one asking
+     * to delete it.
+     *
+     * <p>Wire field {@code companionMetaNonce} on the WhatsApp Web
+     * history-sync proto.
      */
     @ProtobufProperty(index = 16, type = ProtobufType.STRING)
-    String companionMetaNonce;
+    String companionMmsAuthNonce;
 
     /**
-     * Key used to encrypt shareable chat identifiers.
+     * Per-account key that protects the opaque chat identifier
+     * embedded in WhatsApp's shareable-chat links (the
+     * {@code wa.me/} and QR deep-link surface).
+     *
+     * <p>Decoded and persisted on the client purely for completeness.
+     * The deep-link generator runs entirely server-side: there is no
+     * client-side consumer on WhatsApp Web or on the Windows desktop
+     * bundle (the latter shares the Web bundle), so neither WA Web nor
+     * Cobalt ever invokes any local encryption routine with this key.
+     * The client receives it, retains it, and never reads it back.
+     *
+     * <p>Wire field {@code shareableChatIdentifierEncryptionKey} on the
+     * WhatsApp Web history-sync proto.
      */
     @ProtobufProperty(index = 17, type = ProtobufType.BYTES)
-    byte[] shareableChatIdentifierEncryptionKey;
+    byte[] shareableChatLinkKey;
 
     /**
-     * Linked account descriptors (for multi-account users).
+     * Linked account descriptors carried for users who have linked
+     * multiple WhatsApp accounts (the multi-account / "sister accounts"
+     * surface).
+     *
+     * <p>Decoded for protobuf parity only. Cobalt is a single-account
+     * client today; the list is preserved on this payload so embedders
+     * may inspect it, but no part of the stack projects it into a
+     * dedicated store collection or fires a listener event. If Cobalt
+     * grows multi-account support, the right place to land these is on
+     * the store, not here.
+     *
+     * <p>Wire field {@code accounts} on the WhatsApp Web history-sync
+     * proto.
      */
     @ProtobufProperty(index = 18, type = ProtobufType.MESSAGE)
     List<Account> accounts;
@@ -145,32 +234,33 @@ public abstract sealed class HistorySync {
      * @param progress the transfer progress percentage
      * @param pushnames the transferred push-names
      * @param globalSettings the transferred global settings
-     * @param threadIdUserSecret the thread-id user secret
-     * @param threadDsTimeframeOffset the disappearing-mode timeframe offset
+     * @param chatThreadLoggingSecret the Chat Thread Logging HMAC seed
+     * @param chatThreadLoggingDisappearingOffset the Chat Thread Logging
+     *                                            disappearing-mode timeframe offset
      * @param recentStickers the recently used stickers
      * @param pastParticipants the past-participants records
      * @param callLogs the call-log records
      * @param aiWaitListState the AI wait-list state
      * @param phoneNumberToLidMappings the phone-number to LID migration records
-     * @param companionMetaNonce the companion metadata nonce
-     * @param shareableChatIdentifierEncryptionKey the shareable-identifier key
+     * @param companionMmsAuthNonce the MMS authorization nonce
+     * @param shareableChatLinkKey the shareable-chat-link encryption key
      * @param accounts the linked account descriptors
      */
-    HistorySync(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts) {
+    HistorySync(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] chatThreadLoggingSecret, Integer chatThreadLoggingDisappearingOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMmsAuthNonce, byte[] shareableChatLinkKey, List<Account> accounts) {
         this.syncType = Objects.requireNonNull(syncType);
         this.chunkOrder = chunkOrder;
         this.progress = progress;
         this.pushnames = pushnames;
         this.globalSettings = globalSettings;
-        this.threadIdUserSecret = threadIdUserSecret;
-        this.threadDsTimeframeOffset = threadDsTimeframeOffset;
+        this.chatThreadLoggingSecret = chatThreadLoggingSecret;
+        this.chatThreadLoggingDisappearingOffset = chatThreadLoggingDisappearingOffset;
         this.recentStickers = recentStickers;
         this.pastParticipants = pastParticipants;
         this.callLogs = callLogs;
         this.aiWaitListState = aiWaitListState;
         this.phoneNumberToLidMappings = phoneNumberToLidMappings;
-        this.companionMetaNonce = companionMetaNonce;
-        this.shareableChatIdentifierEncryptionKey = shareableChatIdentifierEncryptionKey;
+        this.companionMmsAuthNonce = companionMmsAuthNonce;
+        this.shareableChatLinkKey = shareableChatLinkKey;
         this.accounts = accounts;
     }
 
@@ -262,21 +352,23 @@ public abstract sealed class HistorySync {
     }
 
     /**
-     * Returns the user secret used during thread-id derivation.
+     * Returns the HMAC seed feeding WhatsApp's Chat Thread Logging
+     * telemetry pipeline.
      *
      * @return the secret bytes, or empty if absent
      */
-    public Optional<byte[]> threadIdUserSecret() {
-        return Optional.ofNullable(threadIdUserSecret);
+    public Optional<byte[]> chatThreadLoggingSecret() {
+        return Optional.ofNullable(chatThreadLoggingSecret);
     }
 
     /**
-     * Returns the offset used when computing disappearing-mode windows.
+     * Returns the disappearing-mode timeframe offset feeding WhatsApp's
+     * Chat Thread Logging telemetry pipeline.
      *
      * @return the offset, or empty if absent
      */
-    public OptionalInt threadDsTimeframeOffset() {
-        return threadDsTimeframeOffset == null ? OptionalInt.empty() : OptionalInt.of(threadDsTimeframeOffset);
+    public OptionalInt chatThreadLoggingDisappearingOffset() {
+        return chatThreadLoggingDisappearingOffset == null ? OptionalInt.empty() : OptionalInt.of(chatThreadLoggingDisappearingOffset);
     }
 
     /**
@@ -307,7 +399,10 @@ public abstract sealed class HistorySync {
     }
 
     /**
-     * Returns the AI wait-list state of the account.
+     * Returns the vestigial Meta-AI wait-list state. Decoded for
+     * protobuf parity only; Meta AI access is gated by server-driven
+     * AB props rather than by this flag, and no current handler reads
+     * the value.
      *
      * @return the wait-list state, or empty if absent
      */
@@ -326,21 +421,23 @@ public abstract sealed class HistorySync {
     }
 
     /**
-     * Returns the companion metadata nonce.
+     * Returns the nonce that authenticates this companion against
+     * WhatsApp's MMS when releasing the just-applied history-sync blob.
      *
      * @return the nonce, or empty if absent
      */
-    public Optional<String> companionMetaNonce() {
-        return Optional.ofNullable(companionMetaNonce);
+    public Optional<String> companionMmsAuthNonce() {
+        return Optional.ofNullable(companionMmsAuthNonce);
     }
 
     /**
-     * Returns the encryption key used for shareable chat identifiers.
+     * Returns the per-account key that protects the opaque chat
+     * identifier embedded in WhatsApp's shareable-chat links.
      *
      * @return the key bytes, or empty if absent
      */
-    public Optional<byte[]> shareableChatIdentifierEncryptionKey() {
-        return Optional.ofNullable(shareableChatIdentifierEncryptionKey);
+    public Optional<byte[]> shareableChatLinkKey() {
+        return Optional.ofNullable(shareableChatLinkKey);
     }
 
     /**
@@ -398,21 +495,21 @@ public abstract sealed class HistorySync {
     }
 
     /**
-     * Sets the thread-id user secret.
+     * Sets the Chat Thread Logging HMAC seed.
      *
-     * @param threadIdUserSecret the secret bytes
+     * @param chatThreadLoggingSecret the secret bytes
      */
-    public void setThreadIdUserSecret(byte[] threadIdUserSecret) {
-        this.threadIdUserSecret = threadIdUserSecret;
+    public void setChatThreadLoggingSecret(byte[] chatThreadLoggingSecret) {
+        this.chatThreadLoggingSecret = chatThreadLoggingSecret;
     }
 
     /**
-     * Sets the disappearing-mode timeframe offset.
+     * Sets the Chat Thread Logging disappearing-mode timeframe offset.
      *
-     * @param threadDsTimeframeOffset the offset
+     * @param chatThreadLoggingDisappearingOffset the offset
      */
-    public void setThreadDsTimeframeOffset(Integer threadDsTimeframeOffset) {
-        this.threadDsTimeframeOffset = threadDsTimeframeOffset;
+    public void setChatThreadLoggingDisappearingOffset(Integer chatThreadLoggingDisappearingOffset) {
+        this.chatThreadLoggingDisappearingOffset = chatThreadLoggingDisappearingOffset;
     }
 
     /**
@@ -461,21 +558,21 @@ public abstract sealed class HistorySync {
     }
 
     /**
-     * Sets the companion metadata nonce.
+     * Sets the MMS authorization nonce.
      *
-     * @param companionMetaNonce the nonce
+     * @param companionMmsAuthNonce the nonce
      */
-    public void setCompanionMetaNonce(String companionMetaNonce) {
-        this.companionMetaNonce = companionMetaNonce;
+    public void setCompanionMmsAuthNonce(String companionMmsAuthNonce) {
+        this.companionMmsAuthNonce = companionMmsAuthNonce;
     }
 
     /**
-     * Sets the shareable chat identifier encryption key.
+     * Sets the shareable-chat-link encryption key.
      *
-     * @param shareableChatIdentifierEncryptionKey the key bytes
+     * @param shareableChatLinkKey the key bytes
      */
-    public void setShareableChatIdentifierEncryptionKey(byte[] shareableChatIdentifierEncryptionKey) {
-        this.shareableChatIdentifierEncryptionKey = shareableChatIdentifierEncryptionKey;
+    public void setShareableChatLinkKey(byte[] shareableChatLinkKey) {
+        this.shareableChatLinkKey = shareableChatLinkKey;
     }
 
     /**
@@ -522,21 +619,22 @@ public abstract sealed class HistorySync {
          * @param progress the progress value
          * @param pushnames the push-names
          * @param globalSettings the global settings
-         * @param threadIdUserSecret the thread-id user secret
-         * @param threadDsTimeframeOffset the timeframe offset
+         * @param chatThreadLoggingSecret the Chat Thread Logging HMAC seed
+         * @param chatThreadLoggingDisappearingOffset the Chat Thread Logging
+         *                                            timeframe offset
          * @param recentStickers the recent stickers
          * @param pastParticipants the past participants
          * @param callLogs the call logs
          * @param aiWaitListState the AI wait-list state
          * @param phoneNumberToLidMappings the PN to LID mappings
-         * @param companionMetaNonce the companion nonce
-         * @param shareableChatIdentifierEncryptionKey the shareable-id key
+         * @param companionMmsAuthNonce the MMS authorization nonce
+         * @param shareableChatLinkKey the shareable-chat-link encryption key
          * @param accounts the linked accounts
          * @param chats the transferred chats
          * @param statusV3Messages the transferred status messages
          */
-        Full(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts, List<Chat> chats, List<ChatMessageInfo> statusV3Messages) {
-            super(syncType, chunkOrder, progress, pushnames, globalSettings, threadIdUserSecret, threadDsTimeframeOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMetaNonce, shareableChatIdentifierEncryptionKey, accounts);
+        Full(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] chatThreadLoggingSecret, Integer chatThreadLoggingDisappearingOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMmsAuthNonce, byte[] shareableChatLinkKey, List<Account> accounts, List<Chat> chats, List<ChatMessageInfo> statusV3Messages) {
+            super(syncType, chunkOrder, progress, pushnames, globalSettings, chatThreadLoggingSecret, chatThreadLoggingDisappearingOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMmsAuthNonce, shareableChatLinkKey, accounts);
             this.chats = chats;
             this.statusV3Messages = statusV3Messages;
         }
@@ -1054,19 +1152,20 @@ public abstract sealed class HistorySync {
          * @param progress the progress value
          * @param pushnames the push-names
          * @param globalSettings the global settings
-         * @param threadIdUserSecret the thread-id user secret
-         * @param threadDsTimeframeOffset the timeframe offset
+         * @param chatThreadLoggingSecret the Chat Thread Logging HMAC seed
+         * @param chatThreadLoggingDisappearingOffset the Chat Thread Logging
+         *                                            timeframe offset
          * @param recentStickers the recent stickers
          * @param pastParticipants the past participants
          * @param callLogs the call logs
          * @param aiWaitListState the AI wait-list state
          * @param phoneNumberToLidMappings the PN to LID mappings
-         * @param companionMetaNonce the companion nonce
-         * @param shareableChatIdentifierEncryptionKey the shareable-id key
+         * @param companionMmsAuthNonce the MMS authorization nonce
+         * @param shareableChatLinkKey the shareable-chat-link encryption key
          * @param accounts the linked accounts
          */
-        Light(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] threadIdUserSecret, Integer threadDsTimeframeOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMetaNonce, byte[] shareableChatIdentifierEncryptionKey, List<Account> accounts) {
-            super(syncType, chunkOrder, progress, pushnames, globalSettings, threadIdUserSecret, threadDsTimeframeOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMetaNonce, shareableChatIdentifierEncryptionKey, accounts);
+        Light(HistorySyncType syncType, Integer chunkOrder, Integer progress, List<Pushname> pushnames, GlobalSettings globalSettings, byte[] chatThreadLoggingSecret, Integer chatThreadLoggingDisappearingOffset, List<StickerMetadata> recentStickers, List<GroupPastParticipants> pastParticipants, List<CallLog> callLogs, BotAIWaitListState aiWaitListState, List<PhoneNumberToLIDMapping> phoneNumberToLidMappings, String companionMmsAuthNonce, byte[] shareableChatLinkKey, List<Account> accounts) {
+            super(syncType, chunkOrder, progress, pushnames, globalSettings, chatThreadLoggingSecret, chatThreadLoggingDisappearingOffset, recentStickers, pastParticipants, callLogs, aiWaitListState, phoneNumberToLidMappings, companionMmsAuthNonce, shareableChatLinkKey, accounts);
         }
 
         /**
@@ -1149,7 +1248,7 @@ public abstract sealed class HistorySync {
          * LID of the linked account.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
-        String lid;
+        Jid lid;
 
         /**
          * Username of the linked account, if any.
@@ -1178,7 +1277,7 @@ public abstract sealed class HistorySync {
          * @param countryCode the account country code
          * @param isUsernameDeleted whether the username has been deleted
          */
-        Account(String lid, String username, String countryCode, Boolean isUsernameDeleted) {
+        Account(Jid lid, String username, String countryCode, Boolean isUsernameDeleted) {
             this.lid = lid;
             this.username = username;
             this.countryCode = countryCode;
@@ -1190,7 +1289,7 @@ public abstract sealed class HistorySync {
          *
          * @return the LID, or empty if absent
          */
-        public Optional<String> lid() {
+        public Optional<Jid> lid() {
             return Optional.ofNullable(lid);
         }
 
@@ -1227,7 +1326,7 @@ public abstract sealed class HistorySync {
          *
          * @param lid the LID
          */
-        public void setLid(String lid) {
+        public void setLid(Jid lid) {
             this.lid = lid;
     }
 

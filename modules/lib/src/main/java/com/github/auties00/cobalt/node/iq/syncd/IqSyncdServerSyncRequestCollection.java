@@ -5,42 +5,51 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A single {@code <collection/>} entry in an outbound syncd sync IQ.
+ * A single {@code <collection/>} entry inside an outbound
+ * {@link IqSyncdServerSyncRequest}.
  *
- * <p>Each entry asks the relay either for a snapshot (when {@link #version()}
- * is empty) or for the patches above a known version. When the local client
- * also has pending mutations to push, an encrypted patch payload is
- * attached via {@link #patch()}.
+ * @apiNote
+ * Construct one entry per collection name (e.g. {@code "regular"}, {@code "regular_low"},
+ * {@code "regular_high"}, {@code "critical_block"}, {@code "critical_unblock_low"}) per
+ * sync iteration. Pass {@code version = null} to request an initial snapshot; pass a
+ * known {@code version} to fetch only the patches above it. Pass {@code patch} bytes
+ * to upload encrypted local mutations as part of the same iteration; pass
+ * {@code null} when the entry only fetches remote state.
  */
 public final class IqSyncdServerSyncRequestCollection {
     /**
-     * The collection name (e.g. {@code "regular"}, {@code "regular_high"}).
+     * Holds the collection name (one of the values in WA Web's
+     * {@code WASyncdConst.CollectionName}).
      */
     private final String name;
 
     /**
-     * The locally-known collection version, or {@code null} when the
-     * caller has never synced this collection (in which case the
-     * relay returns a fresh snapshot).
+     * Holds the locally-known collection version, or {@code null} when the caller
+     * has never synced this collection.
      */
     private final Long version;
 
     /**
-     * The encoded {@code SyncdPatch} protobuf carrying local
-     * mutations to push, or {@code null} when this entry only fetches
-     * remote state.
+     * Holds the encoded {@code SyncdPatch} protobuf carrying encrypted local
+     * mutations to push, or {@code null} when this entry only fetches remote state.
      */
     private final byte[] patch;
 
     /**
      * Constructs a new outbound collection entry.
      *
-     * @param name    the collection name. Never {@code null}
-     * @param version the locally-known version, or {@code null} when
-     *                the caller has never synced this collection
-     * @param patch   the encoded {@code SyncdPatch} bytes carrying
-     *                local mutations, or {@code null} when this entry
-     *                fetches only
+     * @apiNote
+     * The {@code patch} parameter is the already-encrypted-and-encoded protobuf
+     * bytes produced by WA Web's
+     * {@code WAWebSyncdRequestBuilderBuild._buildCollectionNodes} pipeline (LtHash
+     * computation, per-mutation encryption, snapshot/patch-MAC computation, and
+     * SyncdPatch encoding); pass {@code null} when the caller has no local
+     * mutations to ship.
+     *
+     * @param name    the collection name; never {@code null}
+     * @param version the locally-known version, or {@code null} when the caller
+     *                has never synced this collection
+     * @param patch   the encoded {@code SyncdPatch} bytes, or {@code null}
      * @throws NullPointerException if {@code name} is {@code null}
      */
     public IqSyncdServerSyncRequestCollection(String name, Long version, byte[] patch) {
@@ -52,7 +61,7 @@ public final class IqSyncdServerSyncRequestCollection {
     /**
      * Returns the collection name.
      *
-     * @return the name. Never {@code null}
+     * @return the name; never {@code null}
      */
     public String name() {
         return name;
@@ -61,21 +70,18 @@ public final class IqSyncdServerSyncRequestCollection {
     /**
      * Returns the locally-known collection version.
      *
-     * @return an {@link Optional} containing the version, or
-     *         {@link Optional#empty()} when the caller has never
-     *         synced this collection
+     * @return an {@link Optional} containing the version, or empty when the caller
+     *         has never synced this collection
      */
     public Optional<Long> version() {
         return Optional.ofNullable(version);
     }
 
     /**
-     * Returns the encoded {@code SyncdPatch} bytes carrying local
-     * mutations.
+     * Returns the encoded {@code SyncdPatch} bytes carrying local mutations.
      *
-     * @return an {@link Optional} containing the patch bytes, or
-     *         {@link Optional#empty()} when this entry only fetches
-     *         remote state
+     * @return an {@link Optional} containing the patch bytes, or empty when this
+     *         entry only fetches remote state
      */
     public Optional<byte[]> patch() {
         return Optional.ofNullable(patch);

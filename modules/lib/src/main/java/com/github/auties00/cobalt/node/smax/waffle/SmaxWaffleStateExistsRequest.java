@@ -13,23 +13,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps a {@code <timestamp/>} child in
- * the canonical {@code <iq xmlns="waffle" smax_id="142" type="get"
- * to="s.whatsapp.net">} envelope.
+ * The outbound {@code <iq xmlns="waffle" smax_id="142" type="get"/>}
+ * Waffle state-existence probe.
+ *
+ * @apiNote
+ * Powers the boot-time check in
+ * {@code WAWebAccountLinkingAPI.stateExists}, which asks the relay
+ * whether this device is currently linked to a Facebook account and
+ * caches the answer as one of {@code UNLINKED}, {@code ACTIVE}, or
+ * {@code PAUSED} (the {@code AccountLinkingStateExists} enum in
+ * {@code WAWebAccountLinkingConstants}). The reply is paired with
+ * {@link SmaxWaffleStateExistsResponse}. The request body carries only
+ * a {@code <timestamp/>} child; the relay identifies the caller from
+ * the authenticated session.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleStateExistsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
 public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request {
     /**
-     * The client's wall-clock at request time, in seconds since the
-     * UNIX epoch.
+     * The client wall-clock at request time, in seconds since the Unix
+     * epoch.
      */
     private final long timestamp;
 
     /**
-     * Constructs a request stamped at the given timestamp.
+     * Constructs a state-existence probe stamped at the given timestamp.
      *
-     * @param timestamp the UNIX epoch seconds at request time
+     * @apiNote
+     * WA Web stamps the request with {@code Date.now()} (milliseconds
+     * since the Unix epoch) for this RPC; the value is opaque to the
+     * relay and is echoed back inside the reply for clock-skew
+     * diagnostics.
+     *
+     * @param timestamp the request timestamp
      */
     public SmaxWaffleStateExistsRequest(long timestamp) {
         this.timestamp = timestamp;
@@ -38,7 +54,7 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
     /**
      * Returns the request timestamp.
      *
-     * @return the UNIX epoch seconds
+     * @return the timestamp as supplied at construction time
      */
     public long timestamp() {
         return timestamp;
@@ -47,8 +63,15 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <timestamp/>} payload
+     * @apiNote
+     * Produces
+     * {@code <iq xmlns="waffle" smax_id="142" type="get" to="s.whatsapp.net">
+     * <timestamp>...</timestamp></iq>}; the dispatch path stamps a fresh
+     * {@code id} attribute on every outbound stanza so the reply parser
+     * can match it back to this request.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
+     *         and the {@code <timestamp/>} payload; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleStateExistsRequest",
@@ -67,6 +90,13 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
                 .content(timestampNode);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxWaffleStateExistsRequest} with an equal timestamp.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when both timestamps match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -79,11 +109,21 @@ public final class SmaxWaffleStateExistsRequest implements SmaxOperation.Request
         return this.timestamp == that.timestamp;
     }
 
+    /**
+     * Returns a hash code derived from the timestamp.
+     *
+     * @return the {@link Long#hashCode(long)} of the timestamp
+     */
     @Override
     public int hashCode() {
         return Long.hashCode(timestamp);
     }
 
+    /**
+     * Returns a debug rendering of this request.
+     *
+     * @return a human-readable summary; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxWaffleStateExistsRequest[timestamp=" + timestamp + ']';

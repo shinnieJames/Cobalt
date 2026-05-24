@@ -19,56 +19,94 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches user directory metadata for a batch of contacts through the MEX transport variant of the usync protocol.
+ * Builds the MEX IQ stanza that batches user-directory lookups through the
+ * GraphQL usync variant.
  *
- * <p>Usync is WhatsApp's bulk user-info query that powers contact sync, participant resolution and device list
- * refresh. The GraphQL variant accepted here lets callers toggle which optional fields are included in each entry,
- * including about status, phone country code and registered username. The response is a list of records, one per
- * queried user, with the selected metadata fields populated.
+ * @apiNote Powers contact sync, device-list refresh, and the per-feature
+ * facades that ship in {@code WAWebMexUsersGetAboutStatus},
+ * {@code WAWebMexUsersGetCountryCode}, and {@code WAWebMexUsersGetUsername}.
+ * Each facade dispatches this query with a different {@code fetch} flag
+ * subset; Cobalt exposes the three flags individually so callers can
+ * compose the same projections. Pair the dispatched stanza with
+ * {@link UsyncMexResponse} to consume the reply.
+ *
+ * @implNote This implementation forwards {@code input} as a pre-serialised
+ * scalar. WA Web's mirror constructs it from
+ * {@code {users: [{jid, privacy_token?}], telemetry: {context}}} after
+ * filtering each entry against
+ * {@code WAWebWidFactory.createWid(jid).isEligibleForUSync()}; Cobalt
+ * callers must perform that filtering and serialisation at a higher
+ * layer.
+ *
+ * @see UsyncMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUsync")
 public final class UsyncMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexUsyncQuery.graphql} for the snapshot this file was
+     * generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsyncQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29829202653362039";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexUsyncQuery.graphql}; WA Web tags the value to
+     * {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsyncQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexUsyncQuery";
 
     /**
-     * Whether each result entry should carry the about-status field.
+     * The {@code include_about_status} flag, possibly {@code null}.
      */
     private final Boolean includeAboutStatus;
 
     /**
-     * Whether each result entry should carry the phone country-code field.
+     * The {@code include_country_code} flag, possibly {@code null}.
      */
     private final Boolean includeCountryCode;
 
     /**
-     * Whether each result entry should carry the registered-username field.
+     * The {@code include_username} flag, possibly {@code null}.
      */
     private final Boolean includeUsername;
 
     /**
-     * The serialised batch of target user JIDs encoded as a single GraphQL input scalar.
+     * The {@code input} GraphQL variable carrying the pre-serialised batch.
      */
     private final String input;
 
     /**
-     * Constructs a new request with the given selection toggles and serialised input.
+     * Constructs a usync query request.
      *
-     * @param includeAboutStatus whether to include the about-status field, or {@code null} to omit the variable
-     * @param includeCountryCode whether to include the phone country-code field, or {@code null} to omit the variable
-     * @param includeUsername whether to include the registered-username field, or {@code null} to omit the variable
-     * @param input the serialised list of target user JIDs, or {@code null} to omit the variable
+     * @apiNote Each {@code include_*} toggle controls whether the
+     * corresponding sub-object is projected on each result row. WA Web's
+     * facades set exactly one toggle per dispatch
+     * ({@link UsyncMexResponse.Item#aboutStatusInfo()} from
+     * {@code WAWebMexUsersGetAboutStatus},
+     * {@link UsyncMexResponse.Item#countryCode()} from
+     * {@code WAWebMexUsersGetCountryCode},
+     * {@link UsyncMexResponse.Item#usernameInfo()} from
+     * {@code WAWebMexUsersGetUsername}); callers may combine them in a
+     * single request to amortise the round-trip cost.
+     *
+     * @param includeAboutStatus whether to include the about-status sub-object,
+     *                           or {@code null} to omit the variable
+     * @param includeCountryCode whether to include the country-code field,
+     *                           or {@code null} to omit the variable
+     * @param includeUsername whether to include the username sub-object,
+     *                        or {@code null} to omit the variable
+     * @param input the serialised batch input, or {@code null} to omit
+     *              the variable
      */
     public UsyncMexRequest(Boolean includeAboutStatus, Boolean includeCountryCode, Boolean includeUsername, String input) {
         this.includeAboutStatus = includeAboutStatus;
@@ -78,9 +116,7 @@ public final class UsyncMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -88,9 +124,7 @@ public final class UsyncMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -98,9 +132,13 @@ public final class UsyncMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits each non-{@code null} flag and
+     * the {@code input} scalar into the {@code variables} object, then
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}. A
+     * fully empty request serialises as {@code {"variables": {}}}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUsync", exports = "mexUsyncQuery",
             adaptation = WhatsAppAdaptation.ADAPTED)

@@ -19,37 +19,67 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the list of users who voted on a newsletter poll option.
+ * Builds the MEX request that fetches the voter list for a newsletter
+ * poll option.
  *
- * <p>Newsletter polls track voters per option; this query returns the paginated list of voter identifiers for a specific option so admins can inspect poll participation.
+ * @apiNote
+ * Drives the admin poll-results surface; the request targets one poll
+ * message by {@code (newsletterId, serverId)} and one option by
+ * {@code voteHash} (a base64-encoded hash returned in the poll-update
+ * message), and the response groups voters by option.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterPollVotersJob")
 public final class FetchNewsletterPollVotersMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterPollVoters} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterPollVotersJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9407762219322536";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled fetchNewsletterPollVoters
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "fetchNewsletterPollVoters";
+
+    /**
+     * The newsletter Jid that owns the poll message.
+     */
     private final String newsletterId;
+
+    /**
+     * The maximum number of voter edges to return.
+     */
     private final long limit;
+
+    /**
+     * The server-assigned identifier of the poll message.
+     */
     private final long serverId;
+
+    /**
+     * The base64-encoded option hash, or {@code null} to fetch voters
+     * for every option.
+     */
     private final String voteHash;
 
     /**
-     * Constructs a new request for the supplied poll voter list query.
+     * Constructs a request for the voter list of one poll option.
      *
-     * @param newsletterId the newsletter JID whose poll voters are being requested
-     * @param limit        the maximum number of voter edges to return
-     * @param serverId     the server-assigned identifier of the poll message
-     * @param voteHash     the base64-encoded option hash, or {@code null} for all options
+     * @apiNote
+     * Pass a {@code null} {@code voteHash} to receive the voter list for
+     * every option of the poll; pass a specific hash to restrict to one
+     * option.
+     *
+     * @param newsletterId the newsletter Jid
+     * @param limit        the maximum voter-edge count
+     * @param serverId     the server-assigned poll message identifier
+     * @param voteHash     the base64-encoded option hash, or {@code null}
+     *                     for all options
      */
     public FetchNewsletterPollVotersMexRequest(String newsletterId, long limit, long serverId, String voteHash) {
         this.newsletterId = newsletterId;
@@ -59,10 +89,10 @@ public final class FetchNewsletterPollVotersMexRequest implements MexOperation.R
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -70,10 +100,10 @@ public final class FetchNewsletterPollVotersMexRequest implements MexOperation.R
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -81,11 +111,24 @@ public final class FetchNewsletterPollVotersMexRequest implements MexOperation.R
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {limit, server_id, newsletter_id, vote_hash}}}}
+     * payload; the {@code server_id} is encoded as a base-10 string to
+     * preserve full 64-bit precision through JSON, matching the JS source.
+     * {@code newsletter_id} and {@code vote_hash} are omitted when their
+     * fields are {@code null}.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterPollVotersJob", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)

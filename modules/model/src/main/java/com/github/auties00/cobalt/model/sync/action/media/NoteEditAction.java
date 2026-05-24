@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.model.sync.action.media;
 
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.model.mixin.InstantMillisMixin;
+import com.github.auties00.cobalt.model.mixin.InstantSecondsMixin;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import it.auties.protobuf.annotation.ProtobufEnum;
@@ -66,7 +66,7 @@ public final class NoteEditAction implements SyncAction<NoteEditActionArgs> {
      * The instant at which the note was created. Encoded on the wire as
      * a 64-bit millisecond epoch via {@link InstantMillisMixin}.
      */
-    @ProtobufProperty(index = 3, type = ProtobufType.INT64, mixins = InstantMillisMixin.class)
+    @ProtobufProperty(index = 3, type = ProtobufType.INT64, mixins = InstantSecondsMixin.class)
     Instant createdAt;
 
     /**

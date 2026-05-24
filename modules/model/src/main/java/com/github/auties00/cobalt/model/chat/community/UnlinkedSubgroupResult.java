@@ -38,7 +38,7 @@ import java.util.Optional;
  *   internal failure for the entire request.</li>
  * </ul>
  *
- * @see com.github.auties00.cobalt.model.chat.community.CommunityMetadata
+ * @see CommunityMetadata
  */
 @ProtobufMessage(name = "UnlinkedSubgroupResult")
 public final class UnlinkedSubgroupResult {

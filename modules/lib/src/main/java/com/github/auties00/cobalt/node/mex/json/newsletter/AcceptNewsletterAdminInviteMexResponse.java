@@ -7,34 +7,48 @@ import com.github.auties00.cobalt.node.Node;
 import java.util.Optional;
 
 /**
- * Response variant for {@link AcceptNewsletterAdminInviteMexRequest} that
- * exposes the newsletter identifier echoed back by the server once the invite
- * is accepted.
+ * Parses the MEX response of the accept-newsletter-admin-invite mutation
+ * built by {@link AcceptNewsletterAdminInviteMexRequest}.
+ *
+ * @apiNote
+ * Hands back the newsletter id echoed under {@code xwa2_newsletter_admin_invite_accept}
+ * after the invitee accepts the admin invite; consumers use it to confirm
+ * which newsletter just transitioned the local user to admin membership.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexAcceptNewsletterAdminInviteJob")
 public final class AcceptNewsletterAdminInviteMexResponse implements MexOperation.Response.Json {
     /**
-     * The identifier of the newsletter whose admin invite was accepted, as
-     * echoed by the server.
+     * The newsletter Jid string echoed under the
+     * {@code xwa2_newsletter_admin_invite_accept.id} response field.
      */
     private final String id;
 
     /**
-     * Creates a response carrying the newsletter identifier returned by the
-     * server.
+     * Constructs a response wrapping the echoed newsletter id.
      *
-     * @param id the newsletter identifier echoed by the server
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param id the newsletter Jid string echoed by the relay
      */
     private AcceptNewsletterAdminInviteMexResponse(String id) {
         this.id = id;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or empty if
-     *         the node does not contain a well-formed result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing, when its content cannot be decoded, or when the JSON envelope
+     * omits the expected {@code data.xwa2_newsletter_admin_invite_accept}
+     * root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<AcceptNewsletterAdminInviteMexResponse> of(Node node) {
         return node.getChild("result")
@@ -43,22 +57,34 @@ public final class AcceptNewsletterAdminInviteMexResponse implements MexOperatio
     }
 
     /**
-     * Returns the identifier of the newsletter whose invite was accepted.
+     * Returns the newsletter Jid string echoed by the relay.
      *
-     * @return an {@link Optional} containing the identifier, or empty if the
-     *         server did not echo it back
+     * @apiNote
+     * Empty when the GraphQL envelope omits {@code id}; otherwise carries the
+     * same Jid string sent in {@link AcceptNewsletterAdminInviteMexRequest}.
+     *
+     * @return the echoed newsletter id, or empty when omitted
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
     }
 
     /**
-     * Parses a response from the raw JSON bytes of the {@code <result>}
-     * child.
+     * Parses the response from the raw UTF-8 JSON payload of the
+     * {@code <result>} child.
+     *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload; callers should not
+     * hold raw JSON bytes.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception, mirroring the defensive null checks in WA Web's caller.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or empty if
-     *         the envelope lacks a {@code data} or result root
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletter_admin_invite_accept} root
      */
     private static Optional<AcceptNewsletterAdminInviteMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

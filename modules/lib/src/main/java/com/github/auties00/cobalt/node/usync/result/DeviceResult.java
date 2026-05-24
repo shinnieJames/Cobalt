@@ -8,30 +8,41 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Success result of {@code WAWebUsyncDevice.deviceParser}.
+ * Success result of the {@code WAWebUsyncDevice.deviceParser} parser.
  *
- * <p>Carries the peer's full device list and, when present, their signed
- * key-index-list metadata.
+ * @apiNote
+ * Surfaced by USync queries that include
+ * {@code UsyncQuery.withDeviceProtocol()}. WA Web callers include
+ * {@code WAWebAdvSyncDeviceListApi} (the ADV device-list sync that keeps
+ * companion-device fan-out in sync), the background contact sync, and
+ * developer tooling. Carries the peer's full device list and, when the relay
+ * also returns a {@code <key-index-list>} child, the signed key-index
+ * metadata used by the ADV verifier.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
 public final class DeviceResult implements UsyncProtocolResponse {
     /**
-     * Holds the list of devices linked to the peer. Never {@code null}.
+     * The list of devices linked to the peer; defaults to the empty list
+     * when the relay did not return a {@code <device-list>} child.
      */
     private final List<Device> devices;
 
     /**
-     * Holds the peer's signed key-index-list metadata, or {@code null} if
-     * the relay did not return a {@code <key-index-list>} child.
+     * The peer's signed key-index metadata, or {@code null} when the
+     * {@code <key-index-list>} child is absent.
      */
     private final KeyIndex keyIndex;
 
     /**
      * Creates a new device result.
      *
-     * @param devices  the device list; defaults to an empty list when
-     *                 {@code null}
-     * @param keyIndex the signed key-index, or {@code null}
+     * @apiNote
+     * Instantiated by the device parser; embedders do not call this
+     * directly.
+     *
+     * @param devices  the {@link Device} list, or {@code null} for an empty
+     *                 list
+     * @param keyIndex the {@link KeyIndex} metadata, or {@code null}
      */
     public DeviceResult(List<Device> devices, KeyIndex keyIndex) {
         this.devices = devices == null ? List.of() : List.copyOf(devices);
@@ -41,6 +52,11 @@ public final class DeviceResult implements UsyncProtocolResponse {
     /**
      * Returns the device list.
      *
+     * @apiNote
+     * Each entry is the wire-level {@code <device id="..." key-index="..."
+     * is_hosted="..."/>} child; the consumer is the ADV device-list sync
+     * which uses the list to refresh the per-peer Signal session fan-out.
+     *
      * @return the list, never {@code null}
      */
     public List<Device> devices() {
@@ -48,41 +64,58 @@ public final class DeviceResult implements UsyncProtocolResponse {
     }
 
     /**
-     * Returns the signed key-index, when present.
+     * Returns the signed key-index metadata, when present.
      *
-     * @return the key-index
+     * @apiNote
+     * Used by the ADV verifier to confirm that the device list was signed by
+     * the peer's primary device. Absent for peers that have not enrolled in
+     * the signed-key-index scheme yet.
+     *
+     * @return the {@link KeyIndex}, or empty when absent
      */
     public Optional<KeyIndex> keyIndex() {
         return Optional.ofNullable(keyIndex);
     }
 
     /**
-     * One device in the peer's device list.
+     * One device in the peer's {@code <device-list>}.
+     *
+     * @apiNote
+     * Each device entry is the wire shape
+     * {@snippet lang = xml:
+     * <device id="2" key-index="1" is_hosted="true"/>
+     * }
+     * with {@code key-index} and {@code is_hosted} both optional.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
     public static final class Device {
         /**
-         * Holds the device id (small integer).
+         * The device id; small non-negative integer where {@code 0} is the
+         * primary device.
          */
         private final int id;
 
         /**
-         * Holds the device's signed key index, or {@code null} if the relay
-         * omitted the attribute.
+         * The device's signed-key-index attribute value, or {@code null} when
+         * the {@code key-index} attribute is absent.
          */
         private final Integer keyIndex;
 
         /**
-         * Tracks whether the device is a hosted device. {@code false} when
-         * the attribute is absent.
+         * Whether the device is marked as hosted; {@code false} when the
+         * {@code is_hosted} attribute is absent.
          */
         private final boolean hosted;
 
         /**
          * Creates a new device entry.
          *
+         * @apiNote
+         * Instantiated by the device parser; embedders do not call this
+         * directly.
+         *
          * @param id       the device id
-         * @param keyIndex the signed key index, or {@code null}
+         * @param keyIndex the signed-key-index attribute, or {@code null}
          * @param hosted   the {@code is_hosted} flag
          */
         public Device(int id, Integer keyIndex, boolean hosted) {
@@ -94,6 +127,10 @@ public final class DeviceResult implements UsyncProtocolResponse {
         /**
          * Returns the device id.
          *
+         * @apiNote
+         * Combined with the peer's JID, identifies a unique device in the
+         * Signal session map.
+         *
          * @return the id
          */
         public int id() {
@@ -101,9 +138,13 @@ public final class DeviceResult implements UsyncProtocolResponse {
         }
 
         /**
-         * Returns the signed key index, when present.
+         * Returns the signed-key-index, when present.
          *
-         * @return the key index
+         * @apiNote
+         * Cross-referenced with the {@link KeyIndex#signedBytes() signed
+         * key-index list} during ADV verification.
+         *
+         * @return the key index, or empty when the attribute is absent
          */
         public Optional<Integer> keyIndex() {
             return Optional.ofNullable(keyIndex);
@@ -112,7 +153,13 @@ public final class DeviceResult implements UsyncProtocolResponse {
         /**
          * Returns whether the device is marked as hosted.
          *
-         * @return {@code true} if {@code is_hosted="true"}
+         * @apiNote
+         * Hosted devices represent business agent seats. WA Web only honours
+         * the flag when {@code WAWebBizCoexGatingUtils.bizHostedDevicesEnabled}
+         * is on; Cobalt always exposes the wire value and leaves the gating
+         * decision to the caller.
+         *
+         * @return {@code true} when {@code is_hosted="true"}
          */
         public boolean hosted() {
             return hosted;
@@ -120,35 +167,48 @@ public final class DeviceResult implements UsyncProtocolResponse {
     }
 
     /**
-     * The peer's signed key-index-list metadata.
+     * The peer's signed key-index-list metadata, used by the ADV verifier.
+     *
+     * @apiNote
+     * Mirrors the wire shape
+     * {@snippet lang = xml:
+     * <key-index-list ts="1700000000" expected_ts="1700003600">{signedBytes}</key-index-list>
+     * }
+     * where {@code expected_ts} and the inline content may be absent.
      */
     @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
     public static final class KeyIndex {
         /**
-         * Holds the timestamp the index was signed at. Never {@code null}.
+         * The timestamp the index was signed at, decoded from the {@code ts}
+         * attribute.
          */
         private final Instant timestamp;
 
         /**
-         * Holds the raw signed protobuf bytes, or {@code null} when the
-         * {@code <key-index-list>} element had no inline content.
+         * The raw signed protobuf bytes carried inline in the
+         * {@code <key-index-list>} element, or {@code null} when the element
+         * had no inline content.
          */
         private final byte[] signedBytes;
 
         /**
-         * Holds the {@code expected_ts} attribute, or {@code null} when
-         * absent.
+         * The {@code expected_ts} attribute value, or {@code null} when the
+         * attribute is absent.
          */
         private final Instant expectedTimestamp;
 
         /**
-         * Creates a new key-index metadata.
+         * Creates a new key-index metadata block.
+         *
+         * @apiNote
+         * Instantiated by the device parser; embedders do not call this
+         * directly.
          *
          * @param timestamp         the signed timestamp; must not be
          *                          {@code null}
-         * @param signedBytes       the raw signed protobuf bytes, or
+         * @param signedBytes       the inline signed bytes, or {@code null}
+         * @param expectedTimestamp the {@code expected_ts} attribute, or
          *                          {@code null}
-         * @param expectedTimestamp the expected timestamp, or {@code null}
          */
         public KeyIndex(Instant timestamp, byte[] signedBytes, Instant expectedTimestamp) {
             this.timestamp = Objects.requireNonNull(timestamp, "timestamp cannot be null");
@@ -159,6 +219,11 @@ public final class DeviceResult implements UsyncProtocolResponse {
         /**
          * Returns the signed timestamp.
          *
+         * @apiNote
+         * Wall-clock time the peer's primary device signed the device list at;
+         * the ADV verifier checks it against the local clock to reject stale
+         * lists.
+         *
          * @return the timestamp, never {@code null}
          */
         public Instant timestamp() {
@@ -166,9 +231,13 @@ public final class DeviceResult implements UsyncProtocolResponse {
         }
 
         /**
-         * Returns the raw signed bytes, when present.
+         * Returns the inline signed bytes, when present.
          *
-         * @return the signed bytes
+         * @apiNote
+         * Protobuf-encoded {@code SignedKeyIndexList} payload; decoded by the
+         * ADV verifier to cross-check {@link Device#keyIndex()} entries.
+         *
+         * @return the signed bytes, or empty when the element had no content
          */
         public Optional<byte[]> signedBytes() {
             return Optional.ofNullable(signedBytes);
@@ -177,7 +246,11 @@ public final class DeviceResult implements UsyncProtocolResponse {
         /**
          * Returns the expected timestamp, when present.
          *
-         * @return the expected timestamp
+         * @apiNote
+         * Carries the relay's view of when the next refresh should happen;
+         * absent on responses that do not include the attribute.
+         *
+         * @return the expected timestamp, or empty when absent
          */
         public Optional<Instant> expectedTimestamp() {
             return Optional.ofNullable(expectedTimestamp);

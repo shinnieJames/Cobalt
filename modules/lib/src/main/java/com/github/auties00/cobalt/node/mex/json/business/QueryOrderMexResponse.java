@@ -21,9 +21,20 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parsed response of the {@code queryOrder} MEX query carrying the
- * {@code xwa_checkout_get_order_info.order} projection mapped onto a Cobalt
- * {@link BusinessOrder} with its nested {@link BusinessOrderItem} list.
+ * Parsed response of the {@code queryOrder} MEX query.
+ *
+ * @apiNote Carries the {@code xwa_checkout_get_order_info.order} projection
+ * mapped onto a Cobalt {@link BusinessOrder} with its nested
+ * {@link BusinessOrderItem} list, ready to be displayed in an
+ * order-detail view paired with {@link QueryOrderMexRequest}.
+ *
+ * @implNote This implementation only models the GraphQL response shape;
+ * the legacy {@code fb:thrift_iq} reply parsed by WA Web's
+ * {@code WAWebBizQueryOrderJob.queryOrderResponse} {@code WapParser} is
+ * intentionally not implemented (see {@link QueryOrderMexRequest}). The
+ * {@code tax} field, present in WA Web's combined return shape, is dropped
+ * because the GraphQL document
+ * ({@code WAWebBizQueryOrderJobQuery.graphql}) does not project it.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public final class QueryOrderMexResponse implements MexOperation.Response.Json {
@@ -31,6 +42,9 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
 
     /**
      * Constructs a parsed order response.
+     *
+     * @apiNote Package-private; instances are produced by {@link #of(Node)}
+     * after parsing the inbound IQ payload.
      *
      * @param order the structured order detail
      */
@@ -40,6 +54,12 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
 
     /**
      * Parses the MEX response carried by an inbound IQ stanza.
+     *
+     * @apiNote Entry point for receivers handling
+     * {@code <iq xmlns="w:mex">} replies tagged with
+     * {@link QueryOrderMexRequest#QUERY_ID}. Unwraps the {@code <result>}
+     * child, reads its content bytes and decodes the GraphQL JSON envelope.
+     *
      * @param node the inbound IQ stanza carrying the {@code <result>} child
      * @return the parsed response, or empty if the expected JSON shape is
      *         absent
@@ -55,6 +75,10 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
     /**
      * Returns the parsed order detail.
      *
+     * @apiNote The returned {@link BusinessOrder} is the projection of the
+     * GraphQL {@code order} object onto the Cobalt domain model; its nested
+     * item list is the projection of the {@code products} array.
+     *
      * @return the order, never {@code null}
      */
     public BusinessOrder order() {
@@ -63,6 +87,17 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
 
     /**
      * Parses the raw JSON bytes of the {@code <result>} child.
+     *
+     * @apiNote Package-private; only invoked via the {@link #of(Node)} entry
+     * point after unwrapping the IQ stanza.
+     *
+     * @implNote This implementation matches WA Web's empty-result fallback: a
+     * reply where {@code xwa_checkout_get_order_info} is {@code null} or its
+     * {@code order} child is missing collapses to {@link Optional#empty()},
+     * mirroring the {@code ServerStatusCodeError(500)} WA Web throws on the
+     * same condition. The {@code creation_time_stamp} field is a stringified
+     * epoch-second value; failures to parse it leave the
+     * {@link BusinessOrder#createdAt()} field {@code null}.
      *
      * @param json the UTF-8 encoded JSON payload
      * @return the parsed response, or empty if the envelope is missing the
@@ -118,6 +153,15 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
      * Parses an array of GraphQL product objects into a list of
      * {@link BusinessOrderItem} values.
      *
+     * @apiNote Invoked once per response to project the {@code order.products}
+     * array onto the Cobalt domain model.
+     *
+     * @implNote This implementation discards entries that
+     * {@link #parseProduct(JSONObject)} rejects (missing {@code id} or
+     * {@code name}). The result is wrapped in
+     * {@link List#copyOf(java.util.Collection)} so callers receive an
+     * unmodifiable list.
+     *
      * @param array the GraphQL products array, possibly {@code null}
      * @return the parsed items, never {@code null}
      */
@@ -135,6 +179,17 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
     /**
      * Parses a single GraphQL product object into a
      * {@link BusinessOrderItem}.
+     *
+     * @apiNote Invoked by {@link #parseProducts(JSONArray)} per array element.
+     *
+     * @implNote This implementation enforces the WA Web
+     * {@code RequiredField}/{@code THROW} markers on {@code id} and
+     * {@code name} (see the {@code WAWebBizQueryOrderJobQuery.graphql}
+     * fragment) by skipping the entry when either is missing, rather than
+     * throwing. Variant properties are projected through
+     * {@link BusinessOrderItemPropertyBuilder} only when both {@code name}
+     * and {@code value} are present; the thumbnail is taken from the first
+     * image's {@code id} and {@code request_image_url} fields.
      *
      * @param obj the GraphQL product object, possibly {@code null}
      * @return the parsed item, or empty when {@code obj} is {@code null} or
@@ -201,6 +256,14 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
     /**
      * Parses a non-empty decimal string into a {@link Long}.
      *
+     * @apiNote Used by the order-detail and item-detail projections; the WA
+     * Web GraphQL schema reports monetary amounts as stringified decimals.
+     *
+     * @implNote This implementation returns {@code null} on a {@code null},
+     * empty or non-numeric input rather than throwing, mirroring the WA Web
+     * {@code parseInt(value, 10)} call where {@code NaN} is treated as a
+     * missing value.
+     *
      * @param value the value to parse, possibly {@code null}
      * @return the parsed long, or {@code null} when the input is missing or
      *         unparseable
@@ -218,6 +281,13 @@ public final class QueryOrderMexResponse implements MexOperation.Response.Json {
 
     /**
      * Parses a non-empty decimal string into an {@link Integer}.
+     *
+     * @apiNote Used by the item-detail projection; the WA Web GraphQL schema
+     * reports order quantities as stringified decimals.
+     *
+     * @implNote This implementation returns {@code null} on a {@code null},
+     * empty or non-numeric input rather than throwing, matching the WA Web
+     * {@code parseInt(value, 10)} call semantics.
      *
      * @param value the value to parse, possibly {@code null}
      * @return the parsed integer, or {@code null} when the input is missing

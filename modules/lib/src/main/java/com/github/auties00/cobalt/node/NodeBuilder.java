@@ -12,41 +12,46 @@ import java.util.*;
  * Fluent builder for assembling {@link Node} stanzas.
  *
  * <p>Stanzas are the unit of communication with the WhatsApp server.
- * Every outbound stanza in Cobalt is constructed through a builder by
- * setting a tag name with {@link #description(String)}, attaching key
- * value attributes through one of the {@code attribute} overloads, and
- * setting the payload through one of the {@code content} overloads. A
- * final call to {@link #build()} returns an immutable {@link Node}
- * picked from the appropriate concrete variant based on the content type.
+ * Every outbound stanza in Cobalt is produced through a builder: a tag
+ * name is set with {@link #description(String)}, attributes are
+ * accumulated through one of the {@code attribute} overloads, and the
+ * payload is set through one of the {@code content} overloads. A final
+ * call to {@link #build()} freezes the accumulated state into an
+ * immutable {@link Node} of the variant matching the populated content
+ * slot.
  *
- * <p>Attribute setters are null safe. Passing a {@code null} value, or
- * passing {@code false} for the optional {@code condition} flag, skips the
- * attribute entirely instead of writing it as a literal {@code "null"}.
- * This removes the need for a null check at every call site.
+ * @apiNote
+ * The {@code attribute} overloads are null-safe: a {@code null} value
+ * skips the attribute instead of writing a literal {@code "null"},
+ * and the {@code condition} overload skips when the guard is
+ * {@code false}. This removes the null check that every caller
+ * would otherwise need at every attribute site, matching the
+ * {@code WAWap.X} factory's {@code n!==F&&(u[t]=n)} guard
+ * ({@code F = DROP_ATTR}).
  *
- * <p>Example usage:
- * <pre>{@code
- * Node iq = new NodeBuilder()
- *         .description("iq")
- *         .attribute("id", "12345")
- *         .attribute("to", recipient)
- *         .attribute("type", "set")
- *         .attribute("xmlns", "w:profile:picture")
- *         .content(new NodeBuilder()
- *                 .description("picture")
- *                 .attribute("type", "image")
- *                 .content(imageBytes)
- *                 .build())
- *         .build();
- * }</pre>
+ * <p>Building an iq stanza for a profile-picture upload:
+ * {@snippet :
+ *     Node iq = new NodeBuilder()
+ *             .description("iq")
+ *             .attribute("id", "12345")
+ *             .attribute("to", recipient)
+ *             .attribute("type", "set")
+ *             .attribute("xmlns", "w:profile:picture")
+ *             .content(new NodeBuilder()
+ *                     .description("picture")
+ *                     .attribute("type", "image")
+ *                     .content(imageBytes)
+ *                     .build())
+ *             .build();
+ * }
  *
- * <p>A simple presence stanza without content:
- * <pre>{@code
- * Node presence = new NodeBuilder()
- *         .description("presence")
- *         .attribute("type", "available")
- *         .build();
- * }</pre>
+ * <p>Building a simple presence stanza without content:
+ * {@snippet :
+ *     Node presence = new NodeBuilder()
+ *             .description("presence")
+ *             .attribute("type", "available")
+ *             .build();
+ * }
  *
  * @see Node
  * @see NodeAttribute
@@ -55,37 +60,72 @@ import java.util.*;
 public final class NodeBuilder {
     /**
      * Pending tag name of the node under construction.
+     *
+     * @apiNote
+     * Set by {@link #description(String)}. When {@code null} at
+     * {@link #build()} time the resulting node carries an empty tag
+     * name (matching the JS {@code makeWapNode("", ...)} fallback).
      */
     private String description;
 
     /**
      * Pending attributes accumulated in insertion order.
+     *
+     * @apiNote
+     * Backed by a {@link LinkedHashMap} so the encoder emits
+     * attributes in the order they were added. Order matters for
+     * the binary wire format only insofar as it must round-trip
+     * stably; the server is order-agnostic on the semantic level.
      */
     private final SequencedMap<String, NodeAttribute> attributes;
 
     /**
      * Pending text content, or {@code null} when not set.
+     *
+     * @apiNote
+     * One of the four content slots; {@link #build()} dispatches on
+     * the first non-null slot in the order text, JID, bytes,
+     * children.
      */
     private String textContent;
 
     /**
      * Pending JID content, or {@code null} when not set.
+     *
+     * @apiNote
+     * Stored as a {@link JidProvider} so callers can pass a
+     * {@link Jid} directly or any provider that resolves to one;
+     * the resolution to a concrete {@link Jid} is deferred to
+     * {@link #build()}.
      */
     private JidProvider jidContent;
 
     /**
      * Pending binary content, or {@code null} when not set.
+     *
+     * @apiNote
+     * Used for Signal ciphertext, media thumbnails, and any other
+     * payload that must traverse the wire as opaque bytes.
      */
     private byte[] bytesContent;
 
     /**
      * Pending child node content, or {@code null} when not set.
+     *
+     * @apiNote
+     * Lazily allocated to a fresh {@link ArrayList} the first time a
+     * {@code content(Node...)} or {@code content(SequencedCollection)}
+     * overload is invoked; subsequent calls append.
      */
     private SequencedCollection<Node> childrenContent;
 
     /**
      * Builds a fresh builder with no description, no attributes, and no
      * content.
+     *
+     * @apiNote
+     * The default starting point for every outbound stanza in
+     * Cobalt.
      */
     public NodeBuilder() {
         this.attributes = new LinkedHashMap<>();
@@ -93,6 +133,12 @@ public final class NodeBuilder {
 
     /**
      * Sets the description (tag name) of the node under construction.
+     *
+     * @apiNote
+     * Mandatory in practice (every meaningful stanza has a tag) but
+     * not enforced by the builder; an unset description produces a
+     * node with an empty tag name to match the JS
+     * {@code makeWapNode} fallback.
      *
      * @param description the tag name
      * @return this builder
@@ -104,6 +150,14 @@ public final class NodeBuilder {
 
     /**
      * Adds a text attribute when the value is non null.
+     *
+     * @apiNote
+     * Mirrors the {@code DROP_ATTR} sentinel handling in
+     * {@code WAWap.X}: passing {@code null} silently drops the
+     * attribute. Use the {@code condition}-taking overload for an
+     * explicit guard. Every other {@code attribute} overload
+     * follows the same drop-on-null convention.
+     *
      * @param key   the attribute key
      * @param value the attribute value, or {@code null} to skip
      * @return this builder
@@ -121,6 +175,10 @@ public final class NodeBuilder {
      * Adds a text attribute when the value is non null and the condition
      * is {@code true}.
      *
+     * @apiNote
+     * Removes the {@code if (cond) builder.attribute(key, value);}
+     * boilerplate at every conditional call site.
+     *
      * @param key       the attribute key
      * @param value     the attribute value, or {@code null} to skip
      * @param condition guard that must hold for the attribute to be
@@ -135,8 +193,14 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a numeric attribute when the value is non null. The number is
-     * serialised through {@link Number#toString()}.
+     * Adds a numeric attribute when the value is non null.
+     *
+     * @apiNote
+     * The number is serialised through {@link Number#toString()};
+     * this matches the {@code INT} and {@code LONG_INT} factories
+     * in {@code WAWap} which both produce a decimal string of the
+     * numeric value before the encoder runs the standard string
+     * compression ladder.
      *
      * @param key   the attribute key
      * @param value the numeric value, or {@code null} to skip
@@ -151,8 +215,10 @@ public final class NodeBuilder {
 
     /**
      * Adds a numeric attribute when the value is non null and the
-     * condition is {@code true}. The number is serialised through
-     * {@link Number#toString()}.
+     * condition is {@code true}.
+     *
+     * @apiNote
+     * The number is serialised through {@link Number#toString()}.
      *
      * @param key       the attribute key
      * @param value     the numeric value, or {@code null} to skip
@@ -168,8 +234,12 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a boolean attribute. The value is serialised as {@code "true"}
-     * or {@code "false"}.
+     * Adds a boolean attribute.
+     *
+     * @apiNote
+     * The value is serialised as {@code "true"} or {@code "false"};
+     * the WhatsApp wire protocol carries booleans as strings rather
+     * than as a dedicated wire shape.
      *
      * @param key   the attribute key
      * @param value the boolean value
@@ -181,8 +251,10 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a boolean attribute when the condition is {@code true}. The
-     * value is serialised as {@code "true"} or {@code "false"}.
+     * Adds a boolean attribute when the condition is {@code true}.
+     *
+     * @apiNote
+     * The value is serialised as {@code "true"} or {@code "false"}.
      *
      * @param key       the attribute key
      * @param value     the boolean value
@@ -198,7 +270,13 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a JID attribute when the value is non null.
+     * Adds a JID attribute when the provider is non null.
+     *
+     * @apiNote
+     * The {@link JidProvider} is resolved eagerly into a concrete
+     * {@link Jid} so the builder snapshot does not change if the
+     * provider's state mutates later. {@code null} is accepted and
+     * skips the attribute.
      *
      * @param key   the attribute key
      * @param value the JID provider, or {@code null} to skip
@@ -213,8 +291,8 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a JID attribute when the value is non null and the condition is
-     * {@code true}.
+     * Adds a JID attribute when the provider is non null and the
+     * condition is {@code true}.
      *
      * @param key       the attribute key
      * @param value     the JID provider, or {@code null} to skip
@@ -233,6 +311,12 @@ public final class NodeBuilder {
     /**
      * Adds a binary attribute when the value is non null.
      *
+     * @apiNote
+     * The blob is stored by reference; callers must not mutate the
+     * array after handing it off. Used for already-encoded payloads
+     * (Signal ciphertext, base64-decoded hashes, etc.) that should
+     * not pass through the string compression ladder.
+     *
      * @param key   the attribute key
      * @param value the binary value, or {@code null} to skip
      * @return this builder
@@ -245,8 +329,8 @@ public final class NodeBuilder {
     }
 
     /**
-     * Adds a binary attribute when the value is non null and the condition
-     * is {@code true}.
+     * Adds a binary attribute when the value is non null and the
+     * condition is {@code true}.
      *
      * @param key       the attribute key
      * @param value     the binary value, or {@code null} to skip
@@ -263,10 +347,13 @@ public final class NodeBuilder {
 
     /**
      * Copies every entry from the supplied map into the pending attribute
-     * set.
+     * set, preserving any prior attributes and overwriting on key collision.
      *
-     * <p>Existing attributes are preserved; entries that share a key are
-     * overwritten. A {@code null} map is skipped silently.
+     * @apiNote
+     * Used by callers that have a pre-built attribute map to splice
+     * into a fresh stanza (for example forwarding a captured
+     * attribute set from one node to another). A {@code null} map
+     * is treated as a no-op.
      *
      * @param attributes the entries to copy, or {@code null} to skip
      * @return this builder
@@ -280,7 +367,12 @@ public final class NodeBuilder {
 
     /**
      * Sets the node content to a text value, clearing any previously set
-     * content.
+     * content slot.
+     *
+     * @apiNote
+     * Used for free-form textual payloads (status blurbs, plain
+     * message bodies) where the wire format will pass through the
+     * string compression ladder.
      *
      * @param value the textual content
      * @return this builder
@@ -295,7 +387,10 @@ public final class NodeBuilder {
 
     /**
      * Sets the node content to a numeric value, clearing any previously
-     * set content. The number is serialised through {@link Objects#toString(Object)}.
+     * set content slot.
+     *
+     * @apiNote
+     * The number is serialised through {@link Objects#toString(Object)}.
      *
      * @param value the numeric content
      * @return this builder
@@ -310,8 +405,11 @@ public final class NodeBuilder {
 
     /**
      * Sets the node content to a boolean value, clearing any previously
-     * set content. The value is serialised as {@code "true"} or
-     * {@code "false"}.
+     * set content slot.
+     *
+     * @apiNote
+     * The value is serialised as {@code "true"} or {@code "false"};
+     * the WhatsApp wire protocol has no dedicated boolean shape.
      *
      * @param value the boolean content
      * @return this builder
@@ -325,8 +423,12 @@ public final class NodeBuilder {
     }
 
     /**
-     * Sets the node content to a JID, clearing any previously set
-     * content.
+     * Sets the node content to a JID, clearing any previously set content
+     * slot.
+     *
+     * @apiNote
+     * The provider is captured by reference and resolved lazily at
+     * {@link #build()} time.
      *
      * @param value the JID provider
      * @return this builder
@@ -342,7 +444,11 @@ public final class NodeBuilder {
 
     /**
      * Sets the node content to a binary blob, clearing any previously set
-     * content.
+     * content slot.
+     *
+     * @apiNote
+     * The blob is stored by reference; do not mutate the array after
+     * passing it in.
      *
      * @param value the binary content
      * @return this builder
@@ -357,11 +463,14 @@ public final class NodeBuilder {
 
     /**
      * Appends a collection of child nodes to the pending children list,
-     * clearing any non child content previously set.
+     * clearing any non-child content previously set.
      *
-     * <p>The method is additive: a second call merges its argument into
-     * the children already accumulated, preserving order. {@code null}
-     * entries inside the supplied collection are skipped.
+     * @apiNote
+     * Additive: a second call merges its argument into the children
+     * already accumulated, preserving order. {@code null} entries
+     * inside the supplied collection are skipped to match the
+     * {@code WAWap.X} {@code Array.isArray(n)} branch which filters
+     * with {@code filter(Boolean)}.
      *
      * @param nodes the children to append, or {@code null} to skip
      * @return this builder
@@ -385,11 +494,12 @@ public final class NodeBuilder {
 
     /**
      * Appends a varargs sequence of child nodes to the pending children
-     * list, clearing any non child content previously set.
+     * list, clearing any non-child content previously set.
      *
-     * <p>The method is additive: a second call merges its arguments into
-     * the children already accumulated, preserving order. {@code null}
-     * entries are skipped.
+     * @apiNote
+     * Additive: a second call merges its arguments into the children
+     * already accumulated, preserving order. {@code null} entries
+     * are skipped.
      *
      * @param nodes the children to append
      * @return this builder
@@ -412,7 +522,13 @@ public final class NodeBuilder {
     }
 
     /**
-     * Returns whether an attribute with the supplied key is currently set.
+     * Returns whether an attribute with the supplied key is currently set
+     * on this builder.
+     *
+     * @apiNote
+     * Used by callers that compose a stanza in branches and need to
+     * decide whether to override or skip based on what an earlier
+     * branch already added.
      *
      * @param key the attribute key
      * @return {@code true} when the attribute is present
@@ -422,10 +538,15 @@ public final class NodeBuilder {
     }
 
     /**
-     * Returns whether any content slot has been populated.
+     * Returns whether any content slot has been populated on this
+     * builder.
      *
-     * @return {@code true} when text, JID, binary, or child content has
-     *         been set
+     * @apiNote
+     * Used by callers that conditionally add children or content
+     * depending on whether the stanza is meant to remain empty.
+     *
+     * @return {@code true} when text, JID, binary, or child content
+     *         has been set
      */
     public boolean hasContent() {
         return textContent != null
@@ -435,19 +556,23 @@ public final class NodeBuilder {
     }
 
     /**
-     * Builds and returns the constructed {@link Node}.
+     * Returns the constructed immutable {@link Node}.
      *
-     * <p>The concrete variant is selected from the populated content slot:
+     * @apiNote
+     * The concrete variant is selected from the first populated
+     * content slot in the order text, JID, bytes, children, falling
+     * back to {@link Node.EmptyNode} when no slot is set. If no
+     * description was supplied the node carries an empty tag name.
+     * The builder is not reset; callers must construct a fresh
+     * {@code NodeBuilder} for the next stanza.
+     *
      * <ul>
-     *   <li>{@link Node.TextNode} when text content is set</li>
-     *   <li>{@link Node.JidNode} when JID content is set</li>
-     *   <li>{@link Node.BytesNode} when binary content is set</li>
-     *   <li>{@link Node.ContainerNode} when child nodes are set</li>
-     *   <li>{@link Node.EmptyNode} when no content slot is populated</li>
+     *   <li>{@link Node.TextNode} when text content is set
+     *   <li>{@link Node.JidNode} when JID content is set
+     *   <li>{@link Node.BytesNode} when binary content is set
+     *   <li>{@link Node.ContainerNode} when child nodes are set
+     *   <li>{@link Node.EmptyNode} when no content slot is populated
      * </ul>
-     *
-     * <p>If no description was set the resulting node carries an empty
-     * tag name.
      *
      * @return the freshly built node
      * @see Node

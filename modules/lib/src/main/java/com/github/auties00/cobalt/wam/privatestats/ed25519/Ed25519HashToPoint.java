@@ -7,27 +7,32 @@ import java.security.NoSuchAlgorithmException;
 
 /**
  * Hashes an arbitrary byte string to a point on the Ed25519
- * prime-order subgroup, using the
- * {@code WACryptoEd25519.hashToPoint} composition: a SHA-512 of the
- * message, an Elligator-2 map onto the Curve25519 Montgomery form, a
- * birational lift to the twisted-Edwards form, and a cofactor
- * multiplication by {@code 8} to land in the prime-order subgroup.
+ * prime-order subgroup via the
+ * {@link WhatsAppWebModule WACryptoEd25519} {@code hashToPoint}
+ * composition.
  *
- * <p>This is <em>not</em> a standard hash-to-curve construction. It
- * predates RFC 9380 and is WhatsApp's own composition, used solely
- * by {@code privateStatsToken.blindToken}. The validation strategy
- * for this class therefore relies on KAT vectors captured from the
- * live WhatsApp Web JavaScript bundle rather than an independent
- * specification.
+ * <p>The composition is: SHA-512 of the message, an Elligator2 map
+ * onto the Curve25519 Montgomery form, a birational lift to the
+ * twisted-Edwards form, and a cofactor multiplication by {@code 8} to
+ * land in the prime-order subgroup.
+ *
+ * @apiNote
+ * Called only by {@link com.github.auties00.cobalt.wam.privatestats.WamPrivateStatsTokenBlinder#blind};
+ * this is not a general-purpose hash-to-curve. It predates RFC 9380
+ * and is WhatsApp's own composition, validated only against vectors
+ * captured from the live WhatsApp Web bundle rather than an
+ * independent specification.
  */
 @WhatsAppWebModule(moduleName = "WACryptoEd25519")
 public final class Ed25519HashToPoint {
     /**
-     * Canonical 32-byte little-endian encoding of the field element
-     * {@code sqrt(-1) mod p}, used as the alternate square-root branch in
-     * {@link #sqrt}.
+     * The canonical 32-byte little-endian encoding of
+     * {@code sqrt(-1) mod p}, used as the alternate square-root
+     * branch in {@link #sqrt}.
      *
-     * <p>Mirrors the {@code T} byte array in {@code WACryptoEd25519}.
+     * @apiNote
+     * Mirrors the {@code T} byte array literal in
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      */
     private static final byte[] SQRT_M1_BYTES = {
             (byte) 176, (byte) 160, (byte) 14, (byte) 74, (byte) 39, (byte) 27, (byte) 238, (byte) 196,
@@ -37,11 +42,13 @@ public final class Ed25519HashToPoint {
     };
 
     /**
-     * Canonical 32-byte little-endian encoding of the field element
-     * {@code sqrt(-486664) mod p}, used in {@link #liftMontToP3} as the
-     * scaling factor of the Curve25519 → Ed25519 birational map.
+     * The canonical 32-byte little-endian encoding of
+     * {@code sqrt(-486664) mod p}, used as the scaling factor of the
+     * Curve25519 to Ed25519 birational map in {@link #liftMontToP3}.
      *
-     * <p>Mirrors the {@code w} byte array in {@code WACryptoEd25519}.
+     * @apiNote
+     * Mirrors the {@code w} byte array literal in
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      */
     private static final byte[] SQRT_NEG_A_PLUS_2_BYTES = {
             (byte) 6, (byte) 126, (byte) 69, (byte) 255, (byte) 170, (byte) 4, (byte) 110, (byte) 204,
@@ -51,8 +58,8 @@ public final class Ed25519HashToPoint {
     };
 
     /**
-     * The Curve25519 Montgomery curve parameter {@code A = 486662}, encoded
-     * as 16 radix-{@code 2^16} limbs.
+     * The Curve25519 Montgomery curve parameter {@code A = 486662},
+     * encoded as 16 radix-{@code 2^16} limbs.
      */
     private static final long[] A_MONT = {
             0x6D06L, 0x7L, 0L, 0L,
@@ -62,7 +69,9 @@ public final class Ed25519HashToPoint {
     };
 
     /**
-     * The constant {@code 2}, used in {@link #squareTimesTwo}.
+     * The field constant {@code 2}, materialised so
+     * {@link #squareTimesTwo} can call {@link Ed25519Field#mul}
+     * directly.
      */
     private static final long[] TWO = {
             2L, 0L, 0L, 0L,
@@ -81,12 +90,22 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Hashes a byte string to a point on the Ed25519 prime-order subgroup.
+     * Hashes a byte string to a point on the Ed25519 prime-order
+     * subgroup.
      *
-     * <p>The output point is in extended-Edwards form, in the prime-order
-     * subgroup (i.e. the cofactor-{@code 8} component has been mapped out).
+     * @apiNote
+     * Mirrors the {@link WhatsAppWebModule WACryptoEd25519}
+     * {@code hashToPoint} export (the {@code H} helper). The output
+     * point is in extended-Edwards form and has the cofactor-{@code 8}
+     * component mapped out.
      *
-     * <p>Mirrors {@code WACryptoEd25519.hashToPoint} (the {@code H} helper).
+     * @implNote
+     * This implementation extracts the SHA-512 sign bit from the high
+     * bit of byte 31 of the digest, masks it off, unpacks the
+     * remainder as a field element, runs {@link #elligator} to land
+     * on the Curve25519 Montgomery form, lifts to Ed25519 with the
+     * extracted sign via {@link #liftMontToP3}, and finally maps into
+     * the prime-order subgroup via {@link #cofactorMul8}.
      *
      * @param message the message to hash; any length
      * @return a freshly allocated extended-Edwards point
@@ -113,9 +132,10 @@ public final class Ed25519HashToPoint {
     /**
      * Computes the SHA-512 digest of the input message.
      *
-     * <p>Replaces {@code WACryptoPrimitives.lowlevel.crypto_hash} with the
-     * JDK's intrinsified implementation. The two are byte-identical for any
-     * input.
+     * @implNote
+     * This implementation replaces tweetnacl's
+     * {@code lowlevel.crypto_hash} with the JDK's intrinsified
+     * implementation; the two are byte-identical for any input.
      *
      * @param message the message
      * @return a fresh 64-byte digest
@@ -132,7 +152,9 @@ public final class Ed25519HashToPoint {
     /**
      * Computes {@code o = 2 * t^2}.
      *
-     * <p>Mirrors the {@code E} helper.
+     * @apiNote
+     * Mirrors the local {@code E} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param o the destination
      * @param t the operand
@@ -147,12 +169,13 @@ public final class Ed25519HashToPoint {
      * Evaluates the Curve25519 Montgomery polynomial at {@code t}:
      * {@code o = t^3 + A*t^2 + t} where {@code A = 486662}.
      *
-     * <p>This is the right-hand side of the Curve25519 equation
-     * {@code v^2 = u^3 + A*u^2 + u}, used in {@link #elligator} to test
-     * whether a candidate {@code u} lies on the curve, and in
+     * @apiNote
+     * Mirrors the local {@code k} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}. This is the
+     * right-hand side of the Curve25519 equation
+     * {@code v^2 = u^3 + A*u^2 + u}, used in {@link #elligator} to
+     * test whether a candidate {@code u} lies on the curve and in
      * {@link #liftMontToP3} to recover the {@code v} coordinate.
-     *
-     * <p>Mirrors the {@code k} helper.
      *
      * @param o the destination
      * @param t the {@code u} coordinate at which to evaluate
@@ -170,19 +193,24 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Computes the canonical square root: {@code o = sqrt(t)} chosen so
-     * that {@code o^2 = t}.
+     * Computes the canonical square root: {@code o = sqrt(t)} chosen
+     * so that {@code o^2 = t}.
      *
-     * <p>For {@code p ≡ 5 (mod 8)} the root is computed as
-     * {@code c = t^((p+3)/8)}; if {@code c^2 = t} the result is {@code c},
-     * otherwise it is {@code c * sqrt(-1)}. The branch on {@code c^2 == t}
-     * is constant-time via {@link Ed25519Point#neq25519} and {@link
-     * Ed25519Field#sel25519}.
+     * @apiNote
+     * Mirrors the local {@code D} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}. The caller must
+     * supply a quadratic residue.
      *
-     * <p>Mirrors the {@code D} helper.
+     * @implNote
+     * This implementation uses the closed-form root for
+     * {@code p == 5 (mod 8)}: compute {@code c = t^((p+3)/8)}; if
+     * {@code c^2 == t} the result is {@code c}, otherwise it is
+     * {@code c * sqrt(-1)}. The branch on {@code c^2 == t} is
+     * constant-time via {@link Ed25519Point#neq25519} and
+     * {@link Ed25519Field#sel25519}.
      *
      * @param o the destination
-     * @param t the operand (assumed to be a quadratic residue)
+     * @param t the operand, assumed to be a quadratic residue
      */
     private static void sqrt(long[] o, long[] t) {
         var sqrtMinusOne = Ed25519Field.gf();
@@ -195,16 +223,17 @@ public final class Ed25519HashToPoint {
         Ed25519Field.square(d, c);
         var alt = Ed25519Field.gf();
         Ed25519Field.mul(alt, c, sqrtMinusOne);
-        // If c^2 != t, swap c with alt so c becomes the alternate root.
         Ed25519Field.sel25519(c, alt, Ed25519Point.neq25519(d, t));
         Ed25519Field.set25519(o, c);
     }
 
     /**
-     * Computes the Edwards y-coordinate from a Montgomery u-coordinate:
-     * {@code o = (t - 1) / (t + 1)}.
+     * Computes the Edwards y-coordinate from a Montgomery
+     * u-coordinate: {@code o = (t - 1) / (t + 1)}.
      *
-     * <p>Mirrors the {@code x} helper.
+     * @apiNote
+     * Mirrors the local {@code x} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param o the destination Edwards y
      * @param t the Montgomery u
@@ -222,7 +251,9 @@ public final class Ed25519HashToPoint {
     /**
      * Negates a field element: {@code o = -t mod p}.
      *
-     * <p>Mirrors the {@code $} helper.
+     * @apiNote
+     * Mirrors the local {@code $} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param o the destination
      * @param t the operand
@@ -232,17 +263,25 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Returns {@code 1} if {@code e} is a non-zero quadratic non-residue
-     * modulo {@code p}, {@code 0} otherwise.
+     * Returns {@code 1} if {@code e} is a non-zero quadratic
+     * non-residue modulo {@code p}, {@code 0} otherwise (including
+     * for zero).
      *
-     * <p>Computes the Legendre symbol bit by raising {@code e} to
-     * {@code (p-1)/2} and reading bit 7 of the canonical encoding's last
-     * byte (which is set for {@code -1} and clear for {@code 1}).
+     * @apiNote
+     * Mirrors the local {@code W} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}; used by
+     * {@link #elligator} to select between the two Elligator2
+     * pre-images.
      *
-     * <p>Mirrors the {@code W} helper.
+     * @implNote
+     * This implementation reads the Legendre symbol bit by raising
+     * {@code e} to {@code (p-1)/2} and inspecting bit 0 of byte 31 of
+     * the canonical encoding (set for {@code -1}, clear for
+     * {@code 1}).
      *
      * @param e the operand
-     * @return {@code 0} if QR (or zero), {@code 1} if NQR
+     * @return {@code 0} for quadratic residues and zero,
+     *         {@code 1} for non-residues
      */
     private static long isNonResidue(long[] e) {
         var l = Ed25519Field.gf();
@@ -262,13 +301,20 @@ public final class Ed25519HashToPoint {
 
     /**
      * Conditionally copies {@code src} into {@code dst} when
-     * {@code bit == 1}; leaves {@code dst} unchanged when {@code bit == 0}.
+     * {@code bit == 1}; leaves {@code dst} unchanged when
+     * {@code bit == 0}.
      *
-     * <p>This branch is on a <em>public</em> indicator (the Legendre symbol
-     * bit, the SHA-512 sign bit, or a parity bit derived from public inputs);
-     * a real {@code if} is acceptable. This matches the behaviour of the
-     * {@code I} helper in {@code WACryptoEd25519}, which uses
-     * {@code n === 1 && e.set(t)}.
+     * @apiNote
+     * Mirrors the local {@code I} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}, which uses a JS
+     * {@code n === 1 && e.set(t)} short-circuit.
+     *
+     * @implNote
+     * This implementation uses a real {@code if} because every call
+     * site supplies a bit derived from public inputs (the Legendre
+     * symbol bit of public field elements, the SHA-512 sign bit of
+     * the public message digest, or a parity bit derived from those);
+     * no secret data flows through this branch.
      *
      * @param dst the possibly-overwritten destination
      * @param src the source
@@ -281,16 +327,19 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Applies the Elligator-2 map: takes a 256-bit field element {@code t}
-     * (with bit 255 cleared) and produces a Curve25519 Montgomery
-     * u-coordinate {@code o} on the curve.
+     * Applies the Elligator2 map: takes a 256-bit field element
+     * {@code t} (with bit 255 cleared) and produces a Curve25519
+     * Montgomery u-coordinate {@code o} on the curve.
      *
-     * <p>Computes {@code u = -A / (1 + 2 t^2)}; if {@code u^3 + A u^2 + u}
-     * is a quadratic residue this is the output, otherwise the output is
-     * {@code -u - A}, the second pre-image of the same quadratic-residue
-     * branch.
+     * @apiNote
+     * Mirrors the local {@code V} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
-     * <p>Mirrors the {@code V} helper.
+     * @implNote
+     * This implementation computes {@code u = -A / (1 + 2 t^2)}; if
+     * {@code u^3 + A u^2 + u} is a quadratic residue the result is
+     * {@code u}, otherwise the result is {@code -u - A}, the second
+     * pre-image of the same quadratic-residue branch.
      *
      * @param o the destination Montgomery u
      * @param t the input field element
@@ -325,13 +374,17 @@ public final class Ed25519HashToPoint {
      * Lifts a Curve25519 Montgomery u-coordinate to an Ed25519
      * extended-Edwards point with the requested sign.
      *
-     * <p>Computes {@code y = (u-1)/(u+1)} (the standard birational map),
-     * recovers the corresponding {@code v} via the Curve25519 polynomial
-     * and a square root, then composes the Ed25519 x-coordinate as
-     * {@code u * sqrt(-486664) / v} and conditionally negates it so that
-     * its parity matches the requested sign bit.
+     * @apiNote
+     * Mirrors the local {@code A} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
-     * <p>Mirrors the {@code A} helper.
+     * @implNote
+     * This implementation computes {@code y = (u-1)/(u+1)} (the
+     * standard birational map), recovers the corresponding {@code v}
+     * via the Curve25519 polynomial and a square root, composes the
+     * Ed25519 x-coordinate as {@code u * sqrt(-486664) / v}, and
+     * conditionally negates it so its parity matches the requested
+     * sign bit.
      *
      * @param p    the destination point
      * @param u    the Montgomery u
@@ -369,15 +422,19 @@ public final class Ed25519HashToPoint {
 
     /**
      * Multiplies a point by the Ed25519 cofactor {@code 8} via three
-     * doublings. Used to land the output of {@link #liftMontToP3} in the
-     * prime-order subgroup.
+     * doublings.
      *
-     * <p>Each doubling is performed with the Hisil-Wong-Carter-Dawson
-     * formulas; the intermediate steps interconvert between projective
-     * (3-element) and extended (4-element) coordinates to avoid recomputing
-     * the {@code T} coordinate when only the next double is needed.
+     * @apiNote
+     * Mirrors the local {@code B} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}; used to land the
+     * output of {@link #liftMontToP3} in the prime-order subgroup.
      *
-     * <p>Mirrors the {@code B} helper.
+     * @implNote
+     * This implementation alternates between extended (4-element) and
+     * projective (3-element) representations to avoid recomputing the
+     * {@code T} coordinate when only the next double is needed; each
+     * doubling uses the Hisil-Wong-Carter-Dawson formulas via
+     * {@link #applyDoublingFormula}.
      *
      * @param r the destination point
      * @param p the input point
@@ -394,11 +451,13 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Computes {@code dst = 2 * src} where both are extended-Edwards points
-     * (4-element form). Internally drops to the projective (3-element) form
-     * to invoke the doubling transform.
+     * Computes {@code dst = 2 * src} where both are extended-Edwards
+     * points (4-element form), dropping to projective form
+     * internally to invoke the doubling transform.
      *
-     * <p>Mirrors the {@code O} helper.
+     * @apiNote
+     * Mirrors the local {@code O} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param dst the destination 4-element point
      * @param src the input 4-element point
@@ -412,11 +471,13 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Projects an extended-Edwards 4-element point into a 3-element tuple
-     * {@code (X*T, Y*Z, Z*T)}, reusable as the input to
+     * Projects an extended-Edwards 4-element point into the
+     * 3-element tuple {@code (X*T, Y*Z, Z*T)} consumed by
      * {@link #applyDoublingFormula}.
      *
-     * <p>Mirrors the {@code P} helper.
+     * @apiNote
+     * Mirrors the local {@code P} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param dst the 3-element destination
      * @param src the 4-element input
@@ -428,11 +489,13 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Finalises the cofactor-mul ladder by emitting the full 4-element
-     * extended-Edwards form, recovering the {@code T} coordinate as
-     * {@code X*Y}.
+     * Finalises the cofactor-mul ladder by emitting the full
+     * 4-element extended-Edwards form, recovering the {@code T}
+     * coordinate as {@code X*Y}.
      *
-     * <p>Mirrors the {@code N} helper.
+     * @apiNote
+     * Mirrors the local {@code N} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}.
      *
      * @param dst the 4-element destination
      * @param src the 4-element input from the last doubling
@@ -445,12 +508,15 @@ public final class Ed25519HashToPoint {
     }
 
     /**
-     * Applies the Hisil-Wong-Carter-Dawson doubling formula on a 3-element
-     * input tuple, producing a 4-element extended-Edwards output.
+     * Applies the Hisil-Wong-Carter-Dawson doubling formula on a
+     * 3-element input tuple, producing a 4-element extended-Edwards
+     * output.
      *
-     * <p>Mirrors the local {@code M} helper inside {@code WACryptoEd25519}
-     * (not to be confused with {@code lowlevel.M}, the field
-     * multiplication).
+     * @apiNote
+     * Mirrors the local {@code M} helper inside
+     * {@link WhatsAppWebModule WACryptoEd25519}, distinct from the
+     * field multiplication exposed as {@code lowlevel.M} on
+     * {@link Ed25519Field#mul}.
      *
      * @param dst the 4-element destination
      * @param src the 3-element input

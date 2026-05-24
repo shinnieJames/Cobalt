@@ -11,59 +11,65 @@ import com.github.auties00.cobalt.model.business.AgentStateBuilder;
 import com.github.auties00.cobalt.model.sync.action.device.AgentAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles agent sync actions for managing business account agents (device agents).
+ * Reconciles the business-account device-agent roster with sync mutations from the server.
  *
- * <p>This handler processes mutations that manage agent/bot assignments.
- * Per WhatsApp Web, the handler belongs to the {@code Regular} collection,
- * uses version {@code 7}, and routes on action name {@code "deviceAgent"}.
+ * @apiNote
+ * Cobalt embedders that present a Business Manager view of agents (other
+ * devices acting on behalf of the business account) read the result of
+ * this handler through {@link com.github.auties00.cobalt.store.WhatsAppStore#findAgentState(String)}.
+ * SET mutations upsert an agent entry by id; REMOVE mutations drop an
+ * entry by id. The handler is registered automatically by the sync engine
+ * and is not invoked directly by user code.
  *
- * <p>Index format: {@code ["deviceAgent", agentId]}
- *
- * <p>On {@code SET}, the handler validates that {@code indexParts[1]} (the agentId)
- * is present and that the protobuf {@code agentAction} field is non-null, then
- * merges the agent into the store (even when {@code isDeleted} is {@code true}).
- * On {@code REMOVE}, only the agentId is validated, and the agent is removed
- * from the store.
+ * @implNote
+ * This implementation omits two side effects that WA Web performs after
+ * each batch:
+ * <ul>
+ *   <li>The {@code WAWebUnattributedMessageCollection} reconciliation
+ *       pass that retroactively assigns {@code agentId} to messages whose
+ *       {@code deviceId} now resolves to a known agent. Cobalt does not
+ *       maintain an unattributed-message collection.</li>
+ *   <li>The {@code WAWebAgentModelUtils.getFormattedAgentName} call that
+ *       expands the stored name into a localized {@code "{name} (Admin)"}
+ *       string for the primary device. Cobalt stores the raw
+ *       {@link AgentAction#name()} and defers display formatting to the
+ *       UI layer.</li>
+ * </ul>
  */
 @WhatsAppWebModule(moduleName = "WAWebAgentSync")
 public final class AgentActionHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates the singleton agent action handler.
+     * Constructs the singleton agent action handler.
      *
-     * <p>Per WhatsApp Web, the constructor of class {@code u} extends
-     * {@code AccountSyncdActionBase} and sets
-     * {@code this.collectionName = WASyncdConst.CollectionName.Regular}. The
-     * {@code collectionName} assignment is surfaced in Cobalt via
-     * {@link #collectionName()} rather than as an instance field.
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
+     *
+     * @implNote
+     * This implementation has nothing to initialize; the
+     * {@code collectionName} field that WA Web sets in its constructor is
+     * surfaced via {@link #collectionName()} instead.
      */
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public AgentActionHandler() {
 
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return AgentAction.ACTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return AgentAction.COLLECTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -71,40 +77,29 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies an agent mutation and returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web, the handler validates the mutation content via
-     * {@code getValidatedContentSet} / {@code getValidatedContentRemove}, then:
-     * <ul>
-     *   <li>For {@code REMOVE}: removes the agent from the store by agentId</li>
-     *   <li>For {@code SET}: merges the agent into the store with all its fields
-     *       (including {@code isDeleted}), regardless of the deleted flag</li>
-     * </ul>
+     * @apiNote
+     * Drives the per-mutation upsert or remove of a single agent entry
+     * from a {@code deviceAgent} sync collection patch. The mutation
+     * index is a JSON array {@code ["deviceAgent", agentId]}; the value
+     * payload carries an {@link AgentAction} for {@code SET} and is
+     * unused for {@code REMOVE}.
      *
-     * <p>After all mutations in a batch, WA Web also reconciles unattributed
-     * messages with the agent collection via a post-processing step that
-     * iterates {@code UnattributedMessageCollection.getModelsArray()}, looks up
-     * each message, and if its {@code deviceId} maps to an agent, sets
-     * {@code msg.agentId} and removes the message from the unattributed
-     * collection. That reconciliation is intentionally omitted in Cobalt
-     * because unattributed message tracking is not implemented.
-     *
-     * <p>Additionally, WA Web formats the display name via
-     * {@code WAWebAgentModelUtils.getFormattedAgentName} (which returns a
-     * localized {@code "{business-name} (Admin)"} string when {@code deviceId}
-     * is the primary device id {@code 0}). Cobalt stores the raw
-     * {@link AgentAction} protobuf with its original {@code name()} and
-     * {@code deviceID()} accessors, deferring display formatting to UI layers.
-     * @param client   the WhatsApp client
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation merges the agent into the store regardless of
+     * the {@link AgentAction#isDeleted()} flag, matching the WA Web
+     * behaviour where the deleted flag is preserved on the stored entry
+     * so other devices converge on the same tombstone state. An unknown
+     * {@link SyncdOperation} returns
+     * {@link MutationApplicationResult#unsupported()} as a defensive
+     * guard; WA Web's {@code applyMutations} has no equivalent path
+     * because it switches on a string operation field.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAgentSync", exports = {"applyMutations", "getValidatedContentSet", "getValidatedContentRemove"}, adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebAgentSync.getValidatedContentSet/Remove: var t=e.indexParts, n=t[1]; if(!n) return {result:"malformed_index"}
-        // Out-of-bounds in JS yields undefined which is falsy; mirror via explicit size check.
         if (indexArray.size() <= 1) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
@@ -114,11 +109,11 @@ public final class AgentActionHandler implements WebAppStateActionHandler {
         }
 
         if (mutation.operation() == SyncdOperation.REMOVE) {
-            client.store().removeAgentState(agentId); // ADAPTED: WAWebAgentCollection/WAWebSchemaAgent — Cobalt uses typed store quintet
+            client.store().removeAgentState(agentId);
             return MutationApplicationResult.success();
         }
 
-        if (mutation.operation() != SyncdOperation.SET) { // NO_WA_BASIS — defensive guard for unknown operation types
+        if (mutation.operation() != SyncdOperation.SET) {
             return MutationApplicationResult.unsupported();
         }
 

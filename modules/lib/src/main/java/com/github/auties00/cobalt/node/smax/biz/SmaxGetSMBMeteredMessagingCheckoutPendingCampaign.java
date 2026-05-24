@@ -17,26 +17,51 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Single {@code <campaign/>} grandchild of the outbound
- * {@code <pending_campaigns>} block. Describes a previously-reserved
- * send whose impact must be accounted for in the new quote.
+ * A single {@code <campaign/>} grandchild of the outbound
+ * {@code <pending_campaigns>} block on the SMB metered-messaging
+ * checkout request.
+ *
+ * @apiNote
+ * Used by Cobalt clients composing a
+ * {@link SmaxGetSMBMeteredMessagingCheckoutRequest} to declare a
+ * previously-reserved send whose free-message impact must be
+ * accounted for in the new quote; the relay subtracts the declared
+ * reservations from the campaign's free-message allowance before
+ * computing the cost.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code makeGetSMBMeteredMessagingCheckoutRequestPendingCampaignsCampaign}
+ * by emitting a {@code <campaign/>} child with the mandatory
+ * {@code free_reserved_msgs} attribute and the optional
+ * {@code send_timestamp} attribute; the parent
+ * {@code <pending_campaigns/>} block accepts a repeated list of up
+ * to 200 entries on the WA Web side.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutSmbMeteredMessagingAccountGetSMBMeteredMessagingCheckoutRequest")
 public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
     /**
-     * The number of free reserved messages on this previously-issued
-     * campaign.
+     * The number of free reserved messages on the previously-issued
+     * campaign; mirrors the WA Web
+     * {@code campaignFreeReservedMsgs} field.
      */
     private final int freeReservedMsgs;
 
     /**
      * The optional send-timestamp of the previously-issued campaign
-     * (epoch seconds).
+     * (epoch seconds); mirrors the WA Web
+     * {@code campaignSendTimestamp} optional field.
      */
     private final Integer sendTimestamp;
 
     /**
      * Constructs a new entry.
+     *
+     * @apiNote
+     * Invoked by callers assembling the {@code pending_campaigns}
+     * list before issuing
+     * {@link SmaxGetSMBMeteredMessagingCheckoutRequest}; one entry
+     * per previously-reserved send to be accounted for.
      *
      * @param freeReservedMsgs the number of reserved messages
      * @param sendTimestamp    the optional send timestamp; may be
@@ -59,6 +84,10 @@ public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
     /**
      * Returns the optional send timestamp.
      *
+     * @apiNote
+     * Empty when the entry was constructed without an associated
+     * timestamp; the value is epoch seconds.
+     *
      * @return an {@link OptionalInt} carrying the timestamp, or
      *         empty when the entry omitted it
      */
@@ -72,6 +101,13 @@ public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
     /**
      * Builds the {@code <campaign/>} child node.
      *
+     * @implNote
+     * This implementation stamps the mandatory
+     * {@code free_reserved_msgs} attribute and emits
+     * {@code send_timestamp} only when supplied, matching WA Web's
+     * {@code OPTIONAL(INT, ...)} guard on the
+     * {@code campaignSendTimestamp} field.
+     *
      * @return the materialised {@link Node}
      */
     public Node toNode() {
@@ -84,6 +120,9 @@ public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
         return builder.build();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -97,11 +136,17 @@ public final class SmaxGetSMBMeteredMessagingCheckoutPendingCampaign {
                 && Objects.equals(this.sendTimestamp, that.sendTimestamp);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(freeReservedMsgs, sendTimestamp);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxGetSMBMeteredMessagingCheckoutPendingCampaign[freeReservedMsgs=" + freeReservedMsgs

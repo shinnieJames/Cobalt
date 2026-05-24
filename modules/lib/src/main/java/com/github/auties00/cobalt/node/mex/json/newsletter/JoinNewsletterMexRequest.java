@@ -18,41 +18,71 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Joins (subscribes to) the given newsletter as the authenticated user.
+ * Builds the MEX request that subscribes the local user to a newsletter.
  *
- * <p>After a successful join the user starts receiving the newsletter's updates and the newsletter appears in the user's channel list. The mutation returns fresh thread metadata so the client can cache the newsletter locally.
+ * @apiNote
+ * Drives the "follow newsletter" UI flow surfaced by
+ * {@code WAWebNewsletterSubscribeJob.subscribeToNewsletter}: the user taps
+ * "follow" on a newsletter detail page, the action runs this mutation
+ * against the newsletter Jid, then the relay starts forwarding the
+ * newsletter's updates to the local user's channel list. Build via the
+ * constructor with the newsletter Jid string and submit through the MEX IQ
+ * dispatcher. Pair the result with {@link JoinNewsletterMexResponse#of(Node)};
+ * a returned {@link JoinNewsletterMexResponse.State} of {@code DELETED} or
+ * {@code NON_EXISTING} indicates the relay refused the join because the
+ * channel has been removed, and {@code SUSPENDED} indicates the channel is
+ * server-side suspended.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexJoinNewsletterJob")
 public final class JoinNewsletterMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code JoinNewsletter} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexJoinNewsletterJobMutation.graphql} on the WhatsApp
+     * relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child;
+     * the WhatsApp relay refuses requests whose persisted-query id is unknown.
      */
     public static final String QUERY_ID = "24404358912487870";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexJoinNewsletter
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this mutation.
+     *
+     * @apiNote
+     * Reported to observability sinks that key telemetry on the operation
+     * name; mirrors the export name exposed by
+     * {@code WAWebMexJoinNewsletterJob}.
      */
     public static final String OPERATION_NAME = "mexJoinNewsletter";
+
+    /**
+     * The Jid string of the newsletter the local user is subscribing to.
+     */
     private final String newsletterId;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request targeting the given newsletter.
      *
-     * @param newsletterId the newsletter id
+     * @apiNote
+     * The {@code newsletterId} must be the newsletter Jid string as
+     * accepted by {@code WAWebNewsletterValidationUtils.toNewsletterJidOrThrow};
+     * the relay rejects user or group ids.
+     *
+     * @param newsletterId the newsletter Jid the local user is subscribing
+     *                     to
      */
     public JoinNewsletterMexRequest(String newsletterId) {
         this.newsletterId = newsletterId;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}, the persisted-query identifier of the
+     * mutation.
      */
     @Override
     public String id() {
@@ -60,10 +90,11 @@ public final class JoinNewsletterMexRequest implements MexOperation.Request.Json
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}, the value WA Web's
+     * {@code MexPerfTracker} reports for this mutation.
      */
     @Override
     public String name() {
@@ -71,11 +102,26 @@ public final class JoinNewsletterMexRequest implements MexOperation.Request.Json
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be
+     * dispatched through the WhatsApp relay.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id: "<id>"}}} payload
+     * consumed by the persisted-query identified by {@link #QUERY_ID}; the
+     * {@code newsletter_id} entry is omitted when {@link #newsletterId} is
+     * {@code null} so the GraphQL schema never receives an explicit
+     * {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and delegates IQ envelope construction to
+     * {@link Json#createMexNode(String, String)}; any {@link IOException}
+     * raised by the in-memory writer is wrapped in an
+     * {@link UncheckedIOException} since neither sink can fail in practice.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexJoinNewsletterJob", exports = "mexJoinNewsletter",
             adaptation = WhatsAppAdaptation.ADAPTED)

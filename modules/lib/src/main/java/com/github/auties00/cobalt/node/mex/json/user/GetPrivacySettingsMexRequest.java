@@ -18,46 +18,67 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the user's current privacy preferences such as last-seen visibility, profile picture visibility, about
- * visibility and read receipts.
+ * Builds the MEX IQ stanza that fetches the authenticated user's privacy
+ * preferences.
  *
- * <p>The response carries the full privacy settings record for the authenticated account. These values drive the
- * Settings privacy screen and are used by outgoing send paths to decide whether receipts and presence should be
- * emitted.
+ * @apiNote Powers the Settings privacy screen and feeds the gates that
+ * outgoing-send paths consult before emitting presence and read receipts.
+ * WA Web's {@code WAWebMexGetPrivacySetting.fetchPrivacySettings} passes a
+ * structured {@code {jid, privacyFeatures}} input (the feature list
+ * includes {@code LAST}, {@code ONLINE}, {@code PROFILE}, {@code ABOUT},
+ * {@code READRECEIPTS}, {@code GROUPADD}, {@code CALLADD}, {@code STICKERS},
+ * {@code MESSAGES}, {@code DEFENSE}); Cobalt accepts the variable as an
+ * opaque pre-serialised string so callers may decide which feature subset
+ * to request. Pair the dispatched stanza with
+ * {@link GetPrivacySettingsMexResponse} to consume the reply.
+ *
+ * @see GetPrivacySettingsMexResponse
  */
 public final class GetPrivacySettingsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexGetPrivacySettingsQuery.graphql} for the snapshot this
+     * file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacySettingsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "25637004609323493";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexGetPrivacySettingsQuery.graphql}; WA Web tags the value
+     * to {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacySettingsQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "fetchPrivacySettings";
 
     /**
-     * The serialised input variable carried by the GraphQL request.
+     * The {@code input} GraphQL variable carrying the pre-serialised payload.
      */
     private final String input;
 
     /**
-     * Constructs a new request with the given input variable.
+     * Constructs a privacy-settings fetch request.
      *
-     * @param input the serialised input variable, or {@code null} to omit it
+     * @apiNote {@code input} must already be the serialised
+     * {@code {query_input: [{jid, privacy_features: [...]}]}} payload WA Web
+     * sends; Cobalt does not materialise it on the caller's behalf.
+     *
+     * @param input the serialised input payload, or {@code null} to omit
+     *              the variable
      */
     public GetPrivacySettingsMexRequest(String input) {
         this.input = input;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -65,9 +86,7 @@ public final class GetPrivacySettingsMexRequest implements MexOperation.Request.
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -75,9 +94,12 @@ public final class GetPrivacySettingsMexRequest implements MexOperation.Request.
     }
 
     /**
-     * Serialises the GraphQL variables as JSON and wraps them in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {"input": <input>}}}
+     * (or {@code {"variables": {}}} when {@code input} is {@code null}) and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacySettingsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.ADAPTED)

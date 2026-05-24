@@ -7,57 +7,77 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Holds the payment-related metadata parsed from an incoming message stanza's
- * {@code <pay>} and {@code <transaction>} children.
+ * The payment metadata extracted from the {@code <pay>} and
+ * {@code <transaction>} children of an incoming {@code <message>} stanza by
+ * {@link MessageReceiveStanzaParser}.
  *
- * <p>The two children appear as siblings (both direct children of the message node),
- * not nested. Cobalt merges them into a single record so callers do not need to know
- * which node carried which attribute. When both are present the {@code <transaction>}
- * fields take precedence.
+ * @apiNote
+ * The two children sit as direct siblings of the {@code <message>} node, not
+ * nested; this record flattens both into one shape so the UI does not need
+ * to know which node carried which attribute. When both are present the
+ * {@code <transaction>} fields win, because {@code <transaction>} is the
+ * newer Novi/WhatsApp Pay envelope. The {@link #futureproofed()} flag is
+ * set when the {@code <pay>} or {@code <transaction>} node is a Novi-style
+ * envelope that this client does not yet understand; downstream code skips
+ * rendering payment details in that case.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceivePaymentInfo {
     /**
-     * Whether this payment represents a futureproofed (novi) transaction.
+     * {@code true} when WA Web's {@code isNoviTransaction} check marks the
+     * payment node as a future Novi envelope.
      */
     private final boolean futureproofed;
 
     /**
-     * String form of the receiver's JID.
+     * The string form of the receiver's JID, taken from the {@code receiver}
+     * attribute or, for legacy {@code pay} {@code type="send"} stanzas, the
+     * outer {@code recipient} attribute.
      */
     private final String receiverJid;
 
     /**
-     * ISO currency code of the payment.
+     * The ISO currency code of the payment.
      */
     private final String currency;
 
     /**
-     * Payment amount in 1/1000 units (cents scaled by 1000 to preserve sub-cent
-     * precision).
+     * The payment amount in 1/1000 units of the smallest currency unit
+     * (millicents for USD-style currencies).
+     *
+     * @implNote
+     * This implementation keeps WA Web's wire-level scaling factor of 1000
+     * instead of converting to a decimal type so the value round-trips
+     * losslessly through any downstream WhatsApp Pay surfaces.
      */
     private final Long amount1000;
 
     /**
-     * Unix-second timestamp of the transaction.
+     * The Unix-second transaction timestamp.
      */
     private final Long transactionTimestamp;
 
     /**
-     * Transaction status, present only when the payment is relevant to the current
-     * user (for example not a group payment between other participants).
+     * The WhatsApp Pay transaction status (for example {@code INIT},
+     * {@code PENDING}, {@code COMPLETED}), set only when the local user is
+     * a party to the transaction.
      */
     private final String txnStatus;
 
     /**
-     * Constructs a new payment info record.
+     * Constructs a populated record from the values extracted by
+     * {@link MessageReceiveStanzaParser}.
      *
-     * @param futureproofed        whether this is a novi-style futureproofed transaction
+     * @apiNote
+     * Not intended for direct use outside the parser; callers consume
+     * existing instances via {@link MessageReceiveStanza#paymentInfo()}.
+     *
+     * @param futureproofed        whether this is a Novi-style futureproofed envelope
      * @param receiverJid          the receiver JID string, or {@code null}
      * @param currency             the ISO currency code, or {@code null}
-     * @param amount1000           the payment amount in 1/1000 units, or {@code null}
+     * @param amount1000           the amount in 1/1000 units, or {@code null}
      * @param txnStatus            the transaction status, or {@code null}
-     * @param transactionTimestamp the Unix-second transaction timestamp, or {@code null}
+     * @param transactionTimestamp the Unix-second timestamp, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -78,7 +98,13 @@ public final class MessageReceivePaymentInfo {
     }
 
     /**
-     * Returns whether this transaction is a novi-style futureproofed payment.
+     * Returns whether this payment node was tagged as a Novi-style
+     * futureproofed envelope.
+     *
+     * @apiNote
+     * When {@code true} every other field on this record is empty; the
+     * receiver should fall back to a generic "unsupported payment" placeholder
+     * rather than attempting to render the transaction.
      *
      * @return {@code true} if futureproofed
      */
@@ -89,6 +115,10 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the string form of the receiver's JID, when present.
      *
+     * @apiNote
+     * Identifies which side of the transaction is the payee; compared against
+     * the local user JID to decide whether to display a status badge.
+     *
      * @return an {@link Optional} wrapping the receiver JID string
      */
     public Optional<String> receiverJid() {
@@ -98,6 +128,10 @@ public final class MessageReceivePaymentInfo {
     /**
      * Returns the ISO currency code, when present.
      *
+     * @apiNote
+     * Combined with {@link #amount1000()} to format the displayed monetary
+     * value.
+     *
      * @return an {@link Optional} wrapping the currency code
      */
     public Optional<String> currency() {
@@ -105,7 +139,12 @@ public final class MessageReceivePaymentInfo {
     }
 
     /**
-     * Returns the payment amount in 1/1000 units, when present.
+     * Returns the payment amount in 1/1000 units of the smallest currency
+     * unit, when present.
+     *
+     * @apiNote
+     * Divide by 1000 to obtain the value in the smallest currency unit and by
+     * 100000 to obtain the value in the major unit (for USD style currencies).
      *
      * @return an {@link Optional} wrapping the amount
      */
@@ -114,7 +153,12 @@ public final class MessageReceivePaymentInfo {
     }
 
     /**
-     * Returns the transaction status, when present.
+     * Returns the WhatsApp Pay transaction status, when present.
+     *
+     * @apiNote
+     * Populated by WA Web's {@code getPaymentTxnWebStatus} only when the
+     * receiver is a party to the transaction; absence here typically means
+     * the message is a third-party transaction visible inside a group chat.
      *
      * @return an {@link Optional} wrapping the status
      */
@@ -124,6 +168,11 @@ public final class MessageReceivePaymentInfo {
 
     /**
      * Returns the Unix-second transaction timestamp, when present.
+     *
+     * @apiNote
+     * Defaults to the message's own {@code t} attribute for legacy
+     * {@code <pay type="send">} stanzas that have no transaction-level
+     * timestamp.
      *
      * @return an {@link Optional} wrapping the timestamp
      */

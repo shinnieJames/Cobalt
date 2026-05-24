@@ -12,30 +12,46 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the disjunctive
- * {@link SmaxMessagePublishNewsletterPayload} children inside a
- * {@code <message to=NEWSLETTER_JID>} envelope.
+ * The outbound {@code <message to=NEWSLETTER_JID>} stanza builder for
+ * publishing to a newsletter; carries either a brand-new post or a
+ * reply / reaction / poll-vote keyed by the target's server-id.
+ *
+ * @apiNote
+ * Used by callers driving the WA Web
+ * {@code WAWebNewsletterSendMessageQueryJob} surface that dispatches
+ * through
+ * {@code WASmaxMessagePublishNewsletterRPC.sendNewsletterRPC}. The
+ * relay replies with a {@link SmaxMessagePublishNewsletterResponse}:
+ * a {@link SmaxMessagePublishNewsletterResponse.Success} when the
+ * publish landed, a {@link SmaxMessagePublishNewsletterResponse.Negative}
+ * when it was rejected.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMessagePublishNewsletterRequest")
 public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID being posted to. Routed verbatim into the
-     * message's {@code to} attribute.
+     * The target newsletter JID; routed verbatim into the message's
+     * {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
-     * The publish payload. Selects between "client + server id" and
-     * "client id only".
+     * The disjunctive publish payload selecting between server-id
+     * addressing and brand-new-post addressing.
      */
     private final SmaxMessagePublishNewsletterPayload payload;
 
     /**
-     * Constructs a new request.
+     * Constructs a newsletter publish request.
+     *
+     * @apiNote
+     * Use this when assembling a
+     * {@link SmaxMessagePublishNewsletterRequest} for dispatch through
+     * the smax send pipeline.
      *
      * @param newsletterJid the target newsletter JID; never
      *                      {@code null}
-     * @param payload       the publish payload; never {@code null}
+     * @param payload       the disjunctive publish payload; never
+     *                      {@code null}
      * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxMessagePublishNewsletterRequest(Jid newsletterJid, SmaxMessagePublishNewsletterPayload payload) {
@@ -62,10 +78,24 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
     }
 
     /**
-     * Builds the outbound message stanza ready for dispatch.
+     * Builds the outbound {@code <message>} stanza ready for
+     * dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the message envelope
-     *         and the disjunctive payload children
+     * @apiNote
+     * The brand-new-post arm folds the optional msg-meta-origin and
+     * sender-content-type-media RCAT children alongside the
+     * client-id content node; the server-id arm stamps the
+     * {@code server_id} attribute and embeds the inner content
+     * directly.
+     *
+     * @implNote
+     * This implementation dispatches on the
+     * {@link SmaxMessagePublishNewsletterPayload} sealed-interface
+     * variants via a Java pattern-matching switch; the dispatch layer
+     * stamps the message's outer id-correlation envelope.
+     *
+     * @return a {@link NodeBuilder} carrying the partially-built
+     *         message envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishNewsletterRequest",
@@ -92,6 +122,15 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
         return builder;
     }
 
+    /**
+     * Compares this request to another for value equality on the
+     * newsletter JID and publish payload.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxMessagePublishNewsletterRequest} with
+     *         identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -105,11 +144,25 @@ public final class SmaxMessagePublishNewsletterRequest implements SmaxOperation.
                 && Objects.equals(this.payload, that.payload);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(newsletterJid, payload);
     }
 
+    /**
+     * Returns a debug-friendly representation of this request.
+     *
+     * @apiNote
+     * Intended for logging; the format is not part of the public
+     * contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxMessagePublishNewsletterRequest[newsletterJid=" + newsletterJid

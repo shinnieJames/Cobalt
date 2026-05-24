@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.business;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.business.BusinessCampaignStatusBuilder;
@@ -16,47 +18,87 @@ import com.github.auties00.cobalt.stream.SocketStream;
 import java.time.Instant;
 
 /**
- * Handles incoming business notification stanzas from WhatsApp.
+ * Handles {@code type="business"}, {@code type="digital_commerce_subscription"},
+ * and {@code type="fb:update"} notifications carrying WhatsApp Business
+ * mutations.
  *
- * <p>Processes the various business-related notification subtypes including
- * verified name changes, business removal, profile updates, product catalog
- * changes, subscriptions, CTWA suggestions, privacy settings, ad account nonces,
- * and marketing campaign state changes.
+ * @apiNote
+ * Dispatched by {@link NotificationBusinessDispatcher}. The
+ * {@code business} type covers verified-name changes, business
+ * deregistration, business-profile updates, product-catalog updates,
+ * subscription/feature-flag pushes, CTWA banner suggestions, SMB
+ * privacy-settings sync, ad-account nonce delivery, and marketing-campaign
+ * state changes. {@code digital_commerce_subscription} re-uses the
+ * subscription parser, and {@code fb:update} delivers bot-profile updates.
+ *
+ * @implNote
+ * This implementation produces an ack with an optional
+ * {@code <user side_list="out"/>} child when a hash-based lookup failed,
+ * mirroring WA Web's
+ * {@code WAWebHandleBusinessNotification.c(stanzaId, from, needsSideList)}
+ * builder. The side-list flag asks the server to redistribute the
+ * notification to companion devices that may have the contact record
+ * Cobalt could not resolve.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleBusinessNotification")
 public final class NotificationBusinessStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger for this handler.
+     * Logger used for warnings about malformed stanzas and debug messages
+     * about unsupported sub-types.
      */
     private static final System.Logger LOGGER =
             System.getLogger(NotificationBusinessStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client instance used to send responses and access the store.
+     * The {@link WhatsAppClient} used for store reads and business-profile
+     * queries.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new business notification handler.
-     * @param whatsapp the WhatsApp client for sending acks and accessing store
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification">} stanzas for {@code business},
+     * {@code digital_commerce_subscription} and {@code fb:update}
+     * notifications.
      */
-    public NotificationBusinessStreamHandler(WhatsAppClient whatsapp) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with the shared client and ack sender.
+     *
+     * @apiNote
+     * Called once by {@link NotificationBusinessDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp  the {@link WhatsAppClient}
+     * @param ackSender the {@link AckSender}
+     */
+    public NotificationBusinessStreamHandler(WhatsAppClient whatsapp, AckSender ackSender) {
         this.whatsapp = whatsapp;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles a business notification stanza by parsing its child elements and
-     * dispatching to the appropriate sub-handler.
+     * Validates the stanza shape, dispatches to the per-type sub-handler,
+     * and always sends the protocol-level ACK.
      *
-     * <p>The notification is always acknowledged via {@link #sendBusinessAck} in
-     * a finally block, regardless of whether processing succeeds or fails.
+     * @apiNote
+     * Invoked by {@link NotificationBusinessDispatcher}. The {@code type}
+     * attribute routes between {@code business} (delegates to
+     * {@link #handleBusinessNotification(Node)}),
+     * {@code digital_commerce_subscription} (delegates to
+     * {@link #handleDigitalCommerceSubscription(Node)}), and
+     * {@code fb:update} (delegates to {@link #handleBotProfileUpdate(Node)}).
      *
-     * <p>WA Web wraps this in a non-persisted job via
-     * {@code WAWebOrchestratorNonPersistedJob.createNonPersistedJob("handleBusinessNotification", ...)}
-     * with priority from {@code WAWebBackendJobsCommon.getNonCriticalNotificationPriority}.
-     * In Cobalt, the virtual thread spawning at the dispatcher level serves the same purpose.
-     * @param node the notification stanza node
+     * @implNote
+     * This implementation routes the three types from one Cobalt handler;
+     * WA Web wraps each one in a separate
+     * {@code createNonPersistedJob} so the orchestrator can reorder them
+     * relative to other non-critical work. Cobalt's virtual-thread fan-out
+     * at the dispatcher level achieves the equivalent concurrency.
+     *
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -79,10 +121,15 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code business} type notification by dispatching to the appropriate sub-handler
-     * and sending an acknowledgement with optional side-list flag.
+     * Routes a {@code business}-type stanza through {@link #dispatch(Node)}
+     * and sends the ack with the side-list child the dispatch returned.
      *
-     * @param node the notification stanza node
+     * @apiNote
+     * The side-list flag asks the server to redistribute the
+     * notification to companions that may have the contact record we
+     * could not resolve from a hash.
+     *
+     * @param node the {@code <notification type="business"/>} stanza
      */
     private void handleBusinessNotification(Node node) {
         var needsSideList = false;
@@ -98,14 +145,20 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code digital_commerce_subscription} notification by parsing subscriptions
-     * and feature flags from the stanza and applying them to the store.
+     * Routes a {@code digital_commerce_subscription}-type stanza through
+     * the shared {@link #handleSubscriptions(Node)} path and sends the
+     * dedicated digital-commerce ack.
      *
-     * <p>This notification type uses the same subscription and feature flag parsing as the
-     * {@code business} notification's {@code subscriptions} child, but arrives as a separate
-     * notification type.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleDigitalCommerceSubscriptionNotification} which
+     * reuses
+     * {@code WAWebSubscriptions.applySubscriptionsAndFeatureFlags} on
+     * the parsed payload. The notification type is distinct from
+     * {@code business} so the server can route based on subscriber
+     * eligibility but the wire shape is the same.
      *
-     * @param node the notification stanza node
+     * @param node the {@code <notification type="digital_commerce_subscription"/>} stanza
      */
     private void handleDigitalCommerceSubscription(Node node) {
         try {
@@ -120,13 +173,23 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code fb:update} notification containing bot profile update information.
+     * Processes a {@code fb:update} stanza by iterating
+     * {@code <update type="bot_profile"/>} children and refreshing each
+     * referenced bot profile.
      *
-     * <p>Iterates {@code update} children with {@code type="bot_profile"}, extracts the bot JID
-     * from the {@code jid} attribute, and refreshes the bot profile in the store. If any update
-     * child is missing a JID (pruned update), a full bot initialization is triggered.
+     * @apiNote
+     * Drives the in-chat bot affordances for accounts that have
+     * registered Meta AI bots. A pruned update (an {@code <update>}
+     * with no {@code jid}) signals that the server has invalidated the
+     * cache and a full bot resync is needed.
      *
-     * @param node the notification stanza node
+     * @implNote
+     * This implementation only logs the bot JID and category. WA Web's
+     * {@code WAWebHandleBotProfileNotification} fires a frontend
+     * refresh on each bot id; Cobalt does not maintain an in-memory
+     * bot-profile collection and lets callers re-query on demand.
+     *
+     * @param node the {@code <notification type="fb:update"/>} stanza
      */
     private void handleBotProfileUpdate(Node node) {
         try {
@@ -167,15 +230,21 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Dispatches the business notification to the appropriate sub-handler
-     * based on the first recognized child element.
+     * Selects the {@code business}-type branch from the first recognised
+     * child element and returns whether the ack should request a
+     * side-list redistribution.
      *
-     * <p>Returns {@code true} when a hash-based lookup was not found, which
-     * means the ack should include a {@code <user side_list="out"/>} child so
-     * the server redistributes the notification to companion devices.
-     * @param node the full notification stanza
-     * @return {@code true} if the ack should include the side-list user child,
-     *     {@code false} otherwise
+     * @apiNote
+     * Mirrors WA Web's {@code businessNotificationParser} type encoding:
+     * {@code remove_jid}/{@code remove_hash}, {@code verified_name_jid}/
+     * {@code verified_name_hash}, {@code profile}/{@code profile_hash},
+     * {@code product}/{@code collection}, {@code subscriptions},
+     * {@code ctwa_suggestion}, {@code privacy},
+     * {@code wa_ad_account_nonce}, {@code mm_campaign}, and an unknown
+     * fall-through.
+     *
+     * @param node the full {@code <notification>} stanza
+     * @return {@code true} when a hash-based lookup failed and the ack should include {@code <user side_list="out"/>}; {@code false} otherwise
      */
     private boolean dispatch(Node node) {
         if (node.hasChild("remove")) {
@@ -201,10 +270,7 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
         }
 
         if (node.hasChild("ctwa_suggestion")) {
-            // WA Web gates this behind WAWebBizGatingUtils.adsActionBannersEnabled(),
-            // parses via WAWebCTWAParseSuggestion.parseCTWASuggestion, then handles
-            // via WAWebHandleCTWASuggestion.handleCTWASuggestion.
-            // ADAPTED: Cobalt does not implement CTWA ad banner infrastructure.
+            // TODO: implement the CTWA action-banner suggestion pipeline once Cobalt has an equivalent of WAWebHandleCTWASuggestion.
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Received ctwa_suggestion business notification (not implemented)");
             return false;
@@ -231,27 +297,34 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code remove} child notification indicating a business has been
-     * deregistered. Distinguishes between jid-based and hash-based variants.
+     * Clears the local business fields when the {@code <remove>} child
+     * targets self by JID, and returns whether a hash-only remove
+     * needs the side-list ack.
      *
-     * <p>For jid-based: delegates to
-     * {@code WAWebHandleBusinessRemoval.handleBusinessRemovalNotificationContact},
-     * which removes business properties and updates the contact.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleBusinessRemoval.handleBusinessRemovalNotificationContact}
+     * (jid branch) and
+     * {@code handleBusinessRemovalNotificationHash} (hash branch). The
+     * hash branch in Cobalt always returns {@code true} because
+     * Cobalt has no hash-keyed contact lookup.
      *
-     * <p>For hash-based: delegates to
-     * {@code WAWebHandleBusinessRemoval.handleBusinessRemovalNotificationHash},
-     * which looks up the contact by hash first. Returns whether the contact was found.
+     * @implNote
+     * This implementation clears verified name, address, description,
+     * email, websites, categories, and the
+     * {@code syncedBusinessCertificate} flag when the remove targets
+     * the local account. WA Web also fires a
+     * {@code privacy_system_message} into the chat thread; Cobalt's
+     * message-generation pipeline runs from a different stream.
+     *
      * @param removeNode the {@code <remove>} child node
-     * @return {@code true} if hash-based and the contact was NOT found (needs side-list ack),
-     *     {@code false} otherwise
+     * @return {@code true} when hash-based lookup failed (Cobalt always returns true on the hash branch), {@code false} otherwise
      */
     private boolean handleRemove(Node removeNode) {
         var jid = removeNode.getAttributeAsJid("jid").orElse(null);
         if (jid != null) {
             var targetJid = jid.withoutData();
             if (isSelf(targetJid)) {
-                // contact business fields and sends frontend events. Cobalt clears
-                // store fields directly.
                 whatsapp.store()
                         .setVerifiedName(null)
                         .setBusinessAddress(null)
@@ -264,10 +337,8 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
             return false;
         }
 
-        // ADAPTED: Hash-based contact lookup (WAWebApiContact.getContactRecordByHash)
-        // is not available in Cobalt. We cannot resolve the contact, so we return true
-        // (contact not found) to trigger the side-list ack for companion redistribution.
-        var hash = removeNode.getAttributeAsString("hash", null); // NO_WA_BASIS: defensive read
+        // TODO: resolve the contact via hash and apply the remove locally. Today Cobalt requests side-list redistribution so a companion that owns the contact applies it instead.
+        var hash = removeNode.getAttributeAsString("hash", null);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Cannot handle hash-based business removal (hash={0}), requesting side-list redistribution",
                 hash);
@@ -275,42 +346,43 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code verified_name} child notification indicating a business name
-     * verification change. Distinguishes between jid-based and hash-based variants.
+     * Re-queries the verified name (self branch) or the business profile
+     * (peer branch) when the {@code <verified_name>} child targets a
+     * JID; returns the side-list flag when the targeting is hash-based.
      *
-     * <p>For jid-based: delegates to
-     * {@code WAWebHandleBusinessNameChange.handleVerifiedBusinessNameNotificationContact},
-     * which retrieves the verified name details and updates the contact record.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleBusinessNameChange.handleVerifiedBusinessNameNotificationContact}
+     * (jid branch) and
+     * {@code handleVerifiedBusinessNameNotificationHash} (hash branch).
      *
-     * <p>For hash-based: delegates to
-     * {@code WAWebHandleBusinessNameChange.handleVerifiedBusinessNameNotificationHash},
-     * which looks up the contact by hash first.
+     * @implNote
+     * This implementation defers the verified name resolution to
+     * {@link WhatsAppClient#queryName(Jid)}
+     * for self and to
+     * {@link WhatsAppClient#queryBusinessProfile(Jid)}
+     * for peers. The hash branch always returns {@code true} because
+     * Cobalt has no hash-keyed contact lookup.
+     *
      * @param verifiedNameNode the {@code <verified_name>} child node
-     * @return {@code true} if hash-based and the contact was NOT found (needs side-list ack),
-     *     {@code false} otherwise
+     * @return {@code true} when hash-based and the contact was not resolved; {@code false} otherwise
      */
     private boolean handleVerifiedName(Node verifiedNameNode) {
         var jid = verifiedNameNode.getAttributeAsJid("jid").orElse(null);
         if (jid != null) {
             var targetJid = jid.withoutData();
             if (isSelf(targetJid)) {
-                // ADAPTED: WA Web retrieves verified name via IQ query (retrieveBusinessDetails)
-                // and updates the contact record, generating privacy system messages.
-                // Cobalt queries the name and stores it.
                 whatsapp.queryName(targetJid)
                         .ifPresent(whatsapp.store()::setVerifiedName);
                 whatsapp.store().setSyncedBusinessCertificate(true);
             } else {
-                // ADAPTED: WA Web calls handleVerifiedBusinessNameNotificationContact
-                // which queries the verified name and updates the remote contact.
-                // Cobalt queries the business profile to refresh the contact.
                 whatsapp.queryBusinessProfile(targetJid);
             }
             return false;
         }
 
-        // ADAPTED: Hash-based contact lookup is not available in Cobalt.
-        var hash = verifiedNameNode.getAttributeAsString("hash", null); // NO_WA_BASIS: defensive read
+        // TODO: resolve the contact via hash. Today Cobalt requests side-list redistribution so a companion that owns the contact applies the verified-name change instead.
+        var hash = verifiedNameNode.getAttributeAsString("hash", null);
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Cannot handle hash-based verified name change (hash={0}), requesting side-list redistribution",
                 hash);
@@ -318,21 +390,25 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code profile} child notification indicating a business profile
-     * update. Distinguishes between the no-hash variant (which always has the
-     * {@code from} jid) and the hash-based variant.
+     * Re-queries the business profile for self when the
+     * {@code <profile>} child has no hash attribute; returns the
+     * side-list flag otherwise.
      *
-     * <p>For no-hash: delegates to
-     * {@code WAWebHandleBusinessProfile.handleBusinessProfile}, which updates the
-     * business profile via a frontend call.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleBusinessProfile.handleBusinessProfile} (no-hash
+     * branch) and
+     * {@code handleBusinessProfileHash} (hash branch).
      *
-     * <p>For hash-based: delegates to
-     * {@code WAWebHandleBusinessProfile.handleBusinessProfileHash}, which looks
-     * up the contact by hash first.
-     * @param node the full notification stanza (used to extract the {@code from} jid)
+     * @implNote
+     * This implementation applies the queried profile to the local
+     * store only when the target is self; for non-self the queried
+     * profile is discarded after the server-side state is refreshed
+     * (the call has its own caching semantics).
+     *
+     * @param node        the full {@code <notification>} stanza, used to read {@code from}
      * @param profileNode the {@code <profile>} child node
-     * @return {@code true} if hash-based and the contact was NOT found (needs side-list ack),
-     *     {@code false} otherwise
+     * @return {@code true} when hash-based and Cobalt cannot resolve the contact; {@code false} otherwise
      */
     private boolean handleProfile(Node node, Node profileNode) {
         var hash = profileNode.getAttributeAsString("hash", null);
@@ -343,8 +419,6 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
             if (targetJid != null) {
                 var refreshed = whatsapp.queryBusinessProfile(targetJid).orElse(null);
                 if (refreshed != null && isSelf(targetJid)) {
-                    // ADAPTED: WA Web sends updateBusinessProfile frontend event.
-                    // Cobalt applies profile fields to the store directly.
                     applyOwnBusinessProfile(refreshed);
                     whatsapp.store().setSyncedBusinessCertificate(true);
                 }
@@ -352,7 +426,7 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
             return false;
         }
 
-        // ADAPTED: Hash-based contact lookup is not available in Cobalt.
+        // TODO: resolve the contact via hash. Today Cobalt requests side-list redistribution for the hash branch.
         LOGGER.log(System.Logger.Level.DEBUG,
                 "Cannot handle hash-based business profile update (hash={0}), requesting side-list redistribution",
                 hash);
@@ -360,31 +434,35 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code product_catalog} child notification by dispatching
-     * based on whether it contains {@code product} or {@code collection} children.
+     * Logs the product or collection counts contained in a
+     * {@code <product_catalog>} child.
      *
-     * <p>For products: WA Web collects all product IDs and calls
-     * {@code refreshCatalogProducts}. For collections: WA Web collects collection
-     * IDs and review statuses and calls {@code updateCatalogCollectionReviewStatuses}.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleBusinessProductCatalogNotification.handleProductNotification}
+     * and {@code handleCollectionNotification}.
+     *
+     * @implNote
+     * This implementation does not refresh the catalog from the
+     * server. WA Web invokes
+     * {@code frontendSendAndReceive("refreshCatalogProducts", ...)}
+     * to drive its catalog cache; Cobalt has no equivalent in-memory
+     * catalog cache so the change is observable only on the next
+     * explicit {@code queryBusinessCatalog} call.
+     *
      * @param catalogNode the {@code <product_catalog>} child node
      */
     private void handleProductCatalog(Node catalogNode) {
         if (catalogNode.hasChild("product")) {
-            // WA Web collects product IDs via c.forEachChildWithTag("product", ...)
             var productIds = catalogNode.getChildren("product").stream()
                     .flatMap(product -> product.getChild("id").stream())
                     .flatMap(idNode -> idNode.toContentString().stream())
                     .toList();
             if (!productIds.isEmpty()) {
-                // ADAPTED: WA Web calls frontendSendAndReceive("refreshCatalogProducts", {productIds}).
-                // Cobalt uses the queryBusinessCatalog API which refreshes the catalog.
-                // The product IDs are logged for diagnostics.
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Received product catalog notification for {0} products", productIds.size());
             }
         } else if (catalogNode.hasChild("collection")) {
-            // WA Web collects collection IDs and review statuses via
-            // c.forEachChildWithTag("collection", ...) with status_info parsing.
             var collectionCount = catalogNode.getChildren("collection").size();
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Received collection catalog notification for {0} collections", collectionCount);
@@ -392,11 +470,17 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Applies the given business profile fields to the own store.
+     * Applies the queried business profile fields to the local store
+     * for the authenticated business account.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code frontendSendAndReceive("updateBusinessProfile", ...)}
+     * frontend event by writing the same fields directly.
+     *
      * @param profile the refreshed business profile
      */
     private void applyOwnBusinessProfile(BusinessProfile profile) {
-        // ADAPTED: WA Web sends updateBusinessProfile frontend event; Cobalt applies directly.
         whatsapp.store()
                 .setBusinessDescription(profile.description().orElse(null))
                 .setBusinessAddress(profile.address().orElse(null))
@@ -406,9 +490,16 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Determines whether the given JID refers to the currently authenticated user.
+     * Returns whether the given JID identifies the authenticated account.
+     *
+     * @apiNote
+     * Internal helper used by {@link #handleRemove(Node)},
+     * {@link #handleVerifiedName(Node)}, and
+     * {@link #handleProfile(Node, Node)} to distinguish self-business
+     * mutations from peer-business mutations.
+     *
      * @param jid the JID to check
-     * @return {@code true} if the JID matches the authenticated user, {@code false} otherwise
+     * @return {@code true} when {@code jid} matches the local account, {@code false} otherwise
      */
     private boolean isSelf(Jid jid) {
         return whatsapp.store().jid()
@@ -417,18 +508,28 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code subscriptions} notification by parsing both
-     * {@code <subscriptions>} and {@code <feature_flags>} children from the
-     * notification stanza and applying them to the store.
+     * Reads {@code feature_flags} and {@code subscriptions} children
+     * from a {@code business} or {@code digital_commerce_subscription}
+     * notification and merges each entry into the store.
      *
-     * <p>WA Web parses via {@code WAWebParseSubscriptionNotification.parseSubscriptionsAndFeatureFlags}
-     * which reads {@code feature_flags} and {@code subscriptions} as direct children of the
-     * notification stanza, then applies via
-     * {@code WAWebSubscriptions.applySubscriptionsAndFeatureFlags(subscriptions, featureFlags, "update")}.
-     * @param node the full notification stanza (not the subscriptions child)
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebParseSubscriptionNotification.parseSubscriptionsAndFeatureFlags}
+     * (parser) and
+     * {@code WAWebSubscriptions.applySubscriptionsAndFeatureFlags(..., "update")}
+     * (applier).
+     *
+     * @implNote
+     * This implementation merges existing fields with the new values
+     * when the stanza is partial (subscription stanzas often carry
+     * only the changed attribute), matching WA Web's
+     * shallow-merge semantics. Subscription identifiers without a
+     * status, expiration, or creation-time are still applied so the
+     * record is created.
+     *
+     * @param node the full {@code <notification>} stanza (the children live directly under the notification, not under the subscriptions child)
      */
     private void handleSubscriptions(Node node) {
-        // feature_flags are a direct child of the notification, not of the subscriptions child
         node.getChild("feature_flags").ifPresent(featureFlagsNode -> {
             featureFlagsNode.getChildren("feature_flag").forEach(featureFlag -> {
                 var name = featureFlag.getAttributeAsString("name", null);
@@ -473,84 +574,83 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Handles a {@code privacy} notification by extracting the SMB data sharing
-     * with Meta consent value and storing it on the local store.
+     * Writes the SMB data-sharing-with-Meta consent value parsed from
+     * the {@code <privacy>} child to the store.
      *
-     * <p>WA Web parses via
-     * {@code WASmaxBizSettingsSyncPrivacySettingRPC.receiveSyncPrivacySettingRPC},
-     * a thin {@code WAWebCTWAParsePrivacy.parseCTWAPrivacy} wrapper that
-     * extracts {@code parsedRequest.privacySmbDataSharingSettingMixin.value}
-     * (the {@code <smb_data_sharing_with_meta_consent value="..."/>} attribute
-     * read through {@code WASmaxInBizSettingsSmbDataSharingSettingValueMixin}
-     * with {@code attrStringEnum} validation against
-     * {@code ENUM_FALSE_NOTSET_TRUE}). The result is forwarded to
-     * {@code WAWebHandlePrivacySettingsNotification.handleSmbDataSharingSettingNotification}
-     * which fires {@code frontendFireAndForget("smbDataSharingSettingUpdate", ...)};
-     * the frontend resolves to
-     * {@code WAWebSmbDataSharingServerUpdateAction.smbDataSharingSettingUpdateAction}
-     * which calls {@code WAWebCTWADataSharingModel.CTWADataSharingModel.setValue(value)}.
-     * @param node the full notification stanza
+     * @apiNote
+     * Mirrors WA Web's flow
+     * {@code WAWebCTWAParsePrivacy.parseCTWAPrivacy} ->
+     * {@code handleSmbDataSharingSettingNotification} ->
+     * {@code CTWADataSharingModel.setValue(value)}. Cobalt persists
+     * the wire literal ({@code "false"}, {@code "notset"}, {@code "true"})
+     * directly via
+     * {@link com.github.auties00.cobalt.store.AbstractWhatsAppStore#setSmbDataSharingConsent}.
+     *
+     * @implNote
+     * This implementation routes through the typed
+     * {@link SmaxSyncPrivacySettingResponse} parser so the SMAX export
+     * remains the single source of truth for envelope validation.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handlePrivacy(Node node) {
-        // WAWebCTWAParsePrivacy.parseCTWAPrivacy: receiveSyncPrivacySettingRPC(node) ->
-        //   parsedRequest.privacySmbDataSharingSettingMixin?.value
-        // The JS swallows parse failures and returns null; we mirror the
-        // null-on-failure semantic by collapsing to Optional.empty.
         var consent = SmaxSyncPrivacySettingResponse.of(node)
                 .flatMap(SmaxSyncPrivacySettingResponse.Notification::dataSharingConsent)
                 .orElse(null);
         if (consent == null) {
             return;
         }
-        // WAWebHandlePrivacySettingsNotification.handleSmbDataSharingSettingNotification ->
-        //   frontendFireAndForget("smbDataSharingSettingUpdate", {smbDataSharingSettingValue: value}) ->
-        //   WAWebCTWADataSharingModel.CTWADataSharingModel.setValue(value).
-        // ADAPTED: Cobalt persists the wire literal on the store directly.
         whatsapp.store().setSmbDataSharingConsent(consent);
     }
 
     /**
-     * Handles a {@code wa_ad_account_nonce} notification by extracting the nonce
-     * value and storing it.
+     * Stores the ad-account nonce parsed from a
+     * {@code <wa_ad_account_nonce>} child.
      *
-     * <p>WA Web parses via
-     * {@code WASmaxBizCtwaAdAccountNonceNotificationRPC.receiveNonceNotificationRPC},
-     * then calls {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification}
-     * which resolves a pending promise or logs a warning.
-     * @param node the full notification stanza
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WASmaxBizCtwaAdAccountNonceNotificationRPC.receiveNonceNotificationRPC}
+     * parser followed by
+     * {@code WAWebCTWABizAccessTokenNonceManager.setNonceFromPushNotification}.
+     * The nonce is a short-lived token consumed by the next ad-creation
+     * authentication call.
+     *
+     * @implNote
+     * This implementation routes through the typed
+     * {@link SmaxNonceNotificationResponse} parser then writes the
+     * nonce to the store via
+     * {@link com.github.auties00.cobalt.store.AbstractWhatsAppStore#setBusinessAccountNonce}.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handleAdAccountNonce(Node node) {
-        // WAWebHandleBusinessNotification (wa_ad_account_nonce case): WA Web parses via
-        // WASmaxBizCtwaAdAccountNonceNotificationRPC.receiveNonceNotificationRPC,
-        // extracts waAdAccountNonceElementValue, passes through castToNonce
-        // (identity), then calls setNonceFromPushNotification.
-        // ADAPTED: Cobalt routes through the typed SMAX response so the
-        // export's parser is the single source of truth, then mirrors the
-        // setNonceFromPushNotification side-effect by storing the nonce.
         SmaxNonceNotificationResponse.of(node)
                 .map(SmaxNonceNotificationResponse.Notification::nonce)
                 .ifPresent(whatsapp.store()::setBusinessAccountNonce);
     }
 
     /**
-     * Handles an {@code mm_campaign} notification by extracting the campaign state
-     * change fields and storing them.
+     * Writes the marketing-campaign status carried by a
+     * {@code <mm_campaign>} child to the store.
      *
-     * <p>WA Web parses via
-     * {@code WASmaxSmbMeteredMessagesCampaignCampaignStateChangedNotificationRPC
-     * .receiveCampaignStateChangedNotificationRPC},
-     * then emits the event via
-     * {@code WAWebBizBroadcastMarketingCampaignNotificationEmitter
-     * .marketingCampaignNotificationEmitter.emit(...)}.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WASmaxSmbMeteredMessagesCampaignCampaignStateChangedNotificationRPC.receiveCampaignStateChangedNotificationRPC}
+     * parser followed by
+     * {@code WAWebBizBroadcastMarketingCampaignNotificationEmitter.marketingCampaignNotificationEmitter.emit(...)}.
+     * Cobalt stores the campaign status keyed by the ad-creative id.
      *
-     * <p>WA Web extracts {@code mmCampaignAdCreativeId}, {@code mmCampaignAdGroupId},
-     * {@code mmCampaignAdId}, and {@code mmCampaignStatus} from the RPC result,
-     * and only processes the notification if all three ID fields are non-null.
-     * @param node the full notification stanza
+     * @implNote
+     * This implementation reads the inline {@code <mm_campaign>} child
+     * attributes directly rather than re-parsing via SMAX, because the
+     * notification carries the fields the campaign store needs and a
+     * second parser pass adds no validation. The notification is
+     * dropped when any of the three id fields is missing, matching WA
+     * Web's null check.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void handleMarketingCampaign(Node node) {
-        // ADAPTED: WA Web parses via RPC, extracting mmCampaign* fields.
-        // Cobalt reads the campaign child node's attributes.
         var campaignNode = node.getChild("mm_campaign").orElse(null);
         if (campaignNode == null) {
             return;
@@ -564,9 +664,6 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
             return;
         }
 
-        // ADAPTED: WA Web emits to marketingCampaignNotificationEmitter with
-        // adCreativeId, adGroupId, adId, status, timestamp, backgroundSendHandling=false.
-        // Cobalt stores the campaign status in the typed quintet.
         if (status != null) {
             whatsapp.store().putBusinessCampaignStatus(new BusinessCampaignStatusBuilder()
                     .campaignId(adCreativeId)
@@ -576,94 +673,61 @@ public final class NotificationBusinessStreamHandler implements SocketStream.Han
     }
 
     /**
-     * Sends a business notification acknowledgment stanza.
+     * Sends the {@code <ack class="notification" type="business"/>}
+     * stanza, with an optional {@code <user side_list="out"/>} child
+     * when {@code needsSideList} is {@code true}.
      *
-     * <p>WA Web's ack function {@code u(stanzaId, from, needsSideList)} always sets
-     * {@code class="notification"} and {@code type="business"} explicitly. When
-     * {@code needsSideList} is {@code true} (hash-based lookup failed), a
-     * {@code <user side_list="out"/>} child is included to request the server to
-     * redistribute the notification to companion devices.
-     * @param node the notification stanza to acknowledge
-     * @param needsSideList whether to include the {@code <user side_list="out"/>} child
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code c(stanzaId, from, needsSideList)} ack-builder. The
+     * side-list child asks the server to redistribute the notification
+     * to companions that may own the contact record this device could
+     * not resolve.
+     *
+     * @param node          the original {@code <notification>} stanza
+     * @param needsSideList whether the ack should include the side-list child
      */
     private void sendBusinessAck(Node node, boolean needsSideList) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        //   {id: CUSTOM_STRING(stanzaId), to: from, class: "notification", type: "business"},
-        //   [optional: WAWap.wap("user", {side_list: "out"})])
-        var ackBuilder = new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("to", stanzaFrom)
-                .attribute("class", "notification")
-                .attribute("type", "business");
-
+        var builder = ackSender.ack(AckClass.NOTIFICATION, node).type("business");
         if (needsSideList) {
-            ackBuilder.content(
-                    new NodeBuilder()
-                            .description("user")
-                            .attribute("side_list", "out")
-                            .build()
-            );
+            builder.child(new NodeBuilder()
+                    .description("user")
+                    .attribute("side_list", "out")
+                    .build());
         }
-
-        whatsapp.sendNodeWithNoResponse(ackBuilder.build());
+        builder.send();
     }
 
     /**
-     * Sends an acknowledgement stanza for a {@code digital_commerce_subscription} notification.
+     * Sends the {@code <ack class="notification"
+     * type="digital_commerce_subscription"/>} stanza.
      *
-     * <p>The ack uses {@code class="notification"} and {@code type="digital_commerce_subscription"}
-     * matching the WA Web ack format in
-     * {@code WAWebHandleDigitalCommerceSubscriptionNotification}.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleDigitalCommerceSubscriptionNotification}
+     * ack-builder.
      *
-     * @param node the notification stanza to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendDigitalCommerceSubscriptionAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        //   {id: CUSTOM_STRING(stanzaId), to: from, class: "notification", type: "digital_commerce_subscription"})
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("to", stanzaFrom)
-                .attribute("class", "notification")
-                .attribute("type", "digital_commerce_subscription")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("digital_commerce_subscription").send();
     }
 
     /**
-     * Sends an acknowledgement stanza for a {@code fb:update} bot profile notification.
+     * Sends the {@code <ack class="notification" type="fb:update"/>}
+     * stanza for a bot-profile update notification.
      *
-     * <p>The ack uses {@code class="notification"} and the notification's original {@code type}
-     * attribute value ({@code "fb:update"}), matching the WA Web ack format in
-     * {@code WAWebHandleBotProfileNotification}.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleBotProfileNotification} ack-builder. The type
+     * attribute reflects the original notification's type rather than
+     * a hard-coded string because WA Web's ack-builder reads it from
+     * the stanza.
      *
-     * @param node the notification stanza to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendBotProfileAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsString("from", null);
         var type = node.getAttributeAsString("type", "fb:update");
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        //   {id: CUSTOM_STRING(s), to: CUSTOM_STRING(u), class: "notification", type: CUSTOM_STRING(f)})
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("to", stanzaFrom)
-                .attribute("class", "notification")
-                .attribute("type", type)
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type(type).send();
     }
 }

@@ -12,27 +12,37 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles the {@code label_reordering} sync action by applying the new label
- * sort order published by the server.
+ * Applies the {@code label_reordering} app-state sync action that publishes a
+ * new sort order for the user's chat labels.
  *
- * <p>This handler processes mutations that reorder chat labels by updating
- * each matching {@link Label}'s {@code orderIndex} to its position in the
- * {@code sortedLabelIds} list. Only {@link SyncdOperation#SET} operations are
- * supported; any other operation is reported back as {@code UNSUPPORTED}.
+ * @apiNote
+ * Drives the SMB/Business "drag to reorder labels" affordance: when the
+ * primary device reorders the label list the resulting sorted id array
+ * fans out across the {@link SyncPatchType#REGULAR} collection so
+ * companion devices render the same order. The mutation index has no
+ * variable parts and is always
+ * {@snippet :
+ *     ["label_reordering"]
+ * }
  *
- * <p>Per {@code WAWebLabelReorderingSync.default.applyMutations}, a mutation
- * is considered malformed when the embedded {@code labelReorderingAction}
- * value is missing or its {@code sortedLabelIds} array is null/empty. In that
- * case the handler returns a malformed result tagged with the collection
- * name.
- *
- * <p>Index format: {@code ["label_reordering"]}
+ * @implNote
+ * This implementation walks the
+ * {@link LabelReorderingAction#sortedLabelIds()} list and writes each
+ * label's zero-based position into
+ * {@link Label#orderIndex()} via {@link Label#setOrderIndex(Integer)},
+ * mirroring the {@code orderIndex: position} merge that WA Web's
+ * {@code WAWebDBLabelsReorder.updateLabelsSortOrder} performs against
+ * the IndexedDB rows. Labels referenced by the action but missing from
+ * the local store are silently skipped, matching the {@code bulkGet}
+ * non-null filter on the WA Web side. The
+ * {@code WAWebWamLabelSyncTrackingReporter} telemetry and the
+ * {@code frontendFireAndForget("reorderLabels")} RPC are not modelled.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelReorderingSync")
 public final class LabelReorderingHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs the singleton handler.
+     * Constructs a new singleton {@link LabelReorderingHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelReorderingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LabelReorderingHandler() {
@@ -69,14 +79,17 @@ public final class LabelReorderingHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * <p>Applies the reordering by updating each matching label's
-     * {@code orderIndex} to its zero-based position in
-     * {@link LabelReorderingAction#sortedLabelIds()}. Labels referenced by the
-     * action but not present in the store are silently skipped, mirroring WA
-     * Web's {@code bulkGet} behavior in
-     * {@code WAWebDBLabelsReorder.updateLabelsSortOrder}. Labels present in the
-     * store but not referenced by the action retain their existing
-     * {@code orderIndex}.
+     * @implNote
+     * This implementation rejects an empty
+     * {@link LabelReorderingAction#sortedLabelIds()} list as
+     * {@link MutationApplicationResult#malformed()}, mirroring WA Web's
+     * {@code SKIP_EMPTY_LIST} reporter outcome. Each id is matched
+     * against the in-memory store via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findLabel(String)};
+     * absent ids are skipped, present rows have their
+     * {@link Label#orderIndex()} set to the loop position. Labels
+     * present in the store but absent from the action keep their
+     * existing {@link Label#orderIndex()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelReorderingSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -94,11 +107,6 @@ public final class LabelReorderingHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        // ADAPTED: WAWebDBLabelsReorder.updateLabelsSortOrder — WA Web builds a
-        // Map<labelId, position>, stringifies ids, bulkGets them from IndexedDB,
-        // then merges { orderIndex: position } into each found row. Cobalt uses
-        // findLabel() against the in-memory store which is equivalent to
-        // bulkGet + non-null filter.
         for (var position = 0; position < sortedLabelIds.size(); position++) {
             var labelId = sortedLabelIds.get(position);
             var labelIdString = String.valueOf(labelId);

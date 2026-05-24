@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.model.sync.action.setting;
 
+import com.github.auties00.cobalt.model.setting.AppTheme;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
@@ -153,10 +154,14 @@ public final class SettingsSyncAction implements SyncAction<SettingsSyncActionAr
     Integer groupDefaultNotificationToneId;
 
     /**
-     * Identifier of the selected application theme (light, dark, system).
+     * Selected application theme (light, dark, system-default).
+     *
+     * <p>Mirrors the {@code ThemesSettingValue} JS enum that WhatsApp Web
+     * defines in its bundle: the wire format is an {@code INT32} carrying
+     * the {@link AppTheme#index()} of the selected constant.
      */
-    @ProtobufProperty(index = 14, type = ProtobufType.INT32)
-    Integer appTheme;
+    @ProtobufProperty(index = 14, type = ProtobufType.ENUM)
+    AppTheme appTheme;
 
     /**
      * Identifier of the selected chat wallpaper.
@@ -303,7 +308,7 @@ public final class SettingsSyncAction implements SyncAction<SettingsSyncActionAr
      * @param statusNotificationToneId             status notification tone id
      * @param shouldPlaySoundForCallNotification   call notification sound
      */
-    SettingsSyncAction(Boolean startAtLogin, Boolean minimizeToTray, String language, Boolean replaceTextWithEmoji, DisplayMode bannerNotificationDisplayMode, DisplayMode unreadCounterBadgeDisplayMode, Boolean isMessagesNotificationEnabled, Boolean isCallsNotificationEnabled, Boolean isReactionsNotificationEnabled, Boolean isStatusReactionsNotificationEnabled, Boolean isTextPreviewForNotificationEnabled, Integer defaultNotificationToneId, Integer groupDefaultNotificationToneId, Integer appTheme, Integer wallpaperId, Boolean isDoodleWallpaperEnabled, Integer fontSize, Boolean isPhotosAutodownloadEnabled, Boolean isAudiosAutodownloadEnabled, Boolean isVideosAutodownloadEnabled, Boolean isDocumentsAutodownloadEnabled, Boolean disableLinkPreviews, Integer notificationToneId, MediaQualitySetting mediaUploadQuality, Boolean isSpellCheckEnabled, Boolean isEnterToSendEnabled, Boolean isGroupMessageNotificationEnabled, Boolean isGroupReactionsNotificationEnabled, Boolean isStatusNotificationEnabled, Integer statusNotificationToneId, Boolean shouldPlaySoundForCallNotification) {
+    SettingsSyncAction(Boolean startAtLogin, Boolean minimizeToTray, String language, Boolean replaceTextWithEmoji, DisplayMode bannerNotificationDisplayMode, DisplayMode unreadCounterBadgeDisplayMode, Boolean isMessagesNotificationEnabled, Boolean isCallsNotificationEnabled, Boolean isReactionsNotificationEnabled, Boolean isStatusReactionsNotificationEnabled, Boolean isTextPreviewForNotificationEnabled, Integer defaultNotificationToneId, Integer groupDefaultNotificationToneId, AppTheme appTheme, Integer wallpaperId, Boolean isDoodleWallpaperEnabled, Integer fontSize, Boolean isPhotosAutodownloadEnabled, Boolean isAudiosAutodownloadEnabled, Boolean isVideosAutodownloadEnabled, Boolean isDocumentsAutodownloadEnabled, Boolean disableLinkPreviews, Integer notificationToneId, MediaQualitySetting mediaUploadQuality, Boolean isSpellCheckEnabled, Boolean isEnterToSendEnabled, Boolean isGroupMessageNotificationEnabled, Boolean isGroupReactionsNotificationEnabled, Boolean isStatusNotificationEnabled, Integer statusNotificationToneId, Boolean shouldPlaySoundForCallNotification) {
         this.startAtLogin = startAtLogin;
         this.minimizeToTray = minimizeToTray;
         this.language = language;
@@ -458,12 +463,13 @@ public final class SettingsSyncAction implements SyncAction<SettingsSyncActionAr
     }
 
     /**
-     * Returns the selected application theme identifier.
+     * Returns the selected application theme.
      *
-     * @return an {@link OptionalInt} containing the theme id, or empty if unset
+     * @return an {@link Optional} containing the {@link AppTheme} constant,
+     *         or empty if unset
      */
-    public OptionalInt appTheme() {
-        return appTheme == null ? OptionalInt.empty() : OptionalInt.of(appTheme);
+    public Optional<AppTheme> appTheme() {
+        return Optional.ofNullable(appTheme);
     }
 
     /**
@@ -749,11 +755,12 @@ public final class SettingsSyncAction implements SyncAction<SettingsSyncActionAr
     }
 
     /**
-     * Updates the selected application theme identifier.
+     * Updates the selected application theme.
      *
-     * @param appTheme the new theme id, or {@code null} to clear it
+     * @param appTheme the new {@link AppTheme} constant, or {@code null} to
+     *                 clear it
      */
-    public void setAppTheme(Integer appTheme) {
+    public void setAppTheme(AppTheme appTheme) {
         this.appTheme = appTheme;
     }
 

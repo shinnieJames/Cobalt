@@ -108,5 +108,6 @@ public enum BannerTypes {
     @WamEnumConstant(110) META_AI_APP_PROMO,
     @WamEnumConstant(111) SMB_BIZ_AI_GDRIVE_L1_RECONNECT,
     @WamEnumConstant(112) SMB_BIZ_AI_GDRIVE_L1_SYNC_FAILED,
-    @WamEnumConstant(113) SMB_BIZ_AI_GDRIVE_L2_RECONNECT
+    @WamEnumConstant(113) SMB_BIZ_AI_GDRIVE_L2_RECONNECT,
+    @WamEnumConstant(114) NOTIFICATION_SETTING_RE_ENABLE
 }

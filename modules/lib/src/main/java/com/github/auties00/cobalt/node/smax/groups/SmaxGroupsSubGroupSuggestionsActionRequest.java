@@ -15,52 +15,50 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the
- * {@code <sub_group_suggestions_action/>} payload in the canonical
- * {@code <iq xmlns="w:g2" type="set" to="<parent>">} envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that approves, rejects, or cancels pending sub-group
+ * suggestions against a community parent group.
+ *
+ * @apiNote Drives the community-admin "Approve sub-group", "Reject sub-group", and "Cancel sub-group suggestion"
+ * affordances on the community-management screen. The relay processes all three sub-actions in one request and
+ * returns per-suggestion echo rows in the matching {@link SmaxGroupsSubGroupSuggestionsActionResponse.Success}.
+ * Each sub-action list is capped at 1000 entries; at least one of the three lists must be non-empty.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionsActionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group JID. Routed verbatim into the IQ's
-     * {@code to} attribute.
+     * The parent (community) group {@link Jid} that anchors the suggestion queue.
      */
     private final Jid parentGroupJid;
 
     /**
-     * The optional list of suggestions to approve. Each entry must
-     * carry both a {@code creator} and a {@code jid} attribute.
+     * The suggestions to approve. Each entry must carry both a {@code creator} and a {@code jid} attribute.
      */
     private final List<CreatorSuggestion> approve;
 
     /**
-     * The optional list of suggestions to reject. Each entry must
-     * carry both a {@code creator} and a {@code jid} attribute.
+     * The suggestions to reject. Each entry must carry both a {@code creator} and a {@code jid} attribute.
      */
     private final List<CreatorSuggestion> reject;
 
     /**
-     * The optional list of suggestions to cancel. Each entry carries
-     * only the {@code jid} attribute (the cancelling caller is
-     * implicit — the relay enforces ownership server-side).
+     * The suggestions to cancel. Each entry carries only the {@code jid} attribute.
      */
     private final List<JidSuggestion> cancel;
 
     /**
-     * Constructs a request.
+     * Constructs a sub-group-suggestions-action request.
      *
-     * @param parentGroupJid the parent community JID; never
-     *                       {@code null}
-     * @param approve        the optional approve list; never
-     *                       {@code null} (empty when omitted)
-     * @param reject         the optional reject list; never
-     *                       {@code null} (empty when omitted)
-     * @param cancel         the optional cancel list; never
-     *                       {@code null} (empty when omitted)
-     * @throws NullPointerException     if any argument is
-     *                                  {@code null}
+     * @apiNote The relay caps each of the three sub-action lists at 1000 entries; a caller batching wider
+     * suggestion-queue mutations should split the work across multiple requests. The three lists are defensively
+     * copied so post-construction mutation of the caller's lists has no effect on the request.
+     *
+     * @param parentGroupJid the parent community {@link Jid}
+     * @param approve        the approve list
+     * @param reject         the reject list
+     * @param cancel         the cancel list
+     * @throws NullPointerException     if any argument is {@code null}
      * @throws IllegalArgumentException when every list is empty
      */
     public SmaxGroupsSubGroupSuggestionsActionRequest(Jid parentGroupJid,
@@ -81,9 +79,11 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     }
 
     /**
-     * Returns the parent group JID.
+     * Returns the parent (community) group {@link Jid}.
      *
-     * @return the parent group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the parent group {@link Jid}; never {@code null}
      */
     public Jid parentGroupJid() {
         return parentGroupJid;
@@ -92,7 +92,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Returns the approve list.
      *
-     * @return an unmodifiable list of suggestions to approve
+     * @return an unmodifiable list of {@link CreatorSuggestion} entries; never {@code null}
      */
     public List<CreatorSuggestion> approve() {
         return approve;
@@ -101,7 +101,7 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Returns the reject list.
      *
-     * @return an unmodifiable list of suggestions to reject
+     * @return an unmodifiable list of {@link CreatorSuggestion} entries; never {@code null}
      */
     public List<CreatorSuggestion> reject() {
         return reject;
@@ -110,17 +110,38 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     /**
      * Returns the cancel list.
      *
-     * @return an unmodifiable list of suggestions to cancel
+     * @return an unmodifiable list of {@link JidSuggestion} entries; never {@code null}
      */
     public List<JidSuggestion> cancel() {
         return cancel;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <sub_group_suggestions_action/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
+     *         <sub_group_suggestions_action>
+     *             <approve>
+     *                 <sub_group_suggestion creator="..." jid="..." creator_pn="..."/>
+     *                 ...
+     *             </approve>
+     *             <reject>
+     *                 <sub_group_suggestion creator="..." jid="..." creator_pn="..."/>
+     *                 ...
+     *             </reject>
+     *             <cancel>
+     *                 <sub_group_suggestion jid="..."/>
+     *                 ...
+     *             </cancel>
+     *         </sub_group_suggestions_action>
+     *     </iq>
+     * }
+     * a sub-action child is omitted when the corresponding caller list is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <sub_group_suggestions_action>}
+     *         payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsSubGroupSuggestionsActionRequest",
@@ -172,6 +193,13 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
                 .content(actionNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsSubGroupSuggestionsActionRequest} with
+     *         identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -187,11 +215,21 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
                 && Objects.equals(this.cancel, that.cancel);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid, approve, reject, cancel);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsSubGroupSuggestionsActionRequest[parentGroupJid=" + parentGroupJid
@@ -201,37 +239,36 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     }
 
     /**
-     * Suggestion entry that carries the {@code creator}+{@code jid}
-     * pair (used by approve/reject lists in both the request and
-     * the response).
+     * Suggestion entry carrying the {@code creator}+{@code jid} pair used by the approve and reject lists.
+     *
+     * @apiNote The {@code creator} attribute carries the {@link Jid} of the user who originally proposed the
+     * suggestion; {@code creator_pn} (optional) carries the corresponding phone-number JID echo when the
+     * suggestion was filed under the LID addressing mode.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionMixin")
     public static final class CreatorSuggestion {
         /**
-         * The user JID who created the suggestion.
+         * The {@link Jid} of the user who proposed the suggestion.
          */
         private final Jid creator;
 
         /**
-         * The proposed sub-group JID.
+         * The proposed sub-group {@link Jid}.
          */
         private final Jid jid;
 
         /**
-         * The optional creator phone-number JID (echoed in
-         * approve/reject responses; ignored on the request side).
+         * The optional creator phone-number {@link Jid}.
          */
         private final Jid creatorPn;
 
         /**
          * Constructs a creator-suggestion entry.
          *
-         * @param creator   the creator JID; never {@code null}
-         * @param jid       the sub-group JID; never {@code null}
-         * @param creatorPn the optional creator phone JID; may be
-         *                  {@code null}
-         * @throws NullPointerException if {@code creator} or
-         *                              {@code jid} is {@code null}
+         * @param creator   the creator {@link Jid}
+         * @param jid       the sub-group {@link Jid}
+         * @param creatorPn the optional creator phone-number {@link Jid}; may be {@code null}
+         * @throws NullPointerException if {@code creator} or {@code jid} is {@code null}
          */
         public CreatorSuggestion(Jid creator, Jid jid, Jid creatorPn) {
             this.creator = Objects.requireNonNull(creator, "creator cannot be null");
@@ -240,35 +277,34 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
         }
 
         /**
-         * Returns the creator JID.
+         * Returns the creator {@link Jid}.
          *
-         * @return the creator JID; never {@code null}
+         * @return the creator {@link Jid}; never {@code null}
          */
         public Jid creator() {
             return creator;
         }
 
         /**
-         * Returns the sub-group JID.
+         * Returns the sub-group {@link Jid}.
          *
-         * @return the sub-group JID; never {@code null}
+         * @return the sub-group {@link Jid}; never {@code null}
          */
         public Jid jid() {
             return jid;
         }
 
         /**
-         * Returns the optional creator phone-number JID.
+         * Returns the optional creator phone-number {@link Jid}.
          *
-         * @return an {@link Optional} carrying the creator phone
-         *         JID, or empty when omitted
+         * @return an {@link Optional} carrying the phone-number {@link Jid}, or empty when omitted
          */
         public Optional<Jid> creatorPn() {
             return Optional.ofNullable(creatorPn);
         }
 
         /**
-         * Builds the {@code <sub_group_suggestion/>} child.
+         * Materialises the {@code <sub_group_suggestion/>} child carrying this entry.
          *
          * @return the materialised {@link Node}
          */
@@ -283,6 +319,12 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
             return builder.build();
         }
 
+        /**
+         * Compares this entry to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link CreatorSuggestion} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -297,11 +339,21 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
                     && Objects.equals(this.creatorPn, that.creatorPn);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(creator, jid, creatorPn);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSubGroupSuggestionsActionRequest.CreatorSuggestion[creator=" + creator
@@ -311,38 +363,39 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
     }
 
     /**
-     * Suggestion entry that carries the {@code jid} only (used by
-     * the cancel list in both the request and the response).
+     * Suggestion entry carrying only the {@code jid} used by the cancel list.
+     *
+     * @apiNote The cancelling caller is implicit; the relay enforces ownership server-side, so cancel entries
+     * omit the {@code creator} attribute.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSubGroupSuggestionWithoutCreatorMixin")
     public static final class JidSuggestion {
         /**
-         * The proposed sub-group JID to cancel.
+         * The proposed sub-group {@link Jid} to cancel.
          */
         private final Jid jid;
 
         /**
          * Constructs a jid-only suggestion entry.
          *
-         * @param jid the sub-group JID; never {@code null}
-         * @throws NullPointerException if {@code jid} is
-         *                              {@code null}
+         * @param jid the sub-group {@link Jid}
+         * @throws NullPointerException if {@code jid} is {@code null}
          */
         public JidSuggestion(Jid jid) {
             this.jid = Objects.requireNonNull(jid, "jid cannot be null");
         }
 
         /**
-         * Returns the sub-group JID.
+         * Returns the sub-group {@link Jid}.
          *
-         * @return the sub-group JID; never {@code null}
+         * @return the sub-group {@link Jid}; never {@code null}
          */
         public Jid jid() {
             return jid;
         }
 
         /**
-         * Builds the {@code <sub_group_suggestion jid/>} child.
+         * Materialises the {@code <sub_group_suggestion jid="..."/>} child carrying this entry.
          *
          * @return the materialised {@link Node}
          */
@@ -353,6 +406,12 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
                     .build();
         }
 
+        /**
+         * Compares this entry to {@code obj} for value equality on {@link #jid()}.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link JidSuggestion} with the same {@link Jid}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -365,11 +424,21 @@ public final class SmaxGroupsSubGroupSuggestionsActionRequest implements SmaxOpe
             return Objects.equals(this.jid, that.jid);
         }
 
+        /**
+         * Returns a hash derived from {@link #jid()}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(jid);
         }
 
+        /**
+         * Returns a debug string carrying {@link #jid()}.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSubGroupSuggestionsActionRequest.JidSuggestion[jid=" + jid + ']';

@@ -14,24 +14,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqQueryMediaConnsRequest}.
+ * Sealed family of inbound reply variants produced by the relay in response to an
+ * {@link IqQueryMediaConnsRequest}.
+ *
+ * @apiNote
+ * WA Web's {@code queryMediaConn} pipeline collapses every failure to either an
+ * {@code E507} ("Insufficient Storage" with a backoff hint) or a generic
+ * {@code ServerStatusCodeError}; Cobalt instead surfaces the failure as either
+ * {@link ClientError} or {@link ServerError} so the media pipeline can decide whether to
+ * retry the query (server-side failure) or to surface the failure to the user (client-side
+ * failure).
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
 public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         permits IqQueryMediaConnsResponse.Success, IqQueryMediaConnsResponse.ClientError, IqQueryMediaConnsResponse.ServerError {
 
     /**
-     * Tries each {@link IqQueryMediaConnsResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Tries each {@link IqQueryMediaConnsResponse} variant in priority order and returns the
+     * first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote
+     * The priority order ({@link Success}, {@link ClientError}, {@link ServerError}) mirrors
+     * the order WA Web's reply parser tries; only one variant ever populates because the
+     * parsing helpers match disjoint stanza shapes.
+     *
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound stanza, used to validate echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()}
+     *         when no documented variant matched the stanza shape
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob",
@@ -51,73 +61,85 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay returned the
-     * current media-conn configuration.
+     * Reply variant carrying the projected {@code <media_conn>} grandchild for a successful
+     * media-conn lookup.
+     *
+     * @apiNote
+     * Carries the bearer token routed to the {@code Authorization} header on media-CDN
+     * requests, the absolute expiry timestamps for the token and the host routes, the
+     * retry budgets the CDN advertises, and the list of host endpoints with their per-host
+     * upload/download/bucket rules.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
     @WhatsAppWebModule(moduleName = "WAMediaConnParser")
     final class Success implements IqQueryMediaConnsResponse {
         /**
-         * The relay-issued auth token used to authenticate uploads
-         * and downloads with the media CDN. Routed to the
-         * {@code Authorization} header verbatim.
+         * Relay-issued auth token routed verbatim to the {@code Authorization} header on
+         * media-CDN requests.
          */
         private final String authToken;
 
         /**
-         * The unix-second absolute expiry timestamp of
-         * {@link #authToken}.
+         * Absolute unix-second expiry timestamp of {@link #authToken}, derived by folding
+         * the relay-supplied {@code auth_ttl} delta into the local clock.
          */
         private final long authTokenExpiry;
 
         /**
-         * The unix-second absolute expiry timestamp of the host
-         * routes themselves.
+         * Absolute unix-second expiry timestamp of the host routes themselves, derived by
+         * folding the relay-supplied {@code ttl} delta into the local clock.
          */
         private final long routesExpiry;
 
         /**
-         * The maximum bucket cardinality the relay supports for
-         * sharded downloads. Capped at four by the WA Web parser.
+         * Maximum bucket cardinality the relay supports for sharded downloads.
+         *
+         * @apiNote
+         * WA Web's {@code attrInt("max_buckets")} rejects a missing attribute; the value is
+         * not range-clipped by the relay parser despite the four-bucket convention seen in
+         * production.
          */
         private final int maxBuckets;
 
         /**
-         * The maximum manual-retry budget per upload. Capped at
-         * four by the WA Web parser; defaults to three when the
-         * relay omits the attribute.
+         * Maximum manual-retry budget per upload.
+         *
+         * @apiNote
+         * Capped at four by WA Web's {@code maybeAttrInt("max_manual_retry", 0, 4)} bound
+         * and defaulted to three when the relay omits the attribute or returns a value
+         * outside that range.
          */
         private final int maxManualRetry;
 
         /**
-         * The maximum auto-download-retry budget per download.
-         * Capped at four by the WA Web parser; defaults to three
-         * when the relay omits the attribute.
+         * Maximum auto-download-retry budget per download.
+         *
+         * @apiNote
+         * Same {@code [0, 4]} bound and same default-three fallback as
+         * {@link #maxManualRetry}.
          */
         private final int maxAutoDownloadRetry;
 
         /**
-         * The list of media-server host endpoints returned by the
-         * relay.
+         * List of media-server host endpoints returned by the relay.
          */
         private final List<Host> hosts;
 
         /**
          * Constructs a new successful reply.
          *
-         * @param authToken           the auth token; never
-         *                            {@code null}
-         * @param authTokenExpiry     the auth-token absolute expiry
-         *                            timestamp
-         * @param routesExpiry        the host-routes absolute expiry
-         *                            timestamp
-         * @param maxBuckets          the bucket cardinality
-         * @param maxManualRetry      the manual-retry budget
+         * @apiNote
+         * Defensively copies {@code hosts}; all other fields are primitives or immutable
+         * strings and are stored directly.
+         *
+         * @param authToken            the auth token
+         * @param authTokenExpiry      the absolute auth-token expiry timestamp
+         * @param routesExpiry         the absolute host-routes expiry timestamp
+         * @param maxBuckets           the bucket cardinality
+         * @param maxManualRetry       the manual-retry budget
          * @param maxAutoDownloadRetry the auto-download-retry budget
-         * @param hosts               the host endpoints; never
-         *                            {@code null}
-         * @throws NullPointerException if any reference argument is
-         *                              {@code null}
+         * @param hosts                the host endpoints
+         * @throws NullPointerException if {@code authToken} or {@code hosts} is {@code null}
          */
         public Success(String authToken, long authTokenExpiry, long routesExpiry,
                        int maxBuckets, int maxManualRetry, int maxAutoDownloadRetry,
@@ -135,25 +157,25 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         /**
          * Returns the auth token.
          *
-         * @return the token; never {@code null}
+         * @return the token, never {@code null}
          */
         public String authToken() {
             return authToken;
         }
 
         /**
-         * Returns the auth-token absolute expiry timestamp.
+         * Returns the absolute auth-token expiry timestamp.
          *
-         * @return the timestamp
+         * @return the timestamp in unix seconds
          */
         public long authTokenExpiry() {
             return authTokenExpiry;
         }
 
         /**
-         * Returns the host-routes absolute expiry timestamp.
+         * Returns the absolute host-routes expiry timestamp.
          *
-         * @return the timestamp
+         * @return the timestamp in unix seconds
          */
         public long routesExpiry() {
             return routesExpiry;
@@ -189,21 +211,33 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         /**
          * Returns the unmodifiable list of host endpoints.
          *
-         * @return the hosts; never {@code null}
+         * @return the hosts, never {@code null}
          */
         public List<Host> hosts() {
             return hosts;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from the given inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when any of the mandatory attributes
+         * ({@code auth}, {@code auth_ttl}, {@code ttl}, {@code max_buckets}) is missing or
+         * malformed; the bridge treats this as a soft failure and may retry the query.
+         *
+         * @implNote
+         * This implementation folds the relay-supplied {@code auth_ttl} and {@code ttl}
+         * deltas into absolute unix-second timestamps via {@link Instant#now()}, mirroring
+         * WA Web's {@code attrFutureTime} (which calls {@code WATimeUtils.futureUnixTime} to
+         * compute {@code now + delta}). The retry caps are silently clamped to the
+         * documented {@code [0, 4]} interval and defaulted to three on out-of-range or
+         * missing attributes, matching WA Web's
+         * {@code maybeAttrInt("max_manual_retry", 0, 4) ?? 3} idiom.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         *         {@link Optional#empty()} when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAMediaConnParser",
                 exports = "mediaConnParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -211,21 +245,14 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // WAMediaConnParser.mediaConnParser: e.child("media_conn")
             var mediaConnChild = node.getChild("media_conn").orElse(null);
             if (mediaConnChild == null) {
                 return Optional.empty();
             }
-            // WAMediaConnParser.mediaConnParser: r.attrString("auth")
             var auth = mediaConnChild.getAttributeAsString("auth").orElse(null);
             if (auth == null) {
                 return Optional.empty();
             }
-            // WAMediaConnParser.mediaConnParser: r.attrFutureTime("auth_ttl")
-            // attrFutureTime reads the int attribute and folds it into an
-            // absolute unix-second timestamp via WATimeUtils.futureUnixTime,
-            // i.e. now + delta. Mirrored here so the field stored on Success
-            // matches the contract documented on authTokenExpiry/routesExpiry.
             var authTtlDelta = mediaConnChild.getAttributeAsLong("auth_ttl", -1L);
             var ttlDelta = mediaConnChild.getAttributeAsLong("ttl", -1L);
             if (authTtlDelta < 0 || ttlDelta < 0) {
@@ -234,17 +261,11 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             var nowSeconds = Instant.now().getEpochSecond();
             var authTtl = nowSeconds + authTtlDelta;
             var ttl = nowSeconds + ttlDelta;
-            // WAMediaConnParser.mediaConnParser: r.attrInt("max_buckets")
-            // attrInt rejects missing attributes; mirror that by treating an
-            // absent attribute as a non-success reply.
             var maxBucketsValue = mediaConnChild.getAttributeAsInt("max_buckets", -1);
             if (maxBucketsValue < 0) {
                 return Optional.empty();
             }
             var maxBuckets = maxBucketsValue;
-            // WAMediaConnParser.mediaConnParser: r.maybeAttrInt("max_manual_retry", 0, 4) ?? 3
-            // maybeAttrInt returns null when the attribute is missing OR out of
-            // [0, 4]; the surrounding "?? 3" then defaults the result to 3.
             var maxManualRetry = mediaConnChild.getAttributeAsInt("max_manual_retry", 3);
             if (maxManualRetry < 0 || maxManualRetry > 4) {
                 maxManualRetry = 3;
@@ -253,7 +274,6 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             if (maxAutoDownloadRetry < 0 || maxAutoDownloadRetry > 4) {
                 maxAutoDownloadRetry = 3;
             }
-            // WAMediaConnParser.c: e.mapChildrenWithTag("host", u)
             var hostNodes = mediaConnChild.getChildren("host");
             var hosts = new ArrayList<Host>(hostNodes.size());
             for (var hostNode : hostNodes) {
@@ -263,6 +283,9 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                     maxManualRetry, maxAutoDownloadRetry, hosts));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -281,12 +304,18 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                     && Objects.equals(this.hosts, that.hosts);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(authToken, authTokenExpiry, routesExpiry, maxBuckets,
                     maxManualRetry, maxAutoDownloadRetry, hosts);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryMediaConnsResponse.Success[authToken=" + authToken
@@ -299,88 +328,94 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         }
 
         /**
-         * One media-server host endpoint projected from a single
-         * {@code <host hostname class ip4 ip6 type><download/><upload/><download_buckets/></host>}
-         * subtree.
+         * Projection of a single {@code <host hostname class ip4 ip6 type>...</host>}
+         * subtree carrying one media-server endpoint and its per-host upload/download/bucket
+         * rules.
+         *
+         * @apiNote
+         * The media pipeline picks a host from {@link Success#hosts()} based on the media
+         * type being uploaded or downloaded ({@link #uploadable()} / {@link #downloadable()})
+         * and on the per-bucket sharding indices ({@link #downloadBuckets()}); the
+         * {@link #fallback()} flag marks the host as a last-resort route when the primary
+         * hosts are unreachable.
          */
         @WhatsAppWebModule(moduleName = "WAMediaConnParser")
         @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
         public static final class Host {
             /**
-             * The host's DNS hostname. Routed verbatim from the
-             * {@code hostname} attribute.
+             * Host DNS hostname routed from the {@code hostname} attribute.
              */
             private final String hostname;
 
             /**
-             * The host's class label, when supplied. Routed
-             * verbatim from the {@code class} attribute.
+             * Optional host class label routed from the {@code class} attribute.
              */
             private final String hostClass;
 
             /**
-             * The host's IPv4 address, when supplied. Routed
-             * verbatim from the {@code ip4} attribute.
+             * Optional host IPv4 address routed from the {@code ip4} attribute.
              */
             private final String ip4;
 
             /**
-             * The host's IPv6 address, when supplied. Routed
-             * verbatim from the {@code ip6} attribute.
+             * Optional host IPv6 address routed from the {@code ip6} attribute.
              */
             private final String ip6;
 
             /**
-             * Whether the host is the relay's documented fallback
-             * route — {@code true} when the {@code type} attribute
-             * is {@code "fallback"}.
+             * Whether this host is the documented fallback route.
+             *
+             * @apiNote
+             * True when the {@code type} attribute equals {@code "fallback"}, mirroring WA
+             * Web's {@code e.maybeAttrString("type") === "fallback"} test.
              */
             private final boolean fallback;
 
             /**
-             * The list of media-type tags supported by uploads to
-             * this host. Routed from {@code <upload/>} grandchild
-             * tags (e.g. {@code "image"}, {@code "video"},
-             * {@code "ptt"}); empty list means "every documented
-             * media type".
+             * Media-type tags supported by uploads to this host.
+             *
+             * @apiNote
+             * Routed from {@code <upload/>} grandchild tags (for example {@code "image"},
+             * {@code "video"}, {@code "ptt"}); an empty wrapper means "every documented
+             * media type", mirroring WA Web's fallback to
+             * {@code WAServerMediaType.SERVER_MEDIA} when the wrapper is absent.
              */
             private final List<String> uploadable;
 
             /**
-             * The list of media-type tags supported by downloads
-             * from this host. Routed from {@code <download/>}
-             * grandchild tags; empty list means "every documented
-             * media type".
+             * Media-type tags supported by downloads from this host.
+             *
+             * @apiNote
+             * Same shape and same SERVER_MEDIA fallback as {@link #uploadable}.
              */
             private final List<String> downloadable;
 
             /**
-             * The list of bucket indices eligible for downloads
-             * through this host. Routed from
-             * {@code <download_buckets/>} grandchild tags.
+             * Bucket indices eligible for downloads through this host.
+             *
+             * @apiNote
+             * Routed from {@code <download_buckets/>} grandchild tags parsed as integers;
+             * the empty list means the host serves every bucket.
              */
             private final List<Integer> downloadBuckets;
 
             /**
              * Constructs a new host endpoint.
              *
-             * @param hostname        the DNS hostname; never
-             *                        {@code null}
-             * @param hostClass       the optional class label;
-             *                        may be {@code null}
-             * @param ip4             the optional IPv4 address;
-             *                        may be {@code null}
-             * @param ip6             the optional IPv6 address;
-             *                        may be {@code null}
+             * @apiNote
+             * Defensively copies the three list parameters.
+             *
+             * @param hostname        the DNS hostname
+             * @param hostClass       the optional class label, or {@code null}
+             * @param ip4             the optional IPv4 address, or {@code null}
+             * @param ip6             the optional IPv6 address, or {@code null}
              * @param fallback        the fallback flag
-             * @param uploadable      the upload media-type tags;
-             *                        never {@code null}
-             * @param downloadable    the download media-type tags;
-             *                        never {@code null}
-             * @param downloadBuckets the download bucket indices;
-             *                        never {@code null}
-             * @throws NullPointerException if any non-nullable
-             *                              argument is {@code null}
+             * @param uploadable      the upload media-type tags
+             * @param downloadable    the download media-type tags
+             * @param downloadBuckets the download bucket indices
+             * @throws NullPointerException if {@code hostname}, {@code uploadable},
+             *                              {@code downloadable}, or {@code downloadBuckets}
+             *                              is {@code null}
              */
             public Host(String hostname, String hostClass, String ip4, String ip6,
                         boolean fallback, List<String> uploadable, List<String> downloadable,
@@ -401,7 +436,7 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             /**
              * Returns the DNS hostname.
              *
-             * @return the hostname; never {@code null}
+             * @return the hostname, never {@code null}
              */
             public String hostname() {
                 return hostname;
@@ -410,8 +445,8 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             /**
              * Returns the optional class label.
              *
-             * @return an {@link Optional} carrying the label, or
-             *         empty when absent
+             * @return an {@link Optional} carrying the label, or {@link Optional#empty()}
+             *         when absent
              */
             public Optional<String> hostClass() {
                 return Optional.ofNullable(hostClass);
@@ -420,8 +455,8 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             /**
              * Returns the optional IPv4 address.
              *
-             * @return an {@link Optional} carrying the address, or
-             *         empty when absent
+             * @return an {@link Optional} carrying the address, or {@link Optional#empty()}
+             *         when absent
              */
             public Optional<String> ip4() {
                 return Optional.ofNullable(ip4);
@@ -430,8 +465,8 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             /**
              * Returns the optional IPv6 address.
              *
-             * @return an {@link Optional} carrying the address, or
-             *         empty when absent
+             * @return an {@link Optional} carrying the address, or {@link Optional#empty()}
+             *         when absent
              */
             public Optional<String> ip6() {
                 return Optional.ofNullable(ip6);
@@ -440,73 +475,70 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             /**
              * Returns the fallback flag.
              *
-             * @return {@code true} when this host is the
-             *         documented fallback route
+             * @return {@code true} when this host is the documented fallback route
              */
             public boolean fallback() {
                 return fallback;
             }
 
             /**
-             * Returns the unmodifiable list of upload media-type
-             * tags.
+             * Returns the unmodifiable list of upload media-type tags.
              *
-             * @return the tags; never {@code null}
+             * @return the tags, never {@code null}
              */
             public List<String> uploadable() {
                 return uploadable;
             }
 
             /**
-             * Returns the unmodifiable list of download media-type
-             * tags.
+             * Returns the unmodifiable list of download media-type tags.
              *
-             * @return the tags; never {@code null}
+             * @return the tags, never {@code null}
              */
             public List<String> downloadable() {
                 return downloadable;
             }
 
             /**
-             * Returns the unmodifiable list of download bucket
-             * indices.
+             * Returns the unmodifiable list of download bucket indices.
              *
-             * @return the indices; never {@code null}
+             * @return the indices, never {@code null}
              */
             public List<Integer> downloadBuckets() {
                 return downloadBuckets;
             }
 
             /**
-             * Parses a host endpoint from the given
-             * {@code <host/>} subtree.
+             * Parses a host endpoint from the given {@code <host/>} subtree.
              *
-             * @param hostNode the {@code <host/>} subtree; never
-             *                 {@code null}
+             * @apiNote
+             * The {@code hostname} attribute is mandatory; the rest of the attributes and
+             * grandchildren are optional and default to {@code null}, {@code false}, or the
+             * empty list as documented on the respective fields.
+             *
+             * @implNote
+             * This implementation rejects a missing {@code hostname} attribute by letting
+             * {@code getRequiredAttributeAsString} throw, mirroring WA Web's
+             * {@code e.attrString("hostname")} contract; a malformed {@code <host/>} subtree
+             * therefore surfaces as a parse failure rather than as a silently-empty host.
+             * Non-integer {@code <download_buckets/>} grandchildren are skipped to mirror WA
+             * Web's best-effort {@code parseInt(e.tag(), 10)} projection.
+             *
+             * @param hostNode the {@code <host/>} subtree
              * @return the parsed host
+             * @throws NullPointerException if {@code hostNode} is {@code null}
              */
             @WhatsAppWebExport(moduleName = "WAMediaConnParser",
                     exports = "mediaConnParser", adaptation = WhatsAppAdaptation.ADAPTED)
             public static Host of(Node hostNode) {
                 Objects.requireNonNull(hostNode, "hostNode cannot be null");
-                // WAMediaConnParser.u: e.attrString("hostname")
-                // attrString throws when the attribute is missing; mirror that by
-                // requiring the attribute here so a malformed <host/> subtree
-                // surfaces as a parse failure rather than a silently-empty host.
                 var hostname = hostNode.getRequiredAttributeAsString("hostname");
-                // WAMediaConnParser.u: e.maybeAttrString("class")
                 var hostClass = hostNode.getAttributeAsString("class").orElse(null);
-                // WAMediaConnParser.u: e.maybeAttrString("ip4") (?? undefined)
                 var ip4 = hostNode.getAttributeAsString("ip4").orElse(null);
-                // WAMediaConnParser.u: e.maybeAttrString("ip6") (?? undefined)
                 var ip6 = hostNode.getAttributeAsString("ip6").orElse(null);
-                // WAMediaConnParser.u: e.maybeAttrString("type") === "fallback"
                 var fallback = "fallback".equals(hostNode.getAttributeAsString("type").orElse(null));
-                // WAMediaConnParser.d: e.hasChild("upload") ? e.child("upload").mapChildren(...).filter(Boolean) : SERVER_MEDIA
                 var uploadable = collectMediaTypes(hostNode.getChild("upload").orElse(null));
-                // WAMediaConnParser.d: e.hasChild("download") ? ... : SERVER_MEDIA
                 var downloadable = collectMediaTypes(hostNode.getChild("download").orElse(null));
-                // WAMediaConnParser.u: e.maybeChild("download_buckets")?.mapChildren(e => parseInt(e.tag(), 10)) ?? []
                 var bucketsNode = hostNode.getChild("download_buckets").orElse(null);
                 var buckets = new ArrayList<Integer>();
                 if (bucketsNode != null) {
@@ -514,8 +546,6 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                         try {
                             buckets.add(Integer.parseInt(bucketChild.description()));
                         } catch (NumberFormatException _) {
-                            // skip non-integer descriptions; mirrors WA Web's
-                            // best-effort projection
                         }
                     }
                 }
@@ -524,8 +554,13 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             }
 
             /**
-             * Collects the media-type tag descriptions from a
-             * {@code <upload/>} or {@code <download/>} subtree.
+             * Collects the media-type tag descriptions from a {@code <upload/>} or
+             * {@code <download/>} wrapper subtree.
+             *
+             * @apiNote
+             * Returns the empty list when the wrapper is absent, leaving the SERVER_MEDIA
+             * default semantics to the caller; an empty result from a present wrapper
+             * therefore means "explicitly no supported types", not "all types".
              *
              * @param wrapper the wrapper node, may be {@code null}
              * @return the collected tags
@@ -541,6 +576,9 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                 return result;
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -560,12 +598,18 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                         && Objects.equals(this.downloadBuckets, that.downloadBuckets);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(hostname, hostClass, ip4, ip6, fallback,
                         uploadable, downloadable, downloadBuckets);
             }
 
+            /**
+             * {@inheritDoc}
+             */
             @Override
             public String toString() {
                 return "IqQueryMediaConnsResponse.Success.Host[hostname=" + hostname
@@ -581,18 +625,22 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * media-conn query as malformed or unauthorised.
+     * Reply variant signalling that the relay rejected the media-conn query as malformed or
+     * unauthorised.
+     *
+     * @apiNote
+     * Maps to the {@code 4xx} branch of WA Web's media-conn reply pipeline; the bridge
+     * surfaces this to the media pipeline as a hard failure (no retry).
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
     final class ClientError implements IqQueryMediaConnsResponse {
         /**
-         * The numeric server-side error code.
+         * Numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * Optional human-readable error text from the {@code <error text/>} attribute.
          */
         private final String errorText;
 
@@ -600,8 +648,7 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
          * Constructs a new client-error reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, or {@code null} when omitted
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -620,22 +667,27 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from the given inbound stanza.
+         *
+         * @apiNote
+         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
+         * {@code code} attribute falls in the {@code 4xx} range, per the parsing contract of
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         *         {@link Optional#empty()} when the stanza does not match the client-error
+         *         schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob",
                 exports = "queryMediaConn", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -647,6 +699,9 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -660,11 +715,17 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryMediaConnsResponse.ClientError[errorCode=" + errorCode
@@ -673,21 +734,24 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure (codes {@code >= 500}) while
-     * processing the query; in particular, code {@code 507}
-     * "Insufficient Storage" maps to the WA Web {@code E507}
-     * type that carries a server-supplied backoff hint.
+     * Reply variant signalling that the relay encountered a transient internal failure while
+     * processing the media-conn query.
+     *
+     * @apiNote
+     * Maps to the {@code 5xx} branch of WA Web's media-conn reply pipeline; in particular
+     * code {@code 507} ("Insufficient Storage") corresponds to WA Web's {@code E507} type
+     * which carries a server-supplied backoff hint, and code {@code 503} is the standard
+     * "Service Unavailable" the media pipeline should retry after a short backoff.
      */
     @WhatsAppWebModule(moduleName = "WAWebQueryMediaConnsJob")
     final class ServerError implements IqQueryMediaConnsResponse {
         /**
-         * The numeric server-side error code.
+         * Numeric server-side error code from the {@code <error code/>} attribute.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * Optional human-readable error text from the {@code <error text/>} attribute.
          */
         private final String errorText;
 
@@ -695,8 +759,7 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
          * Constructs a new server-error reply.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, or {@code null} when omitted
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -715,22 +778,27 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the text, or {@link Optional#empty()} when
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from the given inbound stanza.
+         *
+         * @apiNote
+         * Returns a populated {@link Optional} only when the stanza is a {@code type="error"}
+         * envelope echoing the {@code request} id and carrying a {@code <error/>} child whose
+         * {@code code} attribute falls outside the {@code 4xx} range, per the parsing
+         * contract of {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         *         {@link Optional#empty()} when the stanza does not match the server-error
+         *         schema
          */
         @WhatsAppWebExport(moduleName = "WAWebQueryMediaConnsJob",
                 exports = "queryMediaConn", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -742,6 +810,9 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -755,11 +826,17 @@ public sealed interface IqQueryMediaConnsResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryMediaConnsResponse.ServerError[errorCode=" + errorCode

@@ -1,5 +1,9 @@
 package com.github.auties00.cobalt.wam;
 
+import com.github.auties00.cobalt.props.TestABPropsService;
+import com.github.auties00.cobalt.wam.event.PsIdUpdateEventBuilder;
+import com.github.auties00.cobalt.wam.event.WamClientErrorsEventBuilder;
+import com.github.auties00.cobalt.wam.type.PsIdAction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,31 +18,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link WamSamplingOverride}, the runtime override map
- * that takes precedence over an event's static
- * {@code @WamEvent(releaseWeight = N)} annotation when the sampling
- * config is pushed from AB props.
+ * Behavioural tests for {@link WamSamplingOverride}, the runtime
+ * override map that {@link WamService} consults before falling back to
+ * an event's static {@code @WamEvent(releaseWeight)} annotation.
  *
- * <p>Mirrors the {@code WAWebEventSamplingCache} +
- * {@code WAWebEventSampling} pair in the live JS bundle. The
- * contract covered here:
- *
+ * @apiNote
+ * Mirrors the {@code WAWebEventSamplingCache} +
+ * {@code WAWebEventSampling} pair in WhatsApp Web. Covers the four
+ * properties Cobalt callers depend on:
  * <ul>
  *   <li>{@code put(id, w)} followed by {@code get(id)} returns
  *       {@code OptionalInt.of(w)};</li>
  *   <li>{@code remove(id)} clears the override and {@code get(id)}
- *       returns {@link java.util.OptionalInt#empty()};</li>
- *   <li>{@code replaceAll(map)} atomically swaps the entire override
- *       set, discarding previous keys;</li>
- *   <li>concurrent writes from many virtual threads see the
- *       {@link java.util.concurrent.ConcurrentHashMap} guarantee
- *       (no lost updates).</li>
+ *       returns empty;</li>
+ *   <li>{@code replaceAll(map)} swaps the entire override set,
+ *       discarding previous keys;</li>
+ *   <li>concurrent writes from many virtual threads do not lose
+ *       updates.</li>
  * </ul>
  */
 @DisplayName("WamSamplingOverride")
 class WamSamplingOverrideTest {
     /**
-     * Verifies that a freshly constructed override map has no
+     * Verifies that a freshly constructed override map carries no
      * entries.
      */
     @Test
@@ -52,8 +54,8 @@ class WamSamplingOverrideTest {
 
     /**
      * Verifies that {@code put} followed by {@code get} returns the
-     * weight under the inserted event id, and that another event id
-     * remains uninserted.
+     * inserted weight for the matching id and empty for a
+     * neighbouring id.
      */
     @Test
     @DisplayName("put then get returns the inserted weight")
@@ -65,8 +67,8 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that the second {@code put} for the same id overrides
-     * the first, matching the JS cache's last-writer-wins semantics.
+     * Verifies the second {@code put} for the same id overrides the
+     * first (last-writer-wins, matching the JS cache).
      */
     @Test
     @DisplayName("second put for the same id overrides the first")
@@ -78,8 +80,8 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that {@code remove} clears the override and
-     * subsequent {@code get} returns empty.
+     * Verifies {@code remove} clears the override and the subsequent
+     * {@code get} returns empty.
      */
     @Test
     @DisplayName("remove clears the override")
@@ -91,9 +93,9 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that {@code replaceAll} atomically swaps the override
-     * set: keys present before but absent in the new map are
-     * dropped, and keys in the new map become the new state.
+     * Verifies that {@code replaceAll} swaps the override set:
+     * keys present before but absent in the new map are dropped, and
+     * keys in the new map become the new state.
      */
     @Test
     @DisplayName("replaceAll swaps the entire override set")
@@ -116,7 +118,8 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that {@code replaceAll(emptyMap)} clears everything.
+     * Verifies that {@code replaceAll(emptyMap)} clears every
+     * existing override.
      */
     @Test
     @DisplayName("replaceAll with an empty map clears all overrides")
@@ -130,14 +133,16 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that concurrent writes from many virtual threads to
-     * distinct keys all land. The backing
-     * {@link java.util.concurrent.ConcurrentHashMap} guarantees no
-     * lost updates; this asserts that property holds end-to-end
-     * through the {@code WamSamplingOverride} facade.
+     * Verifies that concurrent {@code put} writes from many virtual
+     * threads to distinct keys all land.
      *
-     * @throws InterruptedException if the test is interrupted while
-     *                              awaiting the latch
+     * @apiNote
+     * Asserts the no-lost-updates property of the backing
+     * {@link java.util.concurrent.ConcurrentHashMap} holds end-to-end
+     * through the {@link WamSamplingOverride} facade.
+     *
+     * @throws InterruptedException if the test thread is interrupted
+     *                              while awaiting the latch
      */
     @Test
     @DisplayName("concurrent puts to distinct keys all land")
@@ -173,20 +178,16 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that after {@code remove(id)}, {@code get(id)}
-     * returns {@link java.util.OptionalInt#empty()} so the caller
-     * (i.e. {@code WamService.effectiveWeight}) falls back to the
-     * event's static {@code @WamEvent.releaseWeight} annotation
-     * value rather than continuing with a stale override.
+     * Verifies that after {@code remove(id)}, {@code get(id)} returns
+     * empty so the caller falls back to the event's static
+     * {@code @WamEvent(releaseWeight)} annotation value.
      *
-     * <p>Cross-checks the fallback against three real Cobalt events
-     * whose annotation weights are pinned at code generation time:
-     * {@code PsIdUpdate (2862)},
-     * {@code WamClientErrors (1144)}, and
-     * {@code MessageSend (854)}. Their {@code releaseWeight()}
-     * values are not part of this test's contract; the test just
-     * confirms they are positive integers (the documented invariant
-     * for any WAM sampling weight).
+     * @apiNote
+     * Cross-checks the fallback target on three real Cobalt events
+     * (PsIdUpdate, WamClientErrors, MessageSend); the annotation
+     * weights themselves are not part of this test's contract, the
+     * assertion is just that they are positive integers, the
+     * documented invariant for any WAM sampling weight.
      */
     @Test
     @DisplayName("removed override surfaces empty so callers fall back to static @WamEvent weight")
@@ -197,13 +198,12 @@ class WamSamplingOverrideTest {
         assertTrue(overrides.get(2862).isEmpty(),
                 "after remove, get() must return empty so WamService falls back to releaseWeight()");
 
-        // Sanity-check the fallback target on three real events.
-        var psIdUpdate = new com.github.auties00.cobalt.wam.event.PsIdUpdateEventBuilder()
-                .psIdAction(com.github.auties00.cobalt.wam.type.PsIdAction.CREATED)
+        var psIdUpdate = new PsIdUpdateEventBuilder()
+                .psIdAction(PsIdAction.CREATED)
                 .psIdKey(1)
                 .psIdRotationFrequence(7)
                 .build();
-        var clientErrors = new com.github.auties00.cobalt.wam.event.WamClientErrorsEventBuilder()
+        var clientErrors = new WamClientErrorsEventBuilder()
                 .wamClientBufferDropErrorCount(1)
                 .build();
         assertTrue(psIdUpdate.releaseWeight() > 0,
@@ -214,34 +214,31 @@ class WamSamplingOverrideTest {
 
     /**
      * Verifies that {@code replaceAll(props.samplingConfigs())}
-     * — the call WamService.initialize() makes to apply
-     * AB-props-loaded sampling configs — picks up the latest
-     * snapshot from a {@link com.github.auties00.cobalt.props.TestABPropsService}
-     * after its config was updated via
-     * {@code updateEventSamplingConfigs}.
+     * picks up successive AB-props refreshes.
      *
-     * <p>Mirrors the production code path: AB props ship a sampling
-     * configs map → {@code WamService.initialize} reads it once →
-     * delegates to {@code samplingOverride.replaceAll(configs)}.
+     * @apiNote
+     * Mirrors the production code path:
+     * {@code WamService.initialize()} reads
+     * {@code props.samplingConfigs()} once and delegates to
+     * {@code samplingOverride.replaceAll(configs)}; an AB-props refresh
+     * that ships a new map must produce a matching update on the next
+     * pass through that delegation.
      */
     @Test
     @DisplayName("replaceAll(props.samplingConfigs()) picks up AB-props refreshes")
     void abPropsRefreshConverges() {
         var overrides = new WamSamplingOverride();
-        var props = com.github.auties00.cobalt.props.TestABPropsService.builder().build();
+        var props = TestABPropsService.builder().build();
 
-        // Initial snapshot: empty.
         overrides.replaceAll(props.samplingConfigs());
         assertTrue(overrides.get(2862).isEmpty(),
-                "no AB-props config → no override");
+                "no AB-props config -> no override");
 
-        // AB props refresh installs an override for event 2862.
         props.updateEventSamplingConfigs(Map.of(2862, 5));
         overrides.replaceAll(props.samplingConfigs());
         assertEquals(5, overrides.get(2862).orElseThrow(),
                 "first AB-props refresh must install the weight");
 
-        // Subsequent refresh changes the weight; replaceAll picks it up.
         props.updateEventSamplingConfigs(Map.of(2862, 25));
         overrides.replaceAll(props.samplingConfigs());
         assertEquals(25, overrides.get(2862).orElseThrow(),
@@ -249,14 +246,19 @@ class WamSamplingOverrideTest {
     }
 
     /**
-     * Verifies that interleaving {@code put} and {@code remove} for
-     * the same key from many threads ends in a consistent state:
-     * each key is either present with the last-written value or
-     * absent. CHM does not lose updates, so this is mostly a smoke
-     * check that the facade does not introduce reordering.
+     * Verifies that interleaved {@code put} and {@code remove} calls
+     * for the same key from two threads converge on a consistent
+     * state.
      *
-     * @throws InterruptedException if the test is interrupted while
-     *                              awaiting the latch
+     * @apiNote
+     * Smoke check that the facade does not introduce reordering on
+     * top of the {@link java.util.concurrent.ConcurrentHashMap}
+     * contract; either the final put landed or the final remove did,
+     * both outcomes are acceptable, the assertion is that the result
+     * is not garbage.
+     *
+     * @throws InterruptedException if the test thread is interrupted
+     *                              while awaiting the latch
      */
     @Test
     @DisplayName("interleaved put/remove on the same key reaches a consistent state")
@@ -290,8 +292,6 @@ class WamSamplingOverrideTest {
 
         startGate.countDown();
         assertTrue(done.await(5, TimeUnit.SECONDS));
-        // Either the final put landed last (some int) or the final remove did (empty).
-        // Both are valid; the assertion is that get() doesn't throw or return garbage.
         var result = overrides.get(key);
         assertTrue(result.isEmpty() || result.getAsInt() >= 0,
                 "final state must be either empty or a valid weight, was " + result);

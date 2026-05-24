@@ -11,8 +11,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound notification. The relay's "drop your QP prefetch
- * timestamp" hint.
+ * The inbound projection of the
+ * {@code <notification type="psa"><reset_smb_last_qp_prefetch_timestamp/></notification>}
+ * stanza that asks the SMB client to refresh its locally-cached
+ * quick-promotion prefetch timestamp.
+ *
+ * @apiNote
+ * Drives the SMB quick-promotion refresh path:
+ * {@code WAWebHandleQPPrefetchTimestampNotification} reacts to this
+ * notification by clearing the locally-cached prefetch timestamp, returning
+ * a {@link SmaxPsaResetSmbLastQpPrefetchTimestampAcknowledgement} to the
+ * relay, and (when {@code qpGraphQLEnabledSMB()} is on) kicking off
+ * {@code fetchQuickPromotionsNow} on the worker. This notification has no
+ * effect on non-SMB accounts.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInPsaResetSmbLastQpPrefetchTimestampRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInPsaServerNotificationMixin")
@@ -24,42 +35,44 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
 
     /**
      * The notification sender JID. Always a user JID per the
-     * {@code attrUserJid(from)} assertion.
+     * {@code attrUserJid(from)} assertion in the WA Web parser.
      */
     private final Jid notificationFrom;
 
     /**
-     * The notification type. Always the literal {@code "psa"} per
-     * the {@code literal(attrString, "type", "psa")} assertion.
+     * The notification type. Always the literal {@code "psa"} per the
+     * {@code literal(attrString, "type", "psa")} assertion.
      */
     private final String notificationType;
 
     /**
      * The relay-side timestamp echoed by the
-     * {@code WASmaxInPsaServerNotificationMixin} envelope ({@code t}
-     * attribute, seconds since epoch).
+     * {@code WASmaxInPsaServerNotificationMixin} envelope.
+     *
+     * @apiNote
+     * Carried by the {@code t} attribute as seconds since the Unix epoch.
      */
     private final long timestampSeconds;
 
     /**
-     * The optional {@code offline} hint. When set carries the count
-     * of offline notifications still queued for delivery.
+     * The optional {@code offline} hint.
+     *
+     * @apiNote
+     * When present, carries the count of offline notifications still queued
+     * for delivery; the WA Web parser admits values {@code 0} to {@code 1024}
+     * inclusive.
      */
     private final Integer offline;
 
     /**
-     * Constructs a new inbound projection.
+     * Constructs an inbound projection.
      *
      * @param notificationId   the notification id; never {@code null}
-     * @param notificationFrom the notification sender JID; never
-     *                         {@code null}
-     * @param notificationType the notification type. Always
-     *                         {@code "psa"}; never {@code null}
+     * @param notificationFrom the notification sender JID; never {@code null}
+     * @param notificationType the notification type, always {@code "psa"}; never {@code null}
      * @param timestampSeconds the relay-side timestamp in seconds
-     * @param offline          the optional offline-queue depth; may
-     *                         be {@code null}
-     * @throws NullPointerException if any required argument is
-     *                              {@code null}
+     * @param offline          the optional offline-queue depth; may be {@code null}
+     * @throws NullPointerException if any required argument is {@code null}
      */
     public SmaxPsaResetSmbLastQpPrefetchTimestampResponse(String notificationId, Jid notificationFrom, String notificationType,
                    long timestampSeconds, Integer offline) {
@@ -89,7 +102,7 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
     }
 
     /**
-     * Returns the notification type. Always {@code "psa"}.
+     * Returns the notification type. Always {@code "psa"} for this RPC.
      *
      * @return the type; never {@code null}
      */
@@ -98,7 +111,7 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
     }
 
     /**
-     * Returns the relay-side timestamp in seconds.
+     * Returns the relay-side timestamp in seconds since the Unix epoch.
      *
      * @return the timestamp
      */
@@ -109,20 +122,32 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
     /**
      * Returns the optional offline-queue depth.
      *
-     * @return an {@link Optional} carrying the offline depth, or
-     *         empty when the relay omitted the attribute
+     * @return an {@link Optional} carrying the depth, or empty when the
+     *         attribute was absent
      */
     public Optional<Integer> offline() {
         return Optional.ofNullable(offline);
     }
 
     /**
-     * Tries to parse an {@link SmaxPsaResetSmbLastQpPrefetchTimestampResponse} projection from the given
-     * {@code <notification/>} stanza.
+     * Parses a {@code <notification>} stanza into an inbound projection.
+     *
+     * @apiNote
+     * Mirrors {@code WASmaxPsaResetSmbLastQpPrefetchTimestampRPC.receiveResetSmbLastQpPrefetchTimestampRPC};
+     * Cobalt returns {@link Optional#empty()} on schema mismatch instead of
+     * throwing the JS {@code SmaxParsingFailure}.
+     *
+     * @implNote
+     * This implementation mirrors {@code parseResetSmbLastQpPrefetchTimestampRequest}:
+     * it requires the {@code <notification>} tag, the literal
+     * {@code type="psa"} marker, the {@code <reset_smb_last_qp_prefetch_timestamp/>}
+     * child, a user JID {@code from} attribute, an {@code t} attribute in
+     * the {@code [0, +inf)} range, a stanza-id {@code id}, and an optional
+     * {@code offline} attribute in {@code [0, 1024]} (modelled as a sentinel
+     * {@code -1} when absent, surfaced via {@link #offline()}).
      *
      * @param node the inbound notification stanza; never {@code null}
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza doesn't match the expected shape
+     * @return an {@link Optional} carrying the projection, or empty on schema mismatch
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInPsaResetSmbLastQpPrefetchTimestampRequest",
@@ -133,7 +158,6 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
         if (!node.hasDescription("notification")) {
             return Optional.empty();
         }
-        //   literal(attrString, "type", "psa")
         if (!node.hasAttribute("type", "psa")) {
             return Optional.empty();
         }
@@ -149,9 +173,6 @@ public final class SmaxPsaResetSmbLastQpPrefetchTimestampResponse implements Sma
         if (type == null) {
             return Optional.empty();
         }
-        //   - attrIntRange(t, 0, void 0)
-        //   - attrStanzaId(id)
-        //   - optional(attrIntRange, offline, 0, 1024)
         var timestampOpt = node.getAttributeAsLong("t");
         if (timestampOpt.isEmpty()) {
             return Optional.empty();

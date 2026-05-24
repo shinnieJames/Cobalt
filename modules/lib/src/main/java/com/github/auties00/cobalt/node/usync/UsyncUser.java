@@ -10,85 +10,97 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One user entry in a {@link UsyncQuery}.
+ * One user entry inside a {@link UsyncQuery}.
  *
- * <p>A USync request carries a list of user entries. Each entry tells the
- * relay which peer the per-protocol elements apply to. WhatsApp Web accepts
- * four ways to address a peer (by canonical {@link Jid id}, by phone number,
- * by username, or by a phone-JID hint). To make the "at least one addressing
- * identifier" invariant impossible to violate at compile time, instances are
- * created through one of the four {@code by*} static factories instead of a
- * public no-arg constructor.
+ * @apiNote
+ * Build one entry per peer the relay should report on, then chain
+ * {@code with*} setters to attach the optional hints the per-protocol
+ * builders consume (device hash, LID, persona id, username PIN,
+ * trusted-contact token). The relay accepts four ways to address a peer
+ * (canonical {@link Jid}, phone number, username, phone-JID hint); to make
+ * the "at least one addressing identifier" invariant impossible to violate
+ * at compile time, instances are created through one of the four {@code by*}
+ * static factories instead of a public no-arg constructor.
  *
- * <p>Once created, callers chain {@code with*} setters to attach optional
- * fields such as LID, device-list hashes, persona id, contact type, and
- * trusted-contact token. Per-protocol payload data is read back by each
- * {@code UsyncProtocol.buildUserElement} when the query stanza is assembled.
+ * @implNote
+ * This implementation is the Cobalt counterpart of {@code USyncUser} in
+ * {@code WAWebUsyncUser}. The JS class uses a no-arg constructor plus a
+ * runtime {@code validate()} call inside {@code USyncQuery.toNode()} that
+ * throws when none of the slots are populated; Cobalt narrows the entry
+ * point to four typed factories so the invariant is enforced at compile time
+ * instead.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncUser")
 public final class UsyncUser {
     /**
-     * Holds the canonical JID for this user entry.
+     * Canonical user JID, when set.
      */
     private Jid id;
 
     /**
-     * Holds the LID JID for this user entry.
+     * LID JID, when set.
      */
     private Jid lid;
 
     /**
-     * Holds the phone-number JID for this user entry.
+     * Phone-number JID, when set.
      */
     private Jid phoneJid;
 
     /**
-     * Holds the phone number, in E.164 form without the leading {@code +}.
+     * Phone number in E.164 form without the leading {@code +}, when set.
      */
     private String phoneNumber;
 
     /**
-     * Holds the cached device-list hash, base64-encoded.
+     * Cached device-list hash (base64-encoded), when set.
      */
     private String deviceHash;
 
     /**
-     * Holds the timestamp the local cache last refreshed at.
+     * Timestamp the local cache last refreshed at, when set.
      */
     private Instant timestamp;
 
     /**
-     * Holds the timestamp the relay should compare against.
+     * Timestamp the relay should compare against, when set.
      */
     private Instant expectedTimestamp;
 
     /**
-     * Holds the persona id used by the bot-profile protocol.
+     * Persona id consumed by the bot-profile protocol, when set.
      */
     private String personaId;
 
     /**
-     * Holds the username used by the contact protocol's username addressing.
+     * Username consumed by the contact protocol's username addressing, when
+     * set.
      */
     private String username;
 
     /**
-     * Holds the username PIN that accompanies a username addressing.
+     * Username PIN that accompanies a username addressing, when set.
      */
     private String pin;
 
     /**
-     * Holds the contact-protocol type discriminator, for instance {@code "in"}.
+     * Contact-protocol type discriminator (e.g. {@code "in"}, {@code "out"}),
+     * when set.
      */
     private String contactType;
 
     /**
-     * Holds the trusted-contact token used by the status protocol.
+     * Trusted-contact token consumed by the status protocol, when set.
      */
     private byte[] trustedContactToken;
 
     /**
-     * Hidden constructor that is invoked through the {@code by*} factories.
+     * Hidden constructor invoked through the {@code by*} factories.
+     *
+     * @apiNote
+     * Kept package-private to force creation through a factory that
+     * populates at least one addressing slot, matching the contract enforced
+     * at runtime in JS by {@code USyncUser.validate()}.
      */
     private UsyncUser() {
     }
@@ -96,8 +108,15 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by canonical JID.
      *
-     * @param id the canonical JID; must not be {@code null}
+     * @apiNote
+     * Used by callers that already hold a resolved
+     * {@link com.github.auties00.cobalt.model.jid.JidServer#user()} or
+     * {@link com.github.auties00.cobalt.model.jid.JidServer#lid()} JID; the
+     * relay resolves the rest from the device list.
+     *
+     * @param id the canonical JID
      * @return a fresh entry
+     * @throws NullPointerException if {@code id} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.withId", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -111,9 +130,15 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by phone number.
      *
+     * @apiNote
+     * Used by contact-import flows ({@code WAWebContactSyncUtils.constructUsyncDeltaQuery})
+     * that ship phone numbers from the local address book and ask the relay
+     * to resolve them to canonical JIDs.
+     *
      * @param phoneNumber the phone number, in E.164 form without the leading
-     *                    {@code +}; must not be {@code null}
+     *                    {@code +}
      * @return a fresh entry
+     * @throws NullPointerException if {@code phoneNumber} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.withPhone", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -127,9 +152,13 @@ public final class UsyncUser {
     /**
      * Creates a user entry addressed by username.
      *
-     * @param username the username (without leading {@code @}); must not be
-     *                 {@code null}
+     * @apiNote
+     * Used by username-lookup flows ({@code WAWebQueryExistsJob.queryUsernameExists})
+     * that resolve a claimed username to its canonical JID.
+     *
+     * @param username the username, without the leading {@code @}
      * @return a fresh entry
+     * @throws NullPointerException if {@code username} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.withUsername", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -141,11 +170,16 @@ public final class UsyncUser {
     }
 
     /**
-     * Creates a user entry addressed by phone-JID hint. The relay maps the
-     * hint to a canonical JID before processing the per-protocol elements.
+     * Creates a user entry addressed by phone-JID hint.
      *
-     * @param phoneJid the phone-number JID; must not be {@code null}
+     * @apiNote
+     * Used when the local store has a phone-JID hint but no canonical JID
+     * yet; the relay resolves the hint to a canonical JID before processing
+     * the per-protocol elements.
+     *
+     * @param phoneJid the phone-number JID
      * @return a fresh entry
+     * @throws NullPointerException if {@code phoneJid} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.withPnJid", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -159,6 +193,10 @@ public final class UsyncUser {
     /**
      * Attaches a canonical JID alongside the primary addressing slot.
      *
+     * @apiNote
+     * Useful when the canonical JID is learned after the entry was created
+     * via one of the non-JID factories.
+     *
      * @param id the canonical JID
      * @return this builder
      */
@@ -170,7 +208,12 @@ public final class UsyncUser {
     }
 
     /**
-     * Attaches the LID identifier for this user.
+     * Attaches a LID identifier for this user.
+     *
+     * @apiNote
+     * Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncLidProtocol}
+     * as a hint the relay should confirm, and by the contact protocol when
+     * the request uses username addressing.
      *
      * @param lid the LID JID
      * @return this builder
@@ -185,6 +228,10 @@ public final class UsyncUser {
     /**
      * Attaches a phone-JID hint.
      *
+     * @apiNote
+     * Emitted onto the {@code pn_jid} attribute of the {@code <user>} entry;
+     * the relay uses it to disambiguate when the canonical JID is also a LID.
+     *
      * @param phoneJid the phone-number JID
      * @return this builder
      */
@@ -196,9 +243,16 @@ public final class UsyncUser {
     }
 
     /**
-     * Sets the cached device-list hash. Used by the device protocol to obtain
-     * a {@code <devices type="omitted">} response when the local cache is
-     * still in sync with the server.
+     * Sets the cached device-list hash for the device protocol.
+     *
+     * @apiNote
+     * When the hash matches the relay's current device-list hash the
+     * response carries {@code <devices type="omitted">} instead of the full
+     * list, so device sync can skip a re-fetch.
+     *
+     * @implNote
+     * This implementation mirrors the JS {@code asMaybeNonEmptyString} guard
+     * by treating {@code null} and blank strings as "no hash".
      *
      * @param deviceHash the hash, base64-encoded
      * @return this builder
@@ -213,6 +267,11 @@ public final class UsyncUser {
     /**
      * Sets the timestamp the local cache last refreshed at.
      *
+     * @apiNote
+     * Emitted on the {@code ts} attribute of the per-user {@code <devices>}
+     * element; combined with {@link #withDeviceHash(String)} to drive the
+     * relay's omit-vs-resend decision.
+     *
      * @param timestamp the cache timestamp
      * @return this builder
      */
@@ -226,6 +285,11 @@ public final class UsyncUser {
     /**
      * Sets the expected timestamp the relay should compare against.
      *
+     * @apiNote
+     * Emitted on the {@code expected_ts} attribute of the per-user
+     * {@code <devices>} element; consumed by the relay's stale-cache
+     * detection.
+     *
      * @param expectedTimestamp the expected timestamp
      * @return this builder
      */
@@ -237,7 +301,13 @@ public final class UsyncUser {
     }
 
     /**
-     * Sets the persona id used by the bot-profile protocol.
+     * Sets the persona id for the bot-profile protocol.
+     *
+     * @apiNote
+     * Consumed by {@link com.github.auties00.cobalt.node.usync.protocol.UsyncBotProfileProtocol#buildUserElement(UsyncUser)}
+     * to attach a {@code persona_id} attribute on the inner {@code <profile/>}
+     * child of the {@code <bot>} element; identifies which persona of a
+     * multi-persona bot the request targets.
      *
      * @param personaId the persona identifier
      * @return this builder
@@ -250,7 +320,13 @@ public final class UsyncUser {
     }
 
     /**
-     * Sets the username PIN accompanying a username addressing scheme.
+     * Sets the username PIN that accompanies a username addressing.
+     *
+     * @apiNote
+     * Emitted on the {@code pin} attribute of the per-user {@code <contact>}
+     * element when the user is addressed by {@link #byUsername(String) username};
+     * the relay uses the PIN to verify the caller's right to resolve the
+     * username.
      *
      * @param pin the username PIN
      * @return this builder
@@ -265,8 +341,12 @@ public final class UsyncUser {
     /**
      * Sets the contact-protocol type discriminator.
      *
-     * @param contactType the type literal, for instance {@code "in"} or
-     *                    {@code "out"}
+     * @apiNote
+     * Emitted on the {@code type} attribute of the per-user {@code <contact>}
+     * element when the entry carries neither a phone number nor a username;
+     * used by contact-direction queries (e.g. {@code "in"}, {@code "out"}).
+     *
+     * @param contactType the type literal
      * @return this builder
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
@@ -277,7 +357,14 @@ public final class UsyncUser {
     }
 
     /**
-     * Sets the trusted-contact token attached to status queries.
+     * Sets the trusted-contact token for the status protocol.
+     *
+     * @apiNote
+     * Wrapped into a per-user {@code <tctoken>} child of the {@code <status>}
+     * element when {@code WAWebPrivacyGatingUtils.isProfileScrappingProtectionInUsyncEnabled()}
+     * is on. WA Web's status protocol skips the {@code <tctoken>} entirely
+     * when the gating utility returns false; Cobalt always attaches it when
+     * present and lets the relay enforce the gate.
      *
      * @param trustedContactToken the raw token bytes
      * @return this builder
@@ -292,7 +379,7 @@ public final class UsyncUser {
     /**
      * Returns the canonical JID, when present.
      *
-     * @return the canonical JID
+     * @return the canonical JID, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getId", adaptation = WhatsAppAdaptation.DIRECT)
@@ -303,7 +390,7 @@ public final class UsyncUser {
     /**
      * Returns the LID, when present.
      *
-     * @return the LID
+     * @return the LID, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getLid", adaptation = WhatsAppAdaptation.DIRECT)
@@ -314,7 +401,7 @@ public final class UsyncUser {
     /**
      * Returns the phone-number JID, when present.
      *
-     * @return the phone-number JID
+     * @return the phone-number JID, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getPnJid", adaptation = WhatsAppAdaptation.DIRECT)
@@ -325,7 +412,7 @@ public final class UsyncUser {
     /**
      * Returns the phone number, when present.
      *
-     * @return the phone number
+     * @return the phone number, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getPhone", adaptation = WhatsAppAdaptation.DIRECT)
@@ -336,7 +423,7 @@ public final class UsyncUser {
     /**
      * Returns the cached device-list hash, when present.
      *
-     * @return the device-list hash
+     * @return the device-list hash, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getDeviceHash", adaptation = WhatsAppAdaptation.DIRECT)
@@ -347,7 +434,7 @@ public final class UsyncUser {
     /**
      * Returns the cache timestamp, when present.
      *
-     * @return the cache timestamp
+     * @return the cache timestamp, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getTs", adaptation = WhatsAppAdaptation.DIRECT)
@@ -358,7 +445,7 @@ public final class UsyncUser {
     /**
      * Returns the expected timestamp, when present.
      *
-     * @return the expected timestamp
+     * @return the expected timestamp, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getExpectedTs", adaptation = WhatsAppAdaptation.DIRECT)
@@ -369,7 +456,7 @@ public final class UsyncUser {
     /**
      * Returns the persona id, when present.
      *
-     * @return the persona id
+     * @return the persona id, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getPersonaId", adaptation = WhatsAppAdaptation.DIRECT)
@@ -380,7 +467,7 @@ public final class UsyncUser {
     /**
      * Returns the username, when present.
      *
-     * @return the username
+     * @return the username, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getUsername", adaptation = WhatsAppAdaptation.DIRECT)
@@ -391,7 +478,7 @@ public final class UsyncUser {
     /**
      * Returns the username PIN, when present.
      *
-     * @return the username PIN
+     * @return the username PIN, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getPin", adaptation = WhatsAppAdaptation.DIRECT)
@@ -400,9 +487,9 @@ public final class UsyncUser {
     }
 
     /**
-     * Returns the contact-protocol type, when present.
+     * Returns the contact-protocol type discriminator, when present.
      *
-     * @return the contact-protocol type
+     * @return the contact-protocol type, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getType", adaptation = WhatsAppAdaptation.DIRECT)
@@ -413,7 +500,7 @@ public final class UsyncUser {
     /**
      * Returns the trusted-contact token, when present.
      *
-     * @return the trusted-contact token
+     * @return the trusted-contact token, or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncUser",
             exports = "USyncUser.getTcToken", adaptation = WhatsAppAdaptation.DIRECT)

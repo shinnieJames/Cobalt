@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.wam;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
@@ -9,6 +10,7 @@ import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.event.PsIdUpdateEventBuilder;
 import com.github.auties00.cobalt.wam.model.WamChannel;
+import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.type.PsIdAction;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,26 +22,29 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Behavioural tests for {@link WamService}'s {@code prevSessionGlobals}
- * dirty-tracking. WhatsApp Web's {@code WAWebWamLibContext.$2} only
- * re-emits global attributes whose values have changed since the
- * previous flush for the same channel; unchanged globals are skipped
- * to keep the buffer small.
+ * Exercises {@link WamService}'s per-channel
+ * dirty-tracking for session globals across three successive
+ * flushes.
  *
- * <p>Captured observable: the byte length of the WAM buffer uploaded
- * via {@code client.sendNode}. The first flush carries every
- * current global; the second flush with identical global state
- * carries no globals; the third flush after mutating one global
- * carries just that one global.
+ * @apiNote
+ * Mirrors WA Web's per-{@code WamContext} {@code prevGlobals}
+ * dirty-tracking inside {@code WAWebWamLibContext}: the encoder
+ * re-emits only the global attributes whose values have changed
+ * since the previous flush on the same channel.
+ *
+ * @implNote
+ * The observed signal is the byte length of the WAM buffer captured
+ * via {@code client.sendNode}: the first flush carries every
+ * current global, the second flush with identical state carries
+ * none, and the third flush after mutating one global carries
+ * exactly that one global's encoded entry.
  */
 @DisplayName("WamService prev-session-globals dirty-write")
 class WamServiceGlobalsDirtyWriteTest {
     /**
-     * Verifies the dirty-tracking three-step invariant: the
-     * second flush is strictly smaller than the first (no globals
-     * re-emitted) and the third flush after mutating a global is
-     * strictly larger than the second (the mutated global is
-     * emitted).
+     * The dirty-tracking three-step invariant holds: the second
+     * flush is strictly smaller than the first and the third flush
+     * (after mutating a global) is strictly larger than the second.
      */
     @Test
     @DisplayName("unchanged globals are skipped on the second flush; mutated globals re-emit on the third")
@@ -60,16 +65,12 @@ class WamServiceGlobalsDirtyWriteTest {
         service.markInitializedForTesting();
         service.setSamplingOverride(2862, 1);
 
-        // First flush — every global is "dirty" because
-        // prevSessionGlobals.get(REGULAR) is null.
         service.commit(samplePsIdEvent());
         service.flushChannel(WamChannel.REGULAR);
         assertTrue(capturedBuffers.size() == 1,
                 "expected exactly one sendNode call after first flush, got " + capturedBuffers.size());
         var firstSize = capturedBuffers.getFirst().length;
 
-        // Second flush — identical globals state, so the globals
-        // section of the buffer should be empty.
         service.commit(samplePsIdEvent());
         service.flushChannel(WamChannel.REGULAR);
         assertTrue(capturedBuffers.size() == 2,
@@ -79,12 +80,8 @@ class WamServiceGlobalsDirtyWriteTest {
                 () -> "second flush must be smaller than the first (no globals re-emitted): first="
                         + firstSize + " second=" + secondSize);
 
-        // Mutate one global between flushes. deviceName is null in
-        // this test (initialize() wasn't run), so setting it to
-        // "TestDevice" must cause that one global to be re-emitted.
         service.setDeviceName("TestDevice");
 
-        // Third flush — only deviceName should be emitted.
         service.commit(samplePsIdEvent());
         service.flushChannel(WamChannel.REGULAR);
         assertTrue(capturedBuffers.size() == 3,
@@ -96,12 +93,17 @@ class WamServiceGlobalsDirtyWriteTest {
     }
 
     /**
-     * Returns a representative PsIdUpdate event. Each call returns
-     * a fresh instance so {@code markCommitted} doesn't reject it.
+     * Builds a fresh {@code PsIdUpdate} event with the
+     * {@link PsIdAction#CREATED} action.
      *
-     * @return a PsIdUpdate event with the CREATED action
+     * @apiNote
+     * Each call returns a new instance so the spec's
+     * {@code markCommitted()} guard does not reject repeat commits
+     * across the three flushes.
+     *
+     * @return a fresh {@code PsIdUpdate} event spec
      */
-    private static com.github.auties00.cobalt.wam.model.WamEventSpec samplePsIdEvent() {
+    private static WamEventSpec samplePsIdEvent() {
         return new PsIdUpdateEventBuilder()
                 .psIdAction(PsIdAction.CREATED)
                 .psIdKey(42)
@@ -110,7 +112,10 @@ class WamServiceGlobalsDirtyWriteTest {
     }
 
     /**
-     * Returns a synthetic successful IQ response.
+     * Builds a successful IQ response recognised by
+     * {@link WamService}'s
+     * {@code sendWithRetry} ({@code type="result"} on the root
+     * {@code <iq>}).
      *
      * @return the success node
      */
@@ -122,14 +127,20 @@ class WamServiceGlobalsDirtyWriteTest {
     }
 
     /**
-     * Extracts the encoded WAM buffer from the captured {@code <iq>}
-     * stanza emitted by {@link WamService}'s
-     * {@code sendViaIq}. The buffer is the content of the inner
-     * {@code <add>} child.
+     * Extracts the encoded WAM buffer from the captured outbound
+     * {@code <iq>} stanza.
+     *
+     * @apiNote
+     * The buffer lives in the binary content of the inner
+     * {@code <add>} child of
+     * {@link WamService}'s
+     * {@code sendViaIq} stanza shape; throws
+     * {@link AssertionError} when the captured stanza does not
+     * match that shape so a regression in the encoder pipeline is
+     * surfaced immediately.
      *
      * @param builder the captured outbound stanza builder
-     * @return the buffer bytes, or an empty array when the iq has
-     *         no add-child binary content
+     * @return the buffer bytes
      */
     private static byte[] extractBuffer(NodeBuilder builder) {
         var built = builder.build();
@@ -142,26 +153,30 @@ class WamServiceGlobalsDirtyWriteTest {
     }
 
     /**
-     * {@link WamService} subclass that overrides the four abstract
-     * timing methods with no-op stubs sufficient for this test —
-     * the test never sleeps, never schedules, and only invokes
-     * {@code flushChannel} synchronously.
+     * Test double for {@link WamService} that stubs the four
+     * abstract timing/scheduling hooks with no-op implementations.
+     *
+     * @apiNote
+     * The dirty-tracking test never sleeps, never schedules, and
+     * drives flushes synchronously via
+     * {@link WamService#flushChannel(WamChannel)}, so the abstract
+     * hooks have no captured-state requirements.
      */
     private static final class InstrumentedWamService extends WamService {
         /**
-         * Holder for the fixed instant {@code now()} returns.
+         * The fixed instant returned by {@link #now()}.
          */
         private final AtomicReference<Instant> now = new AtomicReference<>(Instant.ofEpochSecond(1_747_000_000L));
 
         /**
          * Constructs the instrumented service.
          *
-         * @param client    the test client
-         * @param props     the test AB props
-         * @param beaconing the beaconing impl
+         * @param client    the bound test client
+         * @param props     the bound test AB-props service
+         * @param beaconing the beaconing implementation
          */
         InstrumentedWamService(
-                com.github.auties00.cobalt.client.WhatsAppClient client,
+                WhatsAppClient client,
                 ABPropsService props,
                 WamBeaconing beaconing) {
             super(client, props, beaconing);
@@ -174,17 +189,14 @@ class WamServiceGlobalsDirtyWriteTest {
 
         @Override
         protected void sleep(long millis) {
-            // no-op
         }
 
         @Override
         protected void scheduleRecurring(Runnable task, long initialDelaySeconds, long periodSeconds) {
-            // no-op
         }
 
         @Override
         protected void cancelAllScheduled() {
-            // no-op
         }
     }
 

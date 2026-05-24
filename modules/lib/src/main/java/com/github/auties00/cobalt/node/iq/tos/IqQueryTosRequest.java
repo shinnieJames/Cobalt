@@ -12,24 +12,39 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="tos" type="get">} stanza variant.
- * Wraps a {@code <request>} child whose contents are one
- * {@code <notice id="…"/>} per requested notice id.
+ * Outbound {@code <iq xmlns="tos" type="get">} stanza that fetches the per-user
+ * accepted-state for a batch of TOS / disclosure notice ids.
+ *
+ * @apiNote
+ * Use this to back WA Web's {@code WAWebTos.TosManager.run} state-pull loop: the
+ * caller passes the notice ids known to the local {@code TosManager} (the 3P
+ * disclosure, bot agent / invoke / shortcut TOS, biz-bot TOS, MM signal-sharing
+ * disclosure, newsletter producer / consumer / admin-invite TOS, biz-broadcast TOS,
+ * etc.) and the relay returns the current accepted state plus a refresh interval
+ * driving the loop cadence. The reply is parsed by {@link IqQueryTosResponse}.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's {@code WAWebTosJob.queryTosState} verbatim:
+ * the outbound payload is a single {@code <request>} child carrying one
+ * {@code <notice id="..."/>} grandchild per requested id.
  */
 @WhatsAppWebModule(moduleName = "WAWebTosJob")
 public final class IqQueryTosRequest implements IqOperation.Request {
     /**
-     * The list of notice ids being queried. Each entry is routed
-     * verbatim into the {@code id} attribute of one {@code <notice/>}
-     * child.
+     * Holds the notice ids being queried; routed verbatim into one
+     * {@code <notice/>} child per entry.
      */
     private final List<String> noticeIds;
 
     /**
-     * Constructs a new query-tos request.
+     * Constructs a new query-tos request bound to the given notice ids.
      *
-     * @param noticeIds the list of notice ids to query. Never
-     *                  {@code null}, may be empty
+     * @apiNote
+     * An empty list produces a {@code <request>} child with no grandchildren; the
+     * relay returns an empty notice list inside a still-valid envelope, which the
+     * caller treats as a no-op.
+     *
+     * @param noticeIds the notice ids to query; never {@code null}, may be empty
      * @throws NullPointerException if {@code noticeIds} is {@code null}
      */
     public IqQueryTosRequest(List<String> noticeIds) {
@@ -38,16 +53,21 @@ public final class IqQueryTosRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the unmodifiable list of notice ids being queried.
+     * Returns the unmodifiable list of bound notice ids.
      *
-     * @return the notice ids. Never {@code null}
+     * @return the notice ids; never {@code null}
      */
     public List<String> noticeIds() {
         return noticeIds;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza wrapping the {@code <request>}
+     * payload.
+     *
+     * @apiNote
+     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
+     * attribute, which the dispatch layer assigns.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <request>} payload
@@ -56,7 +76,6 @@ public final class IqQueryTosRequest implements IqOperation.Request {
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "queryTosState", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebTosJob: e.map(id => wap("notice", {id: CUSTOM_STRING(id)}))
         var noticeNodes = new ArrayList<Node>(noticeIds.size());
         for (var id : noticeIds) {
             var noticeNode = new NodeBuilder()
@@ -65,12 +84,10 @@ public final class IqQueryTosRequest implements IqOperation.Request {
                     .build();
             noticeNodes.add(noticeNode);
         }
-        // WAWebTosJob: wap("request", null, [...])
         var requestNode = new NodeBuilder()
                 .description("request")
                 .content(noticeNodes)
                 .build();
-        // WAWebTosJob: wap("iq", {xmlns:"tos", id, type:"get", to:S_WHATSAPP_NET}, request)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "tos")

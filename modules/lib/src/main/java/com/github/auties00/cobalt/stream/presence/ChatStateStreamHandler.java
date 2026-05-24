@@ -11,23 +11,28 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 /**
- * Handles incoming {@code <chatstate>} stanzas from the WhatsApp server.
+ * Updates the {@link Contact#lastKnownPresence()} of the contact identified
+ * by a {@code <chatstate>} stanza.
  *
- * <p>Each chatstate stanza carries the composing state of a contact in a conversation,
- * indicating whether the contact is typing a text message, recording an audio message,
- * or has paused composing. The stanza's {@code from} attribute identifies the
- * conversation (a 1:1 chat JID for individual chatstates or a group JID for group
- * chatstates), and an optional {@code participant} attribute identifies the specific
- * user composing within a group.
+ * @apiNote
+ * Drives the "typing..." / "recording audio..." indicator shown in the
+ * conversation header. The server pushes one {@code <chatstate>} stanza per
+ * transition between composing states; for groups, the stanza carries a
+ * {@code participant} attribute naming the device currently composing
+ * inside the group, and {@code from} carries the group JID.
  *
- * <p>The WA Web architecture splits chatstate handling into two paths created by the
- * {@code WACreateHandleChatState.createHandleChatState} factory: one for individual
- * chatstates ({@code handleIndividualChatState}) triggered when the stanza source is
- * {@code FromUser}, and one for group chatstates ({@code handleGroupChatState})
- * triggered when the source is {@code FromGroup}. In Cobalt, both paths are unified
- * into a single {@link #handle(Node)} method that branches on the presence of the
- * {@code participant} attribute.
- *
+ * @implNote
+ * This implementation collapses WA Web's three-stage flow into one method:
+ * {@code WACreateHandleChatState.createHandleChatState} (the factory that
+ * splits per source kind), {@code WAWebHandleChatState} (the per-source
+ * handlers) and {@code WAWebChangePresenceHandlerAction} (the action that
+ * mutates {@code PresenceCollection}). The split is performed inline in
+ * {@link #handle(Node)} by inspecting the {@code participant} attribute
+ * instead of by reading {@code stateSource} on a parsed RPC. WA Web
+ * additionally maintains a 25-second auto-expiry timer per typing
+ * indicator inside {@code WAWebChangePresenceHandlerAction}; Cobalt
+ * exposes only the raw {@link ContactStatus} transition to its listeners
+ * and leaves expiry policy to the embedder.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleChatState")
 @WhatsAppWebModule(moduleName = "WACreateHandleChatState")
@@ -35,45 +40,56 @@ import com.github.auties00.cobalt.stream.SocketStream;
 @WhatsAppWebModule(moduleName = "WAWebChangePresenceHandlerAction")
 public final class ChatStateStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic messages related to chatstate handling.
+     * The {@link System.Logger} used to report stanzas with missing or
+     * unsupported children.
      */
     private static final System.Logger LOGGER = System.getLogger(ChatStateStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client used to access the store and notify listeners.
+     * The {@link WhatsAppClient} that owns the store this handler mutates and
+     * whose listeners receive the resulting {@code onContactPresence}
+     * notifications.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new chatstate stream handler with the given WhatsApp client.
+     * Constructs a new {@link ChatStateStreamHandler} bound to the given
+     * {@link WhatsAppClient}.
      *
-     * @param whatsapp the non-{@code null} WhatsApp client instance
+     * @apiNote
+     * Constructed by the {@link SocketStream} wiring; embedders do not
+     * call this directly.
+     *
+     * @param whatsapp the non-{@code null} client whose store is updated
+     *                 and whose listeners are notified
      */
     public ChatStateStreamHandler(WhatsAppClient whatsapp) {
         this.whatsapp = whatsapp;
     }
 
     /**
-     * Handles an incoming {@code <chatstate>} stanza by parsing the composing state
-     * and dispatching to either the individual or group chatstate path.
+     * {@inheritDoc}
      *
-     * <p>The handler performs the following steps:
-     * <ol>
-     *   <li>Extracts the {@code from} attribute as a JID (the conversation identifier)</li>
-     *   <li>Extracts the optional {@code participant} attribute (present for group chatstates)</li>
-     *   <li>Resolves the composing state from the stanza's child element</li>
-     *   <li>Dispatches to the group path if {@code participant} is present, or the
-     *       individual path otherwise</li>
-     *   <li>Updates the contact's presence in the store and notifies listeners</li>
-     * </ol>
+     * @apiNote
+     * Consumes one {@code <chatstate>} stanza and routes it to either
+     * {@link #handleIndividualChatState(Jid, ContactStatus)} (no
+     * {@code participant} attribute) or
+     * {@link #handleGroupChatState(Jid, Jid, ContactStatus)} (when the
+     * stanza carries {@code participant}). Stanzas without a {@code from}
+     * attribute or with no recognized composing child are dropped after a
+     * debug log entry.
      *
-     * <p>In WA Web, the factory {@code createHandleChatState} first parses the stanza via
-     * {@code WASmaxChatstateServerNotificationRPC.receiveServerNotificationRPC} to extract
-     * {@code stateSource} (FromUser or FromGroup) and {@code stateTypes} (Composing or
-     * Paused), then dispatches to the appropriate handler. Cobalt performs equivalent
-     * parsing inline using the stanza's XML structure directly.
+     * @implNote
+     * This implementation merges {@code WACreateHandleChatState.createHandleChatState},
+     * which returns a closure that first parses the stanza via
+     * {@code WASmaxChatstateServerNotificationRPC.receiveServerNotificationRPC}
+     * to discriminate {@code FromUser} versus {@code FromGroup} sources.
+     * The discriminator here is the presence of the {@code participant}
+     * attribute, which is equivalent on the wire because WA Web's RPC
+     * parser ultimately reads the same attribute when building
+     * {@code stateSource}.
      *
-     * @param node the non-{@code null} chatstate stanza node
+     * @param node {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WACreateHandleChatState", exports = "createHandleChatState",
@@ -100,22 +116,30 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an individual (1:1) chatstate update by resolving the sender contact
-     * and updating their composing state.
+     * Applies an individual (one-to-one) chatstate update for the sender
+     * identified by {@code from}.
      *
-     * <p>In WA Web, this function receives {@code {jid, status}} and:
-     * <ol>
-     *   <li>Converts the JID to a user WID via {@code userJidToUserWid}</li>
-     *   <li>Performs LID migration resolution (if migrated, looks up chat by account
-     *       LID; if not migrated and sender is LID, also dispatches to PN)</li>
-     *   <li>Calls {@code WAWebChangePresenceHandlerAction} with the resolved ID and status</li>
-     * </ol>
+     * @apiNote
+     * The {@code from} attribute on a 1:1 {@code <chatstate>} stanza names
+     * the peer; the notification fans out with the same JID as both the
+     * conversation and the participant because there is no group context.
+     * Stanzas about the current account are silently dropped.
      *
-     * <p>Cobalt adapts the LID resolution by using {@code findPhoneByLid} on the store,
-     * which is architecturally equivalent since Cobalt stores contacts by PN JID.
+     * @implNote
+     * This implementation diverges from WA Web's
+     * {@code handleIndividualChatState} in two places. WA Web dispatches
+     * twice (once for the resolved id and once for the PN counterpart)
+     * when the client is in pre-migration LID mode and the sender is a
+     * LID-server JID; Cobalt instead canonicalizes the JID to its PN form
+     * via {@link #getOrCreateContact(Jid)} and dispatches once. WA Web
+     * runs the action handler asynchronously through
+     * {@code WAWebBackendApi.frontendFireAndForget("changePresenceHandler", ...)};
+     * Cobalt invokes the listener inline through
+     * {@link #notifyPresence(Jid, Jid)}.
      *
-     * @param from  the JID of the sender (user JID)
-     * @param state the resolved composing state
+     * @param from  the {@code from} attribute of the chatstate stanza
+     * @param state the {@link ContactStatus} previously resolved from the
+     *              stanza child
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleChatState", exports = "handleIndividualChatState",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -136,28 +160,34 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a group chatstate update by resolving the participant contact and
-     * updating their composing state within the context of the group conversation.
+     * Applies a per-participant chatstate update inside the group identified
+     * by {@code from}.
      *
-     * <p>In WA Web, this function receives {@code {jid, participant, status}} and:
-     * <ol>
-     *   <li>Converts the group JID via {@code chatJidToChatWid}</li>
-     *   <li>Converts the participant JID via {@code userJidToUserWid}</li>
-     *   <li>Calls {@code WAWebChangePresenceHandlerAction} with the group as
-     *       {@code id}, status as {@code type}, and participant as {@code participant}</li>
-     * </ol>
+     * @apiNote
+     * The notification fans out with the group JID as the conversation and
+     * the participant's user JID as the participant, so listeners can
+     * scope the typing indicator to a single conversation header without
+     * polluting other surfaces.
      *
-     * <p>The action handler ({@code m(e, t)}) for groups then:
-     * <ol>
-     *   <li>Verifies {@code toPn(participant)} is not {@code null} (participant has a PN mapping)</li>
-     *   <li>Gets the chat from {@code ChatCollection}</li>
-     *   <li>Sets the chatstate on the participant's sub-entry within the group's presence model</li>
-     *   <li>Sets an expiry timer (25s) for typing/recording states</li>
-     * </ol>
+     * @implNote
+     * This implementation diverges from WA Web's
+     * {@code handleGroupChatState} in two places. WA Web's downstream
+     * {@code WAWebChangePresenceHandlerAction} action handler maintains a
+     * per-group {@code chatstates} sub-collection keyed by participant
+     * and an auto-expiry timer of 25 seconds for typing or audio-recording
+     * states; Cobalt does not model either and simply overwrites the
+     * participant's {@link Contact#lastKnownPresence()} for as long as the
+     * server keeps pushing updates. WA Web additionally drops the update
+     * when the participant has no PN mapping (a pre-migration safety
+     * check); Cobalt forwards the update unconditionally because its
+     * contact store always holds a canonical PN entry after
+     * {@link #getOrCreateContact(Jid)} runs.
      *
-     * @param from        the JID of the group
-     * @param participant the JID of the group participant who is composing
-     * @param state       the resolved composing state
+     * @param from        the group JID from the stanza
+     * @param participant the participant JID that produced the composing
+     *                    update
+     * @param state       the {@link ContactStatus} previously resolved from
+     *                    the stanza child
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleChatState", exports = "handleGroupChatState",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -173,27 +203,37 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the composing state from the chatstate stanza's child element.
+     * Returns the {@link ContactStatus} encoded by the single child of a
+     * {@code <chatstate>} stanza, or {@code null} when the child is absent
+     * or unsupported.
      *
-     * <p>This method mirrors the combined parsing of
-     * {@code WASmaxInChatstateStateTypes.parseStateTypes} and
-     * {@code WAHandleChatStateProtocol.parseChatStatus}:
-     * <ul>
-     *   <li>{@code <composing>} without {@code media="audio"} maps to
-     *       {@link ContactStatus#COMPOSING} (WA Web: {@code "typing"})</li>
-     *   <li>{@code <composing media="audio">} maps to {@link ContactStatus#RECORDING}
-     *       (WA Web: {@code "recording_audio"})</li>
-     *   <li>{@code <paused>} maps to {@link ContactStatus#AVAILABLE}
-     *       (WA Web: {@code "idle"}, which is then resolved to {@code "available"} or
-     *       {@code "unavailable"} based on the contact's {@code isOnline} state in the
-     *       PresenceCollection. Since Cobalt does not maintain a per-contact
-     *       PresenceCollection with {@code isOnline} tracking, the paused state is
-     *       mapped to AVAILABLE, reflecting the most common scenario where a user
-     *       who was typing and then paused is still online)</li>
-     * </ul>
+     * @apiNote
+     * Caller-facing semantics: {@code <composing>} maps to
+     * {@link ContactStatus#COMPOSING}, {@code <composing media="audio">} to
+     * {@link ContactStatus#RECORDING}, and {@code <paused>} to
+     * {@link ContactStatus#AVAILABLE}.
      *
-     * @param node the chatstate stanza node
-     * @return the resolved {@link ContactStatus}, or {@code null} if the child element is missing or unsupported
+     * @implNote
+     * This implementation fuses the parsing of
+     * {@code WASmaxInChatstateStateTypes.parseStateTypes} (which classifies
+     * the child as {@code Composing}, {@code ComposingMedia} or
+     * {@code Paused}) and {@code WAHandleChatStateProtocol.parseChatStatus}
+     * (which maps the classification to {@code "typing"},
+     * {@code "recording_audio"} or {@code "idle"}). The {@code "idle"}
+     * outcome is then refined inside
+     * {@code WAWebChangePresenceHandlerAction.s} to either
+     * {@code "available"} or {@code "unavailable"} depending on the
+     * participant's {@code isOnline} flag in {@code PresenceCollection}.
+     * Cobalt has no per-contact {@code isOnline} tracker (presence comes
+     * exclusively through {@link PresenceStreamHandler}), so the paused
+     * branch resolves to {@link ContactStatus#AVAILABLE}, matching the
+     * common case where the peer was composing and then stopped without
+     * going offline.
+     *
+     * @param node the {@code <chatstate>} stanza whose first child encodes
+     *             the composing state
+     * @return the resolved {@link ContactStatus}, or {@code null} when the
+     *         child is missing or carries an unsupported tag
      */
     @WhatsAppWebExport(moduleName = "WAHandleChatStateProtocol", exports = "parseChatStatus",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -210,7 +250,6 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
             case "composing" -> "audio".equals(child.getAttributeAsString("media", null))
                     ? ContactStatus.RECORDING
                     : ContactStatus.COMPOSING;
-            // WA Web converts "idle" via e.isOnline to either "available" or "unavailable"; Cobalt defaults to AVAILABLE because no per-contact PresenceCollection tracks isOnline.
             case "paused" -> ContactStatus.AVAILABLE;
             default -> {
                 LOGGER.log(System.Logger.Level.DEBUG,
@@ -222,16 +261,25 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether the given {@code from} JID represents the current user's
-     * own account.
+     * Returns {@code true} when the given {@code from} JID refers to the
+     * client's own account.
      *
-     * <p>This check mirrors WA Web's {@code isMeAccount} which compares both the
-     * phone-number user and the LID user. In Cobalt, the PN-based check is direct;
-     * LID-based from JIDs are resolved through the LID-to-PN cache.
+     * @apiNote
+     * Suppresses self-echoes during a 1:1 chatstate update; the group path
+     * does not need this check because the group {@code from} JID is never
+     * the local user's JID.
      *
-     * @param from  the JID from the chatstate stanza
-     * @param meJid the current user's device JID
-     * @return {@code true} if the chatstate is for the current user's own account
+     * @implNote
+     * This implementation accepts a {@link Jid} on either the PN server or
+     * the LID server. The LID-server branch consults the store's
+     * LID-to-PN cache via {@code findPhoneByLid}; WA Web's
+     * {@code WAWebUserPrefsMeUser.isMeAccount} caches both ids on the
+     * {@code MeUser} record and compares them directly.
+     *
+     * @param from  the {@code from} attribute of the chatstate stanza
+     * @param meJid the client's own JID from {@code store().jid()}
+     * @return {@code true} when {@code from} and {@code meJid} resolve to
+     *         the same user; {@code false} otherwise
      */
     private boolean isSelf(Jid from, Jid meJid) {
         var fromUser = from.toUserJid();
@@ -247,18 +295,26 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the given JID to a canonical contact, creating a new contact if none
-     * exists in the store.
+     * Returns the {@link Contact} stored under the canonical PN form of
+     * {@code jid}, creating a fresh entry when none exists.
      *
-     * <p>If the JID has a LID server, it is first resolved to a phone-number JID via
-     * the store's LID-to-PN cache. This mirrors the WA Web behavior where
-     * {@code WAWebJidToWid.userJidToUserWid} converts the JID and
-     * {@code WAWebLidMigrationUtils.toUserLid} / {@code WAWebApiContact.getPhoneNumber}
-     * perform LID-to-PN resolution before looking up the contact in the presence
-     * collection.
+     * @apiNote
+     * Centralizes the LID-to-PN normalization every chatstate update needs.
+     * Embedders that consume {@code onContactPresence} can therefore
+     * assume the {@link Contact#toJid()} they receive is on the PN server
+     * even when the wire stanza carried a LID-server {@code from} or
+     * {@code participant}.
      *
-     * @param jid the JID from the chatstate stanza
-     * @return the resolved contact, or {@code null} if the JID cannot be resolved
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebJidToWid.userJidToUserWid} followed by
+     * {@code WAWebApiContact.getPhoneNumber} for LID-server inputs, but
+     * collapses the lookup into one store call because the LID-to-PN cache
+     * is the only source of truth for the mapping in Cobalt.
+     *
+     * @param jid the {@link Jid} read off the stanza, possibly {@code null}
+     * @return the resolved {@link Contact}, or {@code null} when
+     *         {@code jid} is {@code null}
      */
     private Contact getOrCreateContact(Jid jid) {
         if (jid == null) {
@@ -274,14 +330,23 @@ public final class ChatStateStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners about a presence change for the given
-     * conversation and participant.
+     * Fans out an {@code onContactPresence} notification to every registered
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener}.
      *
-     * <p>Each listener is invoked on a separate virtual thread to avoid blocking
-     * the handler.
+     * @apiNote
+     * For a 1:1 chatstate update {@code conversation} and {@code participant}
+     * are equal; for a group update {@code conversation} is the group JID
+     * and {@code participant} is the device that produced the composing
+     * state.
      *
-     * @param conversation the JID of the conversation where the presence changed (same as participant for 1:1 chats, group JID for groups)
-     * @param participant  the JID of the participant whose presence changed
+     * @implNote
+     * This implementation starts one virtual thread per listener so that a
+     * blocking listener cannot stall the {@link SocketStream} dispatch loop.
+     *
+     * @param conversation the JID of the conversation that experienced the
+     *                     composing transition
+     * @param participant  the JID of the participant whose composing state
+     *                     changed
      */
     private void notifyPresence(Jid conversation, Jid participant) {
         for (var listener : whatsapp.store().listeners()) {

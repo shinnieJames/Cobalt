@@ -12,30 +12,44 @@ import java.util.Objects;
 /**
  * The outbound {@code <iq xmlns="w:biz" type="set">} stanza that attaches
  * a previously-uploaded cover photo to the current merchant's business
- * profile. The {@code (id, ts, token)} triple identifies the upload
- * artefact in the mediaWeb store.
+ * profile.
+ *
+ * @apiNote
+ * Use this request from the cover-photo edit surface after the binary
+ * upload has succeeded and the mediaWeb upload service has returned the
+ * {@code (id, ts, token)} triple identifying the artefact; the
+ * {@code WAWebBizCoverPhotoAction.setCoverPhoto} delegate ships this
+ * stanza right after the upload completes.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     /**
-     * The upload id returned by the mediaWeb upload service.
+     * The upload id stamped into the {@code id} attribute of the
+     * {@code <cover_photo/>} grandchild.
      */
     private final long id;
 
     /**
-     * The upload timestamp returned by the mediaWeb upload service
-     * (Unix seconds).
+     * The upload timestamp (Unix seconds) stamped into the {@code ts}
+     * attribute of the {@code <cover_photo/>} grandchild.
      */
     private final long ts;
 
     /**
-     * The opaque upload token — used by the relay to validate that the
-     * upload artefact still exists and belongs to the calling user.
+     * The opaque upload token stamped into the {@code token} attribute
+     * of the {@code <cover_photo/>} grandchild; the relay uses it to
+     * validate that the upload artefact still exists and belongs to
+     * the calling user.
      */
     private final byte[] token;
 
     /**
      * Constructs a request.
+     *
+     * @apiNote
+     * Pass the {@code (id, ts, token)} triple returned by the mediaWeb
+     * upload service; the token is defensively cloned so the caller's
+     * buffer is not retained.
      *
      * @param id    the upload id
      * @param ts    the upload timestamp
@@ -52,6 +66,11 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     /**
      * Returns the upload id.
      *
+     * @apiNote
+     * Use this getter to read back the upload id the stanza will
+     * stamp; the value is taken verbatim from the mediaWeb upload
+     * service response.
+     *
      * @return the id
      */
     public long id() {
@@ -60,6 +79,11 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
 
     /**
      * Returns the upload timestamp.
+     *
+     * @apiNote
+     * Use this getter to read back the upload timestamp the stanza
+     * will stamp; the value is taken verbatim from the mediaWeb upload
+     * service response.
      *
      * @return the timestamp
      */
@@ -70,6 +94,11 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     /**
      * Returns a defensive copy of the upload token.
      *
+     * @apiNote
+     * Use this getter to read back the upload token the stanza will
+     * stamp; the returned array is a fresh clone so callers may mutate
+     * it freely without disturbing this request.
+     *
      * @return the token; never {@code null}
      */
     public byte[] token() {
@@ -77,9 +106,15 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by
+     * the {@code WAWebBusinessProfileJob.sendCoverPhoto} export: a
+     * {@code <cover_photo op="update" id ts token/>} grandchild wrapped
+     * in a {@code <business_profile v="3" mutation_type="delta"/>}
+     * envelope and a {@code w:biz set} IQ frame routed to the WhatsApp
+     * service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBusinessProfileJob",
@@ -106,6 +141,9 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
                 .content(businessProfileNode);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -120,12 +158,18 @@ public final class IqSendCoverPhotoRequest implements IqOperation.Request {
                 && Arrays.equals(this.token, that.token);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         var h = Objects.hash(id, ts);
         return 31 * h + Arrays.hashCode(token);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqSendCoverPhotoRequest[id=" + id + ", ts=" + ts + ']';

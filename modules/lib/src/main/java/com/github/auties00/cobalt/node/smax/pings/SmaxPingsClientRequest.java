@@ -8,32 +8,30 @@ import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.node.smax.SmaxOperation;
 
 /**
- * Outbound {@code <iq xmlns="w:p" type="get" to="s.whatsapp.net">}
- * stanza emitted by the SMAX keep-alive pump to probe relay
- * reachability. Carries no payload — only the standard envelope
- * attributes.
+ * The outbound {@code <iq xmlns="w:p" type="get" to="s.whatsapp.net"/>}
+ * keep-alive ping.
  *
- * <p>The relay echoes the request {@code id} on the matching
- * {@code <iq type="result"/>} reply, which Cobalt parses via
- * {@link SmaxPingsClientResponseServerResponse}.
- *
- * <p>The request type carries no fields: WA Web's
- * {@code WASmaxOutPingsClientRequest.makeClientRequest} takes no
- * arguments and produces a stanza whose only request-side attribute
- * is {@code id = WAWap.generateId()}. Cobalt does not pre-stamp the
- * {@code id} attribute on the typed request because
- * {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode(NodeBuilder)}
- * auto-stamps a fresh {@code id} on every outbound stanza, matching
- * the {@code WAWap.generateId} contract.
+ * @apiNote
+ * Backs the relay-reachability probe that {@code WAComms} emits on its
+ * keep-alive cadence. The reply is parsed by
+ * {@link SmaxPingsClientResponseServerResponse}; a missing or malformed
+ * reply causes WA Web's {@code WAComms.sendPing} to flag the active
+ * ping as lost and surface a stream-stall recovery path. Cobalt's
+ * keep-alive loop dispatches this same request through its socket
+ * pipeline.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutPingsClientRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutPingsClientWellFormedToMixin")
 public final class SmaxPingsClientRequest implements SmaxOperation.Request {
     /**
-     * Constructs a request. Takes no parameters — every keep-alive
-     * ping carries the same envelope; the only varying attribute is
-     * the server-side-generated {@code id} stamped at dispatch by
-     * {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode(NodeBuilder)}.
+     * Constructs a new keep-alive ping.
+     *
+     * @apiNote
+     * Takes no parameters: every keep-alive ping carries the same
+     * envelope, and the only varying attribute is the {@code id}
+     * stamped at dispatch time by
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode(NodeBuilder)}
+     * to match WA Web's {@code WAWap.generateId} contract.
      */
     public SmaxPingsClientRequest() {
     }
@@ -41,11 +39,19 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * <p>The stanza's {@code id} attribute is intentionally left
-     * unset on the typed request: the dispatch path
-     * ({@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode(NodeBuilder)})
-     * stamps a fresh id on every outbound stanza, matching WA Web's
-     * {@code WAWap.generateId} contract.
+     * @apiNote
+     * Produces {@code <iq xmlns="w:p" type="get" to="s.whatsapp.net"/>}
+     * with no body; the dispatch path stamps a fresh {@code id} before
+     * flushing the stanza so the reply parser can match it back to
+     * this request.
+     *
+     * @implNote
+     * This implementation leaves the {@code id} attribute unset on the
+     * returned builder rather than calling {@code WAWap.generateId}
+     * inline; the
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient#sendNode(NodeBuilder)}
+     * dispatch path stamps a fresh id on every outbound stanza so
+     * pre-stamping would be wasted work.
      *
      * @return a {@link NodeBuilder} carrying the empty
      *         {@code <iq xmlns="w:p" type="get" to="s.whatsapp.net"/>}
@@ -55,8 +61,6 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
     @WhatsAppWebExport(moduleName = "WASmaxOutPingsClientRequest",
             exports = "makeClientRequest", adaptation = WhatsAppAdaptation.ADAPTED)
     public NodeBuilder toNode() {
-        // WASmaxOutPingsClientRequest.makeClientRequest: smax("iq", {id, type:"get", xmlns:"w:p"})
-        // WASmaxOutPingsClientWellFormedToMixin.mergeClientWellFormedToMixin: smax("iq", {to: S_WHATSAPP_NET})
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "w:p")
@@ -64,6 +68,14 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
                 .attribute("type", "get");
     }
 
+    /**
+     * Returns whether the given object is also a
+     * {@link SmaxPingsClientRequest}.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxPingsClientRequest}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -72,11 +84,22 @@ public final class SmaxPingsClientRequest implements SmaxOperation.Request {
         return obj != null && obj.getClass() == this.getClass();
     }
 
+    /**
+     * Returns a constant hash code; every ping carries the same
+     * envelope.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return SmaxPingsClientRequest.class.hashCode();
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this request.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxPingsClientRequest[]";

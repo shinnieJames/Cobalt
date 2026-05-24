@@ -4,17 +4,19 @@ package com.github.auties00.cobalt.exception;
  * Thrown when an attempt to re-establish a previously open WhatsApp
  * session fails.
  *
- * <p>After a session is dropped (because the network blipped, the
- * server cycled the connection, or {@code WhatsAppSessionException}
- * was raised), Cobalt schedules a reconnect attempt with backoff. If
- * that attempt cannot complete, this exception is raised carrying the
- * count of attempts made so far via {@link #attempts()}, so the caller
- * can decide how long to wait before trying again or whether to give
- * up.
+ * @apiNote
+ * After a session is dropped (network blip, server cycling the
+ * connection, or a {@link WhatsAppSessionException} being raised),
+ * Cobalt schedules a reconnect attempt with backoff. This exception
+ * carries the count of attempts made so far via {@link #attempts()} so
+ * the caller can decide how long to wait before trying again or whether
+ * to give up. Distinct from {@link WhatsAppConnectionException}, which
+ * fires on the very first connection.
  *
- * <p>This is distinct from {@link WhatsAppConnectionException}, which
- * fires on the very first connection. Both are fatal: there is no
- * usable session to keep working on.
+ * @implNote
+ * This implementation always reports the failure as fatal: there is no
+ * usable session to keep working on. Whether to schedule a further
+ * attempt is up to the configurable error handler.
  *
  * @see WhatsAppConnectionException
  */
@@ -52,8 +54,9 @@ public final class WhatsAppReconnectionException extends WhatsAppException {
     /**
      * Returns the number of reconnection attempts already made.
      *
-     * <p>The caller can use the count to bound retries or to compute a
-     * suitable backoff delay before scheduling another attempt.
+     * @apiNote
+     * Use the count to bound retries or to compute a backoff delay
+     * before scheduling another attempt.
      *
      * @return the attempt count, always non-negative
      */
@@ -62,13 +65,11 @@ public final class WhatsAppReconnectionException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>A failed reconnect leaves the client with no live session, so
-     * the exception is fatal. Whether to schedule a further attempt is
-     * up to the configurable error handler.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: a failed
+     * reconnect leaves the client with no live session.
      */
     @Override
     public boolean isFatal() {

@@ -4,16 +4,19 @@ package com.github.auties00.cobalt.exception;
  * Thrown when the message history transfer from the primary phone to a
  * newly linked companion device fails.
  *
- * <p>WhatsApp ships chat history to a freshly paired companion as a
+ * @apiNote
+ * WhatsApp ships chat history to a freshly paired companion as a
  * sequence of encrypted blobs uploaded by the primary phone and
- * downloaded, decrypted, and applied by the companion. Failures can
- * happen at any stage: downloading the blob, decrypting it, parsing the
- * embedded protobuf, or persisting the resulting messages. Any of those
- * conditions raises this exception.
+ * downloaded, decrypted, and applied by the companion (the WA Web flow
+ * runs through {@code WAWebHandleHistorySyncChunk} and the upstream
+ * {@code history_sync_notification} protobuf). Failures can happen at
+ * any stage: downloading the blob, decrypting it, parsing the embedded
+ * protobuf, or persisting the resulting messages.
  *
- * <p>History sync failures are non-fatal. The session continues to
- * receive new messages and a partial or missing history can be retried
- * later when the primary phone is online again.
+ * @implNote
+ * This implementation always reports the failure as non-fatal: the
+ * session continues to receive new messages and a partial or missing
+ * history can be retried later when the primary phone is online again.
  */
 public final class WhatsAppHistorySyncException extends WhatsAppException {
 
@@ -53,12 +56,12 @@ public final class WhatsAppHistorySyncException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>History sync failures only affect the population of past
-     * messages on this device. The session itself stays usable.
-     *
-     * @return {@code false}
+     * @implNote
+     * This implementation always returns {@code false}: a history sync
+     * failure only affects the population of past messages on this
+     * device, not the active session.
      */
     @Override
     public boolean isFatal() {

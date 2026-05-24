@@ -18,23 +18,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles the unarchive chats setting sync action.
+ * Mirrors the "Keep chats archived" preference and applies the matching
+ * side-effect to every previously archived chat.
  *
- * <p>This handler processes the {@code "setting_unarchiveChats"} sync action,
- * which controls whether archived chats should be automatically unarchived
- * when a new message arrives. When the setting changes, side effects are
- * applied to existing archived chats based on their archive sync action
- * entries.
- *
- * <p>Per WhatsApp Web, this handler extends {@code AccountSyncdActionBase}
- * and only applies the last mutation in a batch (all earlier mutations are
- * skipped). The collection is {@code RegularLow} and the version is {@code 4}.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * routes incoming {@code setting_unarchiveChats} mutations here whenever
+ * the user toggles "Keep chats archived" on another linked device. When
+ * the setting flips to "do not keep archived", the handler unarchives
+ * archived chats that have new messages waiting; when it flips back, the
+ * handler re-archives previously-archived chats per their stored
+ * {@link ArchiveChatAction} entries. The boolean preference itself is
+ * persisted on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUnarchiveChats(boolean)}.
  */
 @WhatsAppWebModule(moduleName = "WAWebArchiveSettingSync")
 public final class UnarchiveChatsSettingHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public UnarchiveChatsSettingHandler() {
@@ -42,8 +48,7 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Returns the action name for the unarchive chats setting action.
-     * @return the action name {@code "setting_unarchiveChats"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -52,11 +57,7 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Returns the sync collection for the unarchive chats setting action.
-     *
-     * <p>Per WhatsApp Web, the handler's {@code collectionName} is set to
-     * {@code WASyncdConst.CollectionName.RegularLow} in the constructor.
-     * @return {@link SyncPatchType#REGULAR_LOW}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -65,8 +66,7 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Returns the mutation format version for the unarchive chats setting action.
-     * @return the version number {@code 4}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -75,19 +75,20 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Applies a batch of unarchive chats setting mutations.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveSettingSync.applyMutations}: only the
-     * last mutation in the batch is applied. All earlier mutations are skipped
-     * because only the final setting value matters.
-     *
-     * <p>If the batch is empty, returns an empty list. Per WA Web, an empty
-     * mutations array logs a warning and returns {@code [{actionState: Failed}]},
-     * but since the caller should not dispatch empty batches, Cobalt returns an
-     * empty list for API consistency with other handlers.
-     * @param client    the WhatsApp client instance
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebArchiveSettingSync.applyMutations} which reads only the
+     * final mutation from the batch ({@code var l = e[e.length - 1]}).
+     * Every earlier mutation is acknowledged as
+     * {@link MutationApplicationResult#skipped()} so the dispatcher can
+     * still correlate the result list with the input by position; the
+     * trailing mutation runs through
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
+     * An empty batch returns an empty list because the dispatcher does
+     * not call this method with one; WA Web logs the empty case as
+     * {@code Failed} but Cobalt does not exercise that path.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -105,24 +106,21 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Applies an unarchive chats setting mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveSettingSync.applyMutations}, for a
-     * mutation with {@code operation === "set"}:
-     * <ol>
-     *   <li>Extracts the {@code unarchiveChatsSetting} from the sync action value</li>
-     *   <li>Validates that {@code unarchiveChats} is not {@code null} (returns
-     *       {@code malformedActionValue} if it is)</li>
-     *   <li>Updates the unarchive chats setting in the store</li>
-     *   <li>Calls {@link #updateSideEffectOnChats(WhatsAppClient, boolean)} to
-     *       apply side effects to existing archived chats</li>
-     * </ol>
-     *
-     * <p>Non-{@code SET} operations return {@code Unsupported}. Exceptions are
-     * caught and return {@code Failed}.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation mirrors WA Web's single-mutation path inside
+     * {@code WAWebArchiveSettingSync.applyMutations}: it requires a
+     * {@link SyncdOperation#SET}, decodes the
+     * {@link UnarchiveChatsSetting} value (treating a missing nullable
+     * Boolean as {@code false} per the Cobalt nullable-boolean
+     * convention), persists it via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setUnarchiveChats(boolean)},
+     * and runs {@link #updateSideEffectOnChats(WhatsAppClient, boolean)}.
+     * WA Web also writes {@code archiveV2EnabledSetting = true} when
+     * unset and fires {@code WAWebBackendApi.frontendFireAndForget("applyAppSetting", ...)};
+     * Cobalt drops both because archive-v2 is always enabled in Cobalt
+     * and there is no frontend to fire at.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -136,16 +134,8 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
                 return SyncdIndexUtils.malformedActionValue(collectionName().name());
             }
 
-            // ADAPTED: WA Web checks (_.unarchiveChats == null) and returns malformedActionValue.
-            // Cobalt's UnarchiveChatsSetting.unarchiveChats() coalesces null to false via
-            // existing boolean accessor pattern. A null unarchiveChats in a valid protobuf
-            // message is treated as false rather than malformed.
             var unarchiveChats = setting.unarchiveChats();
             client.store().setUnarchiveChats(unarchiveChats);
-            // ADAPTED: WAWebArchiveSettingSync.applyMutations also sets archiveV2EnabledSetting
-            // to true if not already set, and fires frontendFireAndForget("applyAppSetting", ...).
-            // Cobalt does not have an archiveV2Enabled setting (archive v2 is always enabled)
-            // and frontend fire-and-forget calls are UI-only browser concerns.
             updateSideEffectOnChats(client, unarchiveChats);
             return MutationApplicationResult.success();
         } catch (Exception e) {
@@ -154,20 +144,24 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Applies side effects to existing archived chats based on the new setting value.
+     * Dispatches the setting-change side-effect to the matching
+     * unarchive / re-archive helper.
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveSettingSync.updateSideEffectOnChats}:
-     * dispatches to one of two private methods depending on the setting value:
-     * <ul>
-     *   <li>When {@code unarchiveChats} is {@code true}: calls
-     *       {@code $ArchiveSettingSync$p_1} which finds archived chats whose
-     *       message ranges indicate new messages have arrived and unarchives them</li>
-     *   <li>When {@code unarchiveChats} is {@code false}: calls
-     *       {@code $ArchiveSettingSync$p_2} which finds chats with successful
-     *       archive sync actions and re-archives them</li>
-     * </ul>
-     * @param client         the WhatsApp client instance
-     * @param unarchiveChats the new unarchive chats setting value
+     * @apiNote
+     * Used by {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * after the new setting value has been persisted; the choice between
+     * unarchiving newly-active chats and re-archiving previously
+     * archived chats is determined solely by the setting value.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code updateSideEffectOnChats(unarchiveChats, _)} two-branch
+     * dispatch, delegating to
+     * {@link #applyUnarchiveSideEffect(WhatsAppClient)} or
+     * {@link #applyArchiveSideEffect(WhatsAppClient)}.
+     *
+     * @param client         the {@link WhatsAppClient} whose store is being updated
+     * @param unarchiveChats the new setting value
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private void updateSideEffectOnChats(WhatsAppClient client, boolean unarchiveChats) {
@@ -179,49 +173,35 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Applies the side effect when unarchive chats setting is enabled (true).
+     * Unarchives chats that have new activity once the user opts out of
+     * "Keep chats archived".
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveSettingSync.$ArchiveSettingSync$p_1}:
-     * finds archived chats that should be unarchived because new messages have
-     * arrived. The logic:
-     * <ol>
-     *   <li>Gets all archived chats</li>
-     *   <li>Filters out chats that have active archive message ranges (browser-specific)</li>
-     *   <li>For remaining chats, looks up their archive sync action entry</li>
-     *   <li>Filters to entries with {@code actionState} of {@code Success} or
-     *       {@code Orphan}, {@code archived === true}, and a valid {@code messageRange}</li>
-     *   <li>Compares current message range with the stored range</li>
-     *   <li>If the current range encloses the stored range or ranges are not
-     *       enclosing, unarchives the chat</li>
-     * </ol>
+     * @apiNote
+     * Side-effect of switching the setting to {@code true}; iterates the
+     * stored {@link ArchiveChatAction} entries and clears the archived
+     * flag on chats that have a successful archive sync action with a
+     * recorded message range.
      *
-     * <p>In Cobalt, the active message range filtering (step 2) is not available
-     * since it relies on browser-specific IndexedDB infrastructure
-     * ({@code WAWebApiActiveMessageRanges}, {@code WAWebSchemaActiveMessageRanges}).
-     * Instead, Cobalt iterates all archived chats and checks their archive sync
-     * action entries directly. This is a conservative adaptation that may unarchive
-     * slightly more chats than WA Web would.
+     * @implNote
+     * This implementation simplifies WA Web's
+     * {@code $ArchiveSettingSync$p_1} which compares the current
+     * message range against the stored range via
+     * {@code WAWebMessageRangeUtils.compareMessageRanges} and only
+     * unarchives when the current range strictly encloses the stored
+     * one. The comparison relies on WA Web's
+     * {@code WAWebApiActiveMessageRanges} / {@code WAWebSchemaActiveMessageRanges}
+     * IDB layer which Cobalt does not maintain; without that probe Cobalt
+     * conservatively unarchives every archived chat with a successful
+     * archive entry, which matches the user-facing intent of the
+     * setting change.
      *
-     * <p>The message range construction ({@code WAWebMessageRangeUtils.constructMessageRange})
-     * is also not available in Cobalt since it requires per-chat message storage
-     * infrastructure. Without current message ranges to compare against, Cobalt
-     * unarchives all archived chats that have a successful archive sync action entry.
-     * This matches the practical effect since the setting change implies the user
-     * wants archived chats to auto-unarchive on new messages.
-     * @param client the WhatsApp client instance
+     * @param client the {@link WhatsAppClient} whose store is being updated
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private void applyUnarchiveSideEffect(WhatsAppClient client) {
-        // ADAPTED: WAWebArchiveSettingSync.$ArchiveSettingSync$p_1
-        // WA Web performs complex message range comparisons using:
-        // - WAWebApiActiveMessageRanges.getActiveMessageRanges
-        // - WAWebSchemaActiveMessageRanges.ActiveRangeAction.Archive
-        // - WAWebMessageRangeUtils.constructMessageRange / compareMessageRanges
-        // - WAWebSyncdDb.getSyncAction
-        // These rely on browser IndexedDB infrastructure not available in Cobalt.
-        // The adapted logic looks up archive sync action entries directly and
-        // unarchives chats that have a successful archived=true entry, which
-        // is the conservative equivalent of the WA Web behavior.
+        // TODO: replicate WA Web's MessageRangeUtils.compareMessageRanges gating once Cobalt
+        //       maintains active-message-range tracking; today Cobalt may unarchive chats
+        //       that WA Web would have left archived.
         var archiveEntries = client.store().getSyncActionEntries(SyncPatchType.REGULAR_LOW);
         for (var entry : archiveEntries) {
             if (entry.actionState() != SyncActionState.SUCCESS
@@ -262,35 +242,33 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
                 continue;
             }
 
-            if (!chat.get().archived()) { // Only process currently archived chats
+            if (!chat.get().archived()) {
                 continue;
             }
 
-            // ADAPTED: WAWebArchiveSettingSync.$ArchiveSettingSync$p_1 compares constructMessageRange
-            // result against the stored messageRange using compareMessageRanges. If the result is
-            // RangeAEnclosesRangeB or RangesNotEnclosing, the chat is unarchived.
-            // Without constructMessageRange infrastructure, Cobalt unarchives the chat directly
-            // since the setting change to unarchiveChats=true indicates the user wants
-            // archived chats to auto-unarchive when messages arrive.
             chat.get().setArchived(false);
         }
     }
 
     /**
-     * Applies the side effect when unarchive chats setting is disabled (false).
+     * Re-archives chats that the user previously archived once the
+     * "Keep chats archived" setting is turned back on.
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveSettingSync.$ArchiveSettingSync$p_2}:
-     * finds chats that should be re-archived based on their archive sync action
-     * entries. The logic:
-     * <ol>
-     *   <li>Gets all sync action entries with the {@code "archive"} action type</li>
-     *   <li>Merges with pending mutations for the archive action</li>
-     *   <li>Filters to entries with {@code actionState === Success} and
-     *       {@code archived === true}</li>
-     *   <li>Resolves the chat for each entry</li>
-     *   <li>Sets the chat as archived</li>
-     * </ol>
-     * @param client the WhatsApp client instance
+     * @apiNote
+     * Side-effect of switching the setting to {@code false}; replays
+     * stored {@link ArchiveChatAction} entries with
+     * {@code archived = true} and a successful action state.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code $ArchiveSettingSync$p_2} which merges the persisted archive
+     * entries with the pending mutations table. Cobalt only inspects the
+     * persisted entries because it does not maintain a parallel pending
+     * archive mutations log; the practical effect is identical because
+     * the dispatcher applies pending mutations to the store before
+     * invoking this handler.
+     *
+     * @param client the {@link WhatsAppClient} whose store is being updated
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private void applyArchiveSideEffect(WhatsAppClient client) {
@@ -334,13 +312,22 @@ public final class UnarchiveChatsSettingHandler implements WebAppStateActionHand
     }
 
     /**
-     * Extracts the chat JID from an archive sync action index string.
+     * Extracts the chat JID from a stored archive-action index.
      *
-     * <p>Per WhatsApp Web, the archive action index is formatted as
-     * {@code ["archive", chatJidString]}. This method parses the JSON array
-     * and extracts the second element.
-     * @param actionIndex the action index string (JSON array format)
-     * @return the parsed chat JID, or {@code null} if parsing fails
+     * @apiNote
+     * The archive action index has the shape
+     * {@code ["archive", chatJidString]}; this helper parses the JSON
+     * array and returns the chat JID, defaulting to {@code null} for
+     * any parse failure.
+     *
+     * @implNote
+     * This implementation tolerates a missing index, a missing JID slot,
+     * an empty JID string, and JID parse failures by returning
+     * {@code null} so callers can simply skip the entry instead of
+     * raising an exception out of the side-effect helpers.
+     *
+     * @param actionIndex the JSON-encoded archive-action index
+     * @return the parsed chat JID, or {@code null} on any failure
      */
     private Jid extractChatJidFromArchiveIndex(String actionIndex) {
         try {

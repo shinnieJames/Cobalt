@@ -1,12 +1,13 @@
 package com.github.auties00.cobalt.socket;
 
+import com.github.auties00.cobalt.client.WhatsAppProxy;
+import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
+import com.github.auties00.cobalt.exception.WhatsAppConnectionException;
+import com.github.auties00.cobalt.exception.WhatsAppSessionException;
+import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
-import com.github.auties00.cobalt.client.WhatsAppWebClientHistory;
-import com.github.auties00.cobalt.exception.WhatsAppSessionException;
-import com.github.auties00.cobalt.exception.WhatsAppStreamException;
 import com.github.auties00.cobalt.model.device.DevicePlatformType;
 import com.github.auties00.cobalt.model.device.DevicePropsBuilder;
 import com.github.auties00.cobalt.model.device.DevicePropsHistorySyncConfigBuilder;
@@ -20,8 +21,9 @@ import com.github.auties00.cobalt.model.signal.NoiseCertificateDetailsSpec;
 import com.github.auties00.cobalt.model.signal.NoiseCertificateSpec;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.binary.NodeReader;
-import com.github.auties00.cobalt.node.binary.NodeWriter;
 import com.github.auties00.cobalt.node.binary.NodeTokens;
+import com.github.auties00.cobalt.node.binary.NodeSizer;
+import com.github.auties00.cobalt.node.binary.NodeWriter;
 import com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramInputStream;
 import com.github.auties00.cobalt.socket.datagram.WhatsAppDatagramOutputStream;
 import com.github.auties00.cobalt.socket.tunnel.HttpTunnel;
@@ -35,6 +37,7 @@ import com.github.auties00.curve25519.Curve25519;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 import com.github.auties00.libsignal.key.SignalIdentityPublicKey;
 
+import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.SSLSocket;
 import javax.security.auth.DestroyFailedException;
@@ -43,6 +46,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -51,54 +55,71 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * Top-level WhatsApp socket client that performs the Noise XX handshake
- * and exchanges int24-prefixed encrypted datagrams with the WhatsApp
- * server.
+ * Top-level WhatsApp socket client that performs the Noise XX
+ * handshake and exchanges {@code int24}-prefixed AES-GCM datagrams
+ * with the WhatsApp server.
  *
- * <p>The class is sealed into {@link Web} (with nested {@code Browser}
- * and {@code Desktop} variants) and {@link Mobile} subtypes that pick
- * the right transport for each client form factor. Browser and Windows
- * hybrid companions tunnel everything through a hand-rolled WebSocket
- * over a {@link SSLSocket}; the macOS desktop runs Noise directly over
- * a TLS-wrapped {@link Socket}; the native mobile clients run Noise
- * over a plain {@link Socket}.
+ * <p>The class is sealed into two transport-shaped subtypes that map
+ * to the two physical wires WhatsApp servers expose:
+ * <ul>
+ *   <li>{@link Tcp}: plain TCP to {@code g.whatsapp.net:443}; used by
+ *       iOS, Android and the native macOS app (Mac Catalyst port of
+ *       the iOS binary).</li>
+ *   <li>{@link WebSocket}: TLS plus RFC 6455 WebSocket to
+ *       {@code web.whatsapp.com:443}; used by the browser and the
+ *       Windows Electron desktop app (which ships the same JS bundle
+ *       as the browser).</li>
+ * </ul>
  *
- * <p>Every subtype builds the same logical I/O pipeline as a chain of
- * standard {@code Filter*Stream} filters:
+ * <p>Handshake shape (prologue, certificate verification and client
+ * payload) is decided <em>orthogonally</em> from the transport, off
+ * the {@code store.device().platform()} value: {@code IOS},
+ * {@code IOS_BUSINESS}, {@code ANDROID} and {@code ANDROID_BUSINESS}
+ * use the mobile-style handshake (flat {@code NoiseCertificate},
+ * mobile prologue, mobile {@code ClientPayload}); {@code WEB},
+ * {@code WINDOWS} and {@code MACOS} use the web-style handshake
+ * (two-level {@code CertChain}, web prologue, companion
+ * {@code ClientPayload}). macOS therefore rides on the {@link Tcp}
+ * transport but uses the web-style handshake, and the transport vs
+ * handshake-shape distinction is what motivates keeping the two
+ * concerns split.
+ *
+ * <p>Every subtype builds the same logical I/O pipeline as a chain
+ * of standard {@code Filter*Stream} filters:
  * <pre>
- * Browser : raw Socket -&gt; SSLSocket -&gt; WebSocketFrame{In,Out}putStream -&gt; WhatsAppDatagram{In,Out}putStream
- * Desktop : raw Socket -&gt; SSLSocket -&gt; WhatsAppDatagram{In,Out}putStream
- * Mobile  : raw Socket -&gt; WhatsAppDatagram{In,Out}putStream
+ * Tcp       : raw Socket -&gt; WhatsAppDatagram{In,Out}putStream
+ * WebSocket : raw Socket -&gt; SSLSocket -&gt; WebSocketFrame{In,Out}putStream -&gt; WhatsAppDatagram{In,Out}putStream
  * </pre>
  *
  * <p>During the Noise XX handshake the datagram streams are in their
- * pre-handshake passthrough mode (no AES-GCM) and the handshake messages
- * are framed directly through {@link #writeHandshakeMessage(byte[], byte[])}
- * and {@link #readHandshakeMessage()}, which each subtype implements
- * against its own underlying transport (one WebSocket frame per
- * handshake message on Browser, one raw write on Desktop and Mobile).
- * Once the handshake derives the read and write keys they are installed
- * on the datagram streams via
- * {@link WhatsAppDatagramInputStream#setReadKey(javax.crypto.SecretKey)}
- * and {@link WhatsAppDatagramOutputStream#setWriteKey(javax.crypto.SecretKey)},
- * and every subsequent {@link #sendNode(Node)} is encoded straight into
+ * pre-handshake passthrough mode (no AES-GCM) and the handshake
+ * messages are framed directly through
+ * {@link WhatsAppSocketHandshake#writeClientHandshake} and
+ * {@link WhatsAppSocketHandshake#readServerHandshake}. Once the
+ * handshake derives the read and write keys they are installed on
+ * the datagram streams via
+ * {@link WhatsAppDatagramInputStream#setReadKey(SecretKey)} and
+ * {@link WhatsAppDatagramOutputStream#setWriteKey(SecretKey)}, and
+ * every subsequent {@link #sendNode(Node)} is encoded straight into
  * the wire by {@link NodeWriter#toStream(OutputStream)}; the reader
  * thread mirrors the same chain by decoding nodes from the datagram
- * input stream with {@link NodeReader#of(InputStream)}.
+ * input stream with {@link NodeReader#fromStream(InputStream)}.
  *
- * <p>HTTP {@code CONNECT} and SOCKS4/4a/5/5h proxies are supported on
- * every form factor through {@link HttpTunnel} and {@link SocksTunnel};
- * {@link WhatsAppProxy.Http.Secure} additionally TLS-wraps the proxy
- * hop before sending {@code CONNECT}.
+ * <p>HTTP {@code CONNECT} and SOCKS4/4a/5/5h proxies are supported
+ * on every form factor through {@link HttpTunnel} and
+ * {@link SocksTunnel}; {@link WhatsAppProxy.Http.Secure}
+ * additionally TLS-wraps the proxy hop before sending
+ * {@code CONNECT}.
  */
 @WhatsAppWebModule(moduleName = "WANoiseSocket")
 @WhatsAppWebModule(moduleName = "WAFrameSocket")
 public sealed abstract class WhatsAppSocketClient {
 
     /**
-     * 32-byte Ed25519 public key of the WhatsApp Noise root CA.
+     * The 32-byte Ed25519 public key of the WhatsApp Noise root CA.
      *
-     * <p>Acts as the trust anchor for the two-level certificate chain
+     * @apiNote
+     * Acts as the trust anchor for the two-level certificate chain
      * (root then intermediate then leaf) that the server presents
      * during the Noise handshake. The intermediate must have
      * {@code issuerSerial == 0} and be signed by this key; the leaf
@@ -110,171 +131,232 @@ public sealed abstract class WhatsAppSocketClient {
     );
 
     /**
-     * Two-byte WhatsApp protocol identifier ({@code "WA"}) prepended to
-     * every handshake prologue.
+     * The two-byte WhatsApp protocol identifier ({@code "WA"})
+     * prepended to every handshake prologue.
      */
     private static final byte[] WHATSAPP_VERSION_HEADER = "WA".getBytes(StandardCharsets.UTF_8);
 
     /**
-     * Number of bytes in the int24 length prefix that frames every
-     * datagram on the wire.
+     * The two-byte web version footer appended to
+     * {@link #WHATSAPP_VERSION_HEADER} to form the web handshake
+     * prologue.
+     *
+     * @apiNote
+     * Used by every companion (browser, Windows Electron, macOS
+     * native app).
+     */
+    private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};
+
+    /**
+     * The handshake prologue advertised by companion-device clients.
+     */
+    private static final byte[] WEB_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, WEB_VERSION);
+
+    /**
+     * The two-byte mobile version footer appended to
+     * {@link #WHATSAPP_VERSION_HEADER} to form the mobile handshake
+     * prologue.
+     */
+    private static final byte[] MOBILE_VERSION = new byte[]{5, NodeTokens.DICTIONARY_VERSION};
+
+    /**
+     * The handshake prologue advertised by native mobile clients
+     * (iOS, Android).
+     */
+    private static final byte[] MOBILE_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, MOBILE_VERSION);
+
+    /**
+     * The number of bytes in the {@code int24} length prefix that
+     * frames every datagram on the wire.
      */
     private static final int INT24_BYTE_SIZE = 3;
 
     /**
-     * Defensive upper bound on a single Noise handshake message.
+     * The defensive upper bound on a single Noise handshake message.
      */
     private static final int MAX_HANDSHAKE_MESSAGE_LENGTH = 0xFFFF;
 
     /**
-     * Connect timeout in milliseconds for the raw TCP open.
+     * The connect timeout in milliseconds for the raw TCP open.
      */
     private static final int CONNECT_TIMEOUT_MILLIS = 30_000;
 
     /**
-     * Builds a WhatsApp socket client tailored to the platform recorded
-     * in {@code store}.
+     * Builds a WhatsApp socket client tailored to the platform
+     * recorded in {@code store}, with the default Chrome-fingerprinted
+     * TLS configuration.
      *
-     * <p>Web and Windows companions get a WebSocket-over-TLS transport;
-     * the macOS desktop gets a TLS-wrapped {@link SSLSocket}; the native
-     * mobile clients get a plain {@link Socket}. The TLS configuration
-     * is the Chrome-style factory by default, which matches the JA3
-     * fingerprint WhatsApp expects.
+     * @apiNote
+     * Equivalent to
+     * {@link #newCipheredSocketClient(WhatsAppStore, WhatsAppSslContextFactory)}
+     * with {@link WhatsAppSslContextFactory#chrome()}; the standard
+     * entry point for Cobalt embedders that do not need a custom
+     * truststore or trust-all factory. {@code WEB} and {@code WINDOWS}
+     * platforms get the {@link WebSocket} transport over
+     * {@code web.whatsapp.com:443}; {@code IOS}, {@code IOS_BUSINESS},
+     * {@code ANDROID}, {@code ANDROID_BUSINESS} and {@code MACOS}
+     * platforms get the {@link Tcp} transport over
+     * {@code g.whatsapp.net:443}.
      *
      * @param store the WhatsApp store carrying the platform, identity
      *              keys and proxy configuration
-     * @return a socket client ready to {@link #connect(WhatsAppSocketListener)}
+     * @return a socket client ready to
+     *         {@link #connect(WhatsAppSocketListener)}
      */
     public static WhatsAppSocketClient newCipheredSocketClient(WhatsAppStore store) {
         return newCipheredSocketClient(store, WhatsAppSslContextFactory.chrome());
     }
 
     /**
-     * Variant of {@link #newCipheredSocketClient(WhatsAppStore)} that
-     * accepts a custom {@link WhatsAppSslContextFactory}.
+     * Builds a WhatsApp socket client tailored to the platform
+     * recorded in {@code store}, with the supplied SSL configuration.
+     *
+     * @apiNote
+     * Use this overload to substitute a trust-all factory in tests
+     * driving a locally-signed proxy, or a custom-truststore factory
+     * for enterprise CA pinning. The factory governs both the
+     * end-to-end TLS hop on {@link WebSocket} and the optional
+     * TLS-to-proxy hop on every form factor.
      *
      * @param store               the WhatsApp store
-     * @param sslContextFactory   factory used for the end-to-end TLS
-     *                            (the WebSocket on Web/Windows, the raw
-     *                            {@link SSLSocket} on macOS); also used
-     *                            for the optional TLS hop to a secure
-     *                            HTTP proxy on every form factor
+     * @param sslContextFactory   the SSL configuration applied to
+     *                            every TLS hop on this connection
      * @return a socket client wired with the supplied SSL context
      *         factory
+     * @throws NullPointerException if {@code store} or
+     *                              {@code sslContextFactory} is
+     *                              {@code null}
      */
     public static WhatsAppSocketClient newCipheredSocketClient(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
         Objects.requireNonNull(store, "store cannot be null");
         Objects.requireNonNull(sslContextFactory, "sslContextFactory cannot be null");
         var platform = store.device().platform();
         return switch (platform) {
-            case WEB, WINDOWS -> new Web.Browser(store, sslContextFactory);
-            case MACOS -> new Web.Desktop(store, sslContextFactory);
-            default -> new Mobile(store, sslContextFactory);
+            case WEB, WINDOWS -> new WebSocket(store, sslContextFactory);
+            default -> new Tcp(store, sslContextFactory);
         };
     }
 
     /**
-     * The WhatsApp store, owning the identity keys and platform metadata
-     * required to assemble the handshake payload.
+     * The WhatsApp store, owning the identity keys and platform
+     * metadata required to assemble the handshake payload.
      */
     final WhatsAppStore store;
 
     /**
-     * SSL configuration applied to every TLS hop on this connection,
-     * including the optional TLS-to-proxy hop performed by
-     * {@link #openTunneledSocket(InetSocketAddress)} and the end-to-end
-     * hop on {@link Web.Browser} / {@link Web.Desktop}. The same factory
-     * is used for both hops so a caller-supplied
+     * The SSL configuration applied to every TLS hop on this
+     * connection.
+     *
+     * @apiNote
+     * Covers both the optional TLS-to-proxy hop performed by
+     * {@link #openTunneledSocket(InetSocketAddress)} and the
+     * end-to-end hop on {@link WebSocket}. The same factory is used
+     * for both hops so a caller-supplied
      * {@link WhatsAppSslContextFactory} (typically a trust-all factory
-     * in tests, or a custom-truststore factory for enterprise CA pinning)
-     * applies consistently.
+     * in tests, or a custom-truststore factory for enterprise CA
+     * pinning) applies consistently.
      */
     final WhatsAppSslContextFactory sslContextFactory;
 
     /**
-     * Listener that receives deserialized nodes, errors and the close
-     * event, set on every {@link #connect(WhatsAppSocketListener)}.
+     * The listener that receives deserialized nodes, errors and the
+     * close event; set on every
+     * {@link #connect(WhatsAppSocketListener)}.
      */
     private WhatsAppSocketListener listener;
 
     /**
-     * Virtual thread that drains int24-framed datagrams off the
-     * transport after the Noise handshake completes.
+     * The virtual thread that drains {@code int24}-framed datagrams
+     * off the transport after the Noise handshake completes.
      */
     private volatile Thread readerThread;
 
     /**
-     * Sticky flag set by {@link #disconnect()} so the reader loop can
-     * distinguish an orderly local close from a server-side drop.
+     * The sticky flag set by {@link #disconnect()} so the reader loop
+     * can distinguish an orderly local close from a server-side drop.
      */
     private volatile boolean closed;
 
     /**
-     * Datagram input stream that strips the int24 prefix and decrypts
-     * inbound AES-GCM datagrams; lives on top of the subtype-specific
-     * transport stream chain built in {@link #openTransport()}.
-     * Subtypes assign this field directly inside {@code openTransport}.
+     * The datagram input stream that strips the {@code int24} prefix
+     * and decrypts inbound AES-GCM datagrams.
+     *
+     * @apiNote
+     * Lives on top of the subtype-specific transport stream chain
+     * built in {@link #openTransport()}; subtypes assign this field
+     * directly inside {@code openTransport}.
      */
     protected WhatsAppDatagramInputStream in;
 
     /**
-     * Datagram output stream that encrypts outbound plaintext with
-     * AES-GCM and writes the int24-prefixed ciphertext; lives on top of
-     * the subtype-specific transport stream chain built in
-     * {@link #openTransport()}. Subtypes assign this field directly
-     * inside {@code openTransport}.
+     * The datagram output stream that encrypts outbound plaintext
+     * with AES-GCM and writes the {@code int24}-prefixed ciphertext.
+     *
+     * @apiNote
+     * Lives on top of the subtype-specific transport stream chain
+     * built in {@link #openTransport()}; subtypes assign this field
+     * directly inside {@code openTransport}.
      */
     protected WhatsAppDatagramOutputStream out;
 
     /**
-     * AES write key derived from the Noise handshake; kept here so the
-     * package-private test accessor {@link #writeKey()} can verify the
-     * handshake completed and so {@link #disconnect()} can destroy the
-     * key material eagerly.
+     * The AES write key derived from the Noise handshake.
+     *
+     * @apiNote
+     * Kept here so the package-private test accessor
+     * {@link #writeKey()} can verify the handshake completed and so
+     * {@link #disconnect()} can destroy the key material eagerly.
      */
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     private volatile SecretKeySpec writeKey;
 
     /**
-     * AES read key derived from the Noise handshake; kept here for the
-     * same reasons as {@link #writeKey}.
+     * The AES read key derived from the Noise handshake; kept here
+     * for the same reasons as {@link #writeKey}.
      */
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     private volatile SecretKeySpec readKey;
 
     /**
-     * Mutex that serialises concurrent {@link #sendNode(Node)} callers
-     * so the datagram output stream observes one complete node-encode
-     * per acquired monitor, with no interleaving across senders.
+     * The mutex that serialises concurrent {@link #sendNode(Node)}
+     * callers so the datagram output stream observes one complete
+     * node-encode per acquired monitor, with no interleaving across
+     * senders.
      */
     private final Object writeLock = new Object();
 
     /**
-     * Wall-clock duration of the transport-open phase, captured between
-     * the entry of {@link #connect(WhatsAppSocketListener)} and the
-     * point at which the transport reports as open.
+     * The wall-clock duration of the transport-open phase, captured
+     * between the entry of {@link #connect(WhatsAppSocketListener)}
+     * and the point at which the transport reports as open.
      *
-     * <p>Mirrors WA Web's {@code socket_open} QPL span and the
-     * {@code WebcSocketConnectWamEvent.webcSocketConnectDuration} field.
+     * @apiNote
+     * Mirrors WA Web's {@code socket_open} QPL span and the
+     * {@code WebcSocketConnectWamEvent.webcSocketConnectDuration}
+     * field; exposed via {@link #socketConnectDuration()} for
+     * telemetry consumers.
      */
     private volatile Duration socketConnectDuration;
 
     /**
-     * Wall-clock duration of the Noise XX handshake, captured from the
-     * first byte of {@code ClientHello} until the read and write keys
-     * have been derived.
+     * The wall-clock duration of the Noise XX handshake, captured
+     * from the first byte of {@code ClientHello} until the read and
+     * write keys have been derived.
      *
-     * <p>Mirrors WA Web's {@code auth_handshake} QPL span and the
-     * {@code WebcSocketConnectWamEvent.webcAuthHandshakeDuration} field.
+     * @apiNote
+     * Mirrors WA Web's {@code auth_handshake} QPL span and the
+     * {@code WebcSocketConnectWamEvent.webcAuthHandshakeDuration}
+     * field; exposed via {@link #authHandshakeDuration()} for
+     * telemetry consumers.
      */
     private volatile Duration authHandshakeDuration;
 
     /**
-     * Common constructor invoked by every subtype.
+     * Constructs the common base shared by every subtype.
      *
      * @param store             the WhatsApp store
-     * @param sslContextFactory the SSL configuration applied to every
-     *                          TLS hop on this connection
+     * @param sslContextFactory the SSL configuration applied to
+     *                          every TLS hop on this connection
      */
     private WhatsAppSocketClient(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
         this.store = store;
@@ -285,8 +367,16 @@ public sealed abstract class WhatsAppSocketClient {
      * Opens the underlying connection and performs the Noise XX
      * handshake, dispatching decoded nodes to {@code listener}.
      *
-     * @param listener the callback that receives decoded nodes, errors
-     *                 and the close event
+     * @apiNote
+     * The single entry point for application code; combines transport
+     * open, Noise handshake and reader-thread start under one call so
+     * the caller has no separate ordering responsibility. The
+     * supplied {@code listener} is bound for the lifetime of this
+     * connection; subsequent reconnects need a fresh listener (or the
+     * same instance reset by the caller).
+     *
+     * @param listener the callback that receives decoded nodes,
+     *                 errors and the close event
      * @throws IOException if the connection or handshake fails
      */
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -308,6 +398,12 @@ public sealed abstract class WhatsAppSocketClient {
      * {@link #in} and {@link #out} fields with the freshly-built
      * datagram stream pair on top of it.
      *
+     * @implSpec
+     * Implementations must populate both {@link #in} and {@link #out}
+     * before returning; the caller assumes the datagram streams are
+     * ready for handshake traffic immediately after this method
+     * returns.
+     *
      * @throws IOException if the transport cannot be opened
      */
     abstract void openTransport() throws IOException;
@@ -315,39 +411,171 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Closes the transport opened by {@link #openTransport()}.
      *
+     * @implSpec
+     * Implementations should close idempotently and tolerate being
+     * invoked on a transport that was never successfully opened.
+     *
      * @throws IOException if the transport cannot be closed cleanly
      */
     abstract void closeTransport() throws IOException;
 
     /**
-     * Returns whether the transport opened by {@link #openTransport()}
-     * is currently open.
+     * Returns whether the transport opened by
+     * {@link #openTransport()} is currently open.
      *
      * @return {@code true} if connected, {@code false} otherwise
      */
     abstract boolean isTransportOpen();
 
     /**
-     * Verifies the server certificate carried in the Noise handshake.
+     * Reports whether this client uses the web-style handshake shape
+     * instead of the mobile-style handshake shape.
      *
-     * <p>Web and Desktop companions receive a two-level chain
-     * (intermediate plus leaf) and call into the chain verifier; Mobile
-     * receives a flat {@code NoiseCertificate}. Each subtype overrides
-     * this method with the matching verification.
+     * @apiNote
+     * The selection is driven by the device platform and is
+     * independent of the transport: {@code WEB}, {@code WINDOWS} and
+     * {@code MACOS} all use the web shape (the macOS native app does
+     * even though it rides on the {@link Tcp} transport), while
+     * {@code IOS} and {@code ANDROID} (and their business variants)
+     * use the mobile shape.
      *
-     * @param decryptedCertificate the decrypted certificate payload
-     * @param serverStaticKey      the 32-byte server static public key
-     *                             extracted from the Noise hello
-     * @throws IOException if the certificate is malformed or invalid
+     * @return {@code true} for the web handshake shape (web
+     *         prologue, two-level certificate chain, companion
+     *         {@code ClientPayload}), {@code false} for the mobile
+     *         handshake shape (mobile prologue, flat
+     *         {@code NoiseCertificate}, mobile {@code ClientPayload})
      */
-    abstract void verifyCertificateChain(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException;
+    private boolean isWebHandshakeShape() {
+        return switch (store.device().platform()) {
+            case WEB, WINDOWS, MACOS -> true;
+            case IOS, IOS_BUSINESS, ANDROID, ANDROID_BUSINESS -> false;
+            default -> throw new IllegalStateException("Unexpected value: " + store.device().platform());
+        };
+    }
 
     /**
-     * Returns the handshake prologue for the current client type.
+     * Returns the handshake prologue for the current client.
+     *
+     * @apiNote
+     * A defensive {@code clone()} of the static prologue is returned
+     * so the handshake can mutate the buffer (currently it does not,
+     * but the contract preserves safety against future caller-side
+     * mutation).
      *
      * @return the prologue bytes
      */
-    abstract byte[] handshakePrologue();
+    private byte[] handshakePrologue() {
+        return isWebHandshakeShape() ? WEB_PROLOGUE.clone() : MOBILE_PROLOGUE.clone();
+    }
+
+    /**
+     * Verifies the server certificate carried in the Noise
+     * handshake.
+     *
+     * @apiNote
+     * Companion-device clients (web shape) receive a two-level chain
+     * (intermediate plus leaf) verified against the WhatsApp root
+     * CA; native mobile clients (mobile shape) receive a flat
+     * {@code NoiseCertificate} verified against the same root.
+     *
+     * @param decryptedCertificate the decrypted certificate payload
+     * @param serverStaticKey      the 32-byte server static public
+     *                             key extracted from the Noise hello
+     * @throws IOException if the certificate is malformed or invalid
+     */
+    private void verifyCertificateChain(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException {
+        if (isWebHandshakeShape()) {
+            verifyWebCertificateChain(decryptedCertificate, serverStaticKey);
+        } else {
+            verifyMobileCertificate(decryptedCertificate, serverStaticKey);
+        }
+    }
+
+    /**
+     * Verifies the two-level companion certificate chain
+     * (intermediate plus leaf) against the embedded root CA.
+     *
+     * @param decryptedCertificate the decrypted certificate payload
+     * @param serverStaticKey      the 32-byte server static key
+     * @throws IOException if the chain is malformed or any signature
+     *         fails to verify
+     */
+    private static void verifyWebCertificateChain(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException {
+        var certChain = CertChainSpec.decode(decryptedCertificate);
+        var intermediate = certChain.intermediate()
+                .orElseThrow(() -> new IOException("Certificate chain missing intermediate certificate"));
+        var leaf = certChain.leaf()
+                .orElseThrow(() -> new IOException("Certificate chain missing leaf certificate"));
+
+        var intermediateDetails = intermediate.details()
+                .orElseThrow(() -> new IOException("Intermediate certificate missing details"));
+        var intermediateSignature = intermediate.signature()
+                .orElseThrow(() -> new IOException("Intermediate certificate missing signature"));
+        var parsedIntermediate = NoiseCertificateCertChainDetailsSpec.decode(intermediateDetails);
+
+        var intermediateIssuerSerial = parsedIntermediate.issuerSerial()
+                .orElseThrow(() -> new IOException("Intermediate certificate missing issuerSerial"));
+        if (intermediateIssuerSerial != 0) {
+            throw new IOException("Intermediate certificate was not issued by root CA, issuerSerial: " + intermediateIssuerSerial);
+        }
+
+        if (!Curve25519.verifySignature(NOISE_ROOT_CA_PUBLIC_KEY, intermediateDetails, ensureSignatureSize(intermediateSignature))) {
+            throw new IOException("Intermediate certificate has invalid signature");
+        }
+
+        var leafDetails = leaf.details()
+                .orElseThrow(() -> new IOException("Leaf certificate missing details"));
+        var leafSignature = leaf.signature()
+                .orElseThrow(() -> new IOException("Leaf certificate missing signature"));
+        var parsedLeaf = NoiseCertificateCertChainDetailsSpec.decode(leafDetails);
+
+        var leafIssuerSerial = parsedLeaf.issuerSerial()
+                .orElseThrow(() -> new IOException("Leaf certificate missing issuerSerial"));
+        var intermediateSerial = parsedIntermediate.serial()
+                .orElseThrow(() -> new IOException("Intermediate certificate missing serial"));
+        if (leafIssuerSerial != intermediateSerial) {
+            throw new IOException("Leaf certificate was not issued by intermediate");
+        }
+
+        var intermediateKey = parsedIntermediate.key()
+                .orElseThrow(() -> new IOException("Intermediate certificate missing key"));
+        if (!Curve25519.verifySignature(intermediateKey, leafDetails, ensureSignatureSize(leafSignature))) {
+            throw new IOException("Leaf certificate has invalid signature");
+        }
+
+        var leafKey = parsedLeaf.key()
+                .orElseThrow(() -> new IOException("Leaf certificate missing key"));
+        if (!Arrays.equals(leafKey, serverStaticKey)) {
+            throw new IOException("Leaf certificate key does not match handshake server static key");
+        }
+    }
+
+    /**
+     * Verifies the flat {@code NoiseCertificate} that the mobile
+     * server returns instead of a two-level chain.
+     *
+     * @param decryptedCertificate the decrypted certificate payload
+     * @param serverStaticKey      the 32-byte server static key
+     * @throws IOException if any check fails
+     */
+    private static void verifyMobileCertificate(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException {
+        var cert = NoiseCertificateSpec.decode(decryptedCertificate);
+        var details = cert.details()
+                .orElseThrow(() -> new IOException("NoiseCertificate missing details"));
+        var signature = cert.signature()
+                .orElseThrow(() -> new IOException("NoiseCertificate missing signature"));
+
+        if (!Curve25519.verifySignature(NOISE_ROOT_CA_PUBLIC_KEY, details, ensureSignatureSize(signature))) {
+            throw new IOException("NoiseCertificate has invalid signature");
+        }
+
+        var parsedDetails = NoiseCertificateDetailsSpec.decode(details);
+        var key = parsedDetails.key()
+                .orElseThrow(() -> new IOException("NoiseCertificate missing key"));
+        if (!Arrays.equals(key, serverStaticKey)) {
+            throw new IOException("NoiseCertificate key does not match handshake server static key");
+        }
+    }
 
     /**
      * Builds the serialized client payload sent inside the
@@ -355,11 +583,256 @@ public sealed abstract class WhatsAppSocketClient {
      *
      * @return the serialized client payload
      */
-    abstract byte[] handshakePayload();
+    private byte[] handshakePayload() {
+        var payload = isWebHandshakeShape() ? webClientPayload() : mobileClientPayload();
+        return ClientPayloadSpec.encode(payload);
+    }
+
+    /**
+     * Builds the companion-device client payload (web handshake
+     * shape).
+     *
+     * @apiNote
+     * Returns a reconnection payload when the store already carries a
+     * JID, otherwise a fresh pairing payload that includes
+     * registration data. Either way the {@code webInfo} sub-platform
+     * is derived from {@code store.device().platform()} via
+     * {@link #webSubPlatform()}.
+     *
+     * @return the client payload
+     */
+    private ClientPayload webClientPayload() {
+        var agent = webUserAgent();
+        var webInfo = new ClientPayloadWebInfoBuilder()
+                .webSubPlatform(webSubPlatform())
+                .build();
+        var jid = store.jid();
+        if (jid.isPresent()) {
+            return new ClientPayloadBuilder()
+                    .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                    .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
+                    .userAgent(agent)
+                    .webInfo(webInfo)
+                    .username(Long.parseLong(jid.get().user()))
+                    .passive(true)
+                    .pull(true)
+                    .device(jid.get().device())
+                    .build();
+        }
+        return new ClientPayloadBuilder()
+                .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
+                .userAgent(agent)
+                .webInfo(webInfo)
+                .devicePairingData(createRegisterData())
+                .passive(false)
+                .pull(false)
+                .build();
+    }
+
+    /**
+     * Builds the user agent advertised inside the companion
+     * handshake payload (web handshake shape).
+     *
+     * @apiNote
+     * On the Windows hybrid shell the six-digit {@code windowsBuild}
+     * URL parameter is copied into {@code appVersion.quaternary} by
+     * {@code WhatsAppWindowsClientInfo}; when six characters long,
+     * the build halves overwrite the mcc/mnc fields in the user
+     * agent. This method mirrors only the mcc/mnc override here; the
+     * quaternary itself is already set on the cached
+     * {@code ClientAppVersion}.
+     *
+     * @return the user agent value
+     */
+    private UserAgent webUserAgent() {
+        var appVersion = store.clientVersion();
+        var mcc = "000";
+        var mnc = "000";
+        var devicePlatform = store.device().platform();
+        if (devicePlatform == ClientPlatformType.WINDOWS
+                && appVersion.quaternary().isPresent()) {
+            var buildStr = Integer.toString(appVersion.quaternary().getAsInt());
+            if (buildStr.length() == 6) {
+                mcc = buildStr.substring(0, 3);
+                mnc = buildStr.substring(3, 6);
+            }
+        }
+        return new ClientPayloadUserAgentBuilder()
+                .platform(webUserAgentPlatform())
+                .appVersion(appVersion)
+                .mcc(mcc)
+                .mnc(mnc)
+                .releaseChannel(store.releaseChannel())
+                .localeLanguageIso6391("en")
+                .localeCountryIso31661Alpha2("US")
+                .deviceType(ClientPayload.ClientType.PHONE)
+                .deviceModelType(store.device().modelId())
+                .build();
+    }
+
+    /**
+     * Returns the {@link ClientPlatformType} advertised in the user
+     * agent for the web handshake shape.
+     *
+     * @apiNote
+     * The Windows hybrid shell keeps
+     * {@code UserAgent.platform == WEB} and only distinguishes
+     * itself from a browser through the
+     * {@code WebInfo.webSubPlatform} field; the macOS native app
+     * advertises {@code MACOS}; the browser advertises {@code WEB}.
+     *
+     * @return the platform value advertised at handshake time
+     */
+    private ClientPlatformType webUserAgentPlatform() {
+        return switch (store.device().platform()) {
+            case WINDOWS, WEB -> ClientPlatformType.WEB;
+            case MACOS -> ClientPlatformType.MACOS;
+            default -> throw new IllegalStateException(
+                    "Unexpected web handshake platform: " + store.device().platform());
+        };
+    }
+
+    /**
+     * Returns the {@code WebSubPlatform} that this client advertises
+     * inside the {@code webInfo} block of the companion handshake.
+     *
+     * @return the sub-platform value advertised at handshake time
+     */
+    private ClientPayload.WebInfo.WebSubPlatform webSubPlatform() {
+        return switch (store.device().platform()) {
+            case WEB -> ClientPayload.WebInfo.WebSubPlatform.WEB_BROWSER;
+            case WINDOWS -> ClientPayload.WebInfo.WebSubPlatform.WIN_HYBRID;
+            case MACOS -> ClientPayload.WebInfo.WebSubPlatform.DARWIN;
+            default -> throw new IllegalStateException(
+                    "Unexpected web handshake platform: " + store.device().platform());
+        };
+    }
+
+    /**
+     * Creates the device-pairing registration data for a new
+     * companion-device session, including the encoded device
+     * properties.
+     *
+     * @return the registration data
+     */
+    private DevicePairingRegistrationData createRegisterData() {
+        return new ClientPayloadDevicePairingRegistrationDataBuilder()
+                .buildHash(store.clientVersion().toHash())
+                .eRegid(DataUtils.intToBytes(store.registrationId(), 4))
+                .eKeytype(DataUtils.intToBytes(SignalIdentityPublicKey.type(), 1))
+                .eIdent(store.identityKeyPair().publicKey().toEncodedPoint())
+                .eSkeyId(DataUtils.intToBytes(store.signedKeyPair().id(), 3))
+                .eSkeyVal(store.signedKeyPair().publicKey().toEncodedPoint())
+                .eSkeySig(store.signedKeyPair().signature())
+                .deviceProps(createCompanionProps())
+                .build();
+    }
+
+    /**
+     * Creates and encodes the companion device properties.
+     *
+     * @apiNote
+     * Carries the history sync configuration flags that tell the
+     * server which categories of history data to deliver to this
+     * companion; the {@code platformType} is derived from the
+     * store's device platform so {@code WINDOWS} maps to
+     * {@code UWP}, {@code MACOS} to {@code IOS_CATALYST}, etc.
+     *
+     * @return the encoded companion device properties
+     */
+    private byte[] createCompanionProps() {
+        var historyLength = store.webHistoryPolicy()
+                .orElse(WhatsAppWebClientHistory.standard(true));
+        var config = new DevicePropsHistorySyncConfigBuilder()
+                .inlineInitialPayloadInE2EeMsg(true)
+                .supportBotUserAgentChatHistory(true)
+                .supportCagReactionsAndPolls(true)
+                .supportRecentSyncChunkMessageCountTuning(true)
+                .supportHostedGroupMsg(true)
+                .supportBizHostedMsg(true)
+                .supportFbidBotChatHistory(true)
+                .supportMessageAssociation(true)
+                .supportCallLogHistory(store.device().platform() == ClientPlatformType.WINDOWS)
+                .supportGroupHistory(true)
+                .storageQuotaMb(historyLength.size())
+                .fullSyncSizeMbLimit(historyLength.size())
+                .build();
+        var platformType = switch (store.device().platform()) {
+            case IOS, IOS_BUSINESS -> DevicePlatformType.IOS_PHONE;
+            case ANDROID, ANDROID_BUSINESS -> DevicePlatformType.ANDROID_PHONE;
+            case WINDOWS -> DevicePlatformType.UWP;
+            case MACOS -> DevicePlatformType.IOS_CATALYST;
+            case WEB -> DevicePlatformType.CHROME;
+            default -> throw new IllegalStateException("Unexpected value: " + store.device().platform());
+        };
+        var props = new DevicePropsBuilder()
+                .os(store.name())
+                .platformType(platformType)
+                .requireFullSync(historyLength.isExtended())
+                .historySyncConfig(config)
+                .version(store.clientVersion())
+                .build();
+        return DevicePropsSpec.encode(props);
+    }
+
+    /**
+     * Builds the mobile client payload (mobile handshake shape).
+     *
+     * @return the client payload
+     */
+    private ClientPayload mobileClientPayload() {
+        var agent = mobileUserAgent();
+        var phoneNumber = store
+                .phoneNumber()
+                .orElseThrow(() -> new InternalError("Phone number was not set"));
+        return new ClientPayloadBuilder()
+                .username(phoneNumber)
+                .passive(false)
+                .pushName(store.registered() ? store.name() : null)
+                .userAgent(agent)
+                .shortConnect(true)
+                .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
+                .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
+                .connectAttemptCount(0)
+                .device(0)
+                .oc(false)
+                .build();
+    }
+
+    /**
+     * Builds the mobile-specific user agent, including the device
+     * manufacturer, model, OS version and FDID.
+     *
+     * @return the user agent value
+     */
+    private UserAgent mobileUserAgent() {
+        return new ClientPayloadUserAgentBuilder()
+                .platform(store.device().platform())
+                .appVersion(store.clientVersion())
+                .mcc("000")
+                .mnc("000")
+                .osVersion(store.device().osDeviceAppVersion().toString())
+                .manufacturer(store.device().manufacturer())
+                .device(store.device().model().replaceAll("_", " "))
+                .osBuildNumber(store.device().osBuildNumber())
+                .phoneId(store.fdid().toString().toUpperCase())
+                .releaseChannel(store.releaseChannel())
+                .localeLanguageIso6391("en")
+                .localeCountryIso31661Alpha2("US")
+                .deviceType(ClientPayload.ClientType.PHONE)
+                .deviceModelType(store.device().modelId())
+                .build();
+    }
 
     /**
      * Returns the measured transport-open duration for the current
      * session.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code socket_open} QPL span; useful for
+     * embedders that mirror WA Web's telemetry surface or for local
+     * diagnostics.
      *
      * @return the duration, or {@code null} if the transport has not
      *         finished opening yet
@@ -372,6 +845,11 @@ public sealed abstract class WhatsAppSocketClient {
      * Returns the measured Noise handshake duration for the current
      * session.
      *
+     * @apiNote
+     * Mirrors WA Web's {@code auth_handshake} QPL span; useful for
+     * embedders that mirror WA Web's telemetry surface or for local
+     * diagnostics.
+     *
      * @return the duration, or {@code null} if the handshake has not
      *         finished yet
      */
@@ -382,12 +860,13 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Returns the AES write key derived by the Noise XX handshake.
      *
-     * <p>Package-private hook for in-process tests that assert the
+     * @apiNote
+     * Package-private hook for in-process tests that assert the
      * handshake completed; not exposed publicly because the key is
      * sensitive material destroyed by {@link #disconnect()}.
      *
-     * @return the write key, or {@code null} if the handshake has not
-     *         completed or has been torn down
+     * @return the write key, or {@code null} if the handshake has
+     *         not completed or has been torn down
      */
     final SecretKeySpec writeKey() {
         return writeKey;
@@ -396,25 +875,34 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Returns the AES read key derived by the Noise XX handshake.
      *
-     * <p>Package-private hook for in-process tests that assert the
+     * @apiNote
+     * Package-private hook for in-process tests that assert the
      * handshake completed; not exposed publicly because the key is
      * sensitive material destroyed by {@link #disconnect()}.
      *
-     * @return the read key, or {@code null} if the handshake has not
-     *         completed or has been torn down
+     * @return the read key, or {@code null} if the handshake has
+     *         not completed or has been torn down
      */
     final SecretKeySpec readKey() {
         return readKey;
     }
 
     /**
-     * Disconnects from the server and destroys the AES read and write
-     * keys.
+     * Disconnects from the server and destroys the AES read and
+     * write keys.
      *
-     * <p>WA Web relies on the browser's garbage collector to dispose of
-     * the keys; Cobalt destroys them eagerly via
-     * {@link SecretKeySpec#destroy()} so the secrets do not linger in
-     * heap memory beyond the lifetime of the connection.
+     * @apiNote
+     * Idempotent: safe to call on an already-closed client or on one
+     * that never completed its handshake. The
+     * {@link WhatsAppSocketListener#onClose()} callback fires from
+     * the reader thread once the underlying transport surfaces the
+     * close.
+     *
+     * @implNote
+     * This implementation destroys the AES keys eagerly via
+     * {@link SecretKeySpec#destroy()} so the secrets do not linger
+     * in heap memory beyond the lifetime of the connection; WA Web
+     * relies on the browser's garbage collector for the same effect.
      */
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     public final void disconnect() {
@@ -445,6 +933,11 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Returns whether the underlying connection is currently open.
      *
+     * @apiNote
+     * Combines the local {@link #closed} flag with the transport's
+     * own open check so a server-side drop or a local
+     * {@link #disconnect()} both surface as {@code false}.
+     *
      * @return {@code true} if connected, {@code false} otherwise
      */
     public final boolean isConnected() {
@@ -452,23 +945,29 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Serialises a {@link Node} and sends it as one encrypted datagram.
+     * Serialises a {@link Node} and sends it as one encrypted
+     * datagram.
      *
-     * <p>The encoding is streamed straight through the datagram output
-     * stream's cipher into the wire: no intermediate buffer is held by
-     * Cobalt beyond the cipher's fixed-size chunk buffer.
-     * {@link #writeLock} serialises concurrent senders so each datagram
-     * is one atomic operation from {@link WhatsAppDatagramOutputStream#beginMessage(int)}
+     * @apiNote
+     * The standard send primitive for every outbound stanza: the
+     * encoding is streamed straight through the datagram output
+     * stream's cipher into the wire, with no intermediate buffer
+     * held by Cobalt beyond the cipher's fixed-size chunk buffer.
+     * Concurrent callers are serialised by {@link #writeLock} so
+     * each datagram is one atomic operation from
+     * {@link WhatsAppDatagramOutputStream#beginDatagram(byte[], int)}
      * through the closing {@link OutputStream#flush()}.
      *
      * @param node the node to send
-     * @throws IOException if serialisation or the underlying write fails
+     * @throws IOException if serialisation or the underlying write
+     *         fails
      */
     @WhatsAppWebExport(moduleName = "WAFrameSocket", exports = "FrameSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     public final void sendNode(Node node) throws IOException {
         Objects.requireNonNull(node, "node cannot be null");
         synchronized (writeLock) {
+            out.beginDatagram(null, NodeSizer.sizeOf(node));
             try (var encoder = NodeWriter.toStream(out)) {
                 encoder.writeNode(node);
             }
@@ -478,12 +977,14 @@ public sealed abstract class WhatsAppSocketClient {
     /**
      * Runs the full Noise XX handshake against the connected server.
      *
-     * <p>Sends the {@code ClientHello}, processes the server's
+     * @apiNote
+     * Sends the {@code ClientHello}, processes the server's
      * {@code ServerHello}, verifies the certificate chain via
      * {@link #verifyCertificateChain(byte[], byte[])}, sends the
-     * {@code ClientFinish} and finally splits the derived 64-byte key
-     * material into the read and write AES keys, installing them on the
-     * datagram streams so subsequent traffic is enciphered.
+     * {@code ClientFinish} and finally splits the derived 64-byte
+     * key material into the read and write AES keys, installing
+     * them on the datagram streams so subsequent traffic is
+     * enciphered.
      *
      * @throws IOException if the handshake fails or any of its
      *         underlying I/O operations does
@@ -494,7 +995,6 @@ public sealed abstract class WhatsAppSocketClient {
         var prologue = handshakePrologue();
 
         try (var handshake = new WhatsAppSocketHandshake(in, out, prologue)) {
-            // Send client hello
             var clientHelloMessage = new HandshakeMessageBuilder()
                     .clientHello(new HandshakeMessageClientHelloBuilder()
                             .ephemeral(ephemeralKeyPair.publicKey().toEncodedPoint())
@@ -503,7 +1003,6 @@ public sealed abstract class WhatsAppSocketClient {
             handshake.updateHash(ephemeralKeyPair.publicKey().toEncodedPoint());
             handshake.writeClientHandshake(clientHelloMessage);
 
-            // Read server hello
             var serverHello = handshake.readServerHandshake()
                     .serverHello()
                     .orElseThrow(() -> new IOException("Missing server hello"));
@@ -530,10 +1029,8 @@ public sealed abstract class WhatsAppSocketClient {
                     .orElseThrow(() -> new IOException("Missing server payload"));
             var decryptedCertificate = handshake.cipher(payload, false);
 
-            // Verify certificate chain
             verifyCertificateChain(decryptedCertificate, decodedStaticText);
 
-            // Send client finish
             var noiseKeyPair = store.noiseKeyPair();
             var encodedKey = handshake.cipher(noiseKeyPair.publicKey().toEncodedPoint(), true);
             var sharedPrivate = Curve25519.sharedKey(
@@ -550,9 +1047,6 @@ public sealed abstract class WhatsAppSocketClient {
                     .build();
             handshake.writeClientHandshake(clientFinishMessage);
 
-            // Derive read/write keys and install them on the datagram
-            // streams so subsequent reads decrypt and subsequent writes
-            // encrypt under the Noise-derived AES keys.
             var keys = handshake.finish();
             this.writeKey = new SecretKeySpec(keys, 0, 32, "AES");
             this.readKey = new SecretKeySpec(keys, 32, 32, "AES");
@@ -572,7 +1066,8 @@ public sealed abstract class WhatsAppSocketClient {
      *
      * @param signature the raw signature bytes
      * @return {@code signature}, returned for fluent chaining
-     * @throws IOException if the signature is not exactly 64 bytes long
+     * @throws IOException if the signature is not exactly 64 bytes
+     *         long
      */
     private static byte[] ensureSignatureSize(byte[] signature) throws IOException {
         if (signature.length != 64) {
@@ -582,9 +1077,9 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Spawns the reader virtual thread that drains datagrams from the
-     * datagram input stream, decodes each one into a {@link Node} and
-     * dispatches it to the application listener.
+     * Spawns the reader virtual thread that drains datagrams from
+     * the datagram input stream, decodes each one into a
+     * {@link Node} and dispatches it to the application listener.
      */
     private void startReaderThread() {
         this.readerThread = Thread.ofVirtual()
@@ -593,12 +1088,21 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Continuously decodes nodes from the datagram input stream until
-     * the transport is closed or a fatal error is observed.
+     * Continuously decodes nodes from the datagram input stream
+     * until the transport is closed or a fatal error is observed.
      *
-     * <p>A bad MAC tears down the connection through
+     * @apiNote
+     * A bad MAC tears down the connection through
      * {@link WhatsAppSessionException.BadMac}; any other failure
      * surfaces as {@link WhatsAppStreamException.MalformedNode}.
+     * Errors observed after {@link #disconnect()} are suppressed so
+     * orderly shutdown does not spam the listener with spurious
+     * failures.
+     *
+     * @implNote
+     * This implementation runs on a dedicated virtual thread so the
+     * carrier thread is never blocked on socket I/O; one reader is
+     * spawned per {@link #connect(WhatsAppSocketListener)} call.
      */
     @WhatsAppWebExport(moduleName = "WAFrameSocket", exports = "FrameSocket", adaptation = WhatsAppAdaptation.ADAPTED)
     @WhatsAppWebExport(moduleName = "WANoiseSocket", exports = "NoiseSocket", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -606,7 +1110,7 @@ public sealed abstract class WhatsAppSocketClient {
         try {
             while (!closed && isTransportOpen()) {
                 Node node;
-                try (var decoder = NodeReader.of(in)) {
+                try (var decoder = NodeReader.fromStream(in)) {
                     node = decoder.decode();
                 }
                 listener.onNode(node);
@@ -615,6 +1119,10 @@ public sealed abstract class WhatsAppSocketClient {
             if (!closed) {
                 listener.onError(e);
                 disconnect();
+            }
+        } catch (SocketException e) {
+            if (!closed) {
+                listener.onError(new WhatsAppConnectionException("Connection failed", e));
             }
         } catch (IOException e) {
             if (!closed) {
@@ -630,7 +1138,7 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Returns the configured proxy, if any.
+     * Returns the configured proxy for this client, if any.
      *
      * @return the proxy or {@code null} if none is configured
      */
@@ -639,26 +1147,29 @@ public sealed abstract class WhatsAppSocketClient {
     }
 
     /**
-     * Opens a blocking {@link Socket} to the supplied endpoint, routing
-     * via the configured proxy when present and dispatching to the
-     * appropriate tunnel implementation in {@code socket.tunnel}.
+     * Opens a blocking {@link Socket} to the supplied endpoint,
+     * routing via the configured proxy when present and dispatching
+     * to the appropriate tunnel implementation in
+     * {@code socket.tunnel}.
      *
-     * <p>Three proxy shapes are supported:
+     * @apiNote
+     * Three proxy shapes are supported:
      * <ul>
-     *   <li>{@link WhatsAppProxy.Http.Plain} / {@link WhatsAppProxy.Http.Secure}
-     *       — {@link HttpTunnel} handles both, internally TLS-wrapping
-     *       the proxy hop for the secure variant before sending
-     *       {@code CONNECT}.
-     *   <li>{@link WhatsAppProxy.Socks} (V4 / V4a / V5 / V5h) —
-     *       {@link SocksTunnel} runs the protocol-specific handshake
-     *       on the raw socket.
+     *   <li>{@link WhatsAppProxy.Http.Plain} or
+     *       {@link WhatsAppProxy.Http.Secure}, handled by
+     *       {@link HttpTunnel}, which internally TLS-wraps the proxy
+     *       hop for the secure variant before sending
+     *       {@code CONNECT}.</li>
+     *   <li>{@link WhatsAppProxy.Socks} (V4, V4a, V5 or V5h),
+     *       handled by {@link SocksTunnel} which runs the
+     *       protocol-specific handshake on the raw socket.</li>
      * </ul>
+     * For a {@link WhatsAppProxy.Http.Secure} proxy the returned
+     * socket is the TLS-wrapped {@link SSLSocket}; in all other
+     * cases the raw socket is returned.
      *
      * @param target the final destination the tunnel should reach
-     * @return the connected socket, already past the proxy
-     *         handshake; for an {@link WhatsAppProxy.Http.Secure}
-     *         proxy this is the TLS-wrapped {@link SSLSocket}, in all
-     *         other cases the raw socket
+     * @return the connected socket, already past the proxy handshake
      * @throws IOException if any step of the connect or tunnel fails
      */
     final Socket openTunneledSocket(InetSocketAddress target) throws IOException {
@@ -668,6 +1179,8 @@ public sealed abstract class WhatsAppSocketClient {
                 : new InetSocketAddress(proxy.host(), proxy.port());
 
         var raw = new Socket();
+        raw.setTcpNoDelay(true);
+        raw.setKeepAlive(true);
         raw.connect(firstHop, CONNECT_TIMEOUT_MILLIS);
 
         if (proxy == null) {
@@ -690,557 +1203,71 @@ public sealed abstract class WhatsAppSocketClient {
         }
     }
 
-
     /**
-     * Shared base for every companion-device socket client.
+     * Raw-TCP socket client for {@code g.whatsapp.net:443}.
      *
-     * <p>{@link Browser} (WebSocket over TLS) and {@link Desktop} (raw
-     * TCP + TLS for the macOS app) share the {@code WEB_PROLOGUE}, the
-     * two-level certificate chain verification against the WhatsApp
-     * root CA, and the handshake payload shape (user agent plus
-     * {@code webInfo} block plus either login credentials or
-     * registration data with companion device props).
-     *
-     * <p>Subtypes diverge on the transport (hand-rolled WebSocket vs
-     * {@link SSLSocket}) and on the {@link #getWebSubPlatform()}
-     * advertised inside the {@code webInfo} block.
-     */
-    static abstract sealed class Web extends WhatsAppSocketClient {
-
-        /**
-         * Two-byte web version footer appended to {@link #WHATSAPP_VERSION_HEADER}
-         * to form the handshake prologue.
-         */
-        private static final byte[] WEB_VERSION = new byte[]{6, NodeTokens.DICTIONARY_VERSION};
-
-        /**
-         * Handshake prologue shared by every companion client.
-         */
-        private static final byte[] WEB_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, WEB_VERSION);
-
-        /**
-         * Common constructor invoked by the companion subtypes.
-         *
-         * @param store             the WhatsApp store
-         * @param sslContextFactory the SSL configuration for every TLS
-         *                          hop on this connection
-         */
-        Web(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
-            super(store, sslContextFactory);
-        }
-
-        /**
-         * Returns the {@code ClientPlatformType} that this client
-         * advertises in the user agent.
-         *
-         * @return the platform value advertised at handshake time
-         */
-        abstract ClientPlatformType getPlatform();
-
-        /**
-         * Returns the {@code WebSubPlatform} that this client advertises
-         * inside the {@code webInfo} block.
-         *
-         * <p>Browsers report {@code WEB_BROWSER}; native desktop apps
-         * report one of {@code DARWIN}, {@code WIN_HYBRID}, etc.
-         *
-         * @return the sub-platform value advertised at handshake time
-         */
-        abstract ClientPayload.WebInfo.WebSubPlatform getWebSubPlatform();
-
-        @Override
-        final byte[] handshakePrologue() {
-            return WEB_PROLOGUE.clone();
-        }
-
-        /**
-         * Verifies a two-level companion certificate chain (intermediate
-         * plus leaf) against the embedded root CA.
-         *
-         * @param decryptedCertificate the decrypted certificate payload
-         * @param serverStaticKey      the 32-byte server static key
-         * @throws IOException if the chain is malformed or any signature
-         *         fails to verify
-         */
-        @Override
-        final void verifyCertificateChain(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException {
-            var certChain = CertChainSpec.decode(decryptedCertificate);
-            var intermediate = certChain.intermediate()
-                    .orElseThrow(() -> new IOException("Certificate chain missing intermediate certificate"));
-            var leaf = certChain.leaf()
-                    .orElseThrow(() -> new IOException("Certificate chain missing leaf certificate"));
-
-            var intermediateDetails = intermediate.details()
-                    .orElseThrow(() -> new IOException("Intermediate certificate missing details"));
-            var intermediateSignature = intermediate.signature()
-                    .orElseThrow(() -> new IOException("Intermediate certificate missing signature"));
-            var parsedIntermediate = NoiseCertificateCertChainDetailsSpec.decode(intermediateDetails);
-
-            var intermediateIssuerSerial = parsedIntermediate.issuerSerial()
-                    .orElseThrow(() -> new IOException("Intermediate certificate missing issuerSerial"));
-            if (intermediateIssuerSerial != 0) {
-                throw new IOException("Intermediate certificate was not issued by root CA, issuerSerial: " + intermediateIssuerSerial);
-            }
-
-            if (!Curve25519.verifySignature(NOISE_ROOT_CA_PUBLIC_KEY, intermediateDetails, ensureSignatureSize(intermediateSignature))) {
-                throw new IOException("Intermediate certificate has invalid signature");
-            }
-
-            var leafDetails = leaf.details()
-                    .orElseThrow(() -> new IOException("Leaf certificate missing details"));
-            var leafSignature = leaf.signature()
-                    .orElseThrow(() -> new IOException("Leaf certificate missing signature"));
-            var parsedLeaf = NoiseCertificateCertChainDetailsSpec.decode(leafDetails);
-
-            var leafIssuerSerial = parsedLeaf.issuerSerial()
-                    .orElseThrow(() -> new IOException("Leaf certificate missing issuerSerial"));
-            var intermediateSerial = parsedIntermediate.serial()
-                    .orElseThrow(() -> new IOException("Intermediate certificate missing serial"));
-            if (leafIssuerSerial != intermediateSerial) {
-                throw new IOException("Leaf certificate was not issued by intermediate");
-            }
-
-            var intermediateKey = parsedIntermediate.key()
-                    .orElseThrow(() -> new IOException("Intermediate certificate missing key"));
-            if (!Curve25519.verifySignature(intermediateKey, leafDetails, ensureSignatureSize(leafSignature))) {
-                throw new IOException("Leaf certificate has invalid signature");
-            }
-
-            var leafKey = parsedLeaf.key()
-                    .orElseThrow(() -> new IOException("Leaf certificate missing key"));
-            if (!Arrays.equals(leafKey, serverStaticKey)) {
-                throw new IOException("Leaf certificate key does not match handshake server static key");
-            }
-        }
-
-        /**
-         * Builds the serialized companion-device handshake payload by
-         * choosing between login and registration based on whether the
-         * store already carries a JID.
-         *
-         * @return the serialized client payload
-         */
-        @Override
-        final byte[] handshakePayload() {
-            var agent = getUserAgent();
-            var payload = getClientPayload(agent);
-            return ClientPayloadSpec.encode(payload);
-        }
-
-        /**
-         * Builds the user agent advertised inside the handshake payload.
-         *
-         * @return the user agent value
-         */
-        private UserAgent getUserAgent() {
-            var appVersion = store.clientVersion();
-            var mcc = "000";
-            var mnc = "000";
-            // On the Windows hybrid shell the six-digit windowsBuild
-            // URL parameter is copied into appVersion.quaternary and,
-            // when six characters long, its halves overwrite mcc and
-            // mnc. The quaternary is already set on the cached
-            // ClientAppVersion by WhatsAppWindowsClientInfo, so this
-            // block only mirrors the mcc/mnc override.
-            if (store.device().platform() == ClientPlatformType.WINDOWS
-                    && appVersion.quaternary().isPresent()) {
-                var buildStr = Integer.toString(appVersion.quaternary().getAsInt());
-                if (buildStr.length() == 6) {
-                    mcc = buildStr.substring(0, 3);
-                    mnc = buildStr.substring(3, 6);
-                }
-            }
-            return new ClientPayloadUserAgentBuilder()
-                    .platform(getPlatform())
-                    .appVersion(appVersion)
-                    .mcc(mcc)
-                    .mnc(mnc)
-                    .releaseChannel(store.releaseChannel())
-                    .localeLanguageIso6391("en")
-                    .localeCountryIso31661Alpha2("US")
-                    .deviceType(ClientPayload.ClientType.PHONE)
-                    .deviceModelType(store.device().modelId())
-                    .build();
-        }
-
-        /**
-         * Builds the companion-device client payload.
-         *
-         * <p>Returns a reconnection payload when the store already
-         * carries a JID, otherwise a fresh pairing payload that
-         * includes registration data. Either way the {@code webInfo}
-         * sub-platform is the value returned by
-         * {@link #getWebSubPlatform()}.
-         *
-         * @param agent the user agent value
-         * @return the client payload
-         */
-        private ClientPayload getClientPayload(UserAgent agent) {
-            var webInfo = new ClientPayloadWebInfoBuilder()
-                    .webSubPlatform(getWebSubPlatform())
-                    .build();
-            var jid = store.jid();
-            if (jid.isPresent()) {
-                return new ClientPayloadBuilder()
-                        .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
-                        .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
-                        .userAgent(agent)
-                        .webInfo(webInfo)
-                        .username(Long.parseLong(jid.get().user()))
-                        .passive(true)
-                        .pull(true)
-                        .device(jid.get().device())
-                        .build();
-            } else {
-                return new ClientPayloadBuilder()
-                        .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
-                        .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
-                        .userAgent(agent)
-                        .webInfo(webInfo)
-                        .devicePairingData(createRegisterData())
-                        .passive(false)
-                        .pull(false)
-                        .build();
-            }
-        }
-
-        /**
-         * Creates the device-pairing registration data for a new
-         * companion-device session, including the encoded device
-         * properties.
-         *
-         * @return the registration data
-         */
-        private DevicePairingRegistrationData createRegisterData() {
-            return new ClientPayloadDevicePairingRegistrationDataBuilder()
-                    .buildHash(store.clientVersion().toHash())
-                    .eRegid(DataUtils.intToBytes(store.registrationId(), 4))
-                    .eKeytype(DataUtils.intToBytes(SignalIdentityPublicKey.type(), 1))
-                    .eIdent(store.identityKeyPair().publicKey().toEncodedPoint())
-                    .eSkeyId(DataUtils.intToBytes(store.signedKeyPair().id(), 3))
-                    .eSkeyVal(store.signedKeyPair().publicKey().toEncodedPoint())
-                    .eSkeySig(store.signedKeyPair().signature())
-                    .deviceProps(createCompanionProps())
-                    .build();
-        }
-
-        /**
-         * Creates and encodes the companion device properties.
-         *
-         * <p>Carries the history sync configuration flags that tell the
-         * server which categories of history data to deliver to this
-         * companion. The {@code platformType} is derived from the
-         * store's device platform.
-         *
-         * @return the encoded companion device properties
-         */
-        private byte[] createCompanionProps() {
-            var historyLength = store.webHistoryPolicy()
-                    .orElse(WhatsAppWebClientHistory.standard(true));
-            var config = new DevicePropsHistorySyncConfigBuilder()
-                    .inlineInitialPayloadInE2EeMsg(true)
-                    .supportBotUserAgentChatHistory(true)
-                    .supportCagReactionsAndPolls(true)
-                    .supportRecentSyncChunkMessageCountTuning(true)
-                    .supportHostedGroupMsg(true)
-                    .supportBizHostedMsg(true)
-                    .supportFbidBotChatHistory(true)
-                    .supportMessageAssociation(true)
-                    .supportCallLogHistory(store.device().platform() == ClientPlatformType.WINDOWS)
-                    .supportGroupHistory(true)
-                    .storageQuotaMb(historyLength.size())
-                    .fullSyncSizeMbLimit(historyLength.size())
-                    .build();
-            var platformType = switch (store.device().platform()) {
-                case IOS, IOS_BUSINESS -> DevicePlatformType.IOS_PHONE;
-                case ANDROID, ANDROID_BUSINESS -> DevicePlatformType.ANDROID_PHONE;
-                case WINDOWS -> DevicePlatformType.UWP;
-                case MACOS -> DevicePlatformType.IOS_CATALYST;
-                case WEB -> DevicePlatformType.CHROME;
-                default -> throw new IllegalStateException("Unexpected value: " + store.device().platform());
-            };
-            var props = new DevicePropsBuilder()
-                    .os(store.name())
-                    .platformType(platformType)
-                    .requireFullSync(historyLength.isExtended())
-                    .historySyncConfig(config)
-                    .version(store.clientVersion())
-                    .build();
-            return DevicePropsSpec.encode(props);
-        }
-
-        /**
-         * Companion client for browser tabs and the Windows hybrid
-         * desktop shell.
-         *
-         * <p>Connects to {@code wss://web.whatsapp.com/ws/chat} by
-         * opening a raw {@link Socket}, optionally tunnelling it
-         * through an HTTP or SOCKS proxy via
-         * {@link WhatsAppSocketClient#openTunneledSocket(InetSocketAddress)},
-         * TLS-wrapping it with the supplied
-         * {@link WhatsAppSslContextFactory}, and then driving the
-         * RFC 6455 upgrade handshake via {@link WebSocketUpgrade}.
-         * Once the upgrade completes, the {@link WebSocketFrameInputStream}
-         * and {@link WebSocketFrameOutputStream} take over: the
-         * WhatsApp datagrams ride on top as a continuous byte stream.
-         *
-         * <p>Browser and Windows hybrid share this class because the
-         * hybrid shell ships the same JavaScript bundle and reuses the
-         * same endpoint; only the handshake payload changes, expressed
-         * through {@link #getWebSubPlatform()}.
-         */
-        static final class Browser extends Web {
-
-            /**
-             * TCP endpoint for browser companions; the WebSocket upgrade
-             * negotiates the {@code /ws/chat} path on top of it.
-             */
-            private static final InetSocketAddress WEB_ENDPOINT = new InetSocketAddress("web.whatsapp.com", 443);
-
-            /**
-             * Host header sent on the WebSocket upgrade request.
-             */
-            private static final String WEB_HOST = "web.whatsapp.com";
-
-            /**
-             * Endpoint path sent on the WebSocket upgrade request.
-             */
-            private static final String WEB_PATH = "/ws/chat";
-
-            /**
-             * Desktop Chrome User-Agent advertised on the upgrade
-             * request so the server does not redirect us to the mobile
-             * landing page.
-             */
-            private static final String WEB_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
-
-            /**
-             * The TLS-wrapped socket, set by {@link #openTransport()}.
-             */
-            private SSLSocket socket;
-
-            /**
-             * Constructs a browser companion client.
-             *
-             * @param store             the WhatsApp store
-             * @param sslContextFactory the SSL configuration for the
-             *                          WebSocket TLS hop
-             */
-            Browser(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
-                super(store, sslContextFactory);
-            }
-
-            @Override
-            void openTransport() throws IOException {
-                var raw = openTunneledSocket(WEB_ENDPOINT);
-                SSLSocket ssl = null;
-                try {
-                    ssl = (SSLSocket) sslContextFactory.sslContext()
-                            .getSocketFactory()
-                            .createSocket(raw, WEB_HOST, WEB_ENDPOINT.getPort(), true);
-                    ssl.setSSLParameters(sslContextFactory.sslParameters());
-                    ssl.startHandshake();
-
-                    var leftover = WebSocketUpgrade.upgrade(ssl, WEB_PATH, WEB_HOST,
-                            WEB_ENDPOINT.getPort(), WEB_USER_AGENT);
-
-                    this.socket = ssl;
-                    var wsOut = new WebSocketFrameOutputStream(ssl.getOutputStream());
-                    var wsIn = new WebSocketFrameInputStream(ssl.getInputStream(), leftover, wsOut);
-                    this.in = new WhatsAppDatagramInputStream(wsIn);
-                    this.out = new WhatsAppDatagramOutputStream(wsOut);
-                } catch (IOException e) {
-                    if (ssl != null) {
-                        try {
-                            ssl.close();
-                        } catch (IOException _) {
-                        }
-                    } else {
-                        try {
-                            raw.close();
-                        } catch (IOException _) {
-                        }
-                    }
-                    throw e;
-                }
-            }
-
-            @Override
-            void closeTransport() throws IOException {
-                if (socket != null) {
-                    socket.close();
-                }
-            }
-
-            @Override
-            boolean isTransportOpen() {
-                return socket != null && !socket.isClosed() && socket.isConnected();
-            }
-
-            @Override
-            ClientPlatformType getPlatform() {
-                // The Windows hybrid shell keeps UserAgent.platform as
-                // WEB and only distinguishes itself from a browser
-                // through the WebInfo.webSubPlatform field.
-                return ClientPlatformType.WEB;
-            }
-
-            @Override
-            ClientPayload.WebInfo.WebSubPlatform getWebSubPlatform() {
-                return switch (store.device().platform()) {
-                    case WINDOWS -> ClientPayload.WebInfo.WebSubPlatform.WIN_HYBRID;
-                    case WEB -> ClientPayload.WebInfo.WebSubPlatform.WEB_BROWSER;
-                    default -> throw new IllegalStateException(
-                            "Browser client does not support platform: " + store.device().platform());
-                };
-            }
-        }
-
-        /**
-         * Companion client for the native macOS desktop application.
-         *
-         * <p>Connects via a blocking {@link Socket} (optionally tunneled
-         * through an HTTP or SOCKS proxy via
-         * {@link WhatsAppSocketClient#openTunneledSocket(InetSocketAddress)})
-         * and then upgrades to TLS using the Chrome-style
-         * {@link javax.net.ssl.SSLContext}. The Noise XX handshake runs
-         * over the {@link SSLSocket} once the TLS handshake completes.
-         *
-         * <p>Only macOS uses this client. The Windows desktop build is
-         * a hybrid web/native shell that reuses the WebSocket endpoint
-         * and is therefore served by {@link Browser}.
-         */
-        static final class Desktop extends Web {
-
-            /**
-             * TCP endpoint for desktop companions; shared with mobile.
-             */
-            private static final InetSocketAddress DESKTOP_ENDPOINT = new InetSocketAddress("g.whatsapp.net", 443);
-
-            /**
-             * The TLS-wrapped socket, set by {@link #openTransport()}.
-             */
-            private SSLSocket socket;
-
-            /**
-             * Constructs a desktop companion client.
-             *
-             * @param store             the WhatsApp store
-             * @param sslContextFactory the SSL configuration for the
-             *                          end-to-end TLS hop
-             */
-            Desktop(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
-                super(store, sslContextFactory);
-            }
-
-            @Override
-            void openTransport() throws IOException {
-                var raw = openTunneledSocket(DESKTOP_ENDPOINT);
-                SSLSocket ssl = null;
-                try {
-                    ssl = (SSLSocket) sslContextFactory.sslContext()
-                            .getSocketFactory()
-                            .createSocket(raw, DESKTOP_ENDPOINT.getHostString(),
-                                    DESKTOP_ENDPOINT.getPort(), true);
-                    ssl.setSSLParameters(sslContextFactory.sslParameters());
-                    ssl.startHandshake();
-                    this.socket = ssl;
-                    this.in = new WhatsAppDatagramInputStream(ssl.getInputStream());
-                    this.out = new WhatsAppDatagramOutputStream(ssl.getOutputStream());
-                } catch (IOException e) {
-                    if (ssl != null) {
-                        try {
-                            ssl.close();
-                        } catch (IOException _) {
-                        }
-                    } else {
-                        try {
-                            raw.close();
-                        } catch (IOException _) {
-                        }
-                    }
-                    throw e;
-                }
-            }
-
-            @Override
-            void closeTransport() throws IOException {
-                if (socket != null) {
-                    socket.close();
-                }
-            }
-
-            @Override
-            boolean isTransportOpen() {
-                return socket != null && !socket.isClosed() && socket.isConnected();
-            }
-
-            @Override
-            ClientPlatformType getPlatform() {
-                return ClientPlatformType.MACOS;
-            }
-
-            @Override
-            ClientPayload.WebInfo.WebSubPlatform getWebSubPlatform() {
-                return ClientPayload.WebInfo.WebSubPlatform.DARWIN;
-            }
-        }
-    }
-
-    /**
-     * Native mobile (iOS or Android) socket client.
-     *
-     * <p>Connects via a blocking {@link Socket} (optionally tunneled
+     * @apiNote
+     * Connects via a blocking {@link Socket} (optionally tunneled
      * through an HTTP or SOCKS proxy via
-     * {@link #openTunneledSocket(InetSocketAddress)}). The Noise XX
-     * handshake runs directly over the socket because mobile clients do
-     * not negotiate a separate TLS layer.
+     * {@link WhatsAppSocketClient#openTunneledSocket(InetSocketAddress)})
+     * and runs the Noise XX handshake directly over the socket. The
+     * end-to-end hop carries no TLS because the Noise handshake is
+     * itself an authenticated key exchange. Used by every client
+     * whose device platform routes to plain TCP: {@code IOS},
+     * {@code IOS_BUSINESS}, {@code ANDROID},
+     * {@code ANDROID_BUSINESS} and {@code MACOS} (the native macOS
+     * desktop app is a Mac Catalyst port of the iOS binary and
+     * shares the transport, although it diverges on the handshake
+     * shape).
      */
-    static final class Mobile extends WhatsAppSocketClient {
+    static final class Tcp extends WhatsAppSocketClient {
 
         /**
-         * Two-byte mobile version footer appended to
-         * {@link #WHATSAPP_VERSION_HEADER} to form the handshake
-         * prologue.
+         * The TCP endpoint for plain-TCP clients.
          */
-        private static final byte[] MOBILE_VERSION = new byte[]{5, NodeTokens.DICTIONARY_VERSION};
+        private static final InetSocketAddress TCP_ENDPOINT = new InetSocketAddress("g.whatsapp.net", 443);
 
         /**
-         * Handshake prologue advertised by mobile clients.
-         */
-        private static final byte[] MOBILE_PROLOGUE = DataUtils.concatByteArrays(WHATSAPP_VERSION_HEADER, MOBILE_VERSION);
-
-        /**
-         * TCP endpoint for mobile connections.
-         */
-        private static final InetSocketAddress SOCKET_ENDPOINT = new InetSocketAddress("g.whatsapp.net", 443);
-
-        /**
-         * The TCP socket, set by {@link #openTransport()}.
+         * The raw TCP socket, set by {@link #openTransport()}.
          */
         private Socket socket;
 
         /**
-         * Constructs a mobile socket client.
+         * Constructs a plain-TCP socket client.
+         *
+         * @apiNote
+         * The {@code sslContextFactory} is only consulted when a
+         * {@link WhatsAppProxy.Http.Secure} proxy is configured; the
+         * end-to-end TCP hop does not use TLS so the factory is
+         * otherwise unused.
          *
          * @param store             the WhatsApp store
-         * @param sslContextFactory the SSL configuration applied when
-         *                          tunnelling through a TLS proxy; the
-         *                          end-to-end Mobile hop does not use
-         *                          TLS so this factory is otherwise
-         *                          unused
+         * @param sslContextFactory the SSL configuration applied
+         *                          when tunnelling through a TLS
+         *                          proxy
          */
-        Mobile(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
+        Tcp(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
             super(store, sslContextFactory);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation opens the (possibly proxy-tunneled)
+         * raw socket and wraps its streams in the datagram pair; no
+         * TLS is involved on the end-to-end hop.
+         */
         @Override
         void openTransport() throws IOException {
-            this.socket = openTunneledSocket(SOCKET_ENDPOINT);
+            this.socket = openTunneledSocket(TCP_ENDPOINT);
             this.in = new WhatsAppDatagramInputStream(socket.getInputStream());
             this.out = new WhatsAppDatagramOutputStream(socket.getOutputStream());
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         void closeTransport() throws IOException {
             if (socket != null) {
@@ -1248,112 +1275,137 @@ public sealed abstract class WhatsAppSocketClient {
             }
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         boolean isTransportOpen() {
             return socket != null && !socket.isClosed() && socket.isConnected();
         }
+    }
+
+    /**
+     * WebSocket-over-TLS socket client for
+     * {@code web.whatsapp.com:443}.
+     *
+     * @apiNote
+     * Opens a raw {@link Socket}, optionally tunnels it through an
+     * HTTP or SOCKS proxy via
+     * {@link WhatsAppSocketClient#openTunneledSocket(InetSocketAddress)},
+     * TLS-wraps it with the supplied
+     * {@link WhatsAppSslContextFactory}, drives the RFC 6455
+     * upgrade handshake via {@link WebSocketUpgrade}, and runs
+     * Noise XX over the resulting frame stream. WhatsApp datagrams
+     * ride on top of the WebSocket frames as a continuous byte
+     * stream. Used by browser companions and by the Windows
+     * Electron desktop app, which is a hybrid web/native shell that
+     * ships the same JS bundle as the browser and reuses this
+     * transport.
+     */
+    static final class WebSocket extends WhatsAppSocketClient {
 
         /**
-         * Verifies the flat {@code NoiseCertificate} that the mobile
-         * server returns instead of a two-level chain.
+         * The TCP endpoint for WebSocket companions; the WebSocket
+         * upgrade negotiates the {@code /ws/chat} path on top of
+         * it.
+         */
+        private static final InetSocketAddress WEB_ENDPOINT = new InetSocketAddress("web.whatsapp.com", 443);
+
+        /**
+         * The Host header sent on the WebSocket upgrade request.
+         */
+        private static final String WEB_HOST = "web.whatsapp.com";
+
+        /**
+         * The endpoint path sent on the WebSocket upgrade request.
+         */
+        private static final String WEB_PATH = "/ws/chat";
+
+        /**
+         * The desktop Chrome User-Agent advertised on the upgrade
+         * request so the server does not redirect the client to the
+         * mobile landing page.
+         */
+        private static final String WEB_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+
+        /**
+         * The TLS-wrapped socket, set by {@link #openTransport()}.
+         */
+        private SSLSocket socket;
+
+        /**
+         * Constructs a WebSocket-over-TLS socket client.
          *
-         * <p>The certificate is verified against the root CA public key
-         * and its embedded key must match the server static key from
-         * the handshake.
+         * @param store             the WhatsApp store
+         * @param sslContextFactory the SSL configuration for the
+         *                          WebSocket TLS hop
+         */
+        WebSocket(WhatsAppStore store, WhatsAppSslContextFactory sslContextFactory) {
+            super(store, sslContextFactory);
+        }
+
+        /**
+         * {@inheritDoc}
          *
-         * @param decryptedCertificate the decrypted certificate payload
-         * @param serverStaticKey      the 32-byte server static key
-         * @throws IOException if any check fails
+         * @implNote
+         * This implementation opens the (possibly proxy-tunneled)
+         * raw socket, TLS-wraps it, performs the WebSocket upgrade
+         * and stacks the WebSocket frame streams under the datagram
+         * streams. Any leftover bytes the server piggybacked on the
+         * upgrade response are passed to the input stream so the
+         * first frame is not lost.
          */
         @Override
-        void verifyCertificateChain(byte[] decryptedCertificate, byte[] serverStaticKey) throws IOException {
-            var cert = NoiseCertificateSpec.decode(decryptedCertificate);
-            var details = cert.details()
-                    .orElseThrow(() -> new IOException("NoiseCertificate missing details"));
-            var signature = cert.signature()
-                    .orElseThrow(() -> new IOException("NoiseCertificate missing signature"));
+        void openTransport() throws IOException {
+            var raw = openTunneledSocket(WEB_ENDPOINT);
+            SSLSocket ssl = null;
+            try {
+                ssl = (SSLSocket) sslContextFactory.sslContext()
+                        .getSocketFactory()
+                        .createSocket(raw, WEB_HOST, WEB_ENDPOINT.getPort(), true);
+                ssl.setSSLParameters(sslContextFactory.sslParameters());
+                ssl.startHandshake();
 
-            if (!Curve25519.verifySignature(NOISE_ROOT_CA_PUBLIC_KEY, details, ensureSignatureSize(signature))) {
-                throw new IOException("NoiseCertificate has invalid signature");
+                var leftover = WebSocketUpgrade.upgrade(ssl, WEB_PATH, WEB_HOST,
+                        WEB_ENDPOINT.getPort(), WEB_USER_AGENT);
+
+                this.socket = ssl;
+                var wsOut = new WebSocketFrameOutputStream(ssl.getOutputStream());
+                var wsIn = new WebSocketFrameInputStream(ssl.getInputStream(), leftover, wsOut);
+                this.in = new WhatsAppDatagramInputStream(wsIn);
+                this.out = new WhatsAppDatagramOutputStream(wsOut);
+            } catch (IOException e) {
+                if (ssl != null) {
+                    try {
+                        ssl.close();
+                    } catch (IOException _) {
+                    }
+                } else {
+                    try {
+                        raw.close();
+                    } catch (IOException _) {
+                    }
+                }
+                throw e;
             }
+        }
 
-            var parsedDetails = NoiseCertificateDetailsSpec.decode(details);
-            var key = parsedDetails.key()
-                    .orElseThrow(() -> new IOException("NoiseCertificate missing key"));
-            if (!Arrays.equals(key, serverStaticKey)) {
-                throw new IOException("NoiseCertificate key does not match handshake server static key");
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        void closeTransport() throws IOException {
+            if (socket != null) {
+                socket.close();
             }
         }
 
         /**
-         * Returns a defensive copy of the mobile handshake prologue.
-         *
-         * @return the prologue bytes
+         * {@inheritDoc}
          */
         @Override
-        byte[] handshakePrologue() {
-            return MOBILE_PROLOGUE.clone();
-        }
-
-        /**
-         * Builds the serialized mobile handshake payload.
-         *
-         * @return the serialized client payload
-         */
-        @Override
-        byte[] handshakePayload() {
-            var agent = getUserAgent();
-            var payload = getClientPayload(agent);
-            return ClientPayloadSpec.encode(payload);
-        }
-
-        /**
-         * Builds the mobile-specific user agent, including the device
-         * manufacturer, model, OS version and FDID.
-         *
-         * @return the user agent value
-         */
-        private UserAgent getUserAgent() {
-            return new ClientPayloadUserAgentBuilder()
-                    .platform(store.device().platform())
-                    .appVersion(store.clientVersion())
-                    .mcc("000")
-                    .mnc("000")
-                    .osVersion(store.device().osDeviceAppVersion().toString())
-                    .manufacturer(store.device().manufacturer())
-                    .device(store.device().model().replaceAll("_", " "))
-                    .osBuildNumber(store.device().osBuildNumber())
-                    .phoneId(store.fdid().toString().toUpperCase())
-                    .releaseChannel(store.releaseChannel())
-                    .localeLanguageIso6391("en")
-                    .localeCountryIso31661Alpha2("US")
-                    .deviceType(ClientPayload.ClientType.PHONE)
-                    .deviceModelType(store.device().modelId())
-                    .build();
-        }
-
-        /**
-         * Builds the mobile client payload.
-         *
-         * @param agent the user agent value
-         * @return the client payload
-         */
-        private ClientPayload getClientPayload(UserAgent agent) {
-            var phoneNumber = store
-                    .phoneNumber()
-                    .orElseThrow(() -> new InternalError("Phone number was not set"));
-            return new ClientPayloadBuilder()
-                    .username(phoneNumber)
-                    .passive(false)
-                    .pushName(store.registered() ? store.name() : null)
-                    .userAgent(agent)
-                    .shortConnect(true)
-                    .connectType(ClientPayload.ConnectType.WIFI_UNKNOWN)
-                    .connectReason(ClientPayload.ConnectReason.USER_ACTIVATED)
-                    .connectAttemptCount(0)
-                    .device(0)
-                    .oc(false)
-                    .build();
+        boolean isTransportOpen() {
+            return socket != null && !socket.isClosed() && socket.isConnected();
         }
     }
 }

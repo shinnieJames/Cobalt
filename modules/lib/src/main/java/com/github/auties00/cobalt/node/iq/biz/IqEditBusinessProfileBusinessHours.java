@@ -5,14 +5,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Typed business-hours payload carried as the {@code <business_hours/>}
- * child of an {@link IqEditBusinessProfileRequest}. Wraps the optional
- * IANA timezone, the optional schedule note, and the per-day-of-week
- * configuration rows.
+ * The typed business-hours payload carried as the {@code <business_hours/>} child of an {@link IqEditBusinessProfileRequest}.
+ *
+ * @apiNote
+ * Use this payload to express the merchant's open-hours schedule in a single edit: the optional timezone (IANA identifier) frames the per-day times, the optional note renders above the schedule grid, and the per-day rows enumerate the open and closed segments. Pass an empty list for the rows to clear the schedule without removing the {@code <business_hours/>} envelope.
+ *
+ * @implNote
+ * This implementation aggregates the day-of-week schedule as a flat list of {@link IqEditBusinessProfileBusinessHoursConfig} entries rather than as a per-day map; multiple rows can target the same day to express split open windows (for example morning and evening).
  */
 public final class IqEditBusinessProfileBusinessHours {
     /**
-     * The IANA timezone identifier, when supplied.
+     * The IANA timezone identifier framing the per-day times, when supplied.
      */
     private final String timezone;
 
@@ -22,16 +25,19 @@ public final class IqEditBusinessProfileBusinessHours {
     private final String note;
 
     /**
-     * The schedule rows.
+     * The per-day schedule rows.
      */
     private final List<IqEditBusinessProfileBusinessHoursConfig> config;
 
     /**
-     * Constructs a payload.
+     * Constructs a typed payload.
      *
-     * @param timezone the timezone; may be {@code null}
-     * @param note     the note; may be {@code null}
-     * @param config   the schedule rows; never {@code null}
+     * @apiNote
+     * Call this constructor with the schedule rows that should be sent to the relay; pass {@code null} for {@code timezone} when the merchant has not set one and pass {@code null} for {@code note} when there is nothing to render above the grid.
+     *
+     * @param timezone the IANA timezone identifier; may be {@code null}
+     * @param note     the note text; may be {@code null}
+     * @param config   the per-day schedule rows; never {@code null}
      * @throws NullPointerException if {@code config} is {@code null}
      */
     public IqEditBusinessProfileBusinessHours(String timezone, String note, List<IqEditBusinessProfileBusinessHoursConfig> config) {
@@ -42,7 +48,10 @@ public final class IqEditBusinessProfileBusinessHours {
     }
 
     /**
-     * Returns the timezone.
+     * Returns the IANA timezone identifier.
+     *
+     * @apiNote
+     * Use this getter to read back the timezone that frames the schedule rows; the value is absent when the merchant has not configured one.
      *
      * @return an {@link Optional} carrying the timezone
      */
@@ -51,7 +60,10 @@ public final class IqEditBusinessProfileBusinessHours {
     }
 
     /**
-     * Returns the note text.
+     * Returns the schedule note text.
+     *
+     * @apiNote
+     * Use this getter to read back the free-text note rendered above the schedule grid; the value is absent when the merchant did not stamp one.
      *
      * @return an {@link Optional} carrying the note
      */
@@ -60,7 +72,10 @@ public final class IqEditBusinessProfileBusinessHours {
     }
 
     /**
-     * Returns the schedule rows.
+     * Returns the per-day schedule rows.
+     *
+     * @apiNote
+     * Use this getter to iterate the per-day rows when rendering the schedule grid; the list is empty when the merchant has not configured any open windows.
      *
      * @return an unmodifiable list; never {@code null}
      */

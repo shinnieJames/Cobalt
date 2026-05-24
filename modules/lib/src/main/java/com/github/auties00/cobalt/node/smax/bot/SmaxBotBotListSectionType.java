@@ -7,8 +7,20 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Section type discriminator. Projects the {@code <section type>}
- * attribute through {@code WASmaxInBotEnums.ENUM_ALL_CATEGORY_FEATURED}.
+ * The kind of grouping a bot-directory section applies to its entries.
+ *
+ * @apiNote
+ * Used by callers consuming a {@link SmaxBotBotListResponse.SuccessV2.Section}
+ * or {@link SmaxBotBotListResponse.SuccessV3.Section} to decide how to
+ * label the section in a directory sheet. The same three values appear
+ * in both V2 and V3 replies.
+ *
+ * @implNote
+ * This implementation projects the wire literal through
+ * {@link #ofWire(String)}; unknown literals collapse to
+ * {@link Optional#empty()} rather than the WA Web parser's rejection
+ * because the enclosing section factories surface the failure to their
+ * callers.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBotEnums")
 @WhatsAppWebExport(
@@ -18,7 +30,10 @@ import java.util.Optional;
 )
 public enum SmaxBotBotListSectionType {
     /**
-     * The "all bots" section. A flat list aggregating every bot.
+     * Aggregates every directory bot into one flat list.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "all"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -27,7 +42,10 @@ public enum SmaxBotBotListSectionType {
     )
     ALL("all"),
     /**
-     * A category section. Bots grouped by topical category.
+     * Groups directory bots under a topical category heading.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "category"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -36,7 +54,10 @@ public enum SmaxBotBotListSectionType {
     )
     CATEGORY("category"),
     /**
-     * A featured / curated section.
+     * Promotes a curated subset of bots into a featured rail.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "featured"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -46,21 +67,33 @@ public enum SmaxBotBotListSectionType {
     FEATURED("featured");
 
     /**
-     * The wire-level literal carried by the {@code type} attribute.
+     * The wire literal carried by the {@code <section type>} attribute.
+     *
+     * @apiNote
+     * Read by {@link #wireValue()} when re-serialising and by
+     * {@link #ofWire(String)} during inbound parsing.
      */
     private final String wireValue;
 
     /**
-     * Constructs a new enum constant.
+     * Constructs an enum constant bound to its wire literal.
      *
-     * @param wireValue the wire-level literal; never {@code null}
+     * @apiNote
+     * Invoked only by the enum's constant initialisers.
+     *
+     * @param wireValue the on-the-wire literal; never {@code null}
      */
     SmaxBotBotListSectionType(String wireValue) {
         this.wireValue = wireValue;
     }
 
     /**
-     * Returns the wire-level literal.
+     * Returns the wire literal that {@code <section type>} carries
+     * for this section kind.
+     *
+     * @apiNote
+     * Use this when re-serialising a parsed constant or matching
+     * against captured wire bytes.
      *
      * @return the literal; never {@code null}
      */
@@ -69,11 +102,24 @@ public enum SmaxBotBotListSectionType {
     }
 
     /**
-     * Resolves a {@link SmaxBotBotListSectionType} from the wire-level literal.
+     * Resolves the constant associated with a {@code <section type>}
+     * wire literal.
      *
-     * @param wireValue the wire-level literal
-     * @return an {@link Optional} carrying the resolved enum
-     *         constant, or empty when the literal is unknown
+     * @apiNote
+     * Called by both the V2 and V3 section factories during inbound
+     * parsing of a {@link SmaxBotBotListResponse}. Returns
+     * {@link Optional#empty()} for {@code null} and for any literal
+     * outside {@code {"all", "category", "featured"}}.
+     *
+     * @implNote
+     * This implementation performs a linear scan over {@link #values()};
+     * the enum has three constants so a hash-backed lookup would not
+     * pay off.
+     *
+     * @param wireValue the wire literal to resolve; may be {@code null}
+     * @return an {@link Optional} carrying the matching constant, or
+     *         {@link Optional#empty()} when the literal is {@code null}
+     *         or unrecognised
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",

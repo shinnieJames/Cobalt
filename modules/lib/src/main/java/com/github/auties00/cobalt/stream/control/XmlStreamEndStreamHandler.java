@@ -7,49 +7,56 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.stream.SocketStream;
 
 /**
- * Handles the {@code <xmlstreamend>} stanza emitted by the WhatsApp server
- * when it intends to close the underlying stream without an explicit error.
+ * Handles the {@code <xmlstreamend>} stanza that the WhatsApp server emits
+ * to signal a graceful end of the encrypted stream.
  *
- * <p>The stanza carries no payload of interest; it simply signals that the
- * server has finished sending data and will close the socket shortly. This
- * handler logs the event for diagnostics and does not send any ack stanza
- * back to the server (the {@code "NO_ACK"} contract from WA Web).
+ * @apiNote
+ * This handler is registered under the {@code "xmlstreamend"} tag inside
+ * {@link SocketStream} and runs as the final stanza on every clean
+ * server-initiated close. Cobalt embedders do not invoke this class
+ * directly; the dispatcher routes the stanza here automatically and the
+ * underlying socket teardown is driven by the next read returning
+ * end-of-stream.
+ *
+ * @implNote
+ * This implementation only logs the stanza and intentionally does not
+ * send any acknowledgement back, preserving the {@code "NO_ACK"} sentinel
+ * that WA Web's {@code WAWebCommsHandleLoggedInStanza} returns from its
+ * {@code "xmlstreamend"} switch arm. {@link SocketStream} never auto-acks
+ * on its own, so a no-op handler reproduces the same wire behaviour.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class XmlStreamEndStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic messages when the server signals stream end.
-     *
-     * <p>The message text mirrors the literal logged by WA Web's
-     * {@code WALogger.LOG} call inside the {@code "xmlstreamend"} switch arm.
+     * The system logger used to record the diagnostic line that mirrors the
+     * literal template logged by {@code WALogger.LOG} inside WA Web's
+     * {@code "xmlstreamend"} switch arm.
      */
     private static final System.Logger LOGGER = System.getLogger(XmlStreamEndStreamHandler.class.getName());
 
     /**
-     * Constructs a new {@code xmlstreamend} stanza handler.
+     * Constructs a new {@code <xmlstreamend>} stanza handler.
      *
-     * <p>No dependencies are required because the handler only logs the
-     * stanza and intentionally does not send any acknowledgement back to
-     * the server, matching WA Web's {@code "NO_ACK"} return value.
+     * @apiNote
+     * Cobalt embedders never call this constructor directly; the dispatcher
+     * in {@link SocketStream} instantiates the handler once per client.
      */
     public XmlStreamEndStreamHandler() {
     }
 
     /**
-     * Logs the reception of the {@code <xmlstreamend>} stanza and returns
-     * without sending any acknowledgement.
+     * {@inheritDoc}
      *
-     * <p>WA Web's {@code handleLoggedInStanza} switch arm for
-     * {@code "xmlstreamend"} performs exactly two actions: it calls
-     * {@code WALogger.LOG} with a fixed template literal and then returns
-     * the sentinel string {@code "NO_ACK"} so that the caller knows not to
-     * dispatch an ack node back to the server. Cobalt mirrors this by
-     * logging the same fixed message and returning {@code void} from this
-     * handler &mdash; the dispatcher in {@link SocketStream} never sends an
-     * ack on its own, so simply not sending one here preserves the
-     * {@code "NO_ACK"} contract.
+     * @apiNote
+     * Logs that the server has signalled end-of-stream and returns
+     * without dispatching any reply, matching WA Web's {@code "NO_ACK"}
+     * contract for the {@code "xmlstreamend"} branch of
+     * {@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza}.
      *
-     * @param node the {@code <xmlstreamend>} stanza received from the server
+     * @implNote
+     * This implementation is intentionally a pure log call; the socket
+     * teardown that follows is driven by the next read returning
+     * end-of-stream rather than by any reply sent here.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)

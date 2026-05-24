@@ -9,34 +9,38 @@ import com.github.auties00.cobalt.wam.privatestats.ed25519.Ed25519Point;
 import java.util.Objects;
 
 /**
- * Client-side blinding and unblinding for the WhatsApp private-stats
- * token protocol.
+ * Performs the client-side blind and unblind steps of the WhatsApp
+ * private-stats token VOPRF on the Ed25519 curve.
  *
- * <p>The protocol is a single-use blinded-token VOPRF on the Ed25519
- * curve. The client picks a random 32-byte scalar {@code k}, hashes
- * the message {@code m} to a curve point {@code H(m)}, and sends
- * {@code blinded = H(m) + k*B} to the server, where {@code B} is the
- * Ed25519 base point. The server replies with the signature
+ * <p>The protocol is a single-use blinded-token verifiable oblivious
+ * pseudorandom function (VOPRF). The client picks a random 32-byte
+ * scalar {@code k}, hashes the message {@code m} to a curve point
+ * {@code H(m)}, and ships {@code blinded = H(m) + k*B} to the server,
+ * where {@code B} is the Ed25519 base point. The server replies with
  * {@code signed = sk * blinded = sk*H(m) + k*pk}, where {@code sk} is
  * the server private key and {@code pk = sk*B} is its public key. The
  * client recovers {@code sk*H(m)} as {@code signed - k*pk}, the
  * unblinded VOPRF output.
  *
- * <p>Mirrors {@code privateStatsToken.blindToken} and
- * {@code privateStatsToken.unblindToken} from the
- * {@code WAWamPrivateStatsToken} module, which is exposed to
- * {@code WAWebIssuePrivateStatsToken} under the alias
- * {@code privateStatsToken}.
- *
- * @apiNote The scalar {@code k} must be uniformly random and used at
- * most once per message. Reusing {@code k} across messages leaks the
+ * @apiNote
+ * Wraps the {@link WhatsAppWebModule WAWamPrivateStatsToken}
+ * {@code blindToken} / {@code unblindToken} export pair. The same
+ * scalar must be supplied to {@link #unblind} that was supplied to
+ * {@link #blind}, and the scalar must be uniformly random and used at
+ * most once per message; reusing a scalar across messages leaks the
  * unblinded outputs of prior messages.
  */
 @WhatsAppWebModule(moduleName = "WAWamPrivateStatsToken")
 @WhatsAppWebModule(moduleName = "WAWebIssuePrivateStatsToken")
 public final class WamPrivateStatsTokenBlinder {
     /**
-     * Length of a token, scalar, or compressed Edwards point in bytes.
+     * The shared byte length of a token, a scalar, and a compressed
+     * Edwards point.
+     *
+     * @apiNote
+     * Matches the {@code new Uint8Array(32)} sized buffers used
+     * everywhere in {@link WhatsAppWebModule WAWamPrivateStatsToken}
+     * and {@link WhatsAppWebModule WACryptoEd25519}.
      */
     public static final int TOKEN_BYTES = 32;
 
@@ -50,25 +54,38 @@ public final class WamPrivateStatsTokenBlinder {
     }
 
     /**
-     * Computes {@code blind(message, scalar) = H(message) + scalar*B}
-     * and returns the 32-byte compressed Edwards encoding.
+     * Computes the blinded curve point
+     * {@code blind(message, scalar) = H(message) + scalar*B} and
+     * returns its 32-byte compressed Edwards encoding.
      *
-     * <p>The scalar is clamped per the X25519/Ed25519 convention
-     * (clear bits 0, 1, 2, and 255; set bit 254) before the scalar
-     * multiplication.
+     * @apiNote
+     * The result is the {@code blinded_credential} payload that
+     * {@link WamPrivateStatsTokenIssuer} sends inside the
+     * {@code <sign_credential>} IQ. The caller's {@code scalar} array
+     * is cloned before clamping, so it survives the call intact.
      *
-     * <p>Mirrors {@code privateStatsToken.blindToken}.
+     * @implNote
+     * This implementation mirrors {@link WhatsAppWebModule WAWamPrivateStatsToken}
+     * {@code .blindToken} step for step: clone-and-clamp the scalar
+     * per the X25519/Ed25519 convention (clear bits 0/1/2 of byte 0,
+     * clear bit 7 of byte 31, set bit 6 of byte 31), compute
+     * {@code scalar*B} via {@link Ed25519Point#scalarMultBase}, hash
+     * the message via {@link Ed25519HashToPoint#compute}, add the two
+     * points in place via {@link Ed25519Point#add}, and emit the
+     * 32-byte compressed encoding via {@link Ed25519Point#pack}.
      *
-     * @apiNote A clone of the scalar is clamped, so the caller's
-     *          {@code scalar} array is not mutated.
      * @param message the message to blind, of any length
      * @param scalar  the client blinding scalar, exactly
      *                {@value #TOKEN_BYTES} bytes
-     * @return a fresh 32-byte compressed encoding of the blinded point
+     * @return a freshly allocated 32-byte compressed encoding of the
+     *         blinded point
      * @throws NullPointerException     if either argument is
      *                                  {@code null}
-     * @throws IllegalArgumentException if {@code scalar} is not exactly
-     *                                  {@value #TOKEN_BYTES} bytes
+     * @throws IllegalArgumentException if {@code scalar} is not
+     *                                  exactly {@value #TOKEN_BYTES}
+     *                                  bytes
+     * @see Ed25519HashToPoint#compute(byte[])
+     * @see Ed25519Point#scalarMultBase(long[][], byte[])
      */
     @WhatsAppWebExport(
             moduleName = "WAWamPrivateStatsToken",
@@ -97,28 +114,53 @@ public final class WamPrivateStatsTokenBlinder {
     }
 
     /**
-     * Recovers the unblinded VOPRF output from a server-signed
+     * Recovers the unblinded VOPRF output from the server-signed
      * blinded token by computing
-     * {@code unblind(signed, scalar, pk) = signed - scalar*pk}.
+     * {@code unblind(signed, scalar, serverPubKey) = signed - scalar*serverPubKey}.
      *
-     * <p>Mirrors {@code privateStatsToken.unblindToken}.
+     * @apiNote
+     * Called by {@link WamPrivateStatsTokenIssuer} on the
+     * {@code <signed_credential>} bytes returned by the server, with
+     * the same {@code scalar} that was passed to {@link #blind} and
+     * the {@code <acs_public_key>} carried alongside the signed
+     * credential. The output is the {@code unblindedSignedToken}
+     * later fed into {@code SHA-512(token || unblindedSignedToken)}
+     * to derive the upload shared secret.
+     *
+     * @implNote
+     * This implementation diverges from
+     * {@link WhatsAppWebModule WAWamPrivateStatsToken}
+     * {@code .unblindToken} in its error model: the JS routine
+     * returns {@code null} when {@code signed} or {@code serverPubKey}
+     * fails to decode, while Cobalt throws
+     * {@link IllegalArgumentException} so the issuer sees the failure
+     * synchronously. The math is otherwise identical: decode
+     * {@code signed} via {@link Ed25519Point#unpack}, decode the
+     * negation of the server key via {@link Ed25519Point#unpackNeg},
+     * scalar-multiply the negated key by the clamped scalar, add the
+     * product to the signed point in place via
+     * {@link Ed25519Point#add}, and emit the 32-byte compressed
+     * encoding.
+     *
      * @param signed       the server-signed blinded token, exactly
      *                     {@value #TOKEN_BYTES} bytes
      * @param scalar       the same client scalar passed to
-     *                     {@link #blind}, exactly
-     *                     {@value #TOKEN_BYTES} bytes
+     *                     {@link #blind}, exactly {@value #TOKEN_BYTES}
+     *                     bytes
      * @param serverPubKey the server public key as a compressed
-     *                     Ed25519 point, exactly
-     *                     {@value #TOKEN_BYTES} bytes
-     * @return a fresh 32-byte compressed encoding of the unblinded
-     *         point
+     *                     Ed25519 point, exactly {@value #TOKEN_BYTES}
+     *                     bytes
+     * @return a freshly allocated 32-byte compressed encoding of the
+     *         unblinded point
      * @throws NullPointerException     if any argument is
      *                                  {@code null}
      * @throws IllegalArgumentException if any argument is not exactly
-     *                                  {@value #TOKEN_BYTES} bytes, or
-     *                                  if {@code signed} or
+     *                                  {@value #TOKEN_BYTES} bytes,
+     *                                  or if {@code signed} or
      *                                  {@code serverPubKey} is not a
      *                                  valid Edwards point
+     * @see Ed25519Point#unpack(long[][], byte[])
+     * @see Ed25519Point#unpackNeg(long[][], byte[])
      */
     @WhatsAppWebExport(
             moduleName = "WAWamPrivateStatsToken",
@@ -164,18 +206,23 @@ public final class WamPrivateStatsTokenBlinder {
     }
 
     /**
-     * Applies the standard X25519/Ed25519 scalar clamp in place. This
-     * clears bits 0, 1, and 2 of byte 0, clears bit 7 of byte 31, and
-     * sets bit 6 of byte 31.
+     * Applies the standard X25519/Ed25519 scalar clamp in place.
      *
-     * <p>The clamp bounds the scalar to the safe range
-     * {@code [2^254, 2^255)} with low-order bits zeroed, matching the
-     * private {@code u} helper inside the
-     * {@code WAWamPrivateStatsToken} module (also reachable through the
-     * {@code privateStatsToken} alias).
+     * @apiNote
+     * Required before any scalar multiplication on Curve25519/Ed25519.
+     * The clamp bounds the scalar to the safe range
+     * {@code [2^254, 2^255)} with low-order bits zeroed so the
+     * Montgomery ladder cannot leak information about the
+     * subgroup-component of an attacker-supplied point.
      *
-     * @param scalar the scalar bytes, exactly {@value #TOKEN_BYTES}
-     *               bytes
+     * @implNote
+     * This implementation matches the private {@code u} helper inside
+     * {@link WhatsAppWebModule WAWamPrivateStatsToken}: clear bits 0,
+     * 1, and 2 of byte 0, clear bit 7 of byte 31, and set bit 6 of
+     * byte 31.
+     *
+     * @param scalar the scalar bytes to clamp in place, exactly
+     *               {@value #TOKEN_BYTES} bytes
      */
     private static void clamp(byte[] scalar) {
         scalar[0] &= (byte) 0xF8;

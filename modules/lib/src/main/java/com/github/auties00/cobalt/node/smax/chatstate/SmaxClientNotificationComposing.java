@@ -10,43 +10,58 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The {@code SmaxClientNotificationComposing} state-type. The user is currently typing
- * (or recording an audio note when {@link #hasComposingMediaAudio()}
- * is {@code true}).
+ * The outbound "composing" state-type carried by a
+ * {@link SmaxClientNotificationRequest}.
+ *
+ * @apiNote
+ * Backs the chat-state surfaces routed through
+ * {@code WASendChatStateProtocol.sendChatStateProtocol}:
+ * {@code WAWebChatStateBridge.sendChatStateComposing} maps the
+ * "user is typing" indicator and
+ * {@code WAWebChatStateBridge.sendChatStateRecording} maps the "user is
+ * recording a voice note" indicator. The two surfaces differ only by
+ * whether {@link #hasComposingMediaAudio()} is set.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstateComposingMixin")
 public final class SmaxClientNotificationComposing implements SmaxClientNotificationStateType {
     /**
-     * Whether the {@code media="audio"} marker should be emitted
-     * (the user is recording a voice note rather than typing
-     * text).
+     * Whether the {@code media="audio"} marker is emitted.
+     *
+     * @apiNote
+     * {@code true} indicates a voice-note recording in progress (the "speech
+     * bubble with mic" indicator in the chat UI); {@code false} indicates
+     * plain text typing.
      */
     private final boolean hasComposingMediaAudio;
 
     /**
-     * Constructs a new {@code SmaxClientNotificationComposing} state-type.
+     * Constructs a composing state-type.
      *
-     * @param hasComposingMediaAudio whether to emit the
-     *                               {@code media="audio"} marker
+     * @param hasComposingMediaAudio whether to emit the {@code media="audio"} marker
      */
     public SmaxClientNotificationComposing(boolean hasComposingMediaAudio) {
         this.hasComposingMediaAudio = hasComposingMediaAudio;
     }
 
     /**
-     * Returns whether the audio marker is set.
+     * Returns whether the {@code media="audio"} marker is emitted.
      *
-     * @return {@code true} when {@code media="audio"} should be
-     *         emitted
+     * @return {@code true} when audio recording, {@code false} when typing text
      */
     public boolean hasComposingMediaAudio() {
         return hasComposingMediaAudio;
     }
 
     /**
-     * Builds the {@code <composing/>} child node.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the child
+     * @implNote
+     * This implementation emits a {@code <composing>} child, attaching
+     * {@code media="audio"} only when {@link #hasComposingMediaAudio()} is
+     * {@code true}, mirroring {@code mergeComposingMixin}'s
+     * {@code OPTIONAL_LITERAL("audio", ...)} behaviour.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <composing>} child
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstateComposingMixin",

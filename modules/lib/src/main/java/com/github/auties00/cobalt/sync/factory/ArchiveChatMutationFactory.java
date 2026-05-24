@@ -17,58 +17,87 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Builds outgoing archive-chat sync mutations.
+ * Builds outgoing app-state mutations that archive or unarchive a chat.
  *
- * <p>Mirrors the {@code getArchiveChatMutation} and
- * {@code getMutationsForArchive} exports of WhatsApp Web's
- * {@code WAWebArchiveChatSync} module. The factory is the outgoing-mutation
- * counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.ArchiveChatHandler} — the
- * handler keeps the inbound {@code applyMutation}/{@code resolveConflicts}
- * pipeline while this class produces the {@link SyncPendingMutation} values
- * dispatched by {@link com.github.auties00.cobalt.client.WhatsAppClient}.
+ * @apiNote
+ * Drives the chat-archive UI affordance through
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient}: when the user
+ * archives or unarchives a chat the resulting {@link SyncPendingMutation}
+ * values are queued for outbound app-state sync so linked devices reflect
+ * the same archive state. The factory is the outgoing-mutation counterpart
+ * of {@link com.github.auties00.cobalt.sync.handler.ArchiveChatHandler}; the
+ * handler owns inbound application via {@code applyMutations} and
+ * {@code resolveConflicts}.
+ *
+ * @implNote
+ * This implementation accepts a pre-built {@link SyncActionMessageRange}
+ * because Cobalt does not run the WA Web
+ * {@code WAWebMessageRangeUtils.constructMessageRange} pipeline, which is
+ * tied to the browser's active-message-range IndexedDB tables; callers
+ * resolve the range upstream.
  */
 public final class ArchiveChatMutationFactory {
     /**
-     * The pin-chat mutation factory consulted by
-     * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)}
-     * to build the companion unpin mutation that ships alongside an
-     * archive mutation.
+     * The pin-chat factory consulted to emit the companion unpin mutation when archiving.
+     *
+     * @apiNote
+     * Held as a constructor-injected dependency rather than a service-locator
+     * lookup so this factory composes cleanly under Cobalt's DI pattern; see
+     * {@link #getMutationsForArchive} for the call site.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebArchiveChatSync.getMutationsForArchive} which calls
+     * {@code WAWebPinChatSync.PinChatSync.getPinMutation(timestamp, false, jid)};
+     * Cobalt routes the same call through {@link PinChatMutationFactory}.
      */
     private final PinChatMutationFactory pinChatMutationFactory;
 
     /**
-     * Constructs an archive-chat mutation factory bound to the given pin-chat
-     * mutation factory.
+     * Creates an instance bound to the given pin-chat factory.
      *
-     * @param pinChatMutationFactory the pin-chat factory used to build the
-     *                               companion unpin mutation when archiving
+     * @apiNote
+     * The constructor is the wiring seam for the
+     * archive-implies-unpin behaviour described on
+     * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)};
+     * a single instance is shared across the client.
+     *
+     * @param pinChatMutationFactory the companion factory used to build the
+     *                               unpin mutation that ships alongside an
+     *                               archive mutation
      */
     public ArchiveChatMutationFactory(PinChatMutationFactory pinChatMutationFactory) {
         this.pinChatMutationFactory = pinChatMutationFactory;
     }
 
     /**
-     * Builds a pending mutation for archiving or unarchiving a chat.
+     * Returns a {@link SyncPendingMutation} that archives or unarchives the given chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveChatSync.getArchiveChatMutation}:
-     * <ol>
-     *   <li>Resolves the chat JID for mutation index via
-     *       {@code WAWebSyncdGetChat.getChatJidMutationIndexForChat}</li>
-     *   <li>Constructs the message range for the chat via
-     *       {@code WAWebMessageRangeUtils.constructMessageRange}</li>
-     *   <li>Builds the pending mutation with the archive action value</li>
-     * </ol>
+     * @apiNote
+     * Call this when archiving or unarchiving a single chat. The mutation
+     * index follows
+     * {@snippet :
+     *     ["archive", chatJid.toString()]
+     * }
+     * and the {@link ArchiveChatAction} sub-message carries the
+     * {@code archived} flag plus the supplied {@link SyncActionMessageRange}
+     * so receive-side conflict resolution can compare ranges. Callers that
+     * want the archive-also-unpins behaviour should prefer
+     * {@link #getMutationsForArchive(Instant, boolean, Jid, SyncActionMessageRange)}.
      *
-     * <p>In Cobalt, the message range is passed as a parameter since
-     * {@code constructMessageRange} requires store infrastructure that is
-     * built at a higher level.
+     * @implNote
+     * This implementation skips WA Web's chat-jid mutation-index resolver
+     * ({@code WAWebSyncdGetChat.getChatJidMutationIndexForChat}) because
+     * Cobalt's {@link Jid} is already in canonical form; it also skips the
+     * pending-mutation merge step
+     * ({@code WAWebSyncdDb.getPendingMutationsRowsByIndex}) since Cobalt
+     * coalesces app-state batches at a higher layer.
      *
      * @param timestamp    the mutation timestamp
-     * @param archived     whether the chat should be archived
-     * @param chatJid      the JID of the chat to archive
-     * @param messageRange the message range for the archive action
-     * @return the pending mutation for the archive action
+     * @param archived     {@code true} to archive the chat, {@code false} to unarchive
+     * @param chatJid      the chat {@link Jid} being toggled
+     * @param messageRange the pre-built range covering the messages visible at the time of the action
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveChatSync", exports = "getArchiveChatMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getArchiveChatMutation(
@@ -97,21 +126,27 @@ public final class ArchiveChatMutationFactory {
     }
 
     /**
-     * Builds the set of pending mutations needed to archive or unarchive a chat.
+     * Returns the full set of {@link SyncPendingMutation} values that archive or unarchive a chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebArchiveChatSync.getMutationsForArchive}:
-     * <ul>
-     *   <li>Always includes an archive mutation</li>
-     *   <li>When archiving ({@code archived = true}), also includes a pin mutation
-     *       with {@code pinned = false} to unpin the chat (via
-     *       {@code WAWebPinChatSync.PinChatSync.getPinMutation(e, false, r)})</li>
-     * </ul>
+     * @apiNote
+     * Prefer this entry point over
+     * {@link #getArchiveChatMutation(Instant, boolean, Jid, SyncActionMessageRange)}
+     * when triggering the archive UI: archiving a chat in WhatsApp Web always
+     * unpins it as a side effect, and this method emits both mutations in the
+     * canonical order so linked devices see them in one batch.
      *
-     * @param timestamp    the mutation timestamp
-     * @param archived     whether the chat should be archived
-     * @param chatJid      the JID of the chat
-     * @param messageRange the message range for the archive action
-     * @return the list of pending mutations for the archive operation
+     * @implNote
+     * This implementation mirrors the {@code [archiveMutation, unpinMutation]}
+     * shape of WA Web's {@code WAWebArchiveChatSync.getMutationsForArchive};
+     * the unpin is appended only when {@code archived} is {@code true}, and
+     * is built via {@link PinChatMutationFactory#getPinMutation} with the
+     * shared {@code timestamp} so the two mutations are timestamp-paired.
+     *
+     * @param timestamp    the mutation timestamp shared by both mutations
+     * @param archived     {@code true} to archive (and unpin) the chat, {@code false} to unarchive
+     * @param chatJid      the chat {@link Jid} being toggled
+     * @param messageRange the pre-built range covering the messages visible at the time of the action
+     * @return the ordered list of pending mutations to enqueue
      */
     @WhatsAppWebExport(moduleName = "WAWebArchiveChatSync", exports = "getMutationsForArchive", adaptation = WhatsAppAdaptation.DIRECT)
     public List<SyncPendingMutation> getMutationsForArchive(

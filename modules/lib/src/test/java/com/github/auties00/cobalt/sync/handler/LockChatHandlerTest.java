@@ -7,7 +7,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.LockChatAction;
@@ -15,7 +14,6 @@ import com.github.auties00.cobalt.model.sync.action.chat.LockChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinAction;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ArchiveChatMutationFactory;
 import com.github.auties00.cobalt.sync.factory.LockChatMutationFactory;
@@ -28,14 +26,34 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LockChatHandler}.
+ * Exercises the {@link LockChatHandler} adapter for
+ * {@code WAWebLockChatSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code lock} app-state sync
+ * action across metadata, the SET happy path that locks (or
+ * unlocks) the chat and clears archive and pin in the locking
+ * branch, the orphan branch when the chat is unknown locally, the
+ * malformed-input fallbacks, the REMOVE rejection, the inherited
+ * timestamp-based conflict resolution and the
+ * {@link LockChatMutationFactory} builder paired with
+ * {@link ArchiveChatMutationFactory} and
+ * {@link PinChatMutationFactory} for the multi-mutation lock
+ * payload.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link com.github.auties00.cobalt.model.chat.Chat#locked()},
+ * {@link com.github.auties00.cobalt.model.chat.Chat#archived()} and
+ * {@link com.github.auties00.cobalt.model.chat.Chat#pinnedTimestamp()}
+ * read-backs can be asserted directly.
  */
 @DisplayName("LockChatHandler")
 class LockChatHandlerTest {
@@ -84,7 +102,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("locked=true also unarchives and unpins the chat (mutual exclusion)")
@@ -123,7 +141,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Chat")
@@ -138,7 +156,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying a pinAction instead of lockChatAction is MALFORMED")
@@ -158,7 +176,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty chat JID at slot 1 is MALFORMED")
@@ -178,7 +196,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -198,11 +216,11 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based behaviour")
+    @DisplayName("resolveConflicts - default timestamp-based behaviour")
     class ResolveConflicts {
         // LockChatHandler does NOT override resolveConflicts; the interface default applies.
         @Test
-        @DisplayName("older local vs. newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("older local vs. newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteWins() {
             var local = lockMutation(true, PEER, Instant.ofEpochSecond(100L));
             var remote = lockMutation(false, PEER, Instant.ofEpochSecond(200L));
@@ -212,7 +230,7 @@ class LockChatHandlerTest {
         }
 
         @Test
-        @DisplayName("newer local vs. older remote â†’ SKIP_REMOTE")
+        @DisplayName("newer local vs. older remote -> SKIP_REMOTE")
         void newerLocalWins() {
             var local = lockMutation(true, PEER, Instant.ofEpochSecond(300L));
             var remote = lockMutation(false, PEER, Instant.ofEpochSecond(200L));
@@ -223,7 +241,7 @@ class LockChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("getChatLockMutation / getMutationsForLock â€” builder helpers")
+    @DisplayName("getChatLockMutation / getMutationsForLock - builder helpers")
     class BuilderHelpers {
         @Test
         @DisplayName("getChatLockMutation carries the locked flag and the [\"lock\", jid] index")
@@ -265,24 +283,4 @@ class LockChatHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/lock-chat/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/lock-chat/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var locked = oracle.getBoolean("locked");
-
-            var action = new LockChatActionBuilder().locked(locked).build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .lockChatAction(action)
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

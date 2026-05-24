@@ -3,6 +3,7 @@ package com.github.auties00.cobalt.device.key;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,25 +15,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Fixture-driven tests for {@link DevicePreKeyHandler}.
+ * Fixture-driven structural tests for {@link DevicePreKeyHandler}.
  *
- * <p>Replays the captured pre-key response (8 devices, one-time keys
- * present for every device) and asserts the handler:
+ * @apiNote
+ * Validates the wire-shape parity between Cobalt's pre-key fetch path and the captured
+ * {@code WAWebFetchPrekeysJob} response: every {@code <user>} child carries the canonical
+ * registration, identity, signed-pre-key, and (when not depleted) one-time-pre-key children,
+ * and the depletion count matches the oracle's expectation. Also pins the empty-input no-op
+ * branch in {@link DevicePreKeyHandler#ensureSessions(java.util.Collection)}.
  *
- * <ul>
- *   <li>issues an IQ when at least one device has no cached session;</li>
- *   <li>reports zero depletion when every response carries a
- *       {@code <key>} child (the captured shape);</li>
- *   <li>returns early without sending when every device already has a
- *       session.</li>
- * </ul>
- *
- * <p>The captured-batch fixture lives at
- * {@code modules/lib/src/test/resources/fixtures/device/prekey-batch.jsonl}
- * and was generated against the {@code personal} session by
- * {@link com.github.auties00.cobalt.device.DeviceFixtures}-friendly
- * tooling. The accompanying {@code prekey-batch.expected.json} pins
- * {@code missedPrekeyCount=8} and {@code depletedPrekeyCount=0}.
+ * @implNote
+ * This implementation replays the captured pre-key response from
+ * {@code modules/lib/src/test/resources/fixtures/device/prekey-batch.jsonl} and the matching
+ * {@code prekey-batch.expected.json} oracle that pins {@code missedPrekeyCount=8} and
+ * {@code depletedPrekeyCount=0}. The {@code prekey-single} fixture covers the one-device path
+ * for a hosted enterprise primary.
  */
 @DisplayName("DevicePreKeyHandler")
 class DevicePreKeyHandlerTest {
@@ -41,8 +38,15 @@ class DevicePreKeyHandlerTest {
 
     /**
      * Returns the inbound response node from the captured pre-key fetch.
+     *
+     * @apiNote
+     * Walks the captured JSONL stream for the given topic and returns the first
+     * {@code direction == "in"} event materialised as a {@link Node}.
+     *
+     * @param topic the fixture topic name (e.g. {@code "prekey-batch"})
+     * @return the captured inbound response
      */
-    private static com.github.auties00.cobalt.node.Node loadCapturedResponse(String topic) {
+    private static Node loadCapturedResponse(String topic) {
         for (var event : DeviceFixtures.loadEvents(topic)) {
             if ("in".equals(event.getString("direction"))) {
                 return DeviceFixtures.buildNodeFromEvent(event);
@@ -53,8 +57,15 @@ class DevicePreKeyHandlerTest {
 
     /**
      * Returns the device JIDs the captured pre-key response refers to.
+     *
+     * @apiNote
+     * Iterates the {@code <list>/<user>} children and extracts every {@code jid} attribute as
+     * a {@link Jid}; the order matches the response's declaration order.
+     *
+     * @param response the captured response node
+     * @return the device JIDs in declaration order
      */
-    private static List<Jid> capturedDeviceJids(com.github.auties00.cobalt.node.Node response) {
+    private static List<Jid> capturedDeviceJids(Node response) {
         var jids = new ArrayList<Jid>();
         response.streamChildren("list")
                 .flatMap(list -> list.streamChildren("user"))
@@ -62,6 +73,10 @@ class DevicePreKeyHandlerTest {
         return jids;
     }
 
+    /**
+     * {@link DevicePreKeyHandler#ensureSessions(java.util.Collection)} returns zero and does
+     * not issue an IQ when called with no devices.
+     */
     @Test
     @DisplayName("ensureSessions: no devices need sessions when called with empty input")
     void emptyInput() {
@@ -74,6 +89,10 @@ class DevicePreKeyHandlerTest {
         assertEquals(0, depleted, "empty input is a no-op");
     }
 
+    /**
+     * The captured batch fixture (8 devices) has a {@code <key>} child on every {@code <user>}
+     * entry, so the depletion count must come out as zero, matching the oracle.
+     */
     @Test
     @DisplayName("captured batch response: every device carries a <key> child, so depletion = 0")
     void batchResponseHasNoDepletion() {
@@ -82,10 +101,6 @@ class DevicePreKeyHandlerTest {
         assertEquals(8, deviceJids.size(),
                 "captured batch fixture has 8 devices");
 
-        // Walk the captured response and count <user> entries that include a <key>
-        // child — the contract for "not depleted". Cobalt's handler uses the same
-        // shape check: a missing <key> child means the server returned no one-time
-        // pre-key for that device, which the handler attributes to depletion.
         var withKey = response.streamChildren("list")
                 .flatMap(list -> list.streamChildren("user"))
                 .filter(user -> user.hasChild("key"))
@@ -94,6 +109,10 @@ class DevicePreKeyHandlerTest {
                 "captured response: every device has a <key> child, matching the prekey-batch.expected.json oracle (depletedPrekeyCount=0)");
     }
 
+    /**
+     * The single-device fixture exercises the hosted enterprise primary; depending on capture
+     * timing it may or may not carry a {@code <key>} child.
+     */
     @Test
     @DisplayName("captured single response: one device, one <key> child, no depletion")
     void singleResponseHasOneKey() {
@@ -106,14 +125,13 @@ class DevicePreKeyHandlerTest {
                 .flatMap(list -> list.streamChildren("user"))
                 .filter(user -> user.hasChild("key"))
                 .count();
-        // The hosted-account captured response had no one-time pre-key (skey only).
-        // This matches the prekey-single.expected.json oracle which shows the bundle
-        // shape without an additional <key> child for the one-time pre-key.
-        // We assert the structural property — what Cobalt's handler counts as
-        // "depleted" maps exactly to this missing-<key> shape.
         assertTrue(withKey <= 1, "single response can have 0 or 1 <key> children");
     }
 
+    /**
+     * Every {@code <user>} entry in the batch fixture carries the canonical pre-key bundle
+     * children: {@code registration}, {@code type}, {@code identity}, and {@code skey}.
+     */
     @Test
     @DisplayName("captured response: every user carries the canonical pre-key bundle children")
     void canonicalBundleShape() {

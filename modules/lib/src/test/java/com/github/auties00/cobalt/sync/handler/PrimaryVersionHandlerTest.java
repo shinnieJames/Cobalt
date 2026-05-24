@@ -24,14 +24,28 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Tests for {@link PrimaryVersionHandler} â€” Cobalt's adapter for
- * {@code WAWebPrimaryVersionSync}.
+ * Exercises {@link PrimaryVersionHandler} against the
+ * {@code WAWebPrimaryVersionSync.applyMutations} per-mutation flow.
  *
- * <p>The handler validates incoming primary version sync mutations but has
- * no application side effect (WA Web emits only WAM telemetry). The test
- * matrix asserts the per-branch classification of {@code applyMutation},
- * the default per-item {@code applyMutationBatch}, and the default
- * timestamp-based conflict resolution.
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: a {@link SyncdOperation#SET} with sub-index
+ * {@code "current"} or {@code "session_start"} and a non-empty
+ * version string surfaces as
+ * {@link SyncActionState#SUCCESS} (no store write); a missing,
+ * empty, or unknown sub-index surfaces as
+ * {@link SyncActionState#MALFORMED}; a wrong-typed value or missing
+ * version field surfaces as {@link SyncActionState#MALFORMED};
+ * {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED};
+ * {@link PrimaryVersionHandler#applyMutationBatch} dispatches each
+ * mutation independently; the default {@code resolveConflicts}
+ * chooses the later timestamp.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * {@code primaryVersionMutation} helper because the action carries
+ * no application side effect to verify against the store.
  */
 @DisplayName("PrimaryVersionHandler")
 class PrimaryVersionHandlerTest {

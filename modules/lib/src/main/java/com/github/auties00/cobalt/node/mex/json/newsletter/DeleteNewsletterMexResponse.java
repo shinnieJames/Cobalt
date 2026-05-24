@@ -18,27 +18,40 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Response variant for {@link DeleteNewsletterMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the delete-newsletter mutation built by
+ * {@link DeleteNewsletterMexRequest}.
+ *
+ * @apiNote
+ * Exposes the deleted newsletter id and the post-deletion {@code state}
+ * object echoed under {@code xwa2_newsletter_delete_v2}. WA Web throws a
+ * {@code ServerStatusCodeError(500)} when the relay returns a null root for
+ * this mutation; Cobalt callers should treat an empty {@link Optional} from
+ * {@link #of(Node)} as the equivalent failure signal.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexDeleteNewsletterJob")
 public final class DeleteNewsletterMexResponse implements MexOperation.Response.Json {
     /**
-     * The identifier of the deleted newsletter, as echoed by the server.
+     * The Jid string of the deleted newsletter, as echoed under
+     * {@code xwa2_newsletter_delete_v2.id}.
      */
     private final String id;
 
     /**
-     * The state object returned by the server after the deletion, which
-     * carries the terminal status type.
+     * The post-deletion {@code state} object describing the terminal
+     * newsletter status.
      */
     private final State state;
 
     /**
-     * Creates a response carrying the deleted newsletter identifier and
-     * its post-deletion state.
+     * Constructs a response wrapping the deleted newsletter id and its
+     * post-deletion state.
      *
-     * @param id the newsletter identifier echoed by the server
-     * @param state the state object describing the deletion outcome
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param id    the newsletter Jid echoed by the relay
+     * @param state the post-deletion state object
      */
     private DeleteNewsletterMexResponse(String id, State state) {
         this.id = id;
@@ -46,11 +59,17 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletter_delete_v2} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<DeleteNewsletterMexResponse> of(Node node) {
         return node.getChild("result")
@@ -59,42 +78,45 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Returns the identifier of the deleted newsletter.
+     * Returns the Jid string of the deleted newsletter.
      *
-     * @return an {@link Optional} containing the identifier, or empty if
-     *         the server did not echo it back
+     * @return the echoed newsletter id, or empty when the relay omitted it
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
     }
 
     /**
-     * Returns the state object carrying the newsletter's post-deletion
-     * status.
+     * Returns the post-deletion state object.
      *
-     * @return an {@link Optional} containing the state, or empty if the
-     *         server omitted it
+     * @return the parsed {@link State}, or empty when the relay omitted it
      */
     public Optional<State> state() {
         return Optional.ofNullable(state);
     }
 
     /**
-     * The state object nested under {@code xwa2_newsletter_delete_v2}
-     * describing the terminal newsletter state after deletion.
+     * Wraps the {@code state} sub-object embedded in the delete-newsletter
+     * response.
+     *
+     * @apiNote
+     * Carries the terminal newsletter status; the {@code type} value
+     * typically reads as the {@code GONE} sentinel used by the WhatsApp
+     * backend to mark removed channels.
      */
     public static final class State {
         /**
-         * The textual state identifier. After deletion this is typically
-         * the terminal {@code GONE} state used by the WhatsApp backend to
-         * mark removed channels.
+         * The textual state identifier.
          */
         private final String type;
 
         /**
-         * Creates a state object wrapping the textual type.
+         * Constructs a state wrapping the textual type.
          *
-     * @param type the raw state identifier returned by the server
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param type the raw state identifier returned by the relay
          */
         private State(String type) {
             this.type = type;
@@ -103,8 +125,7 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
         /**
          * Returns the textual state identifier.
          *
-     * @return an {@link Optional} containing the type, or empty if
-         *         absent from the server reply
+         * @return the state type, or empty when the relay omitted the field
          */
         public Optional<String> type() {
             return Optional.ofNullable(type);
@@ -113,9 +134,13 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
         /**
          * Parses a single {@link State} object from the given JSON map.
          *
-     * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed state, or
-         *         empty if {@code obj} is {@code null}
+         * @apiNote
+         * Used by {@link DeleteNewsletterMexResponse#of(byte[])} to hydrate
+         * the {@code state} entry.
+         *
+         * @param obj the JSON object to parse
+         * @return the parsed {@link State}, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<State> of(JSONObject obj) {
             if (obj == null) {
@@ -127,12 +152,14 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a list of {@link State} objects from the given JSON
-         * array.
+         * Parses a list of {@link State} objects from the given JSON array.
          *
-     * @param arr the JSON array to parse
-         * @return the list of parsed states, empty if {@code arr} is
-         *         {@code null}
+         * @apiNote
+         * Provided for symmetry; the delete-newsletter envelope does not
+         * carry a {@code state} array.
+         *
+         * @param arr the JSON array to parse
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<State> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -148,12 +175,22 @@ public final class DeleteNewsletterMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses a {@link DeleteNewsletterMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception. WA Web raises a {@code ServerStatusCodeError(500)} when
+     * the {@code xwa2_newsletter_delete_v2} root is {@code null}; here that
+     * condition surfaces as empty.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletter_delete_v2} root
      */
     private static Optional<DeleteNewsletterMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

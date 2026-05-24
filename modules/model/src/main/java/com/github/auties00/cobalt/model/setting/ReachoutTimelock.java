@@ -69,22 +69,6 @@ public final class ReachoutTimelock {
     }
 
     /**
-     * Constructs a new {@code ReachoutTimelock} verdict carrying the
-     * relay-issued enforcement state.
-     *
-     * @param active              whether the timelock is currently
-     *                            enforced
-     * @param timeEnforcementEnds the enforcement-window end timestamp,
-     *                            or {@code null} when omitted
-     * @param enforcementType     the enforcement-type tag, or
-     *                            {@code null} when omitted
-     * @return a new {@code ReachoutTimelock}
-     */
-    public static ReachoutTimelock of(boolean active, String timeEnforcementEnds, String enforcementType) {
-        return new ReachoutTimelock(active, timeEnforcementEnds, enforcementType);
-    }
-
-    /**
      * Returns whether the timelock is currently being enforced.
      *
      * @return {@code true} when enforcement is active

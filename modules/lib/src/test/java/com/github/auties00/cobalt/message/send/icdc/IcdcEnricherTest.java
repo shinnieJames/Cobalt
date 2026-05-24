@@ -16,15 +16,22 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link IcdcEnricher}, mirroring
- * {@code WAWebE2EProtoGenerator.populateMessageContextInfo} and
- * {@code WAWebICDCMetaApi.populateICDCMeta}.
+ * Branch-coverage tests for {@link IcdcEnricher#enrich}.
  *
- * <p>The enricher merges {@link com.github.auties00.cobalt.device.icdc.IcdcResult}
- * data from the sender and recipient into the container's
- * {@code messageContextInfo.deviceListMetadata}, sets
- * {@code deviceListMetadataVersion = 2}, and preserves every other
- * context-info field already present.
+ * @apiNote
+ * Mirrors WA Web's {@code WAWebE2EProtoGenerator.populateMessageContextInfo}
+ * and {@code WAWebICDCMetaApi.populateICDCMeta} call branches: both ICDC
+ * inputs {@code null} (no-op, original container returned), sender-only,
+ * recipient-only, both populated, empty ICDC values, and merge over a
+ * pre-existing {@link com.github.auties00.cobalt.model.chat.ChatMessageContextInfo}
+ * with a {@code messageSecret}. Drift on any of these branches silently
+ * corrupts the receiver-side device-sync pipeline.
+ * @implNote
+ * Uses {@link TestIcdcResults} fixture helpers to mint
+ * {@link com.github.auties00.cobalt.device.icdc.IcdcResult} instances without
+ * round-tripping through the
+ * {@link com.github.auties00.cobalt.device.DeviceService}, isolating the
+ * enricher from device-list bookkeeping.
  */
 @DisplayName("IcdcEnricher")
 class IcdcEnricherTest {
@@ -34,15 +41,24 @@ class IcdcEnricherTest {
     private static final Instant SENDER_TS = Instant.ofEpochSecond(1700000000L);
     private static final Instant RECIPIENT_TS = Instant.ofEpochSecond(1700000100L);
 
+    /**
+     * Verifies that both ICDC inputs {@code null} short-circuits to the
+     * supplied container by reference.
+     */
     @Test
     @DisplayName("both ICDC null: container is returned unchanged (no-op)")
     void bothNullReturnsSameContainer() {
         var original = MessageContainer.of("hello");
         var result = IcdcEnricher.enrich(original, null, null);
         assertSame(original, result,
-                "no ICDC inputs → container must be returned by reference");
+                "no ICDC inputs must return the container by reference");
     }
 
+    /**
+     * Verifies that a sender-only ICDC populates the
+     * {@code deviceListMetadata.sender*} fields and leaves the recipient
+     * fields empty.
+     */
     @Test
     @DisplayName("sender-only ICDC: deviceListMetadata.sender* fields populated")
     void senderOnly() {
@@ -60,12 +76,16 @@ class IcdcEnricherTest {
         assertEquals(2, ctx.deviceListMetadataVersion().orElseThrow(),
                 "version=2 must be stamped on every enrich call");
 
-        // Recipient side untouched.
         assertTrue(meta.recipientKeyHash().isEmpty());
         assertTrue(meta.recipientTimestamp().isEmpty());
         assertTrue(meta.recipientKeyIndexes().isEmpty());
     }
 
+    /**
+     * Verifies that a recipient-only ICDC populates the
+     * {@code deviceListMetadata.recipient*} fields and leaves the sender
+     * fields empty.
+     */
     @Test
     @DisplayName("recipient-only ICDC: deviceListMetadata.recipient* fields populated")
     void recipientOnly() {
@@ -80,10 +100,13 @@ class IcdcEnricherTest {
         assertEquals(List.of(0), meta.recipientKeyIndexes());
         assertEquals(ADVEncryptionType.E2EE, meta.receiverAccountType().orElseThrow());
 
-        // Sender side untouched.
         assertTrue(meta.senderKeyHash().isEmpty());
     }
 
+    /**
+     * Verifies that supplying both ICDC inputs populates their respective
+     * field clusters independently.
+     */
     @Test
     @DisplayName("both sender and recipient ICDC populate the corresponding fields independently")
     void bothPopulated() {
@@ -98,14 +121,22 @@ class IcdcEnricherTest {
         assertEquals(List.of(0), meta.recipientKeyIndexes());
     }
 
+    /**
+     * Verifies that an all-empty ICDC pair still triggers the non-null
+     * branch and stamps the version.
+     *
+     * @apiNote
+     * Empty ICDC inputs (every field {@code null}) are distinct from a
+     * {@code null} input: they take the non-short-circuit path, so the
+     * {@code deviceListMetadataVersion = 2} stamp must still appear and the
+     * field-detail Optionals must stay empty.
+     */
     @Test
     @DisplayName("empty ICDC (all fields null): meta is built but Optional fields stay empty")
     void emptyIcdcStillPopulatesMeta() {
         var enriched = IcdcEnricher.enrich(MessageContainer.of("hi"),
                 TestIcdcResults.empty(), TestIcdcResults.empty());
 
-        // Even an empty ICDC pair triggers a non-null result (it's not the
-        // both-null branch). Version is stamped; all detail fields remain empty.
         var ctx = enriched.messageContextInfo().orElseThrow();
         var meta = ctx.deviceListMetadata().orElseThrow();
         assertTrue(meta.senderKeyHash().isEmpty());
@@ -113,6 +144,10 @@ class IcdcEnricherTest {
         assertEquals(2, ctx.deviceListMetadataVersion().orElseThrow());
     }
 
+    /**
+     * Verifies that fields already present on the container's
+     * {@code messageContextInfo} survive the ICDC merge.
+     */
     @Test
     @DisplayName("existing messageContextInfo: messageSecret and other fields are preserved across enrich")
     void existingContextInfoPreserved() {
@@ -129,12 +164,16 @@ class IcdcEnricherTest {
         var ctx = enriched.messageContextInfo().orElseThrow();
         assertArrayEquals(secret, ctx.messageSecret().orElseThrow(),
                 "messageSecret must be preserved through the ICDC merge");
-        // ICDC fields were added.
         assertEquals(2, ctx.deviceListMetadataVersion().orElseThrow());
         var meta = ctx.deviceListMetadata().orElseThrow();
         assertArrayEquals(SENDER_KEY_HASH, meta.senderKeyHash().orElseThrow());
     }
 
+    /**
+     * Verifies that {@link IcdcEnricher#enrich} only affects the
+     * {@code messageContextInfo} side-channel, leaving the payload type
+     * intact.
+     */
     @Test
     @DisplayName("enriched container content() still returns the original payload (side-channel-only change)")
     void contentUnchanged() {
@@ -142,8 +181,6 @@ class IcdcEnricherTest {
         var enriched = IcdcEnricher.enrich(container,
                 TestIcdcResults.create(SENDER_KEY_HASH, SENDER_TS, List.of(0), null),
                 null);
-        // The enrich pass only touches messageContextInfo, never the payload.
-        // content() still resolves to the original ExtendedTextMessage.
         var originalContent = container.content();
         var enrichedContent = enriched.content();
         assertEquals(originalContent.getClass(), enrichedContent.getClass(),

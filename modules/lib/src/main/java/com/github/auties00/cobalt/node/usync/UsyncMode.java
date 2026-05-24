@@ -5,62 +5,75 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * Enumerates the {@code mode} values accepted by the {@code <usync>} stanza.
+ * Enumerates the {@code mode} values the {@code <usync>} stanza accepts.
  *
- * <p>The mode tells the WhatsApp relay how to interpret the request. The
- * default is {@link #QUERY}, meaning the client wants protocol data;
- * {@link #NOTIFY} indicates a side-effect-only request that does not need a
- * body in the response; {@link #DELTA} is used by long-running listeners to
- * receive incremental updates.
+ * @apiNote
+ * Cobalt builders default to {@link #QUERY}; pass {@link #DELTA} from contact
+ * sync jobs that ship just an add/remove diff against the relay's last-known
+ * roster (see {@code WAWebContactSyncUtils.constructUsyncDeltaQuery}).
  *
- * <p>Each constant carries the literal wire string emitted on the
- * {@code mode="..."} attribute via {@link #wireValue()}.
+ * @implNote
+ * This implementation is the typed Cobalt counterpart of the free-form
+ * {@code this.mode} string assigned via {@code USyncQuery.withMode} in
+ * {@code WAWebUsync}; the JS surface accepts any string but only the four
+ * literals modelled here are observed in the call graph.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public enum UsyncMode {
     /**
-     * Standard query mode. The relay returns the protocol data inline in the
-     * response and the request is one-shot.
+     * Standard one-shot query mode.
+     *
+     * @apiNote
+     * The relay inlines the requested protocol data in the response.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
     QUERY("query"),
 
     /**
-     * Notify mode. Used when the client wants the relay to perform a
-     * side-effect (for instance subscribe to updates) without returning a
-     * protocol payload.
+     * Notify mode.
+     *
+     * @apiNote
+     * Asks the relay to perform a side effect without returning protocol
+     * payloads in the response body.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
     NOTIFY("notify"),
 
     /**
-     * Delta mode. The relay returns only the entries that have changed since
-     * the timestamp the client carried in its per-user device hash info.
+     * Delta mode.
+     *
+     * @apiNote
+     * Used by background contact-sync jobs that ship only the add/remove diff
+     * against the relay's last-known roster, keyed by the per-user device-list
+     * hashes attached through {@link UsyncUser#withDeviceHash(String)} and
+     * {@link UsyncUser#withTimestamp(java.time.Instant)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
     DELTA("delta"),
 
     /**
-     * Result mode. Used internally when the relay echoes back a response
-     * already obtained from a peer notification.
+     * Result mode.
+     *
+     * @apiNote
+     * Used internally when the relay echoes a response already obtained
+     * from a peer notification.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsync",
             exports = "USyncQuery", adaptation = WhatsAppAdaptation.DIRECT)
     RESULT("result");
 
     /**
-     * Holds the literal value emitted on the wire for the {@code mode}
-     * attribute.
+     * The literal value emitted on the {@code mode} attribute.
      */
     private final String wireValue;
 
     /**
-     * Creates a new {@code UsyncMode} bound to the given wire string.
+     * Binds a new constant to its wire literal.
      *
-     * @param wireValue the literal value the relay expects on the {@code mode}
+     * @param wireValue the literal the relay expects on the {@code mode}
      *                  attribute
      */
     UsyncMode(String wireValue) {
@@ -68,10 +81,15 @@ public enum UsyncMode {
     }
 
     /**
-     * Returns the literal string emitted on the {@code mode} attribute of the
+     * Returns the literal emitted on the {@code mode} attribute of the
      * {@code <usync>} stanza.
      *
-     * @return the wire value
+     * @apiNote
+     * Call sites that bypass {@link UsyncQuery#toNode()} to assemble a raw
+     * {@link com.github.auties00.cobalt.node.Node} use this to match the exact
+     * wire literal.
+     *
+     * @return the wire literal
      */
     public String wireValue() {
         return wireValue;

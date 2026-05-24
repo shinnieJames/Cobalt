@@ -13,58 +13,50 @@ import org.junit.jupiter.api.TestFactory;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Behavioural tests for {@link WamEventEncoder} / {@link WamEventDecoder}
- * over the full primitive type matrix.
+ * Behavioural tests for {@link WamEventEncoder} and
+ * {@link WamEventDecoder} over the full primitive type matrix.
  *
- * <p>Each test exercises one of three properties:
+ * @apiNote
+ * Three orthogonal properties are exercised: round-trip parity
+ * (encode then decode bit-equals the input), sink parity (byte-array
+ * sink and {@link ByteArrayOutputStream} sink agree byte-for-byte),
+ * and {@link WamEventSizes} parity (the predictive size functions
+ * equal the bytes actually written, and pre-allocating exactly that
+ * many bytes succeeds without overflow). The byte-level KAT against
+ * the live WhatsApp Web bundle is {@link WamEventEncoderKatTest};
+ * this file asserts internal consistency only.
  *
- * <ol>
- *   <li><b>Round-trip parity</b> — encode a value, decode it back, and
- *       assert the result is bit-equal to the input. Covers every
- *       {@code WamType} branch (INTEGER / BOOLEAN / STRING / FLOAT)
- *       and every numeric boundary
- *       ({@code 0}, {@code 1}, {@code Byte.MIN/MAX_VALUE},
- *       {@code Short.MIN/MAX_VALUE},
- *       {@code Integer.MIN/MAX_VALUE},
- *       {@code Float.NaN}, {@code Float.POSITIVE_INFINITY}).</li>
- *   <li><b>Sink parity</b> — the same input encoded via the
- *       byte-array sink and the {@link java.io.OutputStream} sink
- *       must produce byte-identical output and the same
- *       {@code written()} count.</li>
- *   <li><b>{@link WamEventSizes} parity</b> — the byte count returned
- *       by {@code WamEventSizes.xxxSize(...)} must equal the bytes
- *       actually emitted, and pre-allocating exactly that many bytes
- *       must succeed without overflow.</li>
- * </ol>
- *
- * <p>The KAT counterpart against WA Web is
- * {@link WamEventEncoderKatTest}; this class only asserts internal
- * consistency.
+ * @implNote
+ * Cobalt-internal; the encoder and decoder are MCP-grounded against
+ * {@code WAWebWamLibProtocol} via the sibling KAT file, so the
+ * behavioural assertions here can rely on Cobalt's own contract.
  */
 @DisplayName("WamEventEncoder / WamEventDecoder behavioural")
 class WamEventEncoderTest {
     /**
-     * Headroom over the longest encoded entry used by these tests
-     * — the 70 000-byte UTF-8 sink-parity case is the worst case.
+     * The shared buffer size, sized for the 70 000-byte UTF-8
+     * sink-parity case (the worst case in the matrix).
      */
     private static final int BUFFER = 80_000;
 
     /**
-     * Round-trip tests covering every primitive value type.
+     * Round-trip sub-suite: encode a value, decode it, assert
+     * bit-equal to the input.
      */
     @Nested
     @DisplayName("round-trip encode → decode")
     class RoundTrip {
         /**
-         * Returns one dynamic test per integer boundary.
+         * Returns one dynamic test per integer boundary, each in
+         * three variants: bare, {@code LAST}-flagged, and WIDE_ID.
          *
          * @return the test factory stream
          */
@@ -86,7 +78,8 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Returns one dynamic test per string boundary.
+         * Returns one dynamic test per string boundary, covering the
+         * STR8 / STR16 / STR32 length-prefix tiers.
          *
          * @return the test factory stream
          */
@@ -111,7 +104,8 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Tests float round-trip including special IEEE-754 values.
+         * Returns one dynamic test per float boundary, including the
+         * special IEEE-754 values (NaN, infinities, subnormals).
          *
          * @return the test factory stream
          */
@@ -130,7 +124,7 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Tests bool round-trip via the {@code writeBoolField}
+         * Verifies bool round-trip via the {@code writeBoolField}
          * convenience method.
          */
         @Test
@@ -149,14 +143,14 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Tests null entry round-trip for the GLOBAL role — encoder
-         * writes the tag, decoder reads back with valueType =
-         * VALUE_NULL.
+         * Verifies the null entry round-trip for the GLOBAL role: the
+         * encoder writes a 2-byte (tag + fieldId) header, the decoder
+         * reads it back with the {@code VALUE_NULL} value-type nibble.
          *
-         * <p>Per WAWebWamLibProtocol, only the GLOBAL role emits
+         * @implNote
+         * Per {@code WAWebWamLibProtocol}, only the GLOBAL role emits
          * bytes for a null value (the dirty-write null-transition
-         * path); FIELD and EVENT roles with a null value are a
-         * no-op, covered separately by
+         * path); the FIELD and EVENT no-op branches are covered by
          * {@link WamEventDecoderTest#writeNullNonGlobalIsNoop()}.
          */
         @Test
@@ -175,8 +169,15 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Tests event-marker round-trip: writeEventMarker then
-         * readHeader + readInt.
+         * Verifies event-marker round-trip:
+         * {@link WamEventEncoder#writeEventMarker(int, int, boolean)}
+         * followed by {@link WamEventDecoder#readHeader} +
+         * {@link WamEventDecoder#readInt}.
+         *
+         * @implNote
+         * The payload comes back as {@code -weight} per the JS sign
+         * convention {@link WamEventEncoder#writeEventMarker(int, int, boolean)}
+         * negates inside.
          */
         @Test
         @DisplayName("event marker: writeEventMarker → decoded eventId + negated weight")
@@ -193,14 +194,18 @@ class WamEventEncoderTest {
     }
 
     /**
-     * Sink-parity tests: byte-array vs stream sinks must produce
-     * identical bytes and the same {@code written()} count.
+     * Sink-parity sub-suite: the byte-array sink and the
+     * {@link ByteArrayOutputStream} sink must produce identical bytes
+     * and the same {@code written()} count for any sequence of
+     * operations.
      */
     @Nested
     @DisplayName("ByteArray vs Stream sink parity")
     class SinkParity {
         /**
-         * Verifies parity across a representative type matrix.
+         * Verifies parity across a representative type matrix
+         * (null, int across the tier boundaries, float, string across
+         * the length-prefix tiers, event marker, WIDE_ID paths).
          */
         @Test
         @DisplayName("identical inputs yield identical bytes on both sinks")
@@ -217,21 +222,22 @@ class WamEventEncoderTest {
             assertSinkParity(encoder -> encoder.writeString(5, WamTags.GLOBAL, "a".repeat(300)));
             assertSinkParity(encoder -> encoder.writeString(5, WamTags.GLOBAL, "a".repeat(70_000)));
             assertSinkParity(encoder -> encoder.writeEventMarker(2862, 1, true));
-            // Wide-id paths
             assertSinkParity(encoder -> encoder.writeInt(300, WamTags.FIELD, 7L));
             assertSinkParity(encoder -> encoder.writeString(300, WamTags.FIELD, "wide"));
         }
     }
 
     /**
-     * {@link WamEventSizes} parity: every {@code xxxSize(...)} call
-     * must equal the bytes actually written.
+     * {@link WamEventSizes} parity sub-suite: every {@code xxxSize(...)}
+     * call equals the bytes actually written, and a buffer sized to
+     * that count exactly succeeds without overflow.
      */
     @Nested
     @DisplayName("WamEventSizes equals actual bytes written")
     class SizesParity {
         /**
-         * Verifies int field-size parity.
+         * Verifies int field-size parity across the same boundaries
+         * the round-trip suite exercises.
          */
         @Test
         @DisplayName("intFieldSize matches written bytes")
@@ -243,7 +249,7 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Verifies bool field-size parity.
+         * Verifies bool field-size parity for both literal values.
          */
         @Test
         @DisplayName("boolFieldSize matches written bytes")
@@ -255,8 +261,8 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Verifies string field-size parity across the str8 / str16 /
-         * str32 length-prefix boundaries.
+         * Verifies string field-size parity across the STR8 / STR16 /
+         * STR32 length-prefix tiers.
          */
         @Test
         @DisplayName("stringFieldSize matches written bytes (across all length-prefix tiers)")
@@ -290,11 +296,12 @@ class WamEventEncoderTest {
         /**
          * Verifies null-entry size parity for the GLOBAL role.
          *
-         * <p>{@code WamEventSizes.nullSize} returns the byte cost of
-         * a GLOBAL null entry (the only role that emits bytes per
-         * WAWebWamLibProtocol's null-shortcut); pairing it with a
-         * FIELD or EVENT {@code writeNull} would always disagree
-         * because those roles emit zero bytes.
+         * @implNote
+         * {@link WamEventSizes#nullSize(int)} returns the byte cost of
+         * a GLOBAL null entry; pairing it with a FIELD or EVENT
+         * {@code writeNull} would always disagree because those roles
+         * emit zero bytes per {@code WAWebWamLibProtocol}'s
+         * null-shortcut.
          */
         @Test
         @DisplayName("nullSize matches GLOBAL null-entry written bytes")
@@ -307,14 +314,15 @@ class WamEventEncoderTest {
     }
 
     /**
-     * Boundary tests for the buffer-overflow guard.
+     * Boundary sub-suite for the buffer-overflow guard.
      */
     @Nested
     @DisplayName("buffer-overflow boundary")
     class OverflowBoundary {
         /**
-         * Verifies that pre-allocating exactly {@code sizeOf()} bytes
-         * succeeds without overflow.
+         * Verifies that a buffer pre-allocated to exactly
+         * {@link WamEventSizes#intFieldSize(int, long)} bytes accepts
+         * the matching write without overflow.
          */
         @Test
         @DisplayName("pre-allocating exactly sizeOf bytes succeeds")
@@ -327,14 +335,13 @@ class WamEventEncoderTest {
         }
 
         /**
-         * Verifies that overflowing the buffer throws
-         * {@link IndexOutOfBoundsException} with a self-describing
-         * message.
+         * Verifies that a write past the buffer's end throws
+         * {@link IndexOutOfBoundsException}.
          */
         @Test
         @DisplayName("encoding beyond the buffer throws IndexOutOfBoundsException")
         void overflowThrows() {
-            var buffer = new byte[3]; // too small for an int32 field
+            var buffer = new byte[3];
             var encoder = WamEventEncoder.of(buffer);
             assertThrows(IndexOutOfBoundsException.class,
                     () -> encoder.writeIntField(7, 70_000L, false));
@@ -347,7 +354,8 @@ class WamEventEncoderTest {
      *
      * @param fieldId      the wire field id
      * @param value        the value to round-trip
-     * @param hasFollowing whether the LAST flag should be unset
+     * @param hasFollowing whether the {@code LAST} flag should be
+     *                     unset
      */
     private static void assertIntRoundTrip(int fieldId, long value, boolean hasFollowing) {
         var buffer = new byte[BUFFER];
@@ -361,12 +369,14 @@ class WamEventEncoderTest {
     }
 
     /**
-     * Encodes a string field, decodes it, and asserts the value
-     * survives the round-trip (UTF-8 preserved).
+     * Encodes a string field into a buffer sized exactly to
+     * {@link WamEventSizes#stringFieldSize(int, String)}, decodes it,
+     * and asserts the UTF-8 round-trip is bit-exact.
      *
      * @param fieldId      the wire field id
      * @param value        the value to round-trip
-     * @param hasFollowing whether the LAST flag should be unset
+     * @param hasFollowing whether the {@code LAST} flag should be
+     *                     unset
      */
     private static void assertStringRoundTrip(int fieldId, String value, boolean hasFollowing) {
         var size = WamEventSizes.stringFieldSize(fieldId, value);
@@ -380,8 +390,8 @@ class WamEventEncoderTest {
     }
 
     /**
-     * Encodes a float field, decodes it, and asserts the value
-     * survives the round-trip (bit-equal for NaN / Infinity).
+     * Encodes a float field, decodes it, and asserts bit-equal
+     * round-trip (preserving NaN and infinity bit patterns).
      *
      * @param fieldId the wire field id
      * @param value   the value to round-trip
@@ -400,12 +410,12 @@ class WamEventEncoderTest {
     }
 
     /**
-     * Encodes the same operation through both sinks and asserts the
-     * produced bytes are byte-identical.
+     * Runs the same encoder operation against both sinks and asserts
+     * the produced bytes and the {@code written()} count agree.
      *
      * @param op the encoder operation
      */
-    private static void assertSinkParity(java.util.function.Consumer<WamEventEncoder> op) {
+    private static void assertSinkParity(Consumer<WamEventEncoder> op) {
         var arrayBuffer = new byte[BUFFER];
         var arrayEncoder = WamEventEncoder.of(arrayBuffer);
         op.accept(arrayEncoder);
@@ -424,14 +434,13 @@ class WamEventEncoderTest {
 
     /**
      * Encodes the operation into a buffer sized exactly to
-     * {@code expectedSize}, then asserts the operation succeeded
-     * without overflow and {@code written()} equals
-     * {@code expectedSize}.
+     * {@code expectedSize} and asserts {@code written()} returns
+     * {@code expectedSize} without throwing on overflow.
      *
      * @param expectedSize the size reported by {@link WamEventSizes}
      * @param op           the encoder operation
      */
-    private static void assertSizeParity(int expectedSize, java.util.function.Consumer<WamEventEncoder> op) {
+    private static void assertSizeParity(int expectedSize, Consumer<WamEventEncoder> op) {
         var buffer = new byte[expectedSize];
         var encoder = WamEventEncoder.of(buffer);
         op.accept(encoder);

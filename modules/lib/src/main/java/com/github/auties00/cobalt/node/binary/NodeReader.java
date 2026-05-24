@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Objects;
 import java.util.SequencedCollection;
 import java.util.SequencedMap;
+import java.util.function.Supplier;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
@@ -30,39 +31,42 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
 /**
  * Parses {@link Node} trees from WhatsApp's binary stanza format.
  *
- * <p>Inbound stanzas from the WhatsApp server are either raw or DEFLATE
- * compressed binary blobs encoded with the WAWap protocol. This class
- * turns those blobs back into node trees by reading the leading flags
- * byte, then dispatching to a source-and-compression specialised
- * decoder that handles the size header, description, attribute list,
- * and typed content (sized list, JID variant, hex or nibble packed run,
- * dictionary token, single byte token, or binary blob).
+ * <p>Inbound stanzas arrive as raw or DEFLATE-compressed byte sequences
+ * encoded by the WAWap protocol. This class consumes the leading flags
+ * byte to choose between an uncompressed and an inflating decoder, then
+ * walks the size header, description, attribute pairs and typed content
+ * slot (sized child list, JID variant, hex or nibble packed string,
+ * dictionary token, single-byte token, or binary blob) to rebuild the
+ * node tree.
  *
- * <p>This is an abstract base. The tree-traversal logic lives here
- * once; subclasses provide only the four primitive read operations
- * ({@link #read()}, {@link #readShort()}, {@link #readInt()},
- * {@link #readBytes(int)}) and {@link #hasData()} specialised for the
- * backing source. Four sources are supported via static factory
- * methods, each automatically picking the compressed or uncompressed
- * variant based on the leading flags byte:
+ * <p>The class is an abstract template: the tree-traversal logic lives
+ * here once and subclasses provide only the four primitive read
+ * operations ({@link #read()}, {@link #readShort()}, {@link #readInt()},
+ * {@link #readBytes(int)}) plus {@link #hasData()} specialised for the
+ * backing source. Four sources are supported through static factories,
+ * each automatically picking the compressed or uncompressed variant
+ * based on the leading flags byte:
  *
  * <ul>
- *   <li>{@link #of(byte[])} — reads from a {@code byte[]} starting at
- *       offset zero.
- *   <li>{@link #of(ByteBuffer)} — reads from a {@link ByteBuffer}
+ *   <li>{@link #fromBytes(byte[])} reads from a {@code byte[]} starting
+ *       at offset zero
+ *   <li>{@link #fromBuffer(ByteBuffer)} reads from a {@link ByteBuffer}
  *       starting at its current position, advancing it as bytes are
- *       consumed.
- *   <li>{@link #of(MemorySegment, long)} — reads from a
- *       {@link MemorySegment} starting at the supplied byte offset.
- *   <li>{@link #of(InputStream)} — reads from an {@link InputStream}
- *       one byte (or one bulk read) at a time. Wrap in a
- *       {@link java.io.BufferedInputStream} if many small reads are
- *       expected on an unbuffered source.
+ *       consumed
+ *   <li>{@link #fromSegment(MemorySegment, long)} reads from a
+ *       {@link MemorySegment} starting at the supplied byte offset
+ *   <li>{@link #fromStream(InputStream)} and
+ *       {@link #fromStream(InputStream, int)} read from an
+ *       {@link InputStream} through a per-instance staging buffer
+ *       (8 KiB by default) so wrapping the input in
+ *       {@link java.io.BufferedInputStream} is unnecessary
  * </ul>
  *
- * <p>Decoders are {@link AutoCloseable}; closing a compressed decoder
- * releases the underlying {@link Inflater}, closing an uncompressed
- * decoder is a no-op.
+ * <p>Decoders are {@link AutoCloseable}: a compressed decoder releases
+ * its {@link Inflater} on close; an uncompressed decoder is a no-op;
+ * a stream-backed decoder additionally closes the underlying source
+ * when it owns the stream lifecycle (created via
+ * {@link #fromStream(Supplier)}).
  *
  * @see Node
  * @see NodeAttribute
@@ -74,59 +78,84 @@ import static com.github.auties00.cobalt.node.binary.NodeTokens.*;
 public abstract class NodeReader implements AutoCloseable {
 
     /**
-     * Alphabet used to decode nibble packed strings.
+     * Holds the decoder alphabet for nibble packed strings.
+     *
+     * <p>The four high entries are explicit replacement characters because the
+     * wire format reserves those slots without assigning them a textual
+     * meaning; any byte that would index into them is a protocol-level encoder
+     * bug.
      */
     private static final char[] NIBBLE_ALPHABET = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '.', '�', '�', '�', '�'};
 
     /**
-     * Alphabet used to decode hex packed strings.
+     * Holds the decoder alphabet for hex packed strings (uppercase hex digits
+     * only).
      */
     private static final char[] HEX_ALPHABET = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
     /**
-     * Capacity of the per-instance buffers used by the compressed
-     * decoder for inflater input and inflated output staging.
+     * Holds the default capacity of the per-instance staging buffers used by
+     * the stream-backed decoders.
+     *
+     * <p>The compressed stream variant uses two buffers of this size (one for
+     * inflater input, one for inflated output) so its per-decoder cost is
+     * 16 KiB.
+     *
+     * @implNote
+     * 8 KiB matches the default that {@link java.io.BufferedInputStream}
+     * picks: large enough to absorb most stanzas in one fill and small enough
+     * that the per-decoder allocation cost is negligible.
      */
-    private static final int DECOMPRESSION_BUFFER_SIZE = 8192;
+    private static final int DEFAULT_BUFFER_SIZE = 8192;
 
     /**
-     * Mask bit in the leading flags byte signalling that the stanza
+     * Holds the bit mask in the leading flags byte signalling that the stanza
      * payload is DEFLATE compressed.
      */
     private static final int COMPRESSION_FLAG = 2;
 
     /**
-     * Sole constructor, accessible only to package-internal subclasses.
+     * Constructs a new decoder for a package-internal subclass.
+     *
+     * <p>The hierarchy is closed within this package; the constructor exists
+     * only to satisfy {@code javac} for the inner subclasses.
      */
     NodeReader() {
 
     }
 
     /**
-     * Returns a decoder appropriate for the leading flags byte of the
-     * supplied {@code byte[]} source starting at offset zero.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * {@code byte[]} source starting at offset zero.
      *
-     * @param source the array of encoded stanza bytes, starting with
-     *               the flags byte at index zero
-     * @return an inflating decoder when the compression flag is set, a
-     *         direct decoder otherwise
+     * <p>Equivalent to {@code fromBytes(source, 0)} for callers that have the
+     * entire encoded stanza in a fresh array.
+     *
+     * @param source the array of encoded stanza bytes, starting with the flags
+     *               byte at index zero
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWap", exports = "decodeStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static NodeReader of(byte[] source) {
-        return of(source, 0);
+    public static NodeReader fromBytes(byte[] source) {
+        return fromBytes(source, 0);
     }
 
     /**
-     * Returns a decoder appropriate for the leading flags byte of the
-     * supplied {@code byte[]} source starting at {@code offset}.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * {@code byte[]} source starting at {@code offset}.
+     *
+     * <p>Used when the flags byte sits inside a larger framing buffer (for
+     * example a Noise tunnel decryption output) and the caller does not want
+     * to slice the array.
      *
      * @param source the array of encoded stanza bytes
      * @param offset the index of the flags byte within {@code source}
-     * @return an inflating decoder when the compression flag is set, a
-     *         direct decoder otherwise
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
      */
-    public static NodeReader of(byte[] source, int offset) {
+    public static NodeReader fromBytes(byte[] source, int offset) {
         Objects.requireNonNull(source, "source");
         var flags = source[offset] & 0xFF;
         if ((flags & COMPRESSION_FLAG) != 0) {
@@ -136,17 +165,21 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Returns a decoder appropriate for the leading flags byte of the
-     * supplied {@link ByteBuffer} source.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * {@link ByteBuffer} source.
      *
-     * @param source the buffer of encoded stanza bytes, in read mode
-     *               with the flags byte at its current position
-     * @return an inflating decoder when the compression flag is set, a
-     *         direct decoder otherwise
+     * <p>The buffer's current position must be at the flags byte; the decoder
+     * advances the position as it consumes the stanza, so a caller that wants
+     * to peek without committing must {@link ByteBuffer#duplicate()} first.
+     *
+     * @param source the buffer of encoded stanza bytes, in read mode with the
+     *               flags byte at its current position
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWap", exports = "decodeStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
-    public static NodeReader of(ByteBuffer source) {
+    public static NodeReader fromBuffer(ByteBuffer source) {
         Objects.requireNonNull(source, "source");
         var flags = source.get() & 0xFF;
         if ((flags & COMPRESSION_FLAG) != 0) {
@@ -156,16 +189,19 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Returns a decoder appropriate for the leading flags byte of the
-     * supplied {@link MemorySegment} source starting at {@code offset}.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * {@link MemorySegment} source starting at {@code offset}.
+     *
+     * <p>Used by callers that own a foreign memory segment containing the
+     * stanza (for example a frame from an off-heap socket buffer); avoids the
+     * round-trip through a {@code byte[]}.
      *
      * @param source the segment of encoded stanza bytes
-     * @param offset the byte offset of the flags byte within
-     *               {@code source}
-     * @return an inflating decoder when the compression flag is set, a
-     *         direct decoder otherwise
+     * @param offset the byte offset of the flags byte within {@code source}
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
      */
-    public static NodeReader of(MemorySegment source, long offset) {
+    public static NodeReader fromSegment(MemorySegment source, long offset) {
         Objects.requireNonNull(source, "source");
         var flags = source.get(ValueLayout.JAVA_BYTE, offset) & 0xFF;
         if ((flags & COMPRESSION_FLAG) != 0) {
@@ -175,37 +211,108 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Returns a decoder appropriate for the leading flags byte of the
-     * supplied {@link InputStream} source.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * caller-owned {@link InputStream} source using the default 8 KiB staging
+     * buffer.
      *
-     * <p>The leading flags byte is consumed immediately to pick the
-     * uncompressed or compressed variant. Callers that expect many
-     * small reads from an unbuffered source should wrap the input in
-     * {@link java.io.BufferedInputStream} before passing it in.
+     * <p>The decoder does not close {@code source} on {@link #close()}; the
+     * stream is caller-owned and typically long-lived (a socket input stream
+     * shared across many decoded nodes). The {@link #fromStream(Supplier)}
+     * variant transfers stream ownership to the decoder.
      *
      * @param source the input stream of encoded stanza bytes
-     * @return an inflating decoder when the compression flag is set, a
-     *         direct decoder otherwise
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
      * @throws IOException if reading the flags byte fails
      */
-    public static NodeReader of(InputStream source) throws IOException {
-        Objects.requireNonNull(source, "source");
-        var flags = source.read();
-        if (flags < 0) {
-            throw new IOException("Unexpected end of stream while reading flags byte");
-        }
-        if ((flags & COMPRESSION_FLAG) != 0) {
-            return new StreamCompressed(source);
-        }
-        return new StreamUncompressed(source);
+    public static NodeReader fromStream(InputStream source) throws IOException {
+        return fromStream(source, DEFAULT_BUFFER_SIZE, false);
     }
 
     /**
-     * Decodes the root {@link Node} of the source stanza.
+     * Returns a decoder appropriate for the leading flags byte of the supplied
+     * caller-owned {@link InputStream} source using a staging buffer of the
+     * requested capacity.
+     *
+     * <p>The leading flags byte is consumed immediately to pick the
+     * uncompressed or compressed variant; the returned decoder pulls bulk
+     * reads of up to {@code bufferSize} bytes from {@code source} so wrapping
+     * the input in {@link java.io.BufferedInputStream} is unnecessary. The
+     * decoder does not close {@code source} on {@link #close()}.
+     *
+     * @param source     the input stream of encoded stanza bytes
+     * @param bufferSize the capacity of the staging buffer, in bytes; must be
+     *                   at least four for primitive reads
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
+     * @throws IOException if reading the flags byte fails
+     * @throws IllegalArgumentException if {@code bufferSize} is less than four
+     */
+    public static NodeReader fromStream(InputStream source, int bufferSize) throws IOException {
+        return fromStream(source, bufferSize, false);
+    }
+
+    /**
+     * Returns a decoder appropriate for the leading flags byte of an
+     * {@link InputStream} resolved from {@code supplier} and owned by the
+     * decoder.
+     *
+     * <p>Used when the decoder should fully own the stream lifecycle (for
+     * example a stream over a file opened only to decode a single stanza). The
+     * supplier is resolved eagerly at this call; the returned decoder closes
+     * the resolved stream when {@link #close()} runs.
+     *
+     * @param supplier the source of the input stream; resolved eagerly
+     * @return an inflating decoder when the compression flag is set, a direct
+     *         decoder otherwise
+     * @throws IOException if reading the flags byte fails
+     */
+    public static NodeReader fromStream(Supplier<? extends InputStream> supplier) throws IOException {
+        Objects.requireNonNull(supplier, "supplier");
+        return fromStream(supplier.get(), DEFAULT_BUFFER_SIZE, true);
+    }
+
+    /**
+     * Returns the decoder for the leading flags byte, shared by the
+     * {@code fromStream} factories.
+     *
+     * <p>Consolidates the prefill-and-pick logic so the three public variants
+     * differ only in their buffer size and ownership arguments.
+     *
+     * @param source     the input stream of encoded stanza bytes
+     * @param bufferSize the capacity of the staging buffer, in bytes
+     * @param owned      whether the returned decoder owns {@code source} and
+     *                   must close it on {@link #close()}
+     * @return the decoder for the leading flags byte
+     * @throws IOException if reading the flags byte fails
+     * @throws IllegalArgumentException if {@code bufferSize} is less than four
+     */
+    private static NodeReader fromStream(InputStream source, int bufferSize, boolean owned) throws IOException {
+        Objects.requireNonNull(source, "source");
+        if (bufferSize < 4) {
+            throw new IllegalArgumentException("bufferSize must be at least 4, got " + bufferSize);
+        }
+        var buffer = new byte[bufferSize];
+        var prefilledBytes = source.read(buffer);
+        if (prefilledBytes <= 0) {
+            throw new IOException("Unexpected end of stream while reading flags byte");
+        }
+        var flags = buffer[0] & 0xFF;
+        if ((flags & COMPRESSION_FLAG) != 0) {
+            return new StreamCompressed(source, buffer, prefilledBytes, owned);
+        }
+        return new StreamUncompressed(source, buffer, prefilledBytes, owned);
+    }
+
+    /**
+     * Decodes the root {@link Node} of the stanza in the source.
+     *
+     * <p>Callers obtain a decoder from one of the {@code from...} factories,
+     * call this method, then close the decoder.
      *
      * @return the decoded node
-     * @throws IOException if the input is truncated, malformed, or
-     *         fails to decompress
+     * @throws IOException if the input is truncated, malformed, or fails to
+     *         decompress
      */
     @WhatsAppWebExport(moduleName = "WAWap", exports = "decodeStanza",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -214,15 +321,25 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Returns whether this decoder still has bytes available to be
-     * read.
+     * Returns whether this decoder still has bytes available to be read.
      *
-     * @return {@code true} when more bytes remain
+     * <p>Lets callers decode a contiguous stream of stanzas from the same
+     * decoder without knowing the boundary in advance. Returns {@code true}
+     * both for buffered-but-unread bytes and for source bytes the decoder has
+     * not yet drained.
+     *
+     * @return {@code true} when more bytes remain to be read
      */
     public abstract boolean hasData();
 
     /**
-     * Reads the next byte as an unsigned value.
+     * Reads the next byte as an unsigned value in the {@code 0..255}
+     * range.
+     *
+     * @implSpec
+     * Subclasses must return the next byte zero-extended to an
+     * {@code int} and advance the source position by one. An empty
+     * source must throw {@link IOException}.
      *
      * @return the next byte in the {@code 0..255} range
      * @throws IOException if no more bytes are available
@@ -230,18 +347,28 @@ public abstract class NodeReader implements AutoCloseable {
     abstract int read() throws IOException;
 
     /**
-     * Reads the next two bytes as an unsigned 16 bit big endian
+     * Reads the next two bytes as an unsigned 16-bit big-endian
      * integer.
      *
-     * @return the next 16 bit value in the {@code 0..65535} range
+     * @implSpec
+     * Subclasses must return the next two bytes interpreted in
+     * big-endian order zero-extended to an {@code int} and advance
+     * the source position by two.
+     *
+     * @return the next 16-bit value in the {@code 0..65535} range
      * @throws IOException if fewer than two bytes are available
      */
     abstract int readShort() throws IOException;
 
     /**
-     * Reads the next four bytes as a signed 32 bit big endian integer.
+     * Reads the next four bytes as a signed 32-bit big-endian
+     * integer.
      *
-     * @return the next 32 bit signed value
+     * @implSpec
+     * Subclasses must return the next four bytes interpreted in
+     * big-endian order and advance the source position by four.
+     *
+     * @return the next 32-bit signed value
      * @throws IOException if fewer than four bytes are available
      */
     abstract int readInt() throws IOException;
@@ -249,8 +376,14 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads the next {@code length} bytes into a fresh array.
      *
+     * @implSpec
+     * Subclasses must return a freshly allocated array of exactly
+     * {@code length} bytes copied from the source and advance the
+     * source position by {@code length}.
+     *
      * @param length the number of bytes to read
-     * @return a newly allocated array holding the bytes that were read
+     * @return a newly allocated array holding the bytes that were
+     *         read
      * @throws IOException if fewer than {@code length} bytes are
      *         available
      */
@@ -259,15 +392,18 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Closes this decoder, releasing any resources it holds.
      *
-     * <p>The default implementation is a no-op; the uncompressed
-     * subclasses hold no resources beyond the caller-owned source and
-     * inherit this default. The compressed subclasses override it to
-     * release their {@link Inflater}.
+     * <p>The default implementation is a no-op because the buffer-backed
+     * uncompressed subclasses hold no resources beyond the caller-owned
+     * source. Compressed subclasses override to release the {@link Inflater};
+     * the stream-backed subclasses additionally close the underlying stream
+     * when they own it (factory variant {@link #fromStream(Supplier)}).
      *
-     * @throws IOException if the underlying source fails to close; the
-     *         narrowed throws clause overrides the looser
-     *         {@code Exception} declared by
-     *         {@link AutoCloseable#close()}
+     * @implNote
+     * This implementation narrows the throws clause from {@link Exception} on
+     * {@link AutoCloseable#close()} to {@link IOException} so callers do not
+     * need a redundant outer catch.
+     *
+     * @throws IOException if the underlying source fails to close
      */
     @Override
     public void close() throws IOException {
@@ -277,9 +413,11 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a complete node from the source.
      *
+     * <p>Walks the size header, description, attribute pairs, and content slot
+     * of one node, recursing into child nodes through {@link #readList(int)}.
+     *
      * @return the decoded node
-     * @throws IOException if the stream is truncated or holds a
-     *         malformed tag
+     * @throws IOException if the stream is truncated or carries a malformed tag
      */
     private Node readNode() throws IOException {
         var size = readNodeSize();
@@ -325,10 +463,14 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a list size header.
      *
-     * @return the list size
+     * <p>The size encodes one slot for the description, two slots per attribute
+     * (key plus value), and one optional slot for the content. An odd size
+     * signals a content-less {@link Node.EmptyNode}.
+     *
+     * @return the list size in slot units
      * @throws IOException if reading fails
-     * @throws IllegalStateException if the leading byte is not a known
-     *         list size tag
+     * @throws IllegalStateException if the leading byte is not a known list
+     *         size tag
      */
     private int readNodeSize() throws IOException {
         var token = (byte) read();
@@ -342,8 +484,12 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a string under whichever encoding tag appears next.
      *
-     * @return the decoded string, or {@code null} when the leading tag
-     *         is {@link NodeTags#LIST_EMPTY}
+     * <p>Used for descriptions, attribute keys, and any attribute or content
+     * slot that decodes to text. A {@link NodeTags#LIST_EMPTY} tag yields
+     * {@code null}, which the caller filters out where appropriate.
+     *
+     * @return the decoded string, or {@code null} when the leading tag is
+     *         {@link NodeTags#LIST_EMPTY}
      * @throws IOException if the leading tag is not a string shape
      */
     private String readString() throws IOException {
@@ -370,7 +516,7 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a binary blob with an 8 bit length prefix.
+     * Reads a binary blob with an 8-bit length prefix.
      *
      * @return the bytes that were read
      * @throws IOException if the stream is truncated
@@ -381,7 +527,11 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a binary blob with a 20 bit big endian length prefix.
+     * Reads a binary blob with a 20-bit big-endian length prefix.
+     *
+     * <p>The 20-bit width is packed into three bytes: the low nibble of the
+     * first byte holds bits 16-19, and the next two bytes hold the low 16
+     * bits.
      *
      * @return the bytes that were read
      * @throws IOException if the stream is truncated
@@ -394,7 +544,7 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a binary blob with a 32 bit big endian length prefix.
+     * Reads a binary blob with a 32-bit big-endian length prefix.
      *
      * @return the bytes that were read
      * @throws IOException if the stream is truncated
@@ -404,8 +554,8 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads an 8 bit token index and resolves it through the supplied
-     * dictionary.
+     * Reads an 8-bit token index and resolves it through the supplied
+     * extension dictionary.
      *
      * @param dictionary the dictionary to look up
      * @return the resolved string
@@ -417,8 +567,10 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Resolves a single byte token through
+     * Resolves a single-byte token through
      * {@link NodeTokens#SINGLE_BYTE_TOKENS}.
+     *
+     * <p>The tag byte itself is the index; no further bytes are consumed.
      *
      * @param tag the token byte
      * @return the resolved string
@@ -429,11 +581,15 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads {@code size / 2} attribute key value pairs preserving
-     * their declaration order.
+     * Reads {@code size / 2} attribute key value pairs preserving their
+     * declaration order.
      *
-     * @param size the number of size units that the attribute block
-     *             consumes (always even)
+     * <p>The {@code size} is the slot count reported by the enclosing node's
+     * size header minus one for the description; each pair consumes two slots
+     * so the loop subtracts two per iteration.
+     *
+     * @param size the number of slots that the attribute block consumes
+     *             (always even)
      * @return the parsed attribute map
      * @throws IOException if the stream is truncated
      */
@@ -449,13 +605,18 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a single attribute value under whichever encoding tag
-     * appears next.
+     * Reads a single attribute value under whichever encoding tag appears
+     * next.
+     *
+     * <p>Attribute values appear in the same wire shapes as content slots; the
+     * {@link NodeTags#LIST_EMPTY} tag and the list shapes
+     * ({@link NodeTags#LIST_8}, {@link NodeTags#LIST_16}) yield {@code null}
+     * after their bodies are consumed, for forward compatibility with future
+     * protocol revisions that may carry richer attribute structures.
      *
      * @return the parsed attribute, or {@code null} for
      *         {@link NodeTags#LIST_EMPTY} and list shapes
-     * @throws IOException if the stream is truncated or holds a
-     *         malformed tag
+     * @throws IOException if the stream is truncated or holds a malformed tag
      */
     private NodeAttribute readAttribute() throws IOException {
         var tag = (byte) read();
@@ -493,7 +654,7 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a list of child nodes with an 8 bit length prefix.
+     * Reads a list of child nodes with an 8-bit length prefix.
      *
      * @return the parsed children in declaration order
      * @throws IOException if the stream is truncated
@@ -504,7 +665,7 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a list of child nodes with a 16 bit big endian length
+     * Reads a list of child nodes with a 16-bit big-endian length
      * prefix.
      *
      * @return the parsed children in declaration order
@@ -531,10 +692,13 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Reads a packed string under the supplied alphabet.
+     * Reads a packed string under the supplied 16-entry alphabet.
      *
-     * @param alphabet the 16 entry alphabet to translate nibbles
-     *                 through
+     * <p>Packed strings store two characters per byte; the leading length
+     * byte's high bit signals whether the last byte holds one character (and a
+     * filler nibble) or two.
+     *
+     * @param alphabet the 16-entry alphabet to translate nibbles through
      * @return the decoded string
      * @throws IOException if the stream is truncated
      */
@@ -558,6 +722,9 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a {@link NodeTags#JID_PAIR} body.
      *
+     * <p>The body is {@code (user, server)}; a {@link NodeTags#LIST_EMPTY} in
+     * the user slot becomes a server-only JID via {@link Jid#of(JidServer)}.
+     *
      * @return the parsed JID
      * @throws IOException if the stream is truncated
      * @throws NullPointerException if the server component is missing
@@ -571,9 +738,13 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads an {@link NodeTags#AD_JID} body.
      *
+     * <p>The body is {@code (domain:u8, device:u8, user)}. The domain byte
+     * decodes through the {@code DOMAIN_*} constants; the hosted branch
+     * accepts any byte whose low bit is clear and high bit is set.
+     *
      * @return the parsed JID
-     * @throws IOException if the stream is truncated or carries an
-     *         unknown domain code
+     * @throws IOException if the stream is truncated or carries an unknown
+     *         domain code
      */
     private Jid readAdJid() throws IOException {
         var domainType = read() & 0xFF;
@@ -596,6 +767,10 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a {@link NodeTags#JID_FB} body.
      *
+     * <p>The body is {@code (user, device:u16, server)}; the server is consumed
+     * and discarded since the Messenger server is fixed at
+     * {@link JidServer#messenger()}.
+     *
      * @return the parsed JID
      * @throws IOException if the stream is truncated
      */
@@ -609,6 +784,11 @@ public abstract class NodeReader implements AutoCloseable {
     /**
      * Reads a {@link NodeTags#JID_INTEROP} body.
      *
+     * <p>The body is {@code (user, device:u16, integrator:u16, server)}; the
+     * resulting user component is the {@code "integrator-user"} compound form
+     * that bridges the integrator id back into the JID surface, and the
+     * consumed server string is discarded.
+     *
      * @return the parsed JID
      * @throws IOException if the stream is truncated
      */
@@ -621,18 +801,20 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Decoder that reads from a caller-supplied {@code byte[]} without
-     * decompressing.
+     * Decodes from a caller-supplied {@code byte[]} without decompressing.
+     *
+     * <p>Used when the whole stanza is already in memory as a fresh array; the
+     * read primitives index the array directly.
      */
     private static final class ByteArrayUncompressed extends NodeReader {
 
         /**
-         * The source byte array.
+         * Holds the source byte array.
          */
         private final byte[] source;
 
         /**
-         * The current read position into {@link #source}.
+         * Holds the current read position into {@link #source}.
          */
         private int position;
 
@@ -647,11 +829,17 @@ public abstract class NodeReader implements AutoCloseable {
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasData() {
             return position < source.length;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int read() throws IOException {
             if (position >= source.length) {
@@ -660,6 +848,9 @@ public abstract class NodeReader implements AutoCloseable {
             return source[position++] & 0xFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readShort() throws IOException {
             if (source.length - position < 2) {
@@ -670,6 +861,9 @@ public abstract class NodeReader implements AutoCloseable {
             return value & 0xFFFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readInt() throws IOException {
             if (source.length - position < 4) {
@@ -680,6 +874,9 @@ public abstract class NodeReader implements AutoCloseable {
             return value;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         byte[] readBytes(int length) throws IOException {
             if (source.length - position < length) {
@@ -693,20 +890,25 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Decoder that reads from a caller-supplied {@link ByteBuffer}
-     * without decompressing, advancing the buffer's position as bytes
-     * are consumed.
+     * Decodes from a caller-supplied {@link ByteBuffer} without decompressing,
+     * advancing the buffer's position as bytes are consumed.
+     *
+     * <p>Forces big-endian order on the buffer at construction so subsequent
+     * {@link ByteBuffer#getShort()} and {@link ByteBuffer#getInt()} calls read
+     * multi-byte values in the wire's byte order.
      */
     private static final class ByteBufferUncompressed extends NodeReader {
 
         /**
-         * The source buffer.
+         * Holds the source buffer.
          */
         private final ByteBuffer source;
 
         /**
-         * Constructs a new {@link ByteBuffer}-backed uncompressed
-         * decoder. Forces big-endian order on the buffer.
+         * Constructs a new {@link ByteBuffer}-backed uncompressed decoder.
+         *
+         * <p>Forces big-endian order on the buffer so multi-byte primitives
+         * read in wire order.
          *
          * @param source the source buffer
          */
@@ -714,11 +916,17 @@ public abstract class NodeReader implements AutoCloseable {
             this.source = source.order(ByteOrder.BIG_ENDIAN);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasData() {
             return source.hasRemaining();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int read() throws IOException {
             if (!source.hasRemaining()) {
@@ -727,6 +935,9 @@ public abstract class NodeReader implements AutoCloseable {
             return source.get() & 0xFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readShort() throws IOException {
             if (source.remaining() < 2) {
@@ -735,6 +946,9 @@ public abstract class NodeReader implements AutoCloseable {
             return source.getShort() & 0xFFFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readInt() throws IOException {
             if (source.remaining() < 4) {
@@ -743,6 +957,9 @@ public abstract class NodeReader implements AutoCloseable {
             return source.getInt();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         byte[] readBytes(int length) throws IOException {
             if (source.remaining() < length) {
@@ -755,31 +972,35 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Decoder that reads from a caller-supplied {@link MemorySegment}
-     * without decompressing, advancing an internal position cursor as
-     * bytes are consumed.
+     * Decodes from a caller-supplied {@link MemorySegment} without
+     * decompressing, advancing an internal position cursor as bytes are
+     * consumed.
+     *
+     * <p>Used when the stanza sits inside a foreign memory segment (off-heap
+     * socket buffer, mapped file). The FFM-based reads avoid a {@code byte[]}
+     * round trip.
      */
     private static final class MemorySegmentUncompressed extends NodeReader {
 
         /**
-         * Big-endian short layout reused across reads.
+         * Holds the big-endian short layout reused across reads.
          */
         private static final ValueLayout.OfShort BE_SHORT =
                 ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
 
         /**
-         * Big-endian int layout reused across reads.
+         * Holds the big-endian int layout reused across reads.
          */
         private static final ValueLayout.OfInt BE_INT =
                 ValueLayout.JAVA_INT_UNALIGNED.withOrder(ByteOrder.BIG_ENDIAN);
 
         /**
-         * The source segment.
+         * Holds the source segment.
          */
         private final MemorySegment source;
 
         /**
-         * The current read offset within {@link #source}.
+         * Holds the current read offset within {@link #source}.
          */
         private long position;
 
@@ -795,11 +1016,17 @@ public abstract class NodeReader implements AutoCloseable {
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasData() {
             return position < source.byteSize();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int read() throws IOException {
             if (position >= source.byteSize()) {
@@ -808,6 +1035,9 @@ public abstract class NodeReader implements AutoCloseable {
             return source.get(ValueLayout.JAVA_BYTE, position++) & 0xFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readShort() throws IOException {
             if (source.byteSize() - position < 2) {
@@ -818,6 +1048,9 @@ public abstract class NodeReader implements AutoCloseable {
             return value & 0xFFFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readInt() throws IOException {
             if (source.byteSize() - position < 4) {
@@ -828,6 +1061,9 @@ public abstract class NodeReader implements AutoCloseable {
             return value;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         byte[] readBytes(int length) throws IOException {
             if (source.byteSize() - position < length) {
@@ -841,34 +1077,112 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Decoder that reads from an {@link InputStream} without
-     * decompressing.
+     * Decodes from an {@link InputStream} without decompressing.
      *
-     * <p>Each call to {@link #read()}, {@link #readShort()},
-     * {@link #readInt()} and {@link #readBytes(int)} drives one or
-     * more {@code in.read} calls. Callers expecting many small reads
-     * on an unbuffered source should wrap the input in a
-     * {@link java.io.BufferedInputStream}.
+     * <p>A per-instance staging buffer absorbs bulk reads from the underlying
+     * stream so the primitive reads serve from memory and only trigger an
+     * {@link InputStream#read(byte[])} when the buffer drains; wrapping the
+     * input in {@link java.io.BufferedInputStream} is therefore unnecessary.
      */
     private static final class StreamUncompressed extends NodeReader {
 
         /**
-         * The source input stream.
+         * Holds the source input stream.
          */
         private final InputStream source;
 
         /**
-         * Constructs a new {@link InputStream}-backed uncompressed
-         * decoder.
+         * Indicates whether this decoder owns {@link #source} and so must close
+         * it during {@link #close()}.
          *
-         * @param source the source stream
+         * <p>When {@code false}, the stream is caller-owned and {@link #close()}
+         * leaves it open.
          */
-        StreamUncompressed(InputStream source) {
+        private final boolean owned;
+
+        /**
+         * Holds the bytes pulled from {@link #source} pending consumption.
+         */
+        private final byte[] buffer;
+
+        /**
+         * Holds the read offset into {@link #buffer}.
+         */
+        private int bufferPosition;
+
+        /**
+         * Holds the count of valid bytes in {@link #buffer}.
+         */
+        private int bufferLimit;
+
+        /**
+         * Marks that {@link InputStream#read(byte[], int, int)} has returned
+         * end-of-stream so subsequent reads short-circuit to an end-of-data
+         * error without re-querying the stream.
+         */
+        private boolean exhausted;
+
+        /**
+         * Constructs a new {@link InputStream}-backed uncompressed decoder
+         * seeded with a buffer that the factory has already filled with the
+         * leading bulk read.
+         *
+         * <p>The factory consumed the flags byte at index zero before
+         * dispatching to this constructor, so {@link #bufferPosition} starts at
+         * one.
+         *
+         * @param source          the source stream
+         * @param buffer          the staging buffer; the factory has read into
+         *                        it starting at index zero, with the flags byte
+         *                        at index zero
+         * @param prefilledBytes  the count of valid bytes at the head of
+         *                        {@code buffer}; the first byte is the consumed
+         *                        flags byte
+         * @param owned           {@code true} when the decoder owns
+         *                        {@code source} and must close it on
+         *                        {@link #close()}; {@code false} when the
+         *                        stream is caller-owned
+         */
+        StreamUncompressed(InputStream source, byte[] buffer, int prefilledBytes, boolean owned) {
             this.source = source;
+            this.owned = owned;
+            this.buffer = buffer;
+            this.bufferPosition = 1;
+            this.bufferLimit = prefilledBytes;
         }
 
+        /**
+         * Closes the source stream when the decoder owns it; otherwise
+         * a no-op.
+         *
+         * @throws IOException if the downstream close fails
+         */
+        @Override
+        public void close() throws IOException {
+            if (owned) {
+                source.close();
+            }
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation returns {@code true} when the staging
+         * buffer still has bytes; if drained, falls back to
+         * {@link InputStream#available()} which is allowed to
+         * return zero even when more bytes will become available
+         * later, so callers should not rely on a {@code false}
+         * return as a definitive end-of-stream signal.
+         */
         @Override
         public boolean hasData() {
+            if (bufferPosition < bufferLimit) {
+                return true;
+            }
+            if (exhausted) {
+                return false;
+            }
             try {
                 return source.available() > 0;
             } catch (IOException e) {
@@ -876,93 +1190,213 @@ public abstract class NodeReader implements AutoCloseable {
             }
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int read() throws IOException {
-            var b = source.read();
-            if (b < 0) {
-                throw new IOException("Unexpected end of data");
+            if (bufferPosition >= bufferLimit) {
+                fillBuffer();
+                if (bufferPosition >= bufferLimit) {
+                    throw new IOException("Unexpected end of data");
+                }
             }
-            return b;
+            return buffer[bufferPosition++] & 0xFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readShort() throws IOException {
-            var hi = read();
-            var lo = read();
-            return (hi << 8) | lo;
+            ensureAvailable(2);
+            var value = DataUtils.getShort(buffer, bufferPosition, ByteOrder.BIG_ENDIAN);
+            bufferPosition += 2;
+            return value & 0xFFFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int readInt() throws IOException {
-            var b0 = read();
-            var b1 = read();
-            var b2 = read();
-            var b3 = read();
-            return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+            ensureAvailable(4);
+            var value = DataUtils.getInt(buffer, bufferPosition, ByteOrder.BIG_ENDIAN);
+            bufferPosition += 4;
+            return value;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         byte[] readBytes(int length) throws IOException {
-            var result = source.readNBytes(length);
-            if (result.length < length) {
-                throw new IOException("Insufficient data available");
+            var result = new byte[length];
+            var offset = 0;
+            while (offset < length) {
+                if (bufferPosition >= bufferLimit) {
+                    fillBuffer();
+                    if (bufferPosition >= bufferLimit) {
+                        throw new IOException("Insufficient data available");
+                    }
+                }
+                var available = bufferLimit - bufferPosition;
+                var toRead = Math.min(available, length - offset);
+                System.arraycopy(buffer, bufferPosition, result, offset, toRead);
+                bufferPosition += toRead;
+                offset += toRead;
             }
             return result;
+        }
+
+        /**
+         * Refills the staging buffer with another block pulled from the
+         * underlying stream, starting at offset zero.
+         *
+         * <p>Idempotent once the stream is exhausted; resets the buffer to
+         * empty so the calling primitive reports end-of-data on the next
+         * access.
+         *
+         * @throws IOException if the underlying stream fails
+         */
+        private void fillBuffer() throws IOException {
+            if (exhausted) {
+                bufferPosition = 0;
+                bufferLimit = 0;
+                return;
+            }
+            var n = source.read(buffer);
+            if (n < 0) {
+                exhausted = true;
+                bufferPosition = 0;
+                bufferLimit = 0;
+                return;
+            }
+            bufferPosition = 0;
+            bufferLimit = n;
+        }
+
+        /**
+         * Ensures that at least {@code needed} contiguous bytes are available
+         * starting at {@link #bufferPosition}, compacting and refilling the
+         * staging buffer as necessary.
+         *
+         * <p>Multi-byte primitive reads ({@link #readShort()},
+         * {@link #readInt()}) need contiguous bytes; this helper shifts any
+         * partial trailing bytes to the front of the buffer before refilling so
+         * the next read can take them directly.
+         *
+         * @param needed the minimum number of contiguous bytes required
+         * @throws IOException if the source ends before enough bytes are
+         *         buffered
+         */
+        private void ensureAvailable(int needed) throws IOException {
+            var available = bufferLimit - bufferPosition;
+            if (available >= needed) {
+                return;
+            }
+            if (available > 0) {
+                System.arraycopy(buffer, bufferPosition, buffer, 0, available);
+            }
+            bufferPosition = 0;
+            bufferLimit = available;
+            while (bufferLimit < needed) {
+                if (exhausted) {
+                    throw new IOException("Unexpected end of data");
+                }
+                var n = source.read(buffer, bufferLimit, buffer.length - bufferLimit);
+                if (n < 0) {
+                    exhausted = true;
+                    throw new IOException("Unexpected end of data");
+                }
+                bufferLimit += n;
+            }
         }
     }
 
     /**
-     * Abstract base for decoders that inflate DEFLATE compressed
-     * source bytes through a staging buffer.
+     * Inflates DEFLATE compressed source bytes through a staging buffer.
      *
-     * <p>Centralises the {@link Inflater} lifecycle, the inflated-byte
-     * staging buffer and the per-primitive read/inflate logic.
-     * Subclasses provide only the source-specific method
-     * {@link #fillInflaterInput(byte[], int)} that copies raw
-     * compressed bytes from the underlying source into the inflater
+     * <p>Centralises the {@link Inflater} lifecycle, the inflated-byte staging
+     * buffer, and the per-primitive read and inflate logic. Subclasses provide
+     * only the source-specific {@link #fillInflaterInput(byte[], int)} that
+     * copies raw compressed bytes from the underlying source into the inflater
      * input buffer.
      */
     private abstract static class Compressed extends NodeReader {
 
         /**
-         * Inflater that decompresses the source bytes.
+         * Holds the inflater that decompresses the source bytes.
          */
         private final Inflater inflater;
 
         /**
-         * Staging buffer that holds inflated bytes pending consumption.
+         * Holds the inflated bytes pending consumption.
          */
         private final byte[] decompressionBuffer;
 
         /**
-         * Working buffer that feeds compressed bytes into the inflater.
+         * Holds the compressed bytes fed into the inflater.
          */
         final byte[] inflaterInputBuffer;
 
         /**
-         * Read offset into {@link #decompressionBuffer}.
+         * Holds the read offset into {@link #decompressionBuffer}.
          */
         private int bufferPosition;
 
         /**
-         * Count of valid bytes in {@link #decompressionBuffer}.
+         * Holds the count of valid bytes in {@link #decompressionBuffer}.
          */
         private int bufferLimit;
 
         /**
-         * Sole constructor; allocates the inflater and the two staging
-         * buffers.
+         * Allocates a new inflater and two equally sized staging buffers.
+         *
+         * @param bufferSize the capacity of the inflater input and inflated
+         *                   output staging buffers, in bytes
          */
-        Compressed() {
+        Compressed(int bufferSize) {
             this.inflater = new Inflater();
-            this.decompressionBuffer = new byte[DECOMPRESSION_BUFFER_SIZE];
-            this.inflaterInputBuffer = new byte[DECOMPRESSION_BUFFER_SIZE];
+            this.decompressionBuffer = new byte[bufferSize];
+            this.inflaterInputBuffer = new byte[bufferSize];
+        }
+
+        /**
+         * Adopts a caller-supplied inflater input buffer that already holds
+         * some compressed bytes, seeding the inflater with the supplied range.
+         *
+         * <p>Used by the stream-backed variant when the factory has already
+         * pulled the leading bulk read; avoids a second allocation and a copy
+         * into a freshly sized inflater buffer.
+         *
+         * @param prefilledInflaterInput the inflater input buffer; its length
+         *                               determines the size of the inflated
+         *                               output staging buffer
+         * @param prefillOffset          start of the pre-filled compressed-bytes
+         *                               range (inclusive)
+         * @param prefillLimit           end of the pre-filled compressed-bytes
+         *                               range (exclusive)
+         */
+        Compressed(byte[] prefilledInflaterInput, int prefillOffset, int prefillLimit) {
+            this.inflater = new Inflater();
+            this.decompressionBuffer = new byte[prefilledInflaterInput.length];
+            this.inflaterInputBuffer = prefilledInflaterInput;
+            if (prefillLimit > prefillOffset) {
+                inflater.setInput(prefilledInflaterInput, prefillOffset, prefillLimit - prefillOffset);
+            }
         }
 
         /**
          * Copies up to {@code max} compressed bytes from the
          * source-specific backing into {@link #inflaterInputBuffer}
          * starting at offset zero.
+         *
+         * @implSpec
+         * Subclasses must copy at most {@code max} bytes from the
+         * underlying source into {@code dst} starting at index zero
+         * and return the number of bytes actually copied, or zero
+         * when no more source bytes are available.
          *
          * @param dst the destination buffer (always
          *            {@link #inflaterInputBuffer})
@@ -976,11 +1410,26 @@ public abstract class NodeReader implements AutoCloseable {
          * Returns whether more compressed source bytes are available
          * to feed the inflater.
          *
+         * @implSpec
+         * Subclasses return {@code true} when at least one
+         * compressed byte can still be drawn from the underlying
+         * source and {@code false} once the source is exhausted.
+         *
          * @return {@code true} when the source still has compressed
          *         bytes to feed
          */
         abstract boolean sourceHasRemaining();
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation returns {@code true} when either the
+         * staging buffer still has bytes, the inflater has not
+         * finished, or the source still has compressed bytes to
+         * feed; any one of the three implies more output is
+         * reachable.
+         */
         @Override
         public final boolean hasData() {
             return bufferPosition < bufferLimit
@@ -988,6 +1437,9 @@ public abstract class NodeReader implements AutoCloseable {
                    || sourceHasRemaining();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         final int read() throws IOException {
             if (bufferPosition >= bufferLimit) {
@@ -1001,6 +1453,9 @@ public abstract class NodeReader implements AutoCloseable {
             return decompressionBuffer[bufferPosition++] & 0xFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         final int readShort() throws IOException {
             ensureAvailable(2);
@@ -1009,6 +1464,9 @@ public abstract class NodeReader implements AutoCloseable {
             return value & 0xFFFF;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         final int readInt() throws IOException {
             ensureAvailable(4);
@@ -1018,13 +1476,16 @@ public abstract class NodeReader implements AutoCloseable {
         }
 
         /**
-         * Ensures that at least {@code needed} contiguous inflated
-         * bytes are available starting at {@link #bufferPosition}.
+         * Ensures that at least {@code needed} contiguous inflated bytes are
+         * available starting at {@link #bufferPosition}.
          *
-         * @param needed the minimum number of contiguous bytes
-         *               required
-         * @throws IOException if the source ends before enough bytes
-         *         are inflated
+         * <p>Multi-byte primitive reads need contiguous bytes; this helper
+         * compacts any trailing partial bytes and then inflates more until
+         * either the count is reached or the inflater reports end-of-stream.
+         *
+         * @param needed the minimum number of contiguous bytes required
+         * @throws IOException if the source ends before enough bytes are
+         *         inflated
          */
         private void ensureAvailable(int needed) throws IOException {
             var available = bufferLimit - bufferPosition;
@@ -1055,6 +1516,9 @@ public abstract class NodeReader implements AutoCloseable {
             }
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         final byte[] readBytes(int length) throws IOException {
             var result = new byte[length];
@@ -1080,6 +1544,10 @@ public abstract class NodeReader implements AutoCloseable {
         /**
          * Refills the staging buffer with another inflated block.
          *
+         * <p>Feeds the inflater more compressed bytes if it has drained its
+         * input and the source still has more, then inflates one block into the
+         * staging buffer.
+         *
          * @throws IOException if the source bytes are malformed
          */
         private void fillDecompressionBuffer() throws IOException {
@@ -1098,24 +1566,31 @@ public abstract class NodeReader implements AutoCloseable {
             }
         }
 
+        /**
+         * Releases the {@link Inflater} held by this decoder.
+         *
+         * @throws IOException never thrown by the base implementation;
+         *         declared for the narrowed
+         *         {@link NodeReader#close()} signature
+         */
         @Override
-        public final void close() {
+        public void close() throws IOException {
             inflater.close();
         }
     }
 
     /**
-     * Compressed decoder that reads from a {@code byte[]} source.
+     * Inflates from a {@code byte[]} source.
      */
     private static final class ByteArrayCompressed extends Compressed {
 
         /**
-         * The source byte array of compressed bytes.
+         * Holds the source byte array of compressed bytes.
          */
         private final byte[] source;
 
         /**
-         * The current read position into {@link #source}.
+         * Holds the current read position into {@link #source}.
          */
         private int position;
 
@@ -1126,15 +1601,22 @@ public abstract class NodeReader implements AutoCloseable {
          * @param offset the starting read offset
          */
         ByteArrayCompressed(byte[] source, int offset) {
+            super(DEFAULT_BUFFER_SIZE);
             this.source = source;
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         boolean sourceHasRemaining() {
             return position < source.length;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int fillInflaterInput(byte[] dst, int max) {
             var available = source.length - position;
@@ -1149,12 +1631,12 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Compressed decoder that reads from a {@link ByteBuffer} source.
+     * Inflates from a {@link ByteBuffer} source.
      */
     private static final class ByteBufferCompressed extends Compressed {
 
         /**
-         * The source buffer of compressed bytes.
+         * Holds the source buffer of compressed bytes.
          */
         private final ByteBuffer source;
 
@@ -1165,14 +1647,21 @@ public abstract class NodeReader implements AutoCloseable {
          * @param source the source buffer
          */
         ByteBufferCompressed(ByteBuffer source) {
+            super(DEFAULT_BUFFER_SIZE);
             this.source = source;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         boolean sourceHasRemaining() {
             return source.hasRemaining();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int fillInflaterInput(byte[] dst, int max) {
             var toCopy = Math.min(source.remaining(), max);
@@ -1185,18 +1674,17 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Compressed decoder that reads from a {@link MemorySegment}
-     * source.
+     * Inflates from a {@link MemorySegment} source.
      */
     private static final class MemorySegmentCompressed extends Compressed {
 
         /**
-         * The source segment of compressed bytes.
+         * Holds the source segment of compressed bytes.
          */
         private final MemorySegment source;
 
         /**
-         * The current read offset within {@link #source}.
+         * Holds the current read offset within {@link #source}.
          */
         private long position;
 
@@ -1208,15 +1696,22 @@ public abstract class NodeReader implements AutoCloseable {
          * @param offset the starting byte offset
          */
         MemorySegmentCompressed(MemorySegment source, long offset) {
+            super(DEFAULT_BUFFER_SIZE);
             this.source = source;
             this.position = offset;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         boolean sourceHasRemaining() {
             return position < source.byteSize();
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         int fillInflaterInput(byte[] dst, int max) {
             var available = source.byteSize() - position;
@@ -1231,39 +1726,94 @@ public abstract class NodeReader implements AutoCloseable {
     }
 
     /**
-     * Compressed decoder that reads from an {@link InputStream}
-     * source.
+     * Inflates from an {@link InputStream} source.
      */
     private static final class StreamCompressed extends Compressed {
 
         /**
-         * The source input stream of compressed bytes.
+         * Holds the source input stream of compressed bytes.
          */
         private final InputStream source;
 
         /**
-         * Sticky flag set once {@link InputStream#read(byte[], int, int)}
-         * has returned end-of-stream so subsequent
-         * {@link #sourceHasRemaining()} queries do not have to read
-         * again.
+         * Indicates whether this decoder owns {@link #source} and so must close
+         * it during {@link #close()}.
+         *
+         * <p>When {@code false}, the stream is caller-owned and {@link #close()}
+         * leaves it open.
+         */
+        private final boolean owned;
+
+        /**
+         * Marks that {@link InputStream#read(byte[], int, int)} has returned
+         * end-of-stream so subsequent {@link #sourceHasRemaining()} queries do
+         * not re-query the stream.
          */
         private boolean exhausted;
 
         /**
-         * Constructs a new {@link InputStream}-backed compressed
-         * decoder.
+         * Constructs a new {@link InputStream}-backed compressed decoder seeded
+         * with a buffer that the factory has already filled with the leading
+         * bulk read.
          *
-         * @param source the source stream
+         * <p>The factory consumed the flags byte at index zero before
+         * dispatching to this constructor, so the base class seeds the inflater
+         * starting at offset one.
+         *
+         * @param source                 the source stream
+         * @param prefilledInflaterInput the inflater input buffer; the factory
+         *                               has read into it starting at index
+         *                               zero, with the flags byte at index zero
+         *                               and compressed bytes from index one
+         *                               onwards
+         * @param prefilledBytes         the count of valid bytes at the head of
+         *                               {@code prefilledInflaterInput}; the
+         *                               first byte is the consumed flags byte
+         * @param owned                  {@code true} when the decoder owns
+         *                               {@code source} and must close it on
+         *                               {@link #close()}; {@code false} when
+         *                               the stream is caller-owned
          */
-        StreamCompressed(InputStream source) {
+        StreamCompressed(InputStream source, byte[] prefilledInflaterInput, int prefilledBytes, boolean owned) {
+            super(prefilledInflaterInput, 1, prefilledBytes);
             this.source = source;
+            this.owned = owned;
         }
 
+        /**
+         * Releases the {@link Inflater} and, when the decoder owns the
+         * source stream, closes it too.
+         *
+         * @throws IOException if closing the source stream fails
+         */
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                if (owned) {
+                    source.close();
+                }
+            }
+        }
+
+        /**
+         * {@inheritDoc}
+         */
         @Override
         boolean sourceHasRemaining() {
             return !exhausted;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation marks the stream exhausted on either
+         * an end-of-stream return or an {@link IOException} so
+         * subsequent calls short-circuit and do not propagate
+         * downstream failures further into the inflater.
+         */
         @Override
         int fillInflaterInput(byte[] dst, int max) {
             if (exhausted) {

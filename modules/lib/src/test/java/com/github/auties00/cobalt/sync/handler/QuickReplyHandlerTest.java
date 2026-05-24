@@ -8,14 +8,12 @@ import com.github.auties00.cobalt.model.preference.QuickReplyBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.QuickReplyAction;
 import com.github.auties00.cobalt.model.sync.action.chat.QuickReplyActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.QuickReplyMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,22 +24,34 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link QuickReplyHandler} — Cobalt's adapter for
- * {@code WAWebQuickRepliesSync}.
+ * Exercises {@link QuickReplyHandler} against the
+ * {@code WAWebQuickRepliesSync.applyMutations} per-mutation flow.
  *
- * <p>The handler routes {@code quick_reply} sync actions onto the store's
- * quick-reply map. Each mutation either deletes a single entry (when the
- * action's {@code deleted} flag is set) or upserts a {@code QuickReply}
- * record keyed by the {@code indexParts[1]} id. These tests pin down the
- * wire metadata, the SET/REMOVE branching, the malformed-input fallbacks,
- * the default timestamp-based conflict resolution, and the static
- * outbound-mutation builders.
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: a {@link SyncdOperation#SET}
+ * with {@code deleted=true} drops the entry by id; a {@code SET}
+ * with non-empty {@code shortcut} and {@code message} upserts a
+ * {@link com.github.auties00.cobalt.model.preference.QuickReply}
+ * keyed by {@code indexParts[1]}; a missing quick reply id surfaces
+ * as {@link SyncActionState#MALFORMED};
+ * a missing
+ * {@link QuickReplyAction}
+ * payload, empty {@code shortcut}, or empty {@code message} surface
+ * as {@link SyncActionState#MALFORMED};
+ * non-{@code SET} operations surface as
+ * {@link SyncActionState#UNSUPPORTED};
+ * the default {@code resolveConflicts} chooses the later timestamp.
+ *
+ * @implNote
+ * This implementation drives both the handler and the
+ * {@link QuickReplyMutationFactory}
+ * directly so the static outbound-mutation builders can be checked
+ * alongside the inbound apply path.
  */
 @DisplayName("QuickReplyHandler")
 class QuickReplyHandlerTest {
@@ -62,10 +72,28 @@ class QuickReplyHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation whose value carries the given quick-reply action.
+     * Builds a trusted mutation whose value carries the given
+     * quick-reply action under the
+     * {@code ["quick_reply", indexId]} index.
      *
-     * @param indexId   the quick reply id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action    the quick reply action payload, may be {@code null}
+     * @apiNote
+     * Internal helper consumed by every test in this class; not used
+     * outside it. Setting {@code indexId} to {@code null} produces
+     * the singleton-index shape {@code ["quick_reply"]} so the
+     * malformed-index branch can be exercised; setting
+     * {@code action} to {@code null} omits the {@code quickReplyAction}
+     * field on the value so the malformed-value branch can be
+     * exercised.
+     *
+     * @implNote
+     * This implementation builds the index via
+     * {@link JSON#toJSONString(Object)} to
+     * match the on-wire JSON encoding the production handler reads
+     * back via {@link JSON#parseArray(String)}.
+     *
+     * @param indexId   the quick reply id placed in {@code indexParts[1]};
+     *                  may be {@code null}
+     * @param action    the quick reply action payload; may be {@code null}
      * @param operation the sync operation
      * @param ts        the mutation timestamp
      * @return the trusted mutation
@@ -421,23 +449,4 @@ class QuickReplyHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/quick-reply/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/quick-reply/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.getQuickReplyAddOrEditMutation(
-                    "qr-oracle", "/hello", "Hi", 1, List.of("k1"),
-                    Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

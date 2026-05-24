@@ -14,41 +14,72 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing label-edit sync mutations.
+ * Builds outgoing app-state mutations that create, edit, or delete a Business label.
  *
- * <p>Mirrors the {@code getLabelMutation} export of WhatsApp Web's
- * {@code WAWebLabelSync} module. The factory is the outgoing-mutation
+ * @apiNote
+ * Drives the Business label-editor surfaces that
+ * {@code WAWebBizLabelEditingAction} dispatches through (add, edit, and
+ * delete). The mutation populates {@code WAWebSchemaLabel} and the
+ * in-memory {@code WAWebLabelCollection} consistently across linked
+ * devices, including the "deleted" path in which only the {@code deleted}
+ * flag travels with the label id. The factory is the outgoing-mutation
  * counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.LabelEditHandler}.
+ *
+ * @implNote
+ * This implementation does not call
+ * {@code WAWebWamLabelSyncTrackingReporter.generateLabelEditHash} or emit
+ * the matching {@code logLabelSyncEvent}; WA Web records a SUCCESS event on
+ * the sender side as part of {@code getLabelMutation}, but Cobalt does not
+ * run that telemetry pipeline. The cast of {@code type} to the protobuf
+ * enum is done via {@link LabelEditAction.ListType} directly, so the
+ * malformed-cast warning that WA Web logs is unreachable here.
  */
 public final class LabelEditMutationFactory {
     /**
-     * Constructs a label-edit mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public LabelEditMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation for creating or editing a chat label.
+     * Returns a SET mutation that creates, edits, or deletes a Business label.
      *
-     * <p>Per WhatsApp Web {@code WAWebLabelSync.default.getLabelMutation},
-     * assembles a {@link LabelEditAction} with the supplied fields (null
-     * values are preserved so that deleted flags, missing colour, missing
-     * type and so on round-trip correctly) and wraps it in a
-     * {@link SyncPendingMutation} with the canonical index
-     * {@code ["label_edit", labelId]}. WAM telemetry
-     * ({@code WAWebWamLabelSyncTrackingReporter}) is intentionally omitted.
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["label_edit", labelId]
+     * }
+     * and the {@link LabelEditAction} sub-message carries only the fields
+     * the caller actually populated; {@code null} fields are omitted on the
+     * wire so unchanged attributes (colour, predefined id, active flag,
+     * list type) round-trip correctly. Set {@code deleted == true} to emit
+     * the delete branch, in which case the receive-side handler skips most
+     * other fields.
      *
-     * @param labelId      the label identifier (index arg, stringified by the caller)
-     * @param name         the display name, may be {@code null}
+     * @implNote
+     * This implementation preserves the WA Web parameter order
+     * ({@code labelId, name, color, deleted, predefinedId, isActive, type,
+     * timestamp}); changing the order would change the test fixtures'
+     * argument list. Lists with type {@code AI_HANDOFF} or
+     * {@code AI_RESPONDING} are still allowed as outgoing edits; the
+     * receive-side handler reconciles duplicates by querying
+     * {@code WAWebModelStorageUtils.getStorage().lock}.
+     *
+     * @param labelId      the label identifier used as the mutation index
+     * @param name         the display name, or {@code null} when unchanged
      * @param color        the palette colour index, or {@code null} when unchanged
-     * @param deleted      whether the label is being deleted
-     * @param predefinedId the predefined list identifier, or {@code null}
+     * @param deleted      {@code true} when the label is being deleted
+     * @param predefinedId the predefined-label identifier, or {@code null} when not predefined
      * @param isActive     the active flag, or {@code null} when unchanged
-     * @param type         the list type, or {@code null} when unchanged
+     * @param type         the list type (custom, AI, server-assigned, ...), or {@code null} when unchanged
      * @param timestamp    the mutation timestamp
-     * @return the pending mutation for the label edit
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "getLabelMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getLabelMutation(
@@ -81,6 +112,6 @@ public final class LabelEditMutationFactory {
                 timestamp,
                 LabelEditAction.ACTION_VERSION
         );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw pending mutation; Cobalt wraps it in SyncPendingMutation for the outgoing queue
+        return new SyncPendingMutation(mutation, 0);
     }
 }

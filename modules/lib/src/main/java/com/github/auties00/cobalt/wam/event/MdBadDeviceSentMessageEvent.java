@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.wam.type.EditType;
 import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
+import com.github.auties00.cobalt.wam.type.PlatformType;
 import com.github.auties00.cobalt.wam.type.RevokeType;
 
 import java.util.Optional;
@@ -42,4 +43,7 @@ public interface MdBadDeviceSentMessageEvent extends WamEventSpec {
 
     @WamProperty(index = 7, type = WamType.ENUM)
     Optional<RevokeType> revokeType();
+
+    @WamProperty(index = 10, type = WamType.ENUM)
+    Optional<PlatformType> senderPlatform();
 }

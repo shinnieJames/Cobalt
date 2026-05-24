@@ -8,19 +8,41 @@ import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant. Wraps the {@code <offline_batch
- * count/>} payload in the bare {@code <ib>} envelope.
+ * The outbound {@code <ib><offline_batch count/></ib>} stanza.
+ *
+ * @apiNote
+ * Drives the offline-stanza pump: WA Web's {@code WAWebOfflineHandler}
+ * sends this request through {@code WASmaxOfflineBatchRPC.sendBatchRPC}
+ * after every backlog-processing tick, telling the relay how many
+ * additional offline stanzas the client is ready to absorb in the next
+ * batch. The cast-shape RPC has no reply variant; the relay simply
+ * resumes flushing offline messages until the announced budget is
+ * consumed.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutOfflineBatchRequest")
 public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
     /**
-     * The number of offline messages the client expects to absorb in
+     * The number of offline stanzas the client is ready to absorb in
      * the upcoming batch.
+     *
+     * @implNote
+     * This implementation stores the raw {@code int} value; WA Web
+     * wraps it through {@code WAWap.INT} at serialisation time and the
+     * relay rejects negative counts, but Cobalt does not pre-validate
+     * the range here because the caller in
+     * {@code LinkedWhatsAppClient.acknowledgeOfflineBatch} sources the
+     * value from its own offline-pump counter.
      */
     private final int offlineBatchCount;
 
     /**
-     * Constructs a request with the given offline-batch count.
+     * Constructs a request announcing the given offline-batch budget.
+     *
+     * @apiNote
+     * Used by
+     * {@link com.github.auties00.cobalt.client.LinkedWhatsAppClient#acknowledgeOfflineBatch(int)}
+     * to keep the offline-stanza pump flowing across the connection's
+     * post-login backlog drain.
      *
      * @param offlineBatchCount the expected offline-batch size
      */
@@ -29,7 +51,7 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the expected offline-batch size.
+     * Returns the announced offline-batch budget.
      *
      * @return the count
      */
@@ -39,6 +61,13 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
 
     /**
      * Builds the outbound stanza ready for dispatch.
+     *
+     * @apiNote
+     * Produces {@code <ib><offline_batch count="N"/></ib>}; the
+     * envelope carries no {@code id} attribute because the cast-shape
+     * RPC is fire-and-forget. WA Web's
+     * {@code WASmaxOutOfflineBatchRequest.makeBatchRequest} produces
+     * the same node tree.
      *
      * @return a {@link NodeBuilder} carrying the {@code <ib>} envelope
      *         and the {@code <offline_batch/>} payload
@@ -56,6 +85,13 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
                 .content(offlineBatchNode);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxOfflineBatchRequest} with an equal batch count.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when both batch counts match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -68,11 +104,21 @@ public final class SmaxOfflineBatchRequest implements SmaxOperation.Request {
         return this.offlineBatchCount == that.offlineBatchCount;
     }
 
+    /**
+     * Returns a hash code derived from the batch count.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(offlineBatchCount);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this request.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxOfflineBatchRequest[offlineBatchCount=" + offlineBatchCount + ']';

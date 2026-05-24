@@ -16,54 +16,67 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing clear-chat sync mutations.
+ * Builds outgoing app-state mutations that clear the messages of a chat without deleting the chat itself.
  *
- * <p>Mirrors the {@code getClearChatMutation} export of WhatsApp Web's
- * {@code WAWebClearChatSync} module. The factory is the outgoing-mutation
- * counterpart of
+ * @apiNote
+ * Drives the chat-clear UI affordance: when the user clears a conversation
+ * the resulting {@link SyncPendingMutation} is pushed via
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService} so linked
+ * devices apply the same range-bounded delete against
+ * {@code WAWebDBQueryAndRemoveMessageHistory.queryAndRemoveMessagesInMessageRange}.
+ * The factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.ClearChatHandler}.
+ *
+ * @implNote
+ * This implementation accepts a caller-supplied {@link SyncActionMessageRange}
+ * because Cobalt does not run the
+ * {@code WAWebMessageRangeUtils.constructForwardMovingMessageRange}
+ * pipeline, which is tied to the browser-side active-message-range IndexedDB
+ * tables. It also drops WA Web's
+ * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent} telemetry commit; the
+ * caller layer is responsible for emitting WAM events.
  */
 public final class ClearChatMutationFactory {
     /**
-     * Constructs a clear-chat mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public ClearChatMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation that clears a chat's messages.
+     * Returns a SET mutation that clears the messages of the given chat over the supplied range.
      *
-     * <p>Per WhatsApp Web {@code WAWebClearChatSync.getClearChatMutation}:
-     * <pre>{@code
-     * getClearChatMutation(timestamp, chatWid, deleteStarred, messageRange, skipLidLookup) {
-     *   var indexJid = skipLidLookup ? chatWid.toString()
-     *                                : yield getChatJidMutationIndexForChat(chatWid, Actions.ClearChat);
-     *   var forwardRange = yield constructForwardMovingMessageRange(chatWid, indexJid);
-     *   var indexArgs = [indexJid, deleteStarred ? "1" : "0", deleteMedia ? "1" : "0"];
-     *   // merges with any existing pending ClearChat mutation for the same index
-     *   return buildPendingMutation({...});
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["clearChat", chatJid.toString(), deleteStarred ? "1" : "0", deleteMedia ? "1" : "0"]
      * }
-     * }</pre>
+     * and the {@link ClearChatAction} sub-message carries the
+     * {@link SyncActionMessageRange} that bounds the delete. Passing
+     * {@code messageRange == null} emits a clear with no range, which the
+     * receive-side handler treats as "clear whatever was visible at
+     * mutation time".
      *
-     * <p>The index format is {@code ["clearChat", chatJid, deleteStarred, deleteMedia]}.
-     *
-     * <p>In Cobalt, the caller supplies the message range because Cobalt does
-     * not maintain the active-message-range infrastructure (browser-specific
-     * IndexedDB concern). A {@code null} range is permitted and will result in
-     * a mutation without a range. The WAM telemetry commit
-     * ({@code MdSyncdDogfoodingFeatureUsageWamEvent}) is performed at the caller
-     * ({@code WhatsAppClient.clearChat}) since this method has no
-     * {@link com.github.auties00.cobalt.wam.WamService} handle.
+     * @implNote
+     * This implementation does not coalesce against existing pending
+     * mutations the way WA Web's
+     * {@code WAWebClearChatSync.getClearChatMutation} does via
+     * {@code WAWebSyncdDb.getPendingMutationsRowsByIndex}; Cobalt's app-state
+     * pipeline merges at a higher layer. The {@code deleteMedia} flag is
+     * written verbatim as the fourth index segment to keep wire parity with
+     * WA Web's {@code $ClearChatSync$p_3} index builder.
      *
      * @param timestamp     the mutation timestamp
-     * @param chatJid       the JID of the chat to clear
-     * @param deleteStarred whether starred messages should also be deleted
-     * @param deleteMedia   whether media files should be deleted (outgoing
-     *                      flag written verbatim per {@code $ClearChatSync$p_3})
-     * @param messageRange  the message range covering the messages to clear;
-     *                      may be {@code null}
-     * @return the pending mutation for the clear-chat action
+     * @param chatJid       the chat {@link Jid} whose messages are being cleared
+     * @param deleteStarred {@code true} if starred messages must be deleted alongside the rest
+     * @param deleteMedia   {@code true} if the on-disk media files must be deleted as well
+     * @param messageRange  the pre-built range covering the messages to clear, or {@code null}
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebClearChatSync", exports = {"getClearChatMutation", "$ClearChatSync$p_3"}, adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getClearChatMutation(
@@ -82,7 +95,6 @@ public final class ClearChatMutationFactory {
                 .timestamp(timestamp)
                 .clearChatAction(action)
                 .build();
-        // deleteStarred: "1" = delete, "0" = keep; deleteMedia: "1" = keep, "0" = delete (per $p_2 -> s==="1", d==="0")
         var index = JSON.toJSONString(List.of(
                 ClearChatAction.ACTION_NAME,
                 chatJid.toString(),
@@ -96,6 +108,6 @@ public final class ClearChatMutationFactory {
                 timestamp,
                 ClearChatAction.ACTION_VERSION
         );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
+        return new SyncPendingMutation(mutation, 0);
     }
 }

@@ -16,18 +16,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * Sealed family of inbound replies to {@link SmaxIndividualReportRequest}, modelling the two
+ * outcomes WA Web's {@code WASmaxSpamIndividualReportRPC.sendIndividualReportRPC} switches
+ * between: accepted report and rejected report.
+ *
+ * @apiNote
+ * Drives the "Report contact" / "Report business" submit-result UI consumed by WA Web's
+ * {@code WAWebReportSpamJob}; a {@link Success} carries the optional report id used for
+ * follow-up, while {@link Error} surfaces the relay's rejection code/text for banner rendering.
+ *
+ * @implNote
+ * This implementation matches WA Web's parser order: {@link Success} first, then
+ * {@link Error}. An inbound stanza that fits neither shape returns an empty {@link Optional}
+ * instead of WA Web's {@code SmaxParsingFailure}.
  */
 public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Response
         permits SmaxIndividualReportResponse.Success, SmaxIndividualReportResponse.Error {
 
     /**
-     * Tries each {@link SmaxIndividualReportResponse} variant in priority order.
+     * Parses the inbound individual-report reply against each
+     * {@link SmaxIndividualReportResponse} variant and returns the first that matches.
      *
-     * @param node    the inbound stanza; never {@code null}
-     * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty on no-match
+     * @apiNote
+     * Use after the relay's IQ arrives in response to a {@link SmaxIndividualReportRequest}; an
+     * empty {@link Optional} means the inbound stanza did not fit either of the two documented
+     * shapes.
+     *
+     * @implNote
+     * This implementation tries {@link Success#of(Node, Node)} first and falls back to
+     * {@link Error#of(Node, Node)}; no parse exception is raised on total miss.
+     *
+     * @param node    the inbound IQ stanza; never {@code null}
+     * @param request the originating outbound stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxSpamIndividualReportRPC",
@@ -43,19 +64,34 @@ public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The {@code Success} reply variant. The relay accepted the
-     * report.
+     * Accepted-report variant carrying the optional opaque report id.
+     *
+     * @apiNote
+     * Surfaces the relay's "report queued" acknowledgement; {@link #reportId()} is empty when
+     * the relay did not assign a follow-up id.
+     *
+     * @implNote
+     * This implementation reads the id from the {@code <report id>} attribute per WA Web's
+     * {@code WASmaxInSpamReportIdMixin}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSpamIndividualReportResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInSpamReportIdMixin")
     final class Success implements SmaxIndividualReportResponse {
         /**
-         * The optional opaque report id.
+         * The optional opaque report id assigned by the relay.
+         *
+         * @apiNote
+         * Surfaces the value of the {@code <report id>} attribute, or {@code null} when the
+         * relay omitted it.
          */
         private final String reportId;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs an accepted-report reply from the parsed fields.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code <iq type="result"/>} envelope
+         * validated.
          *
          * @param reportId the optional report id; may be {@code null}
          */
@@ -64,22 +100,32 @@ public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Respo
         }
 
         /**
-         * Returns the optional report id.
+         * Returns the optional opaque report id.
          *
-         * @return an {@link Optional} carrying the id, or empty when
-         *         omitted
+         * @apiNote
+         * Empty when the relay did not assign a follow-up id.
+         *
+         * @return an {@link Optional} carrying the id, or empty when omitted
          */
         public Optional<String> reportId() {
             return Optional.ofNullable(reportId);
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse an inbound stanza as a {@link Success}.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @apiNote
+         * Returns empty when the IQ envelope does not match a result for {@code request}.
+         *
+         * @implNote
+         * This implementation defers IQ-envelope validation to
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} and then reads
+         * {@code <report id>} via {@link Node#getChild(String)} chained with
+         * {@link Node#getAttributeAsString(String)}.
+         *
+         * @param node    the inbound IQ stanza
+         * @param request the originating outbound request
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInSpamIndividualReportResponseSuccess",
                 exports = "parseIndividualReportResponseSuccess",
@@ -118,27 +164,46 @@ public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Respo
     }
 
     /**
-     * The {@code Error} reply variant. The relay rejected the
-     * report.
+     * Rejected-report variant carrying the relay's {@code (code, text)} error pair.
+     *
+     * @apiNote
+     * Surfaces the relay refusal; the caller renders an error banner. WA Web's
+     * {@code WASmaxInSpamSpamIqErrors} aliases the documented {@code (code, text)} combinations
+     * to UI strings; Cobalt forwards the raw pair to leave that mapping to the caller.
+     *
+     * @implNote
+     * This implementation delegates IQ-envelope and {@code <error/>} extraction to
+     * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} (4xx) and
+     * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} (5xx).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInSpamIndividualReportResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInSpamSpamIqErrors")
     final class Error implements SmaxIndividualReportResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code from the {@code <error/>} envelope.
+         *
+         * @apiNote
+         * Surfaces the relay's classification of the rejection.
          */
         private final int errorCode;
 
         /**
          * The optional human-readable error text.
+         *
+         * @apiNote
+         * Surfaces the paired text from {@code <error text="..."/>}; {@code null} when the
+         * envelope omitted it.
          */
         private final String errorText;
 
         /**
-         * Constructs a new error reply.
+         * Constructs a rejected-report reply from the parsed fields.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code <error/>} envelope validated.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional text; may be {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public Error(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -147,6 +212,9 @@ public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Respo
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Surfaces the relay's rejection classification.
          *
          * @return the error code
          */
@@ -157,20 +225,29 @@ public sealed interface SmaxIndividualReportResponse extends SmaxOperation.Respo
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the text, or empty when
-         *         omitted
+         * @apiNote
+         * Empty when the {@code <error/>} envelope omitted the {@code text} attribute.
+         *
+         * @return an {@link Optional} carrying the text, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse an {@link Error} variant.
+         * Tries to parse an inbound stanza as an {@link Error}.
          *
-         * @param node    the inbound stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @apiNote
+         * Returns empty when neither the 4xx nor 5xx envelope matched.
+         *
+         * @implNote
+         * This implementation tries {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * first and falls back to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)};
+         * the first match wins.
+         *
+         * @param node    the inbound IQ stanza
+         * @param request the originating outbound request
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInSpamIndividualReportResponseError",
                 exports = "parseIndividualReportResponseError",

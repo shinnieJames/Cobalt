@@ -9,17 +9,24 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Represents a CTWA (Click-to-WhatsApp) external entry point recorded when a user opens
- * a chat via a CTWA ad link.
+ * Records a single CTWA (Click-to-WhatsApp) external entry point captured
+ * when a user opens a chat via a CTWA ad link.
  *
- * <p>Each entry point captures the ad deep-link type, authentication status, optional
- * partner name and the time it was added. Entry points expire after one week.
+ * @apiNote
+ * Stored by {@link CtwaAttributionStanza} keyed by chat JID; each entry
+ * lives at most {@link #MAX_AGE} (one week) before
+ * {@link CtwaAttributionStanza#build(com.github.auties00.cobalt.model.jid.Jid)}
+ * begins ignoring it and {@link CtwaAttributionStanza}'s save method
+ * prunes it. Mirrors the per-chat record shape WA Web stores under the
+ * {@code WAWebUserPrefsStore} {@code EXTERNAL_ENTRY_POINT} key:
+ * {@code {addedTime, deepLinkType, authSuccess, partnerName}}.
  *
- * @param deepLinkType the type of deep link that led the user to this chat
- * @param authSuccess  {@code true} if the user was successfully authenticated during the
- *                     ad flow
- * @param partnerName  the partner or advertiser name, or {@code null} if not available
- * @param addedTime    the instant when this entry point was recorded
+ * @param deepLinkType the deep-link type token that led the user to this
+ *                     chat (e.g. {@code "WA_HOOK"})
+ * @param authSuccess  whether the ad-flow authentication succeeded
+ * @param partnerName  the partner or advertiser name, or {@code null} when
+ *                     not provided
+ * @param addedTime    the {@link Instant} at which this entry was recorded
  */
 @WhatsAppWebModule(moduleName = "WAWebExternalEntryPointPrefs")
 public record ExternalEntryPoint(
@@ -29,20 +36,31 @@ public record ExternalEntryPoint(
         Instant addedTime
 ) {
     /**
-     * Maximum age of an external entry point before it is considered expired and
-     * discarded.
+     * The maximum age of an external entry point before it is considered
+     * expired and dropped from the entry-point cache.
+     *
+     * @apiNote
+     * Matches WA Web's {@code WATimeUtils.WEEK_MILLISECONDS} cutoff used
+     * inside {@code WAWebExternalEntryPointPrefs.u}.
      */
     @WhatsAppWebExport(moduleName = "WATimeUtils", exports = "WEEK_MILLISECONDS",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final Duration MAX_AGE = Duration.ofDays(7);
 
     /**
-     * Returns whether this entry point has expired.
+     * Returns whether this entry point is older than {@link #MAX_AGE}.
      *
-     * <p>Expiry uses a strict greater-than comparison against {@link #MAX_AGE} to match
-     * the JS source.
+     * @apiNote
+     * Used both by {@link CtwaAttributionStanza#getEntryPoint(com.github.auties00.cobalt.model.jid.Jid)}
+     * (to decline returning expired entries) and by the in-memory pruning
+     * step on save.
      *
-     * @return {@code true} if expired
+     * @implNote
+     * This implementation uses a strict greater-than comparison so the
+     * boundary instant ({@code addedTime + MAX_AGE} exactly) is still
+     * considered valid; matches WA Web's {@code t - e.addedTime > WEEK_MILLISECONDS}.
+     *
+     * @return {@code true} when this entry has expired
      */
     @WhatsAppWebExport(moduleName = "WAWebExternalEntryPointPrefs", exports = "getExternalEntryPoint",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -53,7 +71,12 @@ public record ExternalEntryPoint(
     /**
      * Returns the partner name as an {@link Optional}.
      *
-     * @return the partner name, or empty if {@code null}
+     * @apiNote
+     * Convenience accessor for callers that want to flat-map on the
+     * presence of a partner name rather than null-check the record
+     * component.
+     *
+     * @return the partner name, or empty when {@code null}
      */
     public Optional<String> optionalPartnerName() {
         return Optional.ofNullable(partnerName);

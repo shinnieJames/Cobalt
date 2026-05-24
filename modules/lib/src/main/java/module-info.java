@@ -35,6 +35,9 @@ module com.github.auties00.cobalt {
     // LMDB key-value store
     requires static lmdbjava; // Not necessary if the user doesn't want a persistent store
 
+    // PDF rendering (document thumbnails in the upload transcoder)
+    requires org.apache.pdfbox;
+
     // Data model
     requires com.github.auties00.cobalt.model;
 
@@ -46,18 +49,41 @@ module com.github.auties00.cobalt {
     requires com.google.i18n.phonenumbers.libphonenumber;
 
     // Calls, DTLS-SRTP handshake (BouncyCastle TLS + PKIX)
-    // SRTP packet protection is implemented in pure Java on top of the JDK (java.base) and needs no module declaration here.
     requires org.bouncycastle.provider;
     requires org.bouncycastle.tls;
     requires org.bouncycastle.pkix;
 
-    // Call media SPI — public so user code can implement Sources /
-    // Sinks for arbitrary inputs (the cobalt-call-toolkit is just
-    // one such consumer).
-    exports com.github.auties00.cobalt.call.io;
+    // Calls
+    exports com.github.auties00.cobalt.call;
+    exports com.github.auties00.cobalt.call.frame.audio;
+    exports com.github.auties00.cobalt.call.frame.video;
+    exports com.github.auties00.cobalt.call.source;
+    exports com.github.auties00.cobalt.call.sink;
+    exports com.github.auties00.cobalt.call.filter;
+    exports com.github.auties00.cobalt.call.session;
 
-    // Native lib loader — exported only to the toolkit so it can
-    // resolve FFmpeg the same way the lib module resolves libopus /
-    // libvpx / openh264 / libspeexdsp / libusrsctp.
-    exports com.github.auties00.cobalt.util to com.github.auties00.cobalt.call.toolkit;
+    // Client
+    exports com.github.auties00.cobalt.client;
+
+    // Exceptions
+    exports com.github.auties00.cobalt.exception;
+
+    // Node/Stanza
+    // Exported so the user can
+    exports com.github.auties00.cobalt.node;
+    exports com.github.auties00.cobalt.node.iq;
+    exports com.github.auties00.cobalt.node.mex;
+    exports com.github.auties00.cobalt.node.smax;
+    exports com.github.auties00.cobalt.node.usync;
+
+    // Store
+    // Exported for obvious reasons
+    exports com.github.auties00.cobalt.store;
+
+    // Metrics
+    // Export the codegen event specs + types so that users can send their own WAM events through WhatsAppClient
+    // Don't export the WAM internals
+    exports com.github.auties00.cobalt.wam.event;
+    exports com.github.auties00.cobalt.wam.type;
+
 }

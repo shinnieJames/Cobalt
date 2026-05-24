@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BotWelcomeRequestHandler} â€” Cobalt's adapter for
+ * Tests for {@link BotWelcomeRequestHandler} - Cobalt's adapter for
  * {@code WAWebBotWelcomeRequestSync}.
  *
  * <p>The handler records whether the bot welcome message has been delivered
@@ -182,7 +182,7 @@ class BotWelcomeRequestHandlerTest {
     }
 
     @Nested
-    @DisplayName("getBotWelcomeRequestSetMutation â€” builder helper")
+    @DisplayName("getBotWelcomeRequestSetMutation - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the requested chat JID and flag")
@@ -198,7 +198,7 @@ class BotWelcomeRequestHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -213,7 +213,7 @@ class BotWelcomeRequestHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” n/a, default implementation")
+    @DisplayName("applyMutationBatch - n/a, default implementation")
     class BatchNa {
         @Test
         @DisplayName("default applyMutationBatch delegates to applyMutation per mutation")

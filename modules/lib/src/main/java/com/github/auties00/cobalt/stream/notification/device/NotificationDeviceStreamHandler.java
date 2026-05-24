@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
@@ -12,53 +14,86 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles incoming device notification stanzas (type="devices").
- * <p>
- * Parses add, remove, and update device notifications, registers LID-PN mappings,
- * and dispatches to {@link DeviceService} for add/remove or device list sync for updates.
- * Processes notifications for both primary and secondary (LID/PN) user identities,
- * mirroring WA Web's dual-wid processing pattern.
+ * Handles {@code type="devices"} notifications carrying device-list
+ * mutations for a user.
+ *
+ * @apiNote
+ * Dispatched by {@link NotificationDeviceDispatcher}. Each notification
+ * carries one of three action children: {@code <add>} (a new companion
+ * device linked), {@code <remove>} (an existing companion unlinked), or
+ * {@code <update>} (the user's device list changed and a USync refresh
+ * is required). The handler registers LID-PN mappings carried by the
+ * {@code lid} attribute and processes the action against both the
+ * primary user and the alternate (LID/PN) identity when available.
+ *
+ * @implNote
+ * This implementation processes both the PN-keyed and the LID-keyed
+ * record for every notification, matching WA Web's
+ * {@code WAWebHandleDeviceNotification.handleDevicesNotification} which
+ * builds the dual entry list {@code [{wid: pn, ...}, {wid: lid, ...}]}
+ * before fanning out. The {@code update} branch re-queries via
+ * {@link DeviceService#getDeviceLists}; {@code add}/{@code remove}
+ * normalise the action node (wrapping inline {@code <device>} children
+ * in a {@code <device-list>} node when the stanza lacks one) before
+ * delegating to {@link DeviceService#handleDeviceNotification}.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleDeviceNotification")
 public final class NotificationDeviceStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger for device notification operations.
+     * Logger used for warnings about malformed stanzas and errors
+     * surfaced by the per-entry processing loop.
      */
     private static final System.Logger LOGGER =
             System.getLogger(NotificationDeviceStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client used for sending ack stanzas and accessing the store.
+     * The {@link WhatsAppClient} used for store reads and LID-PN
+     * mapping registration.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The device service used for handling add and remove notifications and for syncing device lists.
+     * The {@link DeviceService} used to apply the parsed device action
+     * (add/remove/update) to the cached device list.
      */
     private final DeviceService deviceService;
 
     /**
-     * Constructs a new device notification stream handler.
-     *
-     * @param whatsapp      the WhatsApp client
-     * @param deviceService the device service for device list operations
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification">} stanza (without a
+     * {@code type} attribute, with {@code to} set to the user-level
+     * form of the inbound device JID).
      */
-    public NotificationDeviceStreamHandler(WhatsAppClient whatsapp, DeviceService deviceService) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with shared dependencies.
+     *
+     * @apiNote
+     * Called once by {@link NotificationDeviceDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp      the {@link WhatsAppClient}
+     * @param deviceService the {@link DeviceService}
+     * @param ackSender     the {@link AckSender}
+     */
+    public NotificationDeviceStreamHandler(WhatsAppClient whatsapp, DeviceService deviceService, AckSender ackSender) {
         this.whatsapp = whatsapp;
         this.deviceService = deviceService;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles an incoming device notification stanza.
-     * <p>
-     * Validates the stanza is a notification with type="devices", extracts the user JID from the
-     * {@code from} attribute and the optional LID from the {@code lid} attribute, registers
-     * LID-PN mappings, and dispatches to the appropriate handler based on the action type
-     * (add, remove, or update). Both the primary user and secondary (LID/PN) identity are
-     * processed when available. An ack stanza is always sent to the server.
+     * Validates the stanza shape, processes each entry (PN and optional
+     * LID), and always sends the protocol-level ACK.
      *
-     * @param node the incoming notification stanza node
+     * @apiNote
+     * Invoked by {@link NotificationDeviceDispatcher}. Stanzas with no
+     * {@code from} attribute are debug-logged and dropped; stanzas
+     * without a known action child are warned about and dropped.
+     *
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -95,7 +130,7 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
                 : null;
 
         var secondaryJid = userJid.hasLidServer()
-                ? whatsapp.store().getPhoneNumberByLid(userJid).orElse(null)
+                ? whatsapp.store().findPhoneByLid(userJid).orElse(null)
                 : lidUser;
 
         if (lidUser != null) {
@@ -122,15 +157,24 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Processes a single device notification entry for a given user JID.
-     * <p>
-     * For add/remove actions, delegates to {@link DeviceService#handleDeviceNotification}.
-     * For update actions, triggers a device list sync via {@link DeviceService#getDeviceLists}.
+     * Routes the action to {@link DeviceService} based on its type.
      *
-     * @param entryJid   the user JID to process the notification for
-     * @param actionType the action type ("add", "remove", or "update")
-     * @param actionNode the action child node from the notification stanza
-     * @param hash       the hash attribute value for update notifications, or {@code null}
+     * @apiNote
+     * {@code add} and {@code remove} delegate to
+     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)};
+     * {@code update} delegates to
+     * {@link DeviceService#getDeviceLists(List, String, Object, boolean)}
+     * to refresh from USync.
+     *
+     * @implNote
+     * This implementation warns and drops {@code update} notifications
+     * with no {@code hash} attribute because WA Web's parser asserts
+     * the hash via {@code n.attrString("hash")} and throws otherwise.
+     *
+     * @param entryJid   the user JID being processed (PN or LID)
+     * @param actionType the action description ({@code "add"}, {@code "remove"}, {@code "update"})
+     * @param actionNode the action child node
+     * @param hash       the {@code hash} attribute value for {@code update}, or {@code null}
      */
     private void processDeviceEntry(Jid entryJid, String actionType, Node actionNode, String hash) {
         switch (actionType) {
@@ -155,14 +199,23 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Normalizes an action node for consumption by {@link DeviceService#handleDeviceNotification}.
-     * <p>
-     * If the action node already has a {@code device-list} child or is missing a
-     * {@code key-index-list} child, it is returned unchanged. Otherwise, wraps the device
-     * children in a {@code device-list} node and rebuilds the action node structure.
+     * Wraps inline {@code <device>} children in a synthetic
+     * {@code <device-list>} child when the action node lacks one.
      *
-     * @param actionNode the original action node from the notification stanza
-     * @return the normalized action node
+     * @apiNote
+     * {@link DeviceService#handleDeviceNotification(Node, String, Jid)}
+     * expects an action node with a {@code <device-list>} child and a
+     * {@code <key-index-list>} sibling; this helper synthesises the
+     * {@code <device-list>} from inline {@code <device>} children when
+     * a stanza ships them flat (a server compatibility quirk).
+     *
+     * @implNote
+     * This implementation returns the action node unchanged when
+     * {@code <device-list>} is already present or when
+     * {@code <key-index-list>} is absent (no normalisation needed).
+     *
+     * @param actionNode the action child node
+     * @return the normalised action node
      */
     private Node normalizeDeviceActionNode(Node actionNode) {
         if (actionNode.getChild("device-list").isPresent()
@@ -191,25 +244,20 @@ public final class NotificationDeviceStreamHandler implements SocketStream.Handl
     }
 
     /**
-     * Sends an ack stanza for a device notification.
-     * <p>
-     * Builds and sends an ack with the user JID (not the raw device JID from the
-     * notification), the stanza id, and class="notification".
+     * Sends the {@code <ack class="notification" to="<user>"/>} stanza
+     * (no {@code type} attribute) for the processed notification.
      *
-     * @param node    the original notification stanza node
-     * @param userJid the user-level JID extracted from the {@code from} attribute
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleDeviceNotification.handleDevicesNotification}
+     * ack-builder which uses
+     * {@code USER_JID(a.user)} (not the raw device JID from
+     * {@code from}) as the {@code to} target.
+     *
+     * @param node    the original {@code <notification>} stanza
+     * @param userJid the user-level JID extracted from {@code from}
      */
     private void sendNotificationAck(Node node, Jid userJid) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        if (stanzaId == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", userJid)
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).to(userJid).type(null).send();
     }
 }

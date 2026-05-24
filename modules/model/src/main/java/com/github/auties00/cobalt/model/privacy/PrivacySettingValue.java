@@ -46,7 +46,7 @@ public enum PrivacySettingValue {
     /**
      * No other user at all.
      */
-    NO_ONE(3, "none"),
+    NOBODY(3, "none"),
     /**
      * Mirrors the audience configured for {@link PrivacySettingType#LAST_SEEN}.
      *

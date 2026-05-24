@@ -56,15 +56,14 @@ public enum SettingsItemType {
     @WamEnumConstant(45) CONTACTS,
     @WamEnumConstant(46) APPEARANCE,
     @WamEnumConstant(47) USERNAME,
-    @WamEnumConstant(48) TOAST_VIEW_LATEST_STATUS,
-    @WamEnumConstant(49) PROFILE_VIEW_FIRST_UNREAD_STATUS,
-    @WamEnumConstant(50) PROFILE_VIEW_OLDEST_STATUS,
-    @WamEnumConstant(51) BADGE_ADD_STATUS,
-    @WamEnumConstant(52) PROFILE_ADD_STATUS,
+    @WamEnumConstant(48) TOAST_VIEW_LATEST_SELF_STATUS,
+    @WamEnumConstant(49) PROFILE_VIEW_FIRST_UNREAD_SELF_STATUS,
+    @WamEnumConstant(50) PROFILE_VIEW_OLDEST_SELF_STATUS,
+    @WamEnumConstant(51) BADGE_ADD_SELF_STATUS,
+    @WamEnumConstant(52) PROFILE_ADD_SELF_STATUS,
     @WamEnumConstant(53) PROFILE_OPEN_CONTEXT_MENU,
-    @WamEnumConstant(54) BADGE_OPEN_CONTEXT_MENU,
     @WamEnumConstant(55) CONTEXT_MENU_ADD_PROFILE_PICTURE,
-    @WamEnumConstant(56) CONTEXT_MENU_VIEW_FIRST_UNREAD_STATUS,
-    @WamEnumConstant(57) CONTEXT_MENU_VIEW_OLDEST_STATUS,
-    @WamEnumConstant(58) CONTEXT_MENU_ADD_STATUS
+    @WamEnumConstant(56) CONTEXT_MENU_VIEW_FIRST_UNREAD_SELF_STATUS,
+    @WamEnumConstant(57) CONTEXT_MENU_VIEW_OLDEST_SELF_STATUS,
+    @WamEnumConstant(58) CONTEXT_MENU_ADD_SELF_STATUS
 }

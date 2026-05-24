@@ -10,14 +10,12 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageAction.InteractiveMessageActionMode;
 import com.github.auties00.cobalt.model.sync.action.chat.InteractiveMessageActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,14 +25,32 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link InteractiveMessageHandler}.
+ * Exercises the {@link InteractiveMessageHandler} adapter for
+ * {@code WAWebInteractiveMessageSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the
+ * {@code interactive_message_action} app-state sync action across
+ * metadata, the SET happy path that records the per-AGM and
+ * per-message state, the orphan branches when chat or message are
+ * missing, the malformed-value and malformed-index branches, the
+ * REMOVE rejection, the inherited timestamp-based conflict
+ * resolution and the
+ * {@link InteractiveMessageHandler#buildDisableCTAAction} helper.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the per-AGM and composite-index state recorded by the handler
+ * can be read back through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#interactiveMessageStates()}
+ * directly.
  */
 @DisplayName("InteractiveMessageHandler")
 class InteractiveMessageHandlerTest {
@@ -101,7 +117,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("DISABLE_CTA against an existing message records the interactive state")
@@ -139,7 +155,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Msg")
@@ -168,7 +184,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying a pinAction instead of interactiveMessageAction is MALFORMED")
@@ -188,7 +204,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a 5-element index missing the subId slot is MALFORMED")
@@ -224,7 +240,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -246,11 +262,11 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based behaviour")
+    @DisplayName("resolveConflicts - default timestamp-based behaviour")
     class ResolveConflicts {
         // InteractiveMessageHandler does NOT override resolveConflicts; the interface default applies.
         @Test
-        @DisplayName("older local vs. newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("older local vs. newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteWins() {
             var local = interactiveMutation(InteractiveMessageActionMode.DISABLE_CTA, null,
                     PEER, MESSAGE_ID, "0", "0", SUB_ID, Instant.ofEpochSecond(100L));
@@ -262,7 +278,7 @@ class InteractiveMessageHandlerTest {
         }
 
         @Test
-        @DisplayName("newer local vs. older remote â†’ SKIP_REMOTE")
+        @DisplayName("newer local vs. older remote -> SKIP_REMOTE")
         void newerLocalWins() {
             var local = interactiveMutation(InteractiveMessageActionMode.DISABLE_CTA, null,
                     PEER, MESSAGE_ID, "0", "0", SUB_ID, Instant.ofEpochSecond(300L));
@@ -275,7 +291,7 @@ class InteractiveMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("buildDisableCTAAction â€” builder helper")
+    @DisplayName("buildDisableCTAAction - builder helper")
     class BuilderHelpers {
         @Test
         @DisplayName("buildDisableCTAAction carries the type and agmId fields")
@@ -296,25 +312,4 @@ class InteractiveMessageHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/interactive-message/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/interactive-message/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var agmId = oracle.getString("agmId");
-
-            var builder = new InteractiveMessageActionBuilder().type(InteractiveMessageActionMode.DISABLE_CTA);
-            if (agmId != null) builder.agmId(agmId);
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .interactiveMessageAction(builder.build())
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

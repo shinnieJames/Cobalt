@@ -4,9 +4,11 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyDataBuilder;
 import com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKeyIdBuilder;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
@@ -15,6 +17,7 @@ import com.github.auties00.cobalt.sync.WebAppStateService;
 import com.github.auties00.cobalt.sync.key.SyncKeyRotationService;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
 import com.github.auties00.cobalt.wam.DefaultWamService;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -71,7 +74,7 @@ class KeyRotationCycleIntegrationTest {
         var wam = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wam);
         var snapshotRecovery = new SnapshotRecoveryService(client, props, wam);
-        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wam);
+        var webAppState = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wam, TestMediaConnectionService.create());
         rotation = webAppState.syncKeyRotationService();
     }
 
@@ -81,7 +84,7 @@ class KeyRotationCycleIntegrationTest {
         return out;
     }
 
-    private static com.github.auties00.cobalt.model.message.system.appstate.AppStateSyncKey
+    private static AppStateSyncKey
             syncKey(byte[] id, byte[] data) {
         return new AppStateSyncKeyBuilder()
                 .keyId(new AppStateSyncKeyIdBuilder().keyId(id).build())
@@ -114,7 +117,7 @@ class KeyRotationCycleIntegrationTest {
         @DisplayName("getActiveKey throws when the store has no keys")
         void noKeysThrows() {
             assertFalse(store.appStateKeys().iterator().hasNext());
-            org.junit.jupiter.api.Assertions.assertThrows(
+            Assertions.assertThrows(
                     IllegalStateException.class,
                     () -> rotation.getActiveKey(true));
         }

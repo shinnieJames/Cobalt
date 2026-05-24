@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.call;
 
+import com.github.auties00.cobalt.call.internal.transport.OfferTransportSpec;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.model.jid.Jid;
 
@@ -15,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code <offer>} stanza arrives from the peer; the listener must
  * respond by calling either
  * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)} or
- * {@link WhatsAppClient#rejectCall(IncomingCall, com.github.auties00.cobalt.call.signaling.CallEndReason)}
+ * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}
  * within the WhatsApp-imposed timeout (~30 s) or the offer will
  * expire on its own.
  *
@@ -86,7 +87,21 @@ public final class IncomingCall {
     private final AtomicBoolean responded = new AtomicBoolean(false);
 
     /**
-     * Constructs a new offer.
+     * The transport-layer setup carried inside the offer payload —
+     * relay endpoints, session tokens, call key. Parsed by
+     * {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiver}
+     * via {@link OfferTransportSpec#parse(com.github.auties00.cobalt.node.Node)}
+     * and read by
+     * {@link com.github.auties00.cobalt.call.internal.transport.ActiveCallTransport#start
+     * ActiveCallTransport.start} after the call is accepted. {@code null}
+     * for signaling-only offers (e.g. Cobalt's own pre-Phase-2 outgoing
+     * offer shape).
+     */
+    private final OfferTransportSpec transportSpec;
+
+    /**
+     * Constructs a new offer with no transport spec — used by tests
+     * that exercise the signaling layer in isolation.
      *
      * @param callId       the unique call identifier
      * @param peer         the caller's JID
@@ -103,6 +118,28 @@ public final class IncomingCall {
     public IncomingCall(String callId, Jid peer, Jid chatJid, Instant timestamp,
                         boolean videoOffered, boolean group, Jid groupJid,
                         boolean offlineOffer) {
+        this(callId, peer, chatJid, timestamp, videoOffered, group, groupJid, offlineOffer, null);
+    }
+
+    /**
+     * Constructs a new offer with an attached transport spec.
+     *
+     * @param callId        the unique call identifier
+     * @param peer          the caller's JID
+     * @param chatJid       the chat the offer arrived in
+     * @param timestamp     when the offer was received
+     * @param videoOffered  whether video was offered
+     * @param group         whether this is a group call
+     * @param groupJid      the group JID, or {@code null} for 1:1
+     * @param offlineOffer  whether the offer was server-replayed
+     * @param transportSpec the parsed transport-layer setup, or
+     *                      {@code null} when the offer omitted it
+     * @throws NullPointerException if any non-{@code null} argument
+     *                              is missing
+     */
+    public IncomingCall(String callId, Jid peer, Jid chatJid, Instant timestamp,
+                        boolean videoOffered, boolean group, Jid groupJid,
+                        boolean offlineOffer, OfferTransportSpec transportSpec) {
         this.callId = Objects.requireNonNull(callId, "callId cannot be null");
         this.peer = Objects.requireNonNull(peer, "peer cannot be null");
         this.chatJid = Objects.requireNonNull(chatJid, "chatJid cannot be null");
@@ -111,6 +148,17 @@ public final class IncomingCall {
         this.group = group;
         this.groupJid = groupJid;
         this.offlineOffer = offlineOffer;
+        this.transportSpec = transportSpec;
+    }
+
+    /**
+     * Returns the parsed transport-layer setup, if the inbound offer
+     * carried it.
+     *
+     * @return the spec, or {@link Optional#empty()}
+     */
+    public Optional<OfferTransportSpec> transportSpec() {
+        return Optional.ofNullable(transportSpec);
     }
 
     /**
@@ -197,7 +245,7 @@ public final class IncomingCall {
      * <p>Invoked by
      * {@link WhatsAppClient#acceptCall(IncomingCall, CallOptions)}
      * and
-     * {@link WhatsAppClient#rejectCall(IncomingCall, com.github.auties00.cobalt.call.signaling.CallEndReason)}
+     * {@link WhatsAppClient#rejectCall(IncomingCall, CallEndReason)}
      * before they touch the call engine, so accept-after-reject and
      * double-accept fail loudly instead of silently producing a
      * second {@link ActiveCall}.

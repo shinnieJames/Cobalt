@@ -17,26 +17,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsGetGroupProfilePicturesRequest}.
+ * Sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGroupsGetGroupProfilePicturesRequest}.
+ *
+ * @apiNote
+ * Pattern-match the result returned by {@link #of(Node, Node)} to drive the group-pictures fetch surface
+ * equivalent to WA Web's {@code WAWebGroupGetProfilePicsJob} switch: {@link Success} carries the
+ * per-requested-group picture rows; the two error variants surface caller-side and relay-side failures.
  */
 public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOperation.Response
         permits SmaxGroupsGetGroupProfilePicturesResponse.Success, SmaxGroupsGetGroupProfilePicturesResponse.ClientError, SmaxGroupsGetGroupProfilePicturesResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsGetGroupProfilePicturesResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses the inbound IQ stanza into the first matching
+     * {@link SmaxGroupsGetGroupProfilePicturesResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to
-     *                validate echoed identifiers; never
-     *                {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote
+     * Mirrors WA Web's {@code WASmaxGroupsGetGroupProfilePicturesRPC.sendGetGroupProfilePicturesRPC}
+     * fall-through cascade: {@link Success}, {@link ClientError}, {@link ServerError}. An empty
+     * {@link Optional} signals a stanza shape outside the documented union.
+     *
+     * @implNote
+     * This implementation runs the variant probes in the same priority order as WA Web; it does not throw a
+     * parsing-failure exception, leaving the recovery decision to the caller.
+     *
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound {@link SmaxGroupsGetGroupProfilePicturesRequest} stanza; used to
+     *                validate the echoed {@code id} attribute; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         documented variant matched
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsGetGroupProfilePicturesRPC",
             exports = "sendGetGroupProfilePicturesRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -55,9 +65,13 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The {@code SuccessGroupPictures} reply variant — carries a
-     * {@code <pictures>} wrapper holding one {@link Picture} per
-     * requested group.
+     * The success variant returned when the relay echoed the {@code <pictures/>} wrapper carrying one
+     * {@link Picture} per requested group.
+     *
+     * @apiNote
+     * Iterate {@link #pictures()} in lock-step with the request's
+     * {@link SmaxGroupsGetGroupProfilePicturesRequest#pictures()} to surface per-group results; each entry
+     * carries either a URL projection, an inline blob, or a partial-branch marker.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseSuccessGroupPictures")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesProfilePicturesResponseMixin")
@@ -65,17 +79,18 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsParentOrSubGroupMixinGroup")
     final class Success implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The list of picture replies, one per requested group.
+         * The per-group picture replies, one per requested group.
          */
         private final List<Picture> pictures;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a success variant.
          *
-         * @param pictures the per-picture replies; never
-         *                 {@code null}
-         * @throws NullPointerException if {@code pictures} is
-         *                              {@code null}
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         *
+         * @param pictures the per-picture replies; never {@code null}
+         * @throws NullPointerException if {@code pictures} is {@code null}
          */
         public Success(List<Picture> pictures) {
             Objects.requireNonNull(pictures, "pictures cannot be null");
@@ -85,22 +100,29 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Returns the per-picture replies.
          *
-         * @return an unmodifiable list of picture replies; never
-         *         {@code null}
+         * @return an unmodifiable list of picture replies; never {@code null}
          */
         public List<Picture> pictures() {
             return pictures;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses the inbound stanza into a {@link Success} variant.
+         *
+         * @apiNote
+         * Invoked as the first probe in the variant cascade by
+         * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation validates the IQ envelope via {@link SmaxIqResultResponseMixin#validate(Node, Node)},
+         * extracts the {@code <pictures/>} wrapper, then iterates its {@code <picture/>} children and parses
+         * each one via {@link Picture#of(Node)}. Any failed child parse short-circuits and the whole variant
+         * is rejected.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseSuccessGroupPictures",
                 exports = "parseGetGroupProfilePicturesResponseSuccessGroupPictures",
@@ -152,19 +174,21 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * Per-picture projection — carries the addressing JID alongside
-     * the optional {@code id}, {@code type}, {@code url},
-     * {@code direct_path} and inline {@code blob} bytes.
+     * Per-group picture projection inside a {@link Success}.
      *
-     * <p>The relay's per-picture response is a disjunction of two
-     * sub-shapes: the "success" projection (carrying the picture
-     * URL or blob) and the "partial" projection (carrying a
-     * {@code did_not_change}/{@code not_found}/error marker). This
-     * record unifies both branches; {@link #url}/{@link #directPath}/{@link #blob}
-     * are populated only on the success branch, and the
-     * {@code <picture/>} child is exposed verbatim via
-     * {@link #raw()} so callers can inspect any sub-marker the
-     * partial branch may carry.
+     * @apiNote
+     * The relay's per-picture response is a disjunction of two sub-shapes: a success projection (carrying
+     * either a URL plus {@code direct_path} or inline blob bytes) and a partial projection (carrying a
+     * {@code did_not_change} / {@code not_found} / error marker). This record unifies both branches;
+     * {@link #url()}, {@link #directPath()}, and {@link #blob()} are populated only on the success branch,
+     * and the verbatim {@code <picture/>} child is exposed via {@link #raw()} so callers can inspect any
+     * partial-branch marker.
+     *
+     * @implNote
+     * This implementation collapses the two WA Web mixin modules ({@code SuccessProfilePictureResponseMixin}
+     * and {@code PartialProfilePictureResponseMixin}) into one Java class because the two branches are
+     * distinguishable by inspecting the absence or presence of the URL / blob payload, removing the need
+     * for a sealed-interface oneof at this leaf level.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesSuccessProfilePictureResponseMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesPartialProfilePictureResponseMixin")
@@ -172,67 +196,64 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsProfilePictureBlobResponseMixin")
     final class Picture {
         /**
-         * The parent-group JID when this picture targets a parent
-         * group; mutually exclusive with {@link #subGroupJid}.
+         * The parent-group {@link Jid} when this entry targets a parent group; mutually exclusive with
+         * {@link #subGroupJid}.
          */
         private final Jid parentGroupJid;
 
         /**
-         * The sub-group JID when this picture targets a sub-group;
-         * mutually exclusive with {@link #parentGroupJid}.
+         * The sub-group {@link Jid} when this entry targets a sub-group; mutually exclusive with
+         * {@link #parentGroupJid}.
          */
         private final Jid subGroupJid;
 
         /**
-         * The picture id, when the relay supplied one.
+         * The picture id echoed by the relay; {@code null} when omitted.
          */
         private final String pictureId;
 
         /**
-         * The picture type ({@code "image"} or {@code "preview"})
-         * when the relay supplied one.
+         * The picture type ({@code "image"} or {@code "preview"}) echoed by the relay; {@code null} when
+         * omitted.
          */
         private final String pictureType;
 
         /**
-         * The picture URL — populated only on the URL-projection
-         * success branch.
+         * The picture URL; populated only on the URL-projection success branch.
          */
         private final String url;
 
         /**
-         * The {@code direct_path} attribute — populated only on the
-         * URL-projection success branch.
+         * The {@code direct_path} attribute; populated only on the URL-projection success branch.
          */
         private final String directPath;
 
         /**
-         * The inline blob bytes — populated only on the
-         * blob-projection success branch.
+         * The inline blob bytes; populated only on the blob-projection success branch.
          */
         private final byte[] blob;
 
         /**
-         * The raw {@code <picture/>} node carrying any
-         * partial-branch marker
-         * ({@code did_not_change}/{@code not_found}/{@code bad_*}).
+         * The raw {@code <picture/>} node carrying any partial-branch marker
+         * ({@code did_not_change} / {@code not_found} / {@code bad_*}).
          */
         private final Node raw;
 
         /**
          * Constructs a picture entry.
          *
-         * @param parentGroupJid optional parent-group JID
-         * @param subGroupJid    optional sub-group JID
+         * @apiNote
+         * Typically produced by {@link #of(Node)}; direct construction is used to seed test fixtures.
+         *
+         * @param parentGroupJid optional parent-group {@link Jid}
+         * @param subGroupJid    optional sub-group {@link Jid}
          * @param pictureId      optional picture id
          * @param pictureType    optional picture type
          * @param url            optional picture URL
          * @param directPath     optional direct-path attribute
          * @param blob           optional inline blob bytes
-         * @param raw            the raw {@code <picture/>} node;
-         *                       never {@code null}
-         * @throws NullPointerException if {@code raw} is
-         *                              {@code null}
+         * @param raw            the raw {@code <picture/>} {@link Node}; never {@code null}
+         * @throws NullPointerException if {@code raw} is {@code null}
          */
         public Picture(Jid parentGroupJid, Jid subGroupJid,
                        String pictureId, String pictureType,
@@ -248,7 +269,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         }
 
         /**
-         * Returns the parent-group JID when set.
+         * Returns the parent-group {@link Jid} when set.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -257,7 +278,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         }
 
         /**
-         * Returns the sub-group JID when set.
+         * Returns the sub-group {@link Jid} when set.
          *
          * @return an {@link Optional} carrying the JID
          */
@@ -277,7 +298,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Returns the picture type when supplied by the relay.
          *
-         * @return an {@link Optional} carrying the type
+         * @return an {@link Optional} carrying the type ({@code "image"} or {@code "preview"})
          */
         public Optional<String> pictureType() {
             return Optional.ofNullable(pictureType);
@@ -286,50 +307,62 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Returns the picture URL on the URL-projection branch.
          *
-         * @return an {@link Optional} carrying the URL
+         * @return an {@link Optional} carrying the URL; empty on the blob-projection or partial branches
          */
         public Optional<String> url() {
             return Optional.ofNullable(url);
         }
 
         /**
-         * Returns the {@code direct_path} attribute on the
-         * URL-projection branch.
+         * Returns the {@code direct_path} attribute on the URL-projection branch.
          *
-         * @return an {@link Optional} carrying the direct path
+         * @return an {@link Optional} carrying the direct path; empty on the blob-projection or partial
+         *         branches
          */
         public Optional<String> directPath() {
             return Optional.ofNullable(directPath);
         }
 
         /**
-         * Returns the inline blob bytes on the blob-projection
-         * branch.
+         * Returns the inline blob bytes on the blob-projection branch.
          *
-         * @return an {@link Optional} carrying the blob bytes
+         * @return an {@link Optional} carrying the blob bytes; empty on the URL-projection or partial
+         *         branches
          */
         public Optional<byte[]> blob() {
             return Optional.ofNullable(blob);
         }
 
         /**
-         * Returns the raw {@code <picture/>} node carrying the
-         * remaining attributes and any partial-branch sub-marker.
+         * Returns the raw {@code <picture/>} node carrying any partial-branch sub-marker
+         * ({@code did_not_change} / {@code not_found} / {@code bad_*}).
          *
-         * @return the raw node; never {@code null}
+         * @apiNote
+         * Inspect this node when {@link #url()}, {@link #directPath()}, and {@link #blob()} are all empty
+         * to disambiguate the partial-branch reason.
+         *
+         * @return the raw {@link Node}; never {@code null}
          */
         public Node raw() {
             return raw;
         }
 
         /**
-         * Tries to parse a {@link Picture} from the given
-         * {@code <picture/>} child.
+         * Parses a {@link Picture} from the given {@code <picture/>} child.
+         *
+         * @apiNote
+         * Called by {@link Success#of(Node, Node)} for each {@code <picture/>} child inside the
+         * {@code <pictures/>} wrapper.
+         *
+         * @implNote
+         * This implementation requires the child to carry exactly one of {@code parent_group_jid} or
+         * {@code sub_group_jid}; absence of both signals a wire-format violation and the call returns
+         * {@link Optional#empty()}. The {@code url}, {@code direct_path}, and inline blob bytes are read
+         * unconditionally and surface as empty {@link Optional}s on the partial branch.
          *
          * @param node the {@code <picture/>} child node
-         * @return an {@link Optional} carrying the parsed picture,
-         *         or empty when the child does not satisfy the
-         *         addressing-disjunction schema
+         * @return an {@link Optional} carrying the parsed picture, or {@link Optional#empty()} when the
+         *         child does not satisfy the addressing-disjunction schema
          */
         public static Optional<Picture> of(Node node) {
             Objects.requireNonNull(node, "node cannot be null");
@@ -388,28 +421,33 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected
-     * the request as malformed or unauthorised.
+     * The client-error variant returned when the relay rejected the request as malformed or unauthorised.
+     *
+     * @apiNote
+     * Forwarded by WA Web's {@code WAWebGroupGetProfilePicsJob} as a {@code ServerStatusCodeError}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseClientError")
     final class ClientError implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -417,7 +455,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -428,18 +466,28 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Parses the inbound stanza into a {@link ClientError} envelope.
+         *
+         * @apiNote
+         * Invoked as the second probe in the variant cascade by
+         * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} so every SMAX response in the family
+         * shares the same client-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseClientError",
                 exports = "parseGetGroupProfilePicturesResponseClientError",
@@ -477,28 +525,34 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered
-     * a transient internal failure while processing the request.
+     * The server-error variant returned when the relay encountered a transient internal failure.
+     *
+     * @apiNote
+     * Forwarded by WA Web's {@code WAWebGroupGetProfilePicsJob} as a {@code ServerStatusCodeError}; callers
+     * can decide whether to retry based on the surfaced {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseServerError")
     final class ServerError implements SmaxGroupsGetGroupProfilePicturesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -506,7 +560,7 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -517,18 +571,28 @@ public sealed interface SmaxGroupsGetGroupProfilePicturesResponse extends SmaxOp
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Parses the inbound stanza into a {@link ServerError} envelope.
+         *
+         * @apiNote
+         * Invoked as the terminal probe in the variant cascade by
+         * {@link SmaxGroupsGetGroupProfilePicturesResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} so every SMAX response in the family
+         * shares the same server-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsGetGroupProfilePicturesResponseServerError",
                 exports = "parseGetGroupProfilePicturesResponseServerError",

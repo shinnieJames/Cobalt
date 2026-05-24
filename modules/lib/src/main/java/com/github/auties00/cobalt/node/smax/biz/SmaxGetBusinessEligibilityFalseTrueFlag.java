@@ -7,21 +7,41 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Documented {@code should_show_privacy_interstitial_to_new_users}
- * enum carried by the {@code <meta_verified/>} child. Boolean
- * surfaced as the literal {@code "true"}/{@code "false"} pair.
+ * The boolean privacy-interstitial toggle carried by the
+ * {@code <meta_verified/>} child of the
+ * {@code GetBusinessEligibility} success reply.
+ *
+ * @apiNote
+ * Surfaced as the
+ * {@code should_show_privacy_interstitial_to_new_users} attribute on
+ * {@link SmaxGetBusinessEligibilityResponse.Success.MetaVerified};
+ * the WA Web Meta-Verified onboarding flow renders the privacy
+ * interstitial card when the value is {@link #TRUE} and skips it
+ * when {@link #FALSE}.
+ *
+ * @implNote
+ * This implementation accepts only the case-insensitive literals
+ * {@code "TRUE"} and {@code "FALSE"} surfaced by
+ * {@code WASmaxInBizMarketingMessageEnums.ENUM_FALSE_TRUE}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizMarketingMessageEnums")
 public enum SmaxGetBusinessEligibilityFalseTrueFlag {
     /**
-     * Literal {@code "false"} attribute value.
+     * Wire form {@code "FALSE"}.
+     *
+     * @apiNote
+     * The Meta-Verified privacy interstitial should NOT be shown.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageEnums",
             exports = "ENUM_FALSE_TRUE",
             adaptation = WhatsAppAdaptation.ADAPTED)
     FALSE,
     /**
-     * Literal {@code "true"} attribute value.
+     * Wire form {@code "TRUE"}.
+     *
+     * @apiNote
+     * The Meta-Verified privacy interstitial SHOULD be shown to
+     * new users.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizMarketingMessageEnums",
             exports = "ENUM_FALSE_TRUE",
@@ -29,8 +49,19 @@ public enum SmaxGetBusinessEligibilityFalseTrueFlag {
     TRUE;
 
     /**
-     * Tries to parse a wire-form attribute string into a
-     * {@link SmaxGetBusinessEligibilityFalseTrueFlag} enum value.
+     * Resolves a wire-form attribute string into the matching enum
+     * constant.
+     *
+     * @apiNote
+     * Invoked while parsing a successful
+     * {@code GetBusinessEligibility} reply; callers propagate
+     * {@link Optional#empty()} as a parse failure on the enclosing
+     * {@link SmaxGetBusinessEligibilityResponse.Success.MetaVerified}.
+     *
+     * @implNote
+     * This implementation upper-cases under {@link Locale#ROOT}
+     * before delegating to {@link #valueOf(String)} and swallows the
+     * resulting {@link IllegalArgumentException} as an empty result.
      *
      * @param value the attribute value; may be {@code null}
      * @return an {@link Optional} carrying the matching enum

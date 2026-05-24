@@ -10,35 +10,68 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Production {@link WamBeaconing} implementation that follows
- * WhatsApp Web's {@code WAWebWamBeaconing} exactly: a one percent
- * activation roll at the start of each UTC calendar day, with a
- * monotonically increasing per-buffer-key sequence number while
- * activated.
+ * Production {@link WamBeaconing} that mirrors
+ * {@code WAWebWamBeaconing.maybeGetEventSequenceNumber}: a 1% activation
+ * roll at the start of each UTC calendar day, then an incrementing
+ * sequence number per call while the day stays active.
  *
- * <p>This class is not thread-safe. All calls must be made from the
- * single WAM flush thread.
+ * @apiNote
+ * Wired into {@link DefaultWamService} via its constructor and consumed
+ * by {@link WamService} when sealing each event. No embedder calls into
+ * this class directly; selecting an alternative implementation is done
+ * by subclassing {@link WamService} and passing a different
+ * {@link WamBeaconing} to its base constructor.
+ *
+ * @implNote
+ * This implementation diverges from WhatsApp Web on two fronts. First,
+ * WA Web persists each buffer key's last roll in
+ * {@code WAWebUserPrefsGeneral.getWamBeaconingSettings} (an IndexedDB
+ * row keyed by the buffer key), so the activation decision survives a
+ * page reload mid-day; Cobalt holds state in memory only and re-rolls on
+ * every process start. Second, the counter is a {@code long} (not the
+ * {@code int} WA Web's JavaScript {@code Number} naturally provides) so
+ * Cobalt does not silently sign-flip past the 2^31 mark.
  */
 @WhatsAppWebModule(moduleName = "WAWebWamBeaconing")
 final class DefaultWamBeaconing implements WamBeaconing {
     /**
-     * Probability that beaconing is activated on any given day.
+     * The 1% cutoff applied to each fresh {@link DataUtils#randomDouble}
+     * roll; matches the literal {@code .01} in
+     * {@code WAWebWamBeaconing}.
      */
     private static final double ACTIVATION_PROBABILITY = 0.01;
 
     /**
-     * Per-buffer-key beaconing state, keyed by the buffer key string.
+     * The per-buffer-key activation and counter state map, keyed by
+     * the buffer key string passed to
+     * {@link #nextSequenceNumber(String)}.
      */
     private final ConcurrentMap<String, ChannelState> states;
 
     /**
-     * Constructs a new {@code DefaultWamBeaconing} with no active
-     * beaconing session.
+     * Constructs a beaconing source with no buffer keys yet known;
+     * state for each key is created lazily on its first
+     * {@link #nextSequenceNumber(String)} call.
+     *
+     * @apiNote
+     * Invoked by {@link DefaultWamService}'s constructor; embedders do
+     * not instantiate this class.
      */
     DefaultWamBeaconing() {
         this.states = new ConcurrentHashMap<>();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation truncates {@link Instant#now} to
+     * {@link ChronoUnit#DAYS} to derive the activation day; whenever
+     * that day differs from the cached one for {@code bufferKey} the
+     * roll is redone with a fresh {@link DataUtils#randomDouble} draw
+     * and the counter resets to {@code 0} so the first post-activation
+     * pre-increment yields {@code 1}.
+     */
     @Override
     public OptionalLong nextSequenceNumber(String bufferKey) {
         var state = states.computeIfAbsent(bufferKey, _ -> new ChannelState());
@@ -57,31 +90,36 @@ final class DefaultWamBeaconing implements WamBeaconing {
     }
 
     /**
-     * Per-buffer-key beaconing state, holding the activation day, the
-     * activation flag, and the running sequence counter.
+     * Per-buffer-key activation and counter state, recreated lazily
+     * the first time a key is observed by
+     * {@link DefaultWamBeaconing#nextSequenceNumber(String)}.
      *
-     * <p>The {@code sequenceNumber} counter is a {@code long} (not an
-     * {@code int}) to match WAWebWamBeaconing's effectively-unbounded
-     * JavaScript {@code Number} counter — Cobalt could otherwise wrap
-     * past {@code Integer.MAX_VALUE} into negative territory after
-     * ~2 billion increments, while WA Web would not.
+     * @implNote
+     * This implementation stores {@code sequenceNumber} as a
+     * {@code long} so the counter cannot wrap past
+     * {@link Integer#MAX_VALUE} into negative territory; the
+     * JavaScript reference cannot hit that boundary because its
+     * counter is a {@code Number}.
      */
     private static final class ChannelState {
         /**
-         * Epoch seconds of the calendar day for which {@link #active}
-         * was last decided. Initialised to {@code -1} so the first
-         * call always re-rolls activation.
+         * The UTC epoch second of the calendar day for which
+         * {@link #active} was last decided; initialised to {@code -1}
+         * so the first call observes a day change and re-rolls.
          */
         long activationDayEpoch = -1;
 
         /**
-         * {@code true} when beaconing is active for the current day.
+         * Whether beaconing is active for the current activation day;
+         * {@code true} means the most recent roll fell at or below
+         * {@link DefaultWamBeaconing#ACTIVATION_PROBABILITY}.
          */
         boolean active = false;
 
         /**
-         * Monotonic counter incremented on each successful call. Reset
-         * to {@code 0} at the start of every new day.
+         * The running monotonic counter that pre-increments on each
+         * non-empty call; reset to {@code 0} at every activation-day
+         * change so the first post-reset call returns {@code 1}.
          */
         long sequenceNumber = 0L;
     }

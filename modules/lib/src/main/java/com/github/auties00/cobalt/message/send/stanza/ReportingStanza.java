@@ -15,40 +15,52 @@ import com.github.auties00.cobalt.model.message.poll.PollUpdateMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 
 import java.security.GeneralSecurityException;
 import java.util.Objects;
 
 /**
- * Builds the {@code <reporting>} stanza child node carrying the reporting token
- * (franking tag) used for message integrity verification.
+ * Builds the optional {@code <reporting>} child of an outgoing
+ * {@code <message>} stanza carrying the franking-tag reporting token used
+ * for end-to-end message integrity reporting.
  *
- * <p>Reporting tokens are emitted only when the
- * {@code rt_sender_reporting_token_version} AB prop is greater than zero, the message
- * type is compatible (not a reaction, poll vote, or event response), and the message
- * carries a {@code messageSecret}.
+ * @apiNote
+ * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza}.
+ * The {@code <reporting>} child carries a nested
+ * {@code <reporting_token v="N">{@code hmac}</reporting_token>} whose
+ * HMAC-SHA-256 ties the sender, recipient, stanza id, and a sparse copy of
+ * the message protobuf together so the recipient can later prove
+ * authorship without revealing the message body. Gated by the
+ * {@link ABProp#RT_SENDER_REPORTING_TOKEN_VERSION} version prop, the
+ * message-type compatibility filter ({@link #isMsgTypeCompatible(Message)}),
+ * and the presence of a {@link ChatMessageInfo#messageSecret()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebReportingTokenUtils")
 @WhatsAppWebModule(moduleName = "WAWebMessagingGatingUtils")
 @WhatsAppWebModule(moduleName = "WAWebMessagePluginGenerateReportingTokenContent")
 public final class ReportingStanza {
     /**
-     * Logger for reporting token generation failures.
+     * The {@link System.Logger} for reporting-token generation failures.
      */
     private static final System.Logger LOGGER = System.getLogger(ReportingStanza.class.getName());
 
     /**
-     * AB props service used to query the sender reporting token version.
+     * The {@link ABPropsService} consulted for the sender reporting token
+     * version.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Creates a new reporting stanza builder.
+     * Constructs a stanza builder bound to the given AB-props service.
      *
-     * @param abPropsService the AB props service for version lookup
-     * @throws NullPointerException if {@code abPropsService} is {@code null}
+     * @apiNote
+     * Constructed once per client; the builder is otherwise stateless.
+     *
+     * @param abPropsService the {@link ABPropsService}
+     * @throws NullPointerException if {@code abPropsService} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "genReportingTokenBody",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -57,16 +69,32 @@ public final class ReportingStanza {
     }
 
     /**
-     * Builds the {@code <reporting>} node for the given message.
+     * Builds the {@code <reporting>} child for the given outgoing message.
      *
-     * <p>Returns {@code null} when reporting tokens are disabled, the message type is
-     * incompatible, or the message has no {@code messageSecret}.
+     * @apiNote
+     * Returns {@code null} when any of the four gates fails: the sender
+     * version is zero (reporting tokens disabled),
+     * {@link #isMsgTypeCompatible(Message)} rejects the message type, the
+     * message carries no {@link ChatMessageInfo#messageSecret()}, or the
+     * key has no id. {@code selfJid} is the sender's user JID; the
+     * {@code remoteJid} is the recipient for 1:1 sends, the group JID for
+     * group sends, or the status JID for status broadcasts. All three
+     * inputs are folded into the HMAC key.
      *
-     * @param messageInfo the outgoing message
-     * @param selfJid     the sender's user JID
-     * @param remoteJid   the remote JID (recipient for 1:1, group JID for groups,
-     *                    status JID for broadcasts)
-     * @return the reporting node, or {@code null}
+     * @implNote
+     * This implementation encodes the full {@link MessageContainerSpec} and
+     * then runs the sparse projector
+     * {@link ReportingTokenContent#compute(byte[], int)} to retain only
+     * the field numbers whitelisted by
+     * {@code REPORTING_TOKEN_CONFIG_BASE64} for the current sender
+     * version. WA Web bypasses re-encoding when the message already
+     * carries a {@code reportingTokenContent}; Cobalt always recomputes
+     * because the cache is upstream of this call.
+     *
+     * @param messageInfo the outgoing {@link ChatMessageInfo}
+     * @param selfJid     the sender's user {@link Jid}
+     * @param remoteJid   the recipient or group {@link Jid}
+     * @return the {@code <reporting>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebReportingTokenUtils", exports = "genReportingTokenBody",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -86,9 +114,6 @@ public final class ReportingStanza {
             return null;
         }
 
-        // Compute the sparse copy of the encoded MessageContainer that contains only
-        // the field numbers whitelisted by REPORTING_TOKEN_CONFIG_BASE64 for the
-        // current sender version.
         var fullProto = MessageContainerSpec.encode(messageInfo.message());
         var serializedProto = ReportingTokenContent.compute(fullProto, senderVersion);
 
@@ -127,14 +152,16 @@ public final class ReportingStanza {
     }
 
     /**
-     * Returns the sender reporting token version that the client should advertise when
-     * generating outgoing reporting tokens.
+     * Returns the sender reporting-token version this client should
+     * advertise on every outgoing token.
      *
-     * <p>A value of zero or less disables reporting-token generation entirely. The
-     * integer is consumed by {@link ReportingToken#generate} to select the HMAC
-     * key-derivation scheme used for the token.
+     * @apiNote
+     * A value of zero or below disables reporting-token emission entirely;
+     * a positive value selects which HMAC key derivation scheme
+     * {@link ReportingToken#generate} uses. Backed by
+     * {@link ABProp#RT_SENDER_REPORTING_TOKEN_VERSION}.
      *
-     * @return the sender reporting token version
+     * @return the sender reporting-token version
      */
     @WhatsAppWebExport(moduleName = "WAWebMessagingGatingUtils",
             exports = "getSenderReportingTokenVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -143,14 +170,17 @@ public final class ReportingStanza {
     }
 
     /**
-     * Returns whether reporting-token generation is enabled for outgoing messages.
+     * Returns whether reporting-token generation is enabled for the given
+     * sender version.
      *
-     * <p>WA Web defines this gate as
-     * {@code getSenderReportingTokenVersion() > 0}; a non-zero version selects the HMAC
-     * scheme, zero disables generation.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebMessagingGatingUtils.isReportingTokenSendingEnabled}: a
+     * strictly positive version enables generation, anything else
+     * disables it.
      *
-     * @param senderVersion the sender reporting token version
-     * @return {@code true} when the sender version is strictly positive
+     * @param senderVersion the sender reporting-token version
+     * @return {@code true} when {@code senderVersion} is strictly positive
      */
     @WhatsAppWebExport(moduleName = "WAWebMessagingGatingUtils",
             exports = "isReportingTokenSendingEnabled", adaptation = WhatsAppAdaptation.DIRECT)
@@ -159,13 +189,25 @@ public final class ReportingStanza {
     }
 
     /**
-     * Returns whether the message type is compatible with reporting tokens.
+     * Returns whether the message type is compatible with reporting
+     * tokens.
      *
-     * <p>Reactions, encrypted reactions, encrypted event responses and poll vote
-     * updates are excluded.
+     * @apiNote
+     * Reactions, encrypted reactions, encrypted event responses, and poll
+     * vote updates are excluded; the bodies of those types do not carry
+     * the kind of content the franking tag is meant to authenticate, and
+     * WA Web's plugin registry registers no
+     * {@code generateReportingTokenContent} for them.
      *
-     * @param message the message content to check
-     * @return {@code true} if the message type supports reporting tokens
+     * @implNote
+     * This implementation enumerates the four excluded message classes
+     * via a sealed switch; WA Web uses a registry-driven lookup with a
+     * hard-coded fallback. The two paths produce the same accept/reject
+     * decision for the message types Cobalt emits.
+     *
+     * @param message the unwrapped {@link Message}, possibly {@code null}
+     * @return {@code true} when the message type supports reporting
+     *         tokens
      */
     @WhatsAppWebExport(moduleName = "WAWebMessagePluginGenerateReportingTokenContent",
             exports = "isMsgTypeReportingTokenCompatible", adaptation = WhatsAppAdaptation.DIRECT)

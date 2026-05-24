@@ -12,32 +12,48 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the optional
- * {@code <picture type="image">PIC_BYTES</picture>} child in the
- * canonical {@code <iq xmlns="w:profile:picture" type="set">}
- * envelope.
+ * Outbound {@code <iq xmlns="w:profile:picture" type="set">} stanza setting or clearing the
+ * profile picture for the calling user or for a target group.
+ *
+ * @apiNote
+ * Used by the Settings ("change my photo") and group-admin ("change group photo") surfaces
+ * via WA Web's {@code WAWebContactProfilePicThumbBridge.sendSetPicture}; the same request
+ * shape covers the four operations (self-set, self-clear, group-set, group-clear) by
+ * varying {@link #groupTarget()} and {@link #picture()}. The relay returns the new picture
+ * id in the success reply so the client can refresh the photo cache.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendProfilePictureJob")
 public final class IqSendProfilePictureRequest implements IqOperation.Request {
     /**
-     * The target group JID when updating a group profile picture.
-     * {@code null} when updating the calling user's own picture.
+     * Target group JID when updating a group profile picture.
+     *
+     * @apiNote
+     * {@code null} when updating the calling user's own picture; routed into the {@code target}
+     * attribute on the {@code <iq>} envelope when present, omitted entirely otherwise (WA
+     * Web uses {@code WAWap.DROP_ATTR} to express the same omission).
      */
     private final Jid groupTarget;
 
     /**
-     * The new JPEG profile-picture bytes. {@code null} clears the
-     * existing picture.
+     * New JPEG profile-picture bytes.
+     *
+     * @apiNote
+     * {@code null} signals "clear the existing picture", which produces an {@code <iq>}
+     * envelope with no {@code <picture/>} child; a non-{@code null} value is wrapped in
+     * {@code <picture type="image">PIC_BYTES</picture>}.
      */
     private final byte[] picture;
 
     /**
-     * Constructs a new request.
+     * Constructs a new send-profile-picture request.
      *
-     * @param groupTarget the group JID for a group-picture update,
-     *                    or {@code null} for a self-picture update
-     * @param picture     the new JPEG bytes, or {@code null} to
-     *                    clear the existing picture
+     * @apiNote
+     * Defensively clones {@code picture}; both arguments are nullable to support the four
+     * (set/clear) x (self/group) call shapes.
+     *
+     * @param groupTarget the group JID for a group-picture update, or {@code null} for a
+     *                    self-picture update
+     * @param picture     the new JPEG bytes, or {@code null} to clear the existing picture
      */
     public IqSendProfilePictureRequest(Jid groupTarget, byte[] picture) {
         this.groupTarget = groupTarget;
@@ -47,28 +63,38 @@ public final class IqSendProfilePictureRequest implements IqOperation.Request {
     /**
      * Returns the optional group JID target.
      *
-     * @return an {@link Optional} carrying the group JID, or empty
-     *         when this is a self-picture update
+     * @return an {@link Optional} carrying the group JID, or {@link Optional#empty()} when
+     *         this is a self-picture update
      */
     public Optional<Jid> groupTarget() {
         return Optional.ofNullable(groupTarget);
     }
 
     /**
-     * Returns a defensive copy of the optional new picture bytes.
+     * Returns the optional new picture bytes.
      *
-     * @return an {@link Optional} carrying a clone of the JPEG
-     *         bytes, or empty when the picture is being cleared
+     * @apiNote
+     * Returns a defensive copy; callers may mutate the array without affecting subsequent
+     * reads or the dispatched stanza.
+     *
+     * @return an {@link Optional} carrying a clone of the JPEG bytes, or
+     *         {@link Optional#empty()} when the picture is being cleared
      */
     public Optional<byte[]> picture() {
         return Optional.ofNullable(picture).map(byte[]::clone);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the optional {@code <picture>} payload
+     * @apiNote
+     * Produces a {@code <iq xmlns="w:profile:picture" type="set">} envelope addressed to
+     * {@link JidServer#user()}; the {@code target} attribute is stamped only when
+     * {@link #groupTarget()} is present, and the {@code <picture/>} child is added only when
+     * {@link #picture()} is present.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the optional
+     *         {@code <picture>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSendProfilePictureJob",
@@ -83,7 +109,6 @@ public final class IqSendProfilePictureRequest implements IqOperation.Request {
             iqBuilder.attribute("target", groupTarget);
         }
         if (picture != null) {
-            // WAWebSendProfilePictureJob: wap("picture",{type:"image"}, a)
             var pictureNode = new NodeBuilder()
                     .description("picture")
                     .attribute("type", "image")
@@ -94,6 +119,9 @@ public final class IqSendProfilePictureRequest implements IqOperation.Request {
         return iqBuilder;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -107,11 +135,17 @@ public final class IqSendProfilePictureRequest implements IqOperation.Request {
                 && Arrays.equals(this.picture, that.picture);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupTarget, Arrays.hashCode(picture));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         var pictureLength = picture == null ? -1 : picture.length;

@@ -10,41 +10,49 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of the {@code <chatstate/>} stanza.
+ * The inbound projection of a {@code <chatstate>} stanza pushed by the
+ * relay when a peer or group participant raises a typing or paused event.
+ *
+ * @apiNote
+ * Consumed by the Cobalt analogue of
+ * {@code WACreateHandleChatState.createHandleChatState}: the dispatcher
+ * derives the {@code "composing"} or {@code "paused"} indicator from
+ * {@link #stateType()} and routes it to the 1:1 handler when
+ * {@link #stateSource()} resolves to {@link SmaxServerNotificationStateSource.FromUser}
+ * or to the group handler when it resolves to
+ * {@link SmaxServerNotificationStateSource.FromGroup}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInChatstateServerNotificationRequest")
 public final class SmaxServerNotificationResponse implements SmaxOperation.Response {
     /**
-     * The state-source disjunction (user vs. group); never
-     * {@code null}.
+     * The state-source disjunction identifying who raised the event.
      */
     private final SmaxServerNotificationStateSource stateSource;
 
     /**
-     * The state-type disjunction (composing vs. paused); never
-     * {@code null}.
+     * The state-type disjunction identifying which indicator was raised
+     * (composing or paused).
      */
     private final SmaxServerNotificationStateType stateType;
 
     /**
-     * The optional {@code testConfig} attribute carried by the
-     * dev-only {@code <test config="…"/>} child; may be
-     * {@code null}.
+     * The optional dev-only {@code <test config="..."/>} attribute carried
+     * by the internal-test mixin.
+     *
+     * @apiNote
+     * The mixin is only ever populated by internal WhatsApp builds for
+     * regression testing; production stanzas omit the {@code <test/>} child
+     * and this field stays empty.
      */
     private final String testConfig;
 
     /**
-     * Constructs a new server-notification projection.
+     * Constructs an inbound projection.
      *
-     * @param stateSource the source disjunction; never
-     *                    {@code null}
-     * @param stateType   the state-type disjunction; never
-     *                    {@code null}
-     * @param testConfig  the optional dev-only test config; may
-     *                    be {@code null}
-     * @throws NullPointerException if {@code stateSource} or
-     *                              {@code stateType} is
-     *                              {@code null}
+     * @param stateSource the source disjunction; never {@code null}
+     * @param stateType   the state-type disjunction; never {@code null}
+     * @param testConfig  the optional dev-only test config; may be {@code null}
+     * @throws NullPointerException if {@code stateSource} or {@code stateType} is {@code null}
      */
     public SmaxServerNotificationResponse(SmaxServerNotificationStateSource stateSource, SmaxServerNotificationStateType stateType, String testConfig) {
         this.stateSource = Objects.requireNonNull(stateSource, "stateSource cannot be null");
@@ -71,24 +79,35 @@ public final class SmaxServerNotificationResponse implements SmaxOperation.Respo
     }
 
     /**
-     * Returns the optional dev-only {@code testConfig}.
+     * Returns the optional dev-only test config.
      *
-     * @return an {@link Optional} carrying the value, or empty
-     *         when the relay omitted the {@code <test/>} child
+     * @return an {@link Optional} carrying the value, or empty when the
+     *         {@code <test/>} child was absent
      */
     public Optional<String> testConfig() {
         return Optional.ofNullable(testConfig);
     }
 
     /**
-     * Tries to parse a {@link SmaxServerNotificationResponse} projection from the given
-     * stanza.
+     * Parses a {@code <chatstate>} stanza into an inbound projection.
      *
-     * @param node the inbound {@code <chatstate/>} stanza; never
-     *             {@code null}
-     * @return an {@link Optional} carrying the projection, or
-     *         {@link Optional#empty()} when the stanza does not
-     *         match the documented shape
+     * @apiNote
+     * Mirrors the entry point at
+     * {@code WASmaxChatstateServerNotificationRPC.receiveServerNotificationRPC};
+     * Cobalt returns {@link Optional#empty()} on schema mismatch instead of
+     * throwing the JS {@code SmaxParsingFailure} so callers can route the
+     * stanza through the configured error policy.
+     *
+     * @implNote
+     * This implementation requires the {@code <chatstate>} tag, a parseable
+     * {@link SmaxServerNotificationStateSource} (either {@code FromUser} or
+     * {@code FromGroup}), and a parseable {@link SmaxServerNotificationStateType}
+     * (either {@code Composing} or {@code Paused}); the dev-only
+     * {@code <test config="..."/>} child is best-effort and absence does
+     * not fail the parse.
+     *
+     * @param node the inbound {@code <chatstate/>} stanza; never {@code null}
+     * @return an {@link Optional} carrying the projection, or empty on schema mismatch
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxChatstateServerNotificationRPC",

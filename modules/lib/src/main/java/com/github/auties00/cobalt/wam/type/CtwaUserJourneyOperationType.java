@@ -91,5 +91,8 @@ public enum CtwaUserJourneyOperationType {
     @WamEnumConstant(82) INLINE_USYNC_STARTED,
     @WamEnumConstant(83) INLINE_USYNC_COMPLETED,
     @WamEnumConstant(84) FOLLOW_UP_USYNC_STARTED,
-    @WamEnumConstant(85) FOLLOW_UP_USYNC_COMPLETED
+    @WamEnumConstant(85) FOLLOW_UP_USYNC_COMPLETED,
+    @WamEnumConstant(86) WEBVIEW_INTERSTITIAL_RENDERED,
+    @WamEnumConstant(87) IAB_OPENED,
+    @WamEnumConstant(88) IAB_CLOSED
 }

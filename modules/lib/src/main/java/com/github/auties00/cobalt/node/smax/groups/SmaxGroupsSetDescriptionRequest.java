@@ -14,50 +14,55 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces, sets, or clears a group's description.
+ *
+ * @apiNote Drives the "Edit group description" affordance on the group-info screen. The {@code descriptionId} and
+ * {@code descriptionPrev} attributes implement the relay's revision-chain check: the client must pass the
+ * existing revision id as {@code descriptionPrev} and the freshly minted revision id as {@code descriptionId} so
+ * the relay can detect concurrent edits. Setting {@link #delete()} clears the description; the {@link #body()}
+ * carries the new text on a replace.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetDescriptionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Request {
     /**
-     * The group JID whose description is being changed.
+     * The group {@link Jid} whose description is being mutated.
      */
     private final Jid groupJid;
 
     /**
-     * The new description revision id; {@code null} when only
-     * {@code prev} is supplied (rare).
+     * The new description revision identifier.
      */
     private final String descriptionId;
 
     /**
-     * The previous description revision id being replaced; may be
-     * {@code null} when this is the first description.
+     * The previous description revision identifier being replaced.
      */
     private final String descriptionPrev;
 
     /**
-     * When {@code true}, the relay clears the description and ignores
-     * {@code body}; when {@code false} the {@code body} is required.
+     * Whether this request clears the description (the {@code delete="true"} attribute).
      */
     private final boolean delete;
 
     /**
-     * The new description body text; {@code null} when {@code delete}
-     * is {@code true}.
+     * The new description body text.
      */
     private final String body;
 
     /**
-     * Constructs a request.
+     * Constructs a set-description request.
      *
-     * @param groupJid        the group JID; never {@code null}
-     * @param descriptionId   the new revision id; may be {@code null}
-     * @param descriptionPrev the previous revision id; may be
-     *                        {@code null}
+     * @apiNote The relay enforces the revision-chain semantics: a concurrent edit (a {@code descriptionPrev}
+     * that no longer matches the server-side current revision) produces a
+     * {@link SmaxGroupsSetDescriptionResponse.ClientError}. Setting {@code delete} clears the description and
+     * the relay ignores any {@code body}; on a replace, {@code body} carries the UTF-8 text.
+     *
+     * @param groupJid        the group {@link Jid}
+     * @param descriptionId   the new revision identifier; may be {@code null} when only {@code prev} is supplied
+     * @param descriptionPrev the previous revision identifier; may be {@code null} on the very first description
      * @param delete          {@code true} to clear the description
-     * @param body            the new description text; required when
-     *                        {@code delete} is {@code false}, may be
+     * @param body            the new description text; required when {@code delete} is {@code false}, may be
      *                        {@code null} otherwise
      * @throws NullPointerException if {@code groupJid} is {@code null}
      */
@@ -70,36 +75,39 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     }
 
     /**
-     * Returns the group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the new description revision id.
+     * Returns the new description revision identifier.
      *
-     * @return an {@link Optional} carrying the id, or empty when not
-     *         set
+     * @return an {@link Optional} carrying the new revision id, or empty when not set
      */
     public Optional<String> descriptionId() {
         return Optional.ofNullable(descriptionId);
     }
 
     /**
-     * Returns the previous description revision id being replaced.
+     * Returns the previous description revision identifier being replaced.
      *
-     * @return an {@link Optional} carrying the previous id, or empty
+     * @apiNote The relay rejects the mutation with a {@link SmaxGroupsSetDescriptionResponse.ClientError} when
+     * the value disagrees with the server-side current revision.
+     *
+     * @return an {@link Optional} carrying the previous revision id, or empty when no chain check is requested
      */
     public Optional<String> descriptionPrev() {
         return Optional.ofNullable(descriptionPrev);
     }
 
     /**
-     * Returns whether this request clears the description rather than
-     * replacing it.
+     * Returns whether this request clears the description rather than replacing it.
      *
      * @return {@code true} when this is a delete request
      */
@@ -110,17 +118,27 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
     /**
      * Returns the new description body.
      *
-     * @return an {@link Optional} carrying the new body, or empty
+     * @return an {@link Optional} carrying the new body text, or empty
      */
     public Optional<String> body() {
         return Optional.ofNullable(body);
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         {@code <description/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <description id="<descriptionId>" prev="<descriptionPrev>" delete="true">
+     *             <body>...UTF-8 bytes...</body>
+     *         </description>
+     *     </iq>
+     * }
+     * the {@code id}, {@code prev}, and {@code delete} attributes are emitted only when the corresponding fields
+     * are populated; the {@code <body>} child is omitted when {@link #body()} is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <description>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsSetDescriptionRequest",
@@ -151,6 +169,12 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
                 .content(descriptionBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsSetDescriptionRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -167,11 +191,21 @@ public final class SmaxGroupsSetDescriptionRequest implements SmaxOperation.Requ
                 && Objects.equals(this.body, that.body);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, descriptionId, descriptionPrev, delete, body);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsSetDescriptionRequest[groupJid=" + groupJid

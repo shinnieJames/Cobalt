@@ -15,33 +15,34 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical agreement tests for {@link WamGlobalEncoder} against
- * vectors captured from the live WhatsApp Web bundle.
+ * Byte-identical KAT for {@link WamGlobalEncoder} against vectors
+ * captured from {@code WAWebWamLibProtocol.writeGlobalAttribute}.
  *
- * <p>Each vector pins the bytes that
- * {@code WAWebWamLibProtocol.writeGlobalAttribute(buf, fieldId, value)}
- * emits for a single (fieldId, value) pair, where {@code fieldId}
- * matches one of the named globals enumerated in
- * {@link WamGlobalEncoder}. The Cobalt code path under test is the
- * named per-global writer (e.g. {@link WamGlobalEncoder#writePlatform})
- * for the typed rows, and {@link WamGlobalEncoder#writeNullGlobal} /
- * {@link WamGlobalEncoder#writeDynamicGlobal} for the
- * null/boundary rows.
- *
- * <p>Vectors live in {@code fixtures/wam/wam-global-encoder.json}; see
- * {@code tools/web/wam-fixtures/README.md} for the re-capture
- * procedure.
+ * @apiNote
+ * Pins what each named global writer (for example
+ * {@link WamGlobalEncoder#writePlatform},
+ * {@link WamGlobalEncoder#writeDeviceName}) emits for a captured
+ * (fieldId, value) pair, and what the two generic boundary writers
+ * ({@link WamGlobalEncoder#writeNullGlobal},
+ * {@link WamGlobalEncoder#writeDynamicGlobal}) emit for synthetic
+ * boundary rows. Agreement here is the strongest possible validation
+ * that Cobalt's globals table stays bit-aligned with
+ * {@code WAWebWamGlobals}. Vectors live in
+ * {@code fixtures/wam/wam-global-encoder.json} and pin snapshot
+ * revision {@code 1039260921}.
  */
 @DisplayName("WamGlobalEncoder KAT against live WhatsApp Web bundle")
 class WamGlobalEncoderKatTest {
     /**
-     * Snapshot revision the vectors were captured against.
+     * The snapshot revision the KAT vectors were captured against;
+     * compared against the fixture header so revision drift fails
+     * loudly.
      */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
     /**
-     * Output buffer size, comfortable for the longest captured global
-     * value (UUID-shaped tab id at ~38 bytes).
+     * The shared output buffer size, comfortable for the longest
+     * captured global value (the UUID-shaped tab id at ~38 bytes).
      */
     private static final int MAX_BUFFER = 1_024;
 
@@ -88,14 +89,17 @@ class WamGlobalEncoderKatTest {
     }
 
     /**
-     * Dispatches to the matching {@link WamGlobalEncoder} writer.
+     * Dispatches the row to the matching named {@link WamGlobalEncoder}
+     * writer.
      *
-     * <p>Rows whose name matches a documented WamGlobalEncoder helper
-     * go through that helper (validating the public API). Rows with
-     * synthetic boundary names (e.g. {@code null_tinyId},
-     * {@code int_zero}, {@code bool_true}) go through the generic
-     * {@link WamGlobalEncoder#writeNullGlobal} and
-     * {@link WamGlobalEncoder#writeDynamicGlobal} paths.
+     * @apiNote
+     * Rows whose name matches a documented {@link WamGlobalEncoder}
+     * helper exercise that helper directly (so a public-API
+     * regression on a single global fails the matching named row
+     * rather than the catch-all). Rows with synthetic boundary names
+     * (for example {@code null_tinyId}, {@code int_zero},
+     * {@code str_empty}) fall through to
+     * {@link #invokeBoundaryWriter(WamEventEncoder, int, String, Object)}.
      *
      * @param encoder     the destination encoder
      * @param name        the captured row name
@@ -157,15 +161,16 @@ class WamGlobalEncoderKatTest {
     }
 
     /**
-     * Dispatches a boundary-case row (synthetic names like
-     * {@code null_tinyId}, {@code int_zero}, {@code str_empty}) to
-     * the generic {@link WamGlobalEncoder#writeNullGlobal} or
+     * Dispatches a synthetic boundary row to the generic
+     * {@link WamGlobalEncoder#writeNullGlobal} or
      * {@link WamGlobalEncoder#writeDynamicGlobal} entry points.
      *
      * @param encoder     the destination encoder
      * @param fieldId     the captured field id
      * @param type        the captured value type
      * @param sampleValue the captured raw value
+     * @throws IllegalStateException if {@code type} is not one of
+     *                               the recognised boundary types
      */
     private static void invokeBoundaryWriter(WamEventEncoder encoder, int fieldId, String type, Object sampleValue) {
         if ("null".equals(type) || sampleValue == null) {

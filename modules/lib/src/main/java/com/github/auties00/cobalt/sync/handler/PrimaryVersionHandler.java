@@ -14,36 +14,79 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Handles primary version actions.
+ * Applies the {@code primaryVersion} app-state action that distributes
+ * the primary device's WhatsApp version string across linked devices.
  *
- * <p>This handler processes mutations that track the WhatsApp primary client
- * version string for either the {@code "current"} or {@code "session_start"}
- * checkpoint. WhatsApp Web's implementation simply validates each mutation in
- * the batch, increments local counters for unsupported and malformed entries,
- * and emits {@code WALogger.WARN} traces. There is no application side effect
- * beyond the per-mutation result classification, so Cobalt mirrors the same
- * validation pipeline without persisting any value.
+ * @apiNote
+ * Drives the multi-device version-tracking surface: the primary
+ * device announces its current build and its session-start build to
+ * the paired companions so each companion can render version-skew
+ * warnings when needed. The handler validates the per-mutation
+ * shape but writes nothing to the store: WA Web emits only
+ * {@code WALogger.WARN} telemetry for invalid entries, and Cobalt
+ * has no consumer for the version data either. The mutation index
+ * keys each entry by the checkpoint name, formatted as
+ * {@snippet :
+ *     ["primaryVersion", "current"]
+ *     ["primaryVersion", "session_start"]
+ * }
  *
- * <p>Index format: {@code ["primaryVersion", "current"|"session_start"]}.
+ * @implNote
+ * This implementation overrides
+ * {@link #applyMutationBatch(WhatsAppClient, List)} to
+ * mirror WA Web's batch loop shape, but the per-mutation arm
+ * delegates to
+ * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+ * because there is no batch-level state to track. WA Web's
+ * {@code WALogger.WARN} batch counters and the missing-version /
+ * unknown-sub-index trace messages are dropped; per-mutation
+ * outcomes are surfaced through {@link MutationApplicationResult}.
  */
 @WhatsAppWebModule(moduleName = "WAWebPrimaryVersionSync")
 public final class PrimaryVersionHandler implements WebAppStateActionHandler {
     /**
-     * Sub-index value identifying the {@code "current"} primary version
-     * checkpoint inside the index parts array.
+     * The {@code "current"} sub-index value identifying the primary
+     * device's current-build version checkpoint.
+     *
+     * @apiNote
+     * Internal constant consumed by
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * to validate {@code indexParts[1]}.
+     *
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code WAWebPrimaryVersionSync.CURRENT = "current"} literal.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final String INDEX_CURRENT = "current";
 
     /**
-     * Sub-index value identifying the {@code "session_start"} primary version
-     * checkpoint inside the index parts array.
+     * The {@code "session_start"} sub-index value identifying the
+     * primary device's session-start version checkpoint.
+     *
+     * @apiNote
+     * Internal constant consumed by
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * to validate {@code indexParts[1]}.
+     *
+     * @implNote
+     * This implementation matches WA Web's
+     * {@code WAWebPrimaryVersionSync.SESSION_START = "session_start"}
+     * literal.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private static final String INDEX_SESSION_START = "session_start";
 
     /**
-     * Constructs the singleton instance.
+     * Constructs the singleton primary-version sync handler.
+     *
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; no AB-prop or store dependency
+     * is held.
      */
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public PrimaryVersionHandler() {
@@ -80,29 +123,17 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebPrimaryVersionSync.applyMutations}: maps
-     * each mutation in the batch to its per-mutation classification. The
-     * mapping logic mirrors WA Web exactly:
-     * <ul>
-     *   <li>Non-{@code SET} operations are acknowledged as {@code UNSUPPORTED}.</li>
-     *   <li>If {@code indexParts[1]} is missing/empty or is not one of
-     *       {@code "current"} or {@code "session_start"}, the mutation is
-     *       classified as {@code MALFORMED} via
-     *       {@link #malformedActionIndex()}.</li>
-     *   <li>If {@code value.primaryVersionAction.version} is missing, the
-     *       mutation is classified as {@code MALFORMED} via
-     *       {@link #malformedActionValue()}.</li>
-     *   <li>Otherwise, the mutation is classified as {@code SUCCESS}.</li>
-     * </ul>
-     *
-     * <p>WhatsApp Web also tracks {@code WALogger.WARN} counters for the
-     * unsupported and malformed-value paths, which Cobalt intentionally
-     * omits as logging/telemetry is not replicated.
+     * @implNote
+     * This implementation delegates to
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * for every entry; there is no batch-level deduplication or
+     * latest-wins tracking. WA Web's per-batch
+     * {@code WALogger.WARN} counters for the unsupported and
+     * malformed-value paths are dropped.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)
     public List<MutationApplicationResult> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
-        // r and a are local counters for the WALogger WARN telemetry, intentionally omitted in Cobalt
         var results = new ArrayList<MutationApplicationResult>(mutations.size());
         for (var mutation : mutations) {
             results.add(applyMutation(client, mutation));
@@ -113,18 +144,21 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * <p>Single-mutation adapter that mirrors the per-mutation classification
-     * inside WhatsApp Web's batch entry point exactly. The validation order
-     * follows WA Web:
+     * @implNote
+     * This implementation walks the per-mutation arms of WA Web's
+     * {@code WAWebPrimaryVersionSync.applyMutations} in this order:
      * <ol>
-     *   <li>If {@code operation !== "set"}, return {@code UNSUPPORTED}.</li>
-     *   <li>Parse the index, take {@code indexParts[1]}; if it is missing,
-     *       empty, or not one of {@code "current"} or {@code "session_start"},
-     *       return {@link #malformedActionIndex()}.</li>
-     *   <li>If {@code value.primaryVersionAction.version} is missing, return
-     *       {@link #malformedActionValue()}.</li>
-     *   <li>Otherwise, return {@code SUCCESS}.</li>
+     *   <li>only {@link SyncdOperation#SET} is accepted;</li>
+     *   <li>{@code indexParts[1]} must equal exactly one of
+     *       {@link #INDEX_CURRENT} or {@link #INDEX_SESSION_START};
+     *       any missing, empty, or unknown value surfaces as
+     *       {@link SyncdIndexUtils#malformedActionIndex(String, String)};</li>
+     *   <li>the mutation value must decode to a
+     *       {@link PrimaryVersionAction} with a non-empty
+     *       {@link PrimaryVersionAction#version()};</li>
+     *   <li>otherwise, returns {@link MutationApplicationResult#success()}.</li>
      * </ol>
+     * No store side effect is performed.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebPrimaryVersionSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -134,8 +168,6 @@ public final class PrimaryVersionHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebPrimaryVersionSync.applyMutations: var i=e.indexParts, s=i[1]; if(!s||...) return n.malformedActionIndex().
-        // indexParts[1] is undefined when missing; mirror with explicit size check.
         if (indexArray.size() <= 1) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }

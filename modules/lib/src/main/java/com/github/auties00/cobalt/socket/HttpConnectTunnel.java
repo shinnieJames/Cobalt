@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.socket;
 
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.client.WhatsAppProxy;
+import com.github.auties00.cobalt.client.WhatsAppProxyAuthenticator;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -10,80 +11,83 @@ import java.nio.charset.StandardCharsets;
  * Establishes an HTTP {@code CONNECT} tunnel on an already-connected
  * {@link Socket}.
  *
- * <p>The JDK's {@code Socket(Proxy)} constructor rejects
+ * @apiNote
+ * Used when the WhatsApp connection must traverse an HTTP proxy and
+ * the proxy hop is plain or already TLS-wrapped by the caller. The
+ * JDK's {@code Socket(Proxy)} constructor rejects
  * {@link java.net.Proxy.Type#HTTP} (only {@code SOCKS} and
  * {@code DIRECT} are accepted), and {@link java.net.http.HttpClient}
- * cannot be plugged into a raw socket transport. The Mobile and macOS
- * Desktop paths therefore negotiate the {@code CONNECT} themselves on
- * the underlying socket before handing it to TLS or Noise.
+ * cannot be plugged into a raw socket transport, so every form factor
+ * that needs HTTP-proxy tunnelling negotiates the {@code CONNECT}
+ * itself.
  *
- * <p>The parser is deliberately minimal: it confirms the response is
- * {@code HTTP/X[.X] 2xx} (matching both the {@code HTTP/1.x} and
- * {@code HTTP/2} status-line shapes) and then scans the byte stream for
- * the {@code CRLF CRLF} header terminator. Header fields are not parsed,
- * header blocks larger than the read buffer are still accepted by
- * recycling the buffer in place, and any bytes received after
- * {@code CRLF CRLF} are rejected because the raw socket
- * {@link java.io.InputStream} provides no push-back to the next
- * protocol layer. No {@code 407} retry is attempted; authentication is
- * preemptive: if a {@link WhatsAppProxyAuthenticator.Http.Basic}
- * authenticator is supplied the {@code Proxy-Authorization} header is
- * sent on the first request and the call fails if the proxy rejects it.
- *
- * <p>Hosts containing a colon are treated as IPv6 literals and bracketed
- * in both the request-target and the {@code Host} header.
- *
- * <p>On a malformed status line the full buffered response is embedded
- * verbatim in the thrown {@link IOException} to ease debugging of
- * misbehaving proxies.
+ * @implNote
+ * This implementation keeps the parser deliberately minimal: it
+ * confirms the response is {@code HTTP/X[.X] 2xx} (matching both the
+ * {@code HTTP/1.x} and {@code HTTP/2} status-line shapes) and scans
+ * the byte stream for the {@code CRLF CRLF} header terminator. Header
+ * fields are not parsed, header blocks larger than the read buffer
+ * are still accepted by recycling the buffer in place, and any bytes
+ * received after {@code CRLF CRLF} are rejected because the raw
+ * socket {@link java.io.InputStream} provides no push-back to the
+ * next protocol layer. No {@code 407} retry is attempted;
+ * authentication is preemptive when a
+ * {@link WhatsAppProxyAuthenticator.Http.Basic} is supplied and the
+ * call fails if the proxy rejects the first attempt. Hosts containing
+ * a colon are bracketed as IPv6 literals in both the request-target
+ * and the {@code Host} header. On a malformed status line the
+ * buffered response is embedded verbatim in the thrown
+ * {@link IOException} to ease proxy debugging.
  */
 final class HttpConnectTunnel {
 
     /**
-     * Size of the reusable read buffer used to drain the
+     * The size of the reusable read buffer used to drain the
      * {@code CONNECT} response.
      */
     private static final int READ_BUFFER_SIZE = 8192;
 
     /**
-     * Minimum length of an HTTP response status line, namely
+     * The minimum length of an HTTP response status line, namely
      * {@code "HTTP/X.X NNN"} without the trailing {@code CRLF}.
      */
     private static final int STATUS_LINE_MIN_LENGTH = 12;
 
     /**
-     * Packed bytes representing {@code "\r\n\r\n"}, used to detect the
-     * end of the header block with a single sliding 32-bit comparison.
+     * The packed bytes representing {@code "\r\n\r\n"}, used to detect
+     * the end of the header block with a single sliding 32-bit
+     * comparison.
      */
     private static final int CRLF_CRLF = 0x0D0A0D0A;
 
     /**
-     * Prevents instantiation of the utility class.
+     * Prevents instantiation of this utility holder.
      */
     private HttpConnectTunnel() {
 
     }
 
     /**
-     * Issues an HTTP {@code CONNECT} request over {@code socket} for the
-     * given target endpoint and consumes the response.
+     * Issues an HTTP {@code CONNECT} request over {@code socket} for
+     * the given target endpoint and consumes the response.
      *
-     * <p>The {@code socket} parameter is typed as {@link Socket} so the
-     * same method covers a plain socket (Mobile) and an {@code SSLSocket}
-     * to a {@link com.github.auties00.cobalt.client.proxy.WhatsAppProxy.Http.Secure}
-     * proxy (macOS Desktop). On success the socket's input stream is
-     * positioned past the response header block, ready for the next
-     * protocol layer.
+     * @apiNote
+     * The {@code socket} parameter is typed as {@link Socket} so the
+     * same method covers both a plain socket (Mobile path) and an
+     * {@link javax.net.ssl.SSLSocket} already wrapping a connection to
+     * a {@link WhatsAppProxy.Http.Secure} proxy. On success the
+     * socket's input stream is positioned past the response header
+     * block and ready for the next protocol layer.
      *
      * @param socket     the already-connected proxy socket
      * @param targetHost the host the tunnel is meant to reach
      * @param targetPort the port the tunnel is meant to reach
      * @param auth       the proxy authentication strategy, or
      *                   {@code null} for anonymous proxies
-     * @throws IOException if the request cannot be written, the response
-     *         cannot be read in full, the status line is malformed, the
-     *         status code is not {@code 2xx}, or any other I/O failure
-     *         occurs
+     * @throws IOException if the request cannot be written, the
+     *         response cannot be read in full, the status line is
+     *         malformed, the status code is not {@code 2xx}, or any
+     *         other I/O failure occurs
      */
     static void tunnel(Socket socket, String targetHost, int targetPort,
                        WhatsAppProxyAuthenticator.Http auth) throws IOException {
@@ -92,13 +96,13 @@ final class HttpConnectTunnel {
     }
 
     /**
-     * Writes the {@code CONNECT} request and the
-     * {@code Proxy-Authorization} header (if any) to the socket.
+     * Writes the {@code CONNECT} request and the optional
+     * {@code Proxy-Authorization} header to the socket.
      *
      * @param socket     the proxy socket
      * @param targetHost the target host
      * @param targetPort the target port
-     * @param auth       the optional authenticator
+     * @param auth       the optional authenticator, or {@code null}
      * @throws IOException if the underlying write fails
      */
     private static void sendConnect(Socket socket, String targetHost, int targetPort,
@@ -107,7 +111,7 @@ final class HttpConnectTunnel {
         appendAuthority(request, targetHost, targetPort).append(" HTTP/1.1\r\nHost: ");
         appendAuthority(request, targetHost, targetPort).append("\r\n");
         if (auth != null) {
-            request.append("Proxy-Authorization: ").append(auth.authenticate()).append("\r\n");
+            request.append("Proxy-Authorization: ").append(auth.authorization()).append("\r\n");
         }
         request.append("\r\n");
 
@@ -120,9 +124,14 @@ final class HttpConnectTunnel {
      * Appends an HTTP authority of the form {@code host:port} to
      * {@code sb}, bracketing the host if it is an IPv6 literal.
      *
+     * @apiNote
+     * Detects IPv6 by the presence of a colon and the absence of a
+     * leading bracket; an already-bracketed literal is passed through
+     * verbatim.
+     *
      * @param sb   the destination buffer
-     * @param host the host, either a registered name, an IPv4 literal,
-     *             or an unbracketed IPv6 literal
+     * @param host the host, either a registered name, an IPv4
+     *             literal, or an unbracketed IPv6 literal
      * @param port the port
      * @return the same {@link StringBuilder} for chaining
      */
@@ -140,17 +149,23 @@ final class HttpConnectTunnel {
      * reports a {@code 2xx} code, and consumes the header block up to
      * and including the {@code CRLF CRLF} terminator.
      *
+     * @implNote
+     * This implementation slides a 32-bit window through the response
+     * bytes looking for {@link #CRLF_CRLF} so the header block can be
+     * located without parsing individual header fields. When the
+     * header block exceeds {@link #READ_BUFFER_SIZE} the buffer is
+     * recycled in place since the only state that must be preserved
+     * across refills lives in the sliding window itself.
+     *
      * @param socket the proxy socket
-     * @throws IOException if the response is incomplete, malformed, or
-     *         reports a non-{@code 2xx} status
+     * @throws IOException if the response is incomplete, malformed,
+     *         or reports a non-{@code 2xx} status
      */
     private static void readConnectResponse(Socket socket) throws IOException {
         var in = socket.getInputStream();
         var buffer = new byte[READ_BUFFER_SIZE];
         var filled = 0;
 
-        // Drain at least the status line, then continue feeding the scanner
-        // until CRLF CRLF closes the header block.
         while (filled < STATUS_LINE_MIN_LENGTH) {
             var n = in.read(buffer, filled, buffer.length - filled);
             if (n < 0) {
@@ -161,7 +176,6 @@ final class HttpConnectTunnel {
 
         verifyStatusLine(buffer, filled);
 
-        // Slide a 32-bit window through the response bytes looking for "\r\n\r\n".
         var last4 = 0;
         var scanPos = 0;
         while (true) {
@@ -176,8 +190,6 @@ final class HttpConnectTunnel {
                 }
             }
             if (filled == buffer.length) {
-                // Header block exceeded the buffer; restart filling from offset 0
-                // since the only state we need to preserve lives in last4.
                 filled = 0;
                 scanPos = 0;
             }
@@ -190,20 +202,19 @@ final class HttpConnectTunnel {
     }
 
     /**
-     * Validates the first 12 bytes of {@code buffer} match the
+     * Validates that the first bytes of {@code buffer} match the
      * {@code "HTTP/X.X 2NN"} status-line prefix.
      *
      * @param buffer the response buffer
      * @param filled the number of bytes currently in {@code buffer}
-     * @throws IOException if the prefix is malformed or the status code
-     *         is not {@code 2xx}
+     * @throws IOException if the prefix is malformed or the status
+     *         code is not {@code 2xx}
      */
     private static void verifyStatusLine(byte[] buffer, int filled) throws IOException {
         if (buffer[0] != 'H' || buffer[1] != 'T' || buffer[2] != 'T' || buffer[3] != 'P' || buffer[4] != '/') {
             throw invalidResponse(buffer, filled);
         }
 
-        // HTTP/X[.Y] SP -- exactly one space after the version, regardless of digits.
         var pos = 5;
         if (!isDigit(buffer[pos])) {
             throw invalidResponse(buffer, filled);
@@ -248,8 +259,13 @@ final class HttpConnectTunnel {
     }
 
     /**
-     * Builds an {@link IOException} carrying the full raw response bytes
-     * that were buffered up to the point of detection.
+     * Builds an {@link IOException} carrying the buffered raw
+     * response bytes up to the point of detection.
+     *
+     * @apiNote
+     * Embedding the buffered response in the exception message is the
+     * fastest path to diagnosing misbehaving proxies, which often
+     * return HTML error pages rather than RFC-compliant status lines.
      *
      * @param buffer the response buffer
      * @param filled the number of bytes currently in {@code buffer}

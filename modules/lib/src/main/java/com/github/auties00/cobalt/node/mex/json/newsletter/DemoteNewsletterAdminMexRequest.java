@@ -14,33 +14,59 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Demotes an existing newsletter administrator back to a regular follower.
+ * Builds the MEX request that demotes a newsletter administrator back to a
+ * regular follower.
  *
- * <p>Only the newsletter owner may demote an admin. The target user retains follower status but loses admin-only capabilities such as publishing or moderation.
+ * @apiNote
+ * Drives the "demote admin" flow consumed by
+ * {@code WAWebDemoteNewsletterAdminAction}: only the newsletter owner may
+ * demote other admins, and an admin may demote themselves. The target user
+ * keeps follower membership but loses admin-only capabilities such as
+ * publishing or moderating.
+ *
+ * @implNote
+ * This implementation expects the caller to have already converted the
+ * target user's Jid to its LID string; WA Web performs the conversion via
+ * {@code WAWebLidMigrationUtils.toUserLidOrThrow}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexDemoteNewsletterAdminJob")
 public final class DemoteNewsletterAdminMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code DemoteNewsletterAdmin} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexDemoteNewsletterAdminJobMutation.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9880997548630971";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled demoteNewsletterAdmin
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this mutation.
      */
     public static final String OPERATION_NAME = "demoteNewsletterAdmin";
+
+    /**
+     * The Jid string of the newsletter on which the demotion is taking
+     * place.
+     */
     private final String newsletterId;
+
+    /**
+     * The user LID string of the admin being demoted.
+     */
     private final String userId;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request that demotes the given user on the given
+     * newsletter.
      *
-     * @param newsletterId the newsletter id
-     * @param userId the user id
+     * @apiNote
+     * The {@code userId} parameter must be the user LID string.
+     *
+     * @param newsletterId the newsletter Jid where the demotion is applied
+     * @param userId       the user LID of the admin being demoted
      */
     public DemoteNewsletterAdminMexRequest(String newsletterId, String userId) {
         this.newsletterId = newsletterId;
@@ -48,10 +74,10 @@ public final class DemoteNewsletterAdminMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -59,10 +85,10 @@ public final class DemoteNewsletterAdminMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -70,11 +96,21 @@ public final class DemoteNewsletterAdminMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id, user_id}}} payload;
+     * either field is omitted when its backing string is {@code null} so the
+     * server-side schema never receives an explicit {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexDemoteNewsletterAdminJob", exports = "demoteNewsletterAdmin",
             adaptation = WhatsAppAdaptation.ADAPTED)

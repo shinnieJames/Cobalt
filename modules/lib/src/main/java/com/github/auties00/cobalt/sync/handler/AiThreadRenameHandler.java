@@ -9,6 +9,7 @@ import com.github.auties00.cobalt.model.bot.AiThreadTitleBuilder;
 import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
+import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
@@ -16,60 +17,57 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
 /**
- * Handles AI thread rename sync actions.
+ * Renames a Meta-AI conversation thread in the local store in response to an {@code ai_thread_rename} sync mutation.
  *
- * <p>Per WhatsApp Web {@code WAWebAiThreadRenameSync}, this handler extends
- * {@code ChatSyncdActionBase} and processes the {@code "ai_thread_rename"} action.
- * It only supports SET operations. The handler validates that {@code index[1]}
- * is a valid bot WID ({@code isWid} and {@code isBot} checks) and that
- * {@code index[2]} is a non-null, non-whitespace thread ID.
+ * @apiNote
+ * Drives the Meta-AI chat surface where the user has renamed a single
+ * AI conversation thread on another device. Cobalt embedders observe
+ * the new title through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findAiThreadTitle(String)}.
  *
- * <p>Index format: {@code ["ai_thread_rename", chatJid, threadId]}
- *
- * <p>The gating check in WA Web verifies {@code isBotEnabled() && isAiChatThreadsInfraEnabled()},
- * which are AB prop-based runtime checks. In Cobalt, these are adapted to a
- * {@code DeviceCapabilities.AiThread.SupportLevel} check since Cobalt does not
- * have an AB props subsystem.
+ * @implNote
+ * This implementation collapses WA Web's full {@code ThreadsMetadata}
+ * row (last-message timestamp, creation timestamp, AI thread info,
+ * etc.) into a single flat {@code aiThreadTitles} entry that tracks
+ * only the title string. The frontend
+ * {@code updateChatAiThreads} fire-and-forget notification is
+ * intentionally omitted because Cobalt has no browser frontend bridge.
  */
 @WhatsAppWebModule(moduleName = "WAWebAiThreadRenameSync")
 public final class AiThreadRenameHandler implements WebAppStateActionHandler {
     /**
-     * Logger for this handler.
+     * The handler-scoped {@link Logger} used to record failed mutation attempts.
+     *
+     * @apiNote
+     * Used to record the {@link Exception} message of a mutation that
+     * threw before completing.
      */
     private static final Logger LOGGER = Logger.getLogger(AiThreadRenameHandler.class.getName());
 
     /**
      * Constructs the singleton AI thread rename handler.
+     *
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public AiThreadRenameHandler() {
 
     }
 
-    /**
-     * Returns the action type name this handler processes.
-     * @return the action type name
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return AiThreadRenameAction.ACTION_NAME;
     }
 
-    /**
-     * Returns the sync collection this handler's action belongs to.
-     * @return the sync patch type / collection name
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return AiThreadRenameAction.COLLECTION_NAME;
     }
 
-    /**
-     * Returns the mutation format version for this handler.
-     * @return the handler's supported mutation version
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -77,24 +75,26 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies an AI thread rename mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadRenameSync.applyMutations}, the per-mutation
-     * logic performs the following steps:
-     * <ol>
-     *   <li>If operation is not SET, return {@code Unsupported}</li>
-     *   <li>Extract {@code indexParts[1]} (chatJid) and {@code indexParts[2]} (threadId)</li>
-     *   <li>Validate both are non-null, non-whitespace; chatJid must be a valid Wid</li>
-     *   <li>Validate action value contains a non-null, non-whitespace {@code newTitle}</li>
-     *   <li>Create Wid from chatJid and verify it {@code isBot()}</li>
-     *   <li>Check bot gating: {@code isBotEnabled() && isAiChatThreadsInfraEnabled()}</li>
-     *   <li>Create AI thread from mutation index and resolve thread from store</li>
-     *   <li>If thread not found, return {@code Orphan} with orphan model</li>
-     *   <li>If found, update thread metadata with new title and return {@code Success}</li>
-     * </ol>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @apiNote
+     * Validates the JSON index {@code ["ai_thread_rename", chatJid, threadId]}
+     * and the {@link AiThreadRenameAction#newTitle()} payload, gates on
+     * AI-thread support, and stores the new title via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#putAiThreadTitle(com.github.auties00.cobalt.model.bot.AiThreadTitle)}.
+     * Returns {@link SyncActionState#UNSUPPORTED} for non-{@code SET}
+     * operations or when AI-thread support is off,
+     * {@link SyncActionState#ORPHAN} when no matching thread is in the
+     * store, and {@link SyncActionState#FAILED} on any thrown exception.
+     *
+     * @implNote
+     * This implementation maps WA Web's
+     * {@code isBotEnabled() && isAiChatThreadsInfraEnabled()} runtime
+     * AB-prop gate onto a {@link DeviceCapabilities.AiThread.SupportLevel}
+     * lookup against the primary device because Cobalt has no AB-props
+     * subsystem. The store key is {@code "<chatJid>|<threadId>"}, and
+     * the orphan model type {@code "Thread"} mirrors WA Web's
+     * {@code SyncModelType.Thread}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -111,13 +111,11 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
 
             var chatJidString = indexArray.getString(1);
             var threadId = indexArray.getString(2);
-            //     return t.malformedActionIndex()
             if (chatJidString == null || chatJidString.isBlank()
                     || threadId == null || threadId.isBlank()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
-            //     return malformedActionValue(t.collectionName)
             if (!(mutation.value().action().orElse(null) instanceof AiThreadRenameAction action)) {
                 return SyncdIndexUtils.malformedActionValue(collectionName().name());
             }
@@ -127,15 +125,10 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
                 return SyncdIndexUtils.malformedActionValue(collectionName().name());
             }
 
-            // so Cobalt must use Jid.isBot() (not Jid.hasBotServer()) to match semantics.
             var chatJid = Jid.of(chatJidString);
             if (!chatJid.isBot()) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
-            // ADAPTED: WAWebAiThreadRenameSync.applyMutations — WA Web checks
-            // isBotEnabled() && isAiChatThreadsInfraEnabled() (AB prop-based gating).
-            // Cobalt maps this to DeviceCapabilities.AiThread.SupportLevel check
-            // since Cobalt does not have an AB props subsystem.
             var aiThreadSupported = client.store().primaryDeviceCapabilities()
                     .flatMap(DeviceCapabilities::aiThread)
                     .flatMap(DeviceCapabilities.AiThread::supportLevel)
@@ -145,19 +138,11 @@ public final class AiThreadRenameHandler implements WebAppStateActionHandler {
                 return MutationApplicationResult.unsupported();
             }
 
-            // ADAPTED: WAWebAiThreadRenameSync.applyMutations — WA Web calls
-            // createAiThreadFromMutationIndex(botWid, threadId) then resolveThreadForMutationIndex(thread).
-            // Cobalt collapses WA Web's ThreadsMetadata IDB table into the aiThreadTitles store.
             var key = chatJidString + "|" + threadId;
             if (client.store().findAiThreadTitle(key).isEmpty()) {
                 return MutationApplicationResult.orphan(key, "Thread");
             }
 
-            // ADAPTED: WAWebAiThreadRenameSync.$AiThreadRenameSync$p_1 — WA Web reads
-            // lastMessageTimestamp, creationTimestamp, aiThreadInfo from the resolved thread,
-            // builds a metadata object with getAiThreadInfoFromType(newTitle, aiThreadType),
-            // calls bulkCreateOrUpdateThreadsMetadata, then frontendFireAndForget("updateChatAiThreads").
-            // Cobalt's flat aiThreadTitles store only tracks the title string.
             client.store().putAiThreadTitle(new AiThreadTitleBuilder().threadId(key).title(newTitle).build());
             return MutationApplicationResult.success();
         } catch (Exception e) {

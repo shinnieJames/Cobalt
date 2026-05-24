@@ -2,7 +2,6 @@ package com.github.auties00.cobalt.sync.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -15,7 +14,7 @@ import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartn
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerAction.Status;
 import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartnerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -31,17 +30,30 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MerchantPaymentPartnerHandler} — Cobalt's adapter for
+ * Exercises the {@link MerchantPaymentPartnerHandler} adapter for
  * {@code WAWebMerchantPaymentPartnerSync}.
  *
- * <p>The handler is gated on the SMB (Small/Medium Business) platform
- * pair, the
- * {@code payments_br_merchant_psp_account_status_sync} AB prop, and on
- * the {@code SET} operation. When all three gates pass the action is
- * persisted via {@link WhatsAppStore#setMerchantPaymentPartner}. These
- * tests pin the wire metadata, every gating predicate, the malformed
- * branch, and the default timestamp-based conflict resolution. No outbound
+ * @apiNote
+ * Verifies parity with WA Web for the
+ * {@code merchant_payment_partner} app-state sync action across
+ * metadata, the SMB platform gating
+ * ({@link ClientPlatformType#IOS_BUSINESS} /
+ * {@link ClientPlatformType#ANDROID_BUSINESS}), the
+ * {@link ABProp#PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC}
+ * gating, the SET happy path that persists the action via
+ * {@link WhatsAppStore#setMerchantPaymentPartner(MerchantPaymentPartnerAction)},
+ * the malformed-value branch, the REMOVE rejection and the
+ * inherited timestamp-based conflict resolution. No outbound
  * builder is exposed.
+ *
+ * @implNote
+ * This implementation builds the handler with a stubbed
+ * {@link TestABPropsService} so the gating prop can be flipped per
+ * test, and exercises it against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#merchantPaymentPartner()} read-back can be
+ * asserted directly.
  */
 @DisplayName("MerchantPaymentPartnerHandler")
 class MerchantPaymentPartnerHandlerTest {
@@ -60,12 +72,21 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation carrying the given merchant action.
+     * Builds a {@link DecryptedMutation.Trusted} carrying the given
+     * merchant action under the canonical
+     * {@code ["merchant_payment_partner"]} index.
      *
-     * @param action    the merchant action payload, may be {@code null}
-     * @param operation the sync operation
+     * @apiNote
+     * Used by every test to centralise mutation construction. The
+     * {@code action} parameter is nullable so the malformed-value
+     * path can be exercised without re-implementing the envelope.
+     *
+     * @param action    the merchant action payload, may be
+     *                  {@code null}
+     * @param operation the {@link SyncdOperation} to wrap
      * @param ts        the mutation timestamp
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} with the requested
+     *         shape
      */
     private DecryptedMutation.Trusted buildMutation(MerchantPaymentPartnerAction action,
                                                     SyncdOperation operation, Instant ts) {
@@ -87,7 +108,7 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the wire constant")
@@ -111,7 +132,7 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("platform gate — only SMB iOS/Android pass")
+    @DisplayName("platform gate - only SMB iOS/Android pass")
     class PlatformGate {
         @Test
         @DisplayName("a non-business platform returns UNSUPPORTED without reading the AB prop")
@@ -154,13 +175,13 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("AB-prop gate — when SMB but prop is off")
+    @DisplayName("AB-prop gate - when SMB but prop is off")
     class AbPropGate {
         @Test
         @DisplayName("a business platform with the AB prop unset returns UNSUPPORTED")
         void propOffIsUnsupported() {
             store.device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
-            // The AB prop defaults to "false" — explicitly set to false to exercise the gate path.
+            // The AB prop defaults to "false" - explicitly set to false to exercise the gate path.
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, false);
             var client = TestWhatsAppClient.create().withStore(store).withAbPropsService(props);
 
@@ -172,7 +193,7 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET happy path")
+    @DisplayName("applyMutation - SET happy path")
     class ApplySetHappy {
         @Test
         @DisplayName("SET on SMB with AB prop on persists the merchant partner")
@@ -193,10 +214,10 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
-        @DisplayName("there is no orphan branch — the handler writes a singleton store slot")
+        @DisplayName("there is no orphan branch - the handler writes a singleton store slot")
         void orphanNotApplicable() {
             store.device().setPlatform(ClientPlatformType.ANDROID_BUSINESS);
             props.set(ABProp.PAYMENTS_BR_MERCHANT_PSP_ACCOUNT_STATUS_SYNC, true);
@@ -211,7 +232,7 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -236,10 +257,10 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index dimension is n/a")
+    @DisplayName("applyMutation - malformed index dimension is n/a")
     class MalformedIndex {
         @Test
-        @DisplayName("the handler never reads indexParts past slot 0 — index content is irrelevant")
+        @DisplayName("the handler never reads indexParts past slot 0 - index content is irrelevant")
         void indexUnused() {
             // The index for this action is the singleton ["merchant_payment_partner"]; the handler
             // does not extract any positional argument. Confirm that arbitrary index payloads
@@ -269,7 +290,7 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE on SMB with AB prop on returns UNSUPPORTED")
@@ -290,10 +311,10 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -302,7 +323,7 @@ class MerchantPaymentPartnerHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -316,10 +337,10 @@ class MerchantPaymentPartnerHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("MerchantPaymentPartnerHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("MerchantPaymentPartnerHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
             assertEquals(handler, handler);
         }

@@ -23,35 +23,43 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Combined behavioural and KAT tests for the WAM beaconing roll
- * implemented by {@link DefaultWamBeaconing}.
+ * Combined behavioural and KAT tests for the WAM beaconing roll backing
+ * {@link DefaultWamBeaconing}.
  *
- * <p>The behavioural tests run against a controllable
- * {@link WamBeaconing} implementation that lets a test drive the
- * activation roll and UTC day boundary deterministically. The KAT
- * tests run the same controllable implementation through the
- * scenarios captured from the live WAWebWamBeaconing module and
- * assert that Cobalt produces identical activation / sequence-number
- * results step by step.
+ * @apiNote
+ * Exercises the 1% activation roll, the UTC day boundary, and the
+ * per-buffer-key counter semantics demanded by
+ * {@code WAWebWamBeaconing.maybeGetEventSequenceNumber}. The KAT suite
+ * replays captured scenarios; the behavioural suite covers boundary
+ * conditions (threshold inclusivity, counter wraparound, key isolation)
+ * without depending on a fixture.
  *
- * <p>Vectors live in {@code fixtures/wam/wam-beaconing.json}.
+ * @implNote
+ * Behavioural tests run against a {@link DeterministicWamBeaconing}
+ * harness that lets the test queue activation rolls and drive the
+ * simulated UTC day boundary by hand. KAT vectors live in
+ * {@code fixtures/wam/wam-beaconing.json} pinned to snapshot revision
+ * {@code 1039260921}.
  */
 @DisplayName("WamBeaconing behavioural + KAT")
 class WamBeaconingTest {
     /**
-     * Snapshot revision the vectors were captured against.
+     * The snapshot revision the KAT vectors were captured against;
+     * compared against the fixture header so revision drift fails
+     * loudly.
      */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
     /**
-     * Activation probability cutoff, matching
-     * {@code WAWebWamBeaconing.ACTIVATION_PROBABILITY}. The roll is
-     * inclusive: {@code random <= 0.01} activates.
+     * The 1% activation cutoff applied inclusively
+     * ({@code roll <= 0.01} activates), matching the literal
+     * {@code .01} in {@code WAWebWamBeaconing}.
      */
     private static final double ACTIVATION_PROBABILITY = 0.01;
 
     /**
-     * Returns one dynamic test per captured beaconing scenario.
+     * Returns one dynamic test per scenario captured from the live
+     * {@code WAWebWamBeaconing} oracle.
      *
      * @return the KAT test factory stream
      */
@@ -72,9 +80,15 @@ class WamBeaconingTest {
     }
 
     /**
-     * Replays a captured beaconing scenario step by step through
-     * {@link DeterministicWamBeaconing} and asserts each step's
-     * result matches the captured outcome.
+     * Replays a captured beaconing scenario step by step against a
+     * fresh {@link DeterministicWamBeaconing} and asserts each step's
+     * outcome matches the captured result (or empty).
+     *
+     * @apiNote
+     * Each step carries a {@code unixTime}, an optional
+     * {@code pushedRandom} to enqueue before the call, a
+     * {@code bufferKey}, and an expected {@code result} (the next
+     * sequence number or {@code null} for empty).
      *
      * @param scenario the captured scenario
      */
@@ -108,17 +122,23 @@ class WamBeaconingTest {
     }
 
     /**
-     * Behavioural unit tests over {@link DeterministicWamBeaconing}
-     * that exercise the roll, day boundary, and counter semantics
-     * without relying on fixture replay.
+     * Behavioural sub-suite covering the roll, day boundary, and
+     * counter semantics that {@link DefaultWamBeaconing} must satisfy
+     * regardless of fixture availability.
+     *
+     * @apiNote
+     * The harness is {@link DeterministicWamBeaconing}; each test
+     * queues the random rolls and the simulated UTC time it needs and
+     * asserts the produced sequence numbers (or empties) directly.
      */
     @Nested
     @DisplayName("DefaultWamBeaconing semantics under deterministic inputs")
     class BehaviouralSemantics {
         /**
-         * Verifies that a roll below the 1% threshold activates the
-         * given buffer key and that subsequent same-day calls
-         * monotonically increment the sequence number.
+         * Verifies that a roll strictly below the 1% cutoff activates
+         * the key and the next three same-day calls return
+         * monotonically increasing sequence numbers starting at
+         * {@code 1}.
          */
         @Test
         @DisplayName("activation roll below threshold starts the per-day sequence at 1")
@@ -132,9 +152,8 @@ class WamBeaconingTest {
         }
 
         /**
-         * Verifies that a roll above the 1% threshold deactivates the
-         * key for the day and all subsequent same-day calls return
-         * empty.
+         * Verifies that a roll above the 1% cutoff deactivates the key
+         * for the whole day and every same-day call returns empty.
          */
         @Test
         @DisplayName("activation roll above threshold returns empty for the whole day")
@@ -147,8 +166,8 @@ class WamBeaconingTest {
         }
 
         /**
-         * Verifies that crossing a UTC day boundary forces a new roll,
-         * which may toggle activation.
+         * Verifies that crossing a UTC day boundary forces a fresh
+         * activation roll, which may toggle the active state.
          */
         @Test
         @DisplayName("crossing a UTC day boundary re-rolls activation")
@@ -168,8 +187,8 @@ class WamBeaconingTest {
         }
 
         /**
-         * Verifies that different buffer keys roll independently;
-         * activation of one does not influence the other.
+         * Verifies that two buffer keys roll independently; activation
+         * of one does not leak into the other.
          */
         @Test
         @DisplayName("buffer keys roll independently")
@@ -177,20 +196,19 @@ class WamBeaconingTest {
             var beaconing = new DeterministicWamBeaconing();
             beaconing.setUnixTimeSeconds(100 * dayInSeconds());
 
-            beaconing.enqueueRandom(0.005); // regular activates
+            beaconing.enqueueRandom(0.005);
             assertEquals(OptionalLong.of(1), beaconing.nextSequenceNumber("regular"));
 
-            beaconing.enqueueRandom(0.5); // realtime rejects on its first roll
+            beaconing.enqueueRandom(0.5);
             assertTrue(beaconing.nextSequenceNumber("realtime").isEmpty());
 
-            // regular continues without being touched by realtime's roll
             assertEquals(OptionalLong.of(2), beaconing.nextSequenceNumber("regular"));
         }
 
         /**
-         * Verifies the activation cutoff is inclusive at 0.01: a roll
-         * of exactly 0.01 activates, and the smallest value just above
-         * (0.01000001) deactivates.
+         * Verifies the activation cutoff is inclusive at {@code 0.01}:
+         * a roll equal to the cutoff activates, the smallest
+         * representable value above ({@code 0.01000001}) deactivates.
          */
         @Test
         @DisplayName("threshold is inclusive at 0.01")
@@ -208,7 +226,8 @@ class WamBeaconingTest {
 
         /**
          * Verifies that the sequence counter resets to {@code 1} at
-         * the start of each new day on which activation succeeds.
+         * the start of every new active day, not at the day boundary
+         * itself.
          */
         @Test
         @DisplayName("sequence counter resets at the start of a new active day")
@@ -229,18 +248,17 @@ class WamBeaconingTest {
         }
 
         /**
-         * Verifies that the long counter advances past
-         * {@link Integer#MAX_VALUE} without sign-flipping.
+         * Verifies that the {@code long} counter advances past
+         * {@link Integer#MAX_VALUE} as a positive value rather than
+         * sign-flipping.
          *
-         * <p>WhatsApp Web stores the counter as a JavaScript
-         * {@code Number} — effectively unbounded up to
-         * {@code Number.MAX_SAFE_INTEGER} (2^53). Cobalt's original
-         * {@code int} counter would have overflowed to
-         * {@code Integer.MIN_VALUE} on the 2^31st increment, a
-         * silent divergence. The counter is now {@code long}, so
-         * the value at {@code Integer.MAX_VALUE + 1} is the
-         * positive {@code 2_147_483_648L}, not the negative
-         * {@code -2_147_483_648}.
+         * @implNote
+         * Forces the internal counter to {@code Integer.MAX_VALUE - 1}
+         * to make the 2^31 boundary observable in constant time
+         * without firing 2 billion increments; the test exists because
+         * a previous {@code int} counter silently wrapped to
+         * {@link Integer#MIN_VALUE} there and the JavaScript reference
+         * cannot hit that case at all.
          */
         @Test
         @DisplayName("counter past Integer.MAX_VALUE stays positive (long counter)")
@@ -248,12 +266,8 @@ class WamBeaconingTest {
             var beaconing = new DeterministicWamBeaconing();
             beaconing.setUnixTimeSeconds(100 * dayInSeconds());
             beaconing.enqueueRandom(0.001);
-            // First call activates and returns 1.
             assertEquals(OptionalLong.of(1L), beaconing.nextSequenceNumber("regular"));
 
-            // Pre-set the internal counter directly to
-            // Integer.MAX_VALUE - 1 so we observe the first call
-            // crossing 2^31 in a constant-time test.
             beaconing.forceSequenceCounter("regular", Integer.MAX_VALUE - 1L);
 
             var atMax = beaconing.nextSequenceNumber("regular");
@@ -268,43 +282,54 @@ class WamBeaconingTest {
     /**
      * Returns the number of seconds in a day.
      *
-     * @return {@code 86400}
+     * @return {@code 86_400}
      */
     private static long dayInSeconds() {
         return Duration.ofDays(1).toSeconds();
     }
 
     /**
-     * A {@link WamBeaconing} implementation whose UTC day boundary
-     * and activation roll are controlled by the test, allowing
-     * scenario replay and deterministic assertions.
+     * Controllable {@link WamBeaconing} test double whose UTC day
+     * boundary and activation rolls are driven explicitly by the test.
      *
-     * <p>Mirrors {@link DefaultWamBeaconing}'s per-buffer-key state
-     * machine exactly: on the first call of a new UTC day for the
-     * given key, consume the next queued random value and activate
-     * if it is {@code <= 0.01}; otherwise return the next sequence
-     * number when active or empty when inactive.
+     * @apiNote
+     * Tests call {@link #setUnixTimeSeconds(long)} and
+     * {@link #enqueueRandom(double)} to set up a step, then exercise
+     * the same {@link #nextSequenceNumber(String)} surface every
+     * production caller uses.
+     *
+     * @implNote
+     * Mirrors {@link DefaultWamBeaconing}'s per-buffer-key state
+     * machine: on the first call of a new UTC day the next queued
+     * random value is consumed, activation set if it is
+     * {@code <= 0.01}, and the counter reset to {@code 0}; subsequent
+     * calls within the same day either return the next sequence number
+     * (when active) or empty (when inactive).
      */
     private static final class DeterministicWamBeaconing implements WamBeaconing {
         /**
-         * Per-buffer-key state.
+         * The per-buffer-key state map; entries are materialised lazily
+         * on the first {@link #nextSequenceNumber(String)} call for a
+         * key.
          */
         private final ConcurrentMap<String, KeyState> states = new ConcurrentHashMap<>();
 
         /**
-         * Queue of upcoming random values consumed by activation
-         * rolls, in FIFO order.
+         * The FIFO queue of upcoming random values that activation
+         * rolls consume on day-boundary transitions.
          */
         private final List<Double> pendingRandoms = new ArrayList<>();
 
         /**
-         * Current simulated wall-clock time, in Unix epoch seconds.
+         * The current simulated wall-clock time, in Unix epoch
+         * seconds.
          */
         private long unixSeconds;
 
         /**
          * Sets the simulated wall-clock time to the given epoch
-         * second.
+         * second; the next {@link #nextSequenceNumber(String)} call
+         * sees this time as {@code now}.
          *
          * @param seconds the wall-clock epoch second
          */
@@ -313,8 +338,8 @@ class WamBeaconingTest {
         }
 
         /**
-         * Enqueues the next random value to be consumed by an
-         * activation roll.
+         * Enqueues the next random value the activation roll will
+         * consume.
          *
          * @param value the random value
          */
@@ -323,25 +348,39 @@ class WamBeaconingTest {
         }
 
         /**
-         * Force-sets the internal sequence counter for the given
-         * buffer key, used by the wraparound test to probe values
-         * near {@code Integer.MAX_VALUE} without waiting for 2^31
-         * increments. Requires the key's state to already exist
-         * (call {@code nextSequenceNumber(bufferKey)} once first
-         * to materialise it).
+         * Force-sets the running counter for the given buffer key.
+         *
+         * @apiNote
+         * Used by the wraparound test to probe values near
+         * {@link Integer#MAX_VALUE} without firing 2 billion
+         * increments. The key's state must already exist; call
+         * {@link #nextSequenceNumber(String)} once first to
+         * materialise it.
          *
          * @param bufferKey the buffer key whose counter is being set
          * @param value     the new counter value
+         * @throws IllegalStateException if no state has been
+         *                               materialised for
+         *                               {@code bufferKey}
          */
         void forceSequenceCounter(String bufferKey, long value) {
             var state = states.get(bufferKey);
             if (state == null) {
                 throw new IllegalStateException("no state yet for bufferKey " + bufferKey
-                        + " — call nextSequenceNumber(bufferKey) once first");
+                        + " - call nextSequenceNumber(bufferKey) once first");
             }
             state.sequenceNumber = value;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation truncates {@link #unixSeconds} to days
+         * to detect a UTC day change; on a change it pulls the next
+         * value from {@link #pendingRandoms} (throwing if the queue
+         * was not pre-armed by the test) and resets the counter.
+         */
         @Override
         public OptionalLong nextSequenceNumber(String bufferKey) {
             var state = states.computeIfAbsent(bufferKey, _ -> new KeyState());
@@ -365,34 +404,43 @@ class WamBeaconingTest {
         }
 
         /**
-         * Per-buffer-key activation and counter state.
+         * Per-buffer-key activation and counter state mirroring
+         * {@link DefaultWamBeaconing.ChannelState} bit for bit.
          */
         private static final class KeyState {
             /**
-             * Epoch seconds of the day for which {@link #active} was
-             * last decided. Initialised to {@code -1} so the first
-             * call always re-rolls.
+             * The UTC epoch second of the day for which {@link #active}
+             * was last decided; initialised to {@code -1} so the first
+             * call observes a day change.
              */
             long activationDayEpoch = -1;
 
             /**
-             * {@code true} when beaconing is active for the current day.
+             * Whether beaconing is active for the current activation
+             * day.
              */
             boolean active;
 
             /**
-             * Monotonic counter incremented per successful sequence
-             * call. Reset to {@code 0} at the start of every new day.
+             * The running counter, pre-incremented on each non-empty
+             * call and reset to {@code 0} on every activation-day
+             * change.
              */
             long sequenceNumber;
         }
     }
 
     /**
-     * Smoke assertion that {@link DefaultWamBeaconing} (the
-     * production impl) is wired into Cobalt's {@code DefaultWamService}
-     * — protects against an accidental regression that swaps the
-     * impl with a no-op while leaving the interface in place.
+     * Smoke check that {@link DefaultWamBeaconing} (the production
+     * impl) is the {@link WamBeaconing} implementation
+     * {@link DefaultWamService} actually wires up.
+     *
+     * @apiNote
+     * Guards against an accidental regression that swaps the impl for
+     * a no-op while leaving the interface in place; the assertion
+     * tolerates both possible outcomes of the underlying randomised
+     * roll, asserting only the contract (present-and-monotonic or
+     * empty-and-stays-empty).
      */
     @Test
     @DisplayName("DefaultWamBeaconing is the production impl exposed to WamService")
@@ -400,9 +448,6 @@ class WamBeaconingTest {
         WamBeaconing beaconing = new DefaultWamBeaconing();
         var first = beaconing.nextSequenceNumber("regular");
         var second = beaconing.nextSequenceNumber("regular");
-        // The roll is randomised by DataUtils.randomDouble, but the
-        // result must be either empty (deactivated) on both calls or
-        // present and monotonically increasing.
         if (first.isPresent()) {
             assertTrue(second.isPresent(), "if first call is present, second must be too");
             assertEquals(first.getAsLong() + 1, second.getAsLong(),
@@ -413,14 +458,15 @@ class WamBeaconingTest {
     }
 
     /**
-     * Smoke assertion that two distinct buffer keys are treated
-     * independently by the production impl.
+     * Smoke check that two distinct buffer keys see independent
+     * activation rolls in the production impl.
      *
-     * <p>Necessarily probabilistic because the production impl uses
-     * the real {@link java.lang.Math#random} for the roll. The check
-     * only asserts that the two keys' KeyState instances are kept
-     * separate (one's activation does not leak into the other), not
-     * any specific outcome of the roll itself.
+     * @apiNote
+     * Probabilistic by construction (the production impl reads the
+     * real {@link Math#random}); the assertion is that the
+     * second key's state was decided by a fresh roll, not inherited
+     * from the first, regardless of what either roll actually
+     * produced.
      */
     @Test
     @DisplayName("DefaultWamBeaconing keeps per-key state isolated")
@@ -428,15 +474,10 @@ class WamBeaconingTest {
         var beaconing = new DefaultWamBeaconing();
         var regular = beaconing.nextSequenceNumber("regular");
         var realtime = beaconing.nextSequenceNumber("realtime");
-        // Either both are deactivated (most likely, since p=0.01) or the
-        // two keys rolled independently; in either case the second key's
-        // state was decided by a fresh roll, not inherited from the first.
         if (regular.isPresent() && realtime.isPresent()) {
             assertEquals(1, regular.getAsLong(), "first call to 'regular' on an active day starts at 1");
             assertEquals(1, realtime.getAsLong(), "first call to 'realtime' on an active day also starts at 1");
         }
-        // Negative space: make sure we don't accidentally share a single
-        // KeyState across keys by checking they don't see each other's increments.
         var regular2 = beaconing.nextSequenceNumber("regular");
         if (regular.isPresent()) {
             assertNotEquals(regular, regular2, "'regular' must advance independently of 'realtime'");

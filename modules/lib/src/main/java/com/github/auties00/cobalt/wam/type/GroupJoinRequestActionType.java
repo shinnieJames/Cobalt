@@ -14,5 +14,6 @@ public enum GroupJoinRequestActionType {
     @WamEnumConstant(4) MEMBERSHIP_REQUEST_APPROVAL_MODE_OFF,
     @WamEnumConstant(5) MEMBERSHIP_REQUEST_APPROVE,
     @WamEnumConstant(6) MEMBERSHIP_REQUEST_REJECT,
-    @WamEnumConstant(7) MEMBERSHIP_REQUEST_CANCEL
+    @WamEnumConstant(7) MEMBERSHIP_REQUEST_CANCEL,
+    @WamEnumConstant(8) DISMISS_PENDING_PARTICIPANTS_BANNER
 }

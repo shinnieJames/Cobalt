@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.cobalt.wam.model.WamType;
+import com.github.auties00.cobalt.wam.type.ConsentSource;
 import com.github.auties00.cobalt.wam.type.MmDirectionFrom;
 import com.github.auties00.cobalt.wam.type.MmSignalType;
 
@@ -16,6 +17,9 @@ import java.util.OptionalInt;
 @WhatsAppWebModule(moduleName = "WAWebMmSignalWamEvent")
 @WamEvent(id = 5572, channel = WamChannel.PRIVATE, privateStatsId = 0)
 public interface MmSignalEvent extends WamEventSpec {
+    @WamProperty(index = 10, type = WamType.ENUM)
+    Optional<ConsentSource> consentSource();
+
     @WamProperty(index = 4, type = WamType.BOOLEAN)
     Optional<Boolean> disclosed();
 

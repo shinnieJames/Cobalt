@@ -16,27 +16,49 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The optional {@code <picture type="avatar"><avatar
- * pose_id/>×0..4></picture>} payload overlay carried by a
- * {@link SmaxProfilePictureGetRequest}.
+ * The optional avatar-overlay payload of a
+ * {@link SmaxProfilePictureGetRequest}; carries the 0..4
+ * {@code <avatar pose_id/>} children that turn a picture-get into an
+ * avatar-pose-set fetch.
+ *
+ * @apiNote
+ * Pass an instance to {@link SmaxProfilePictureGetRequest} when
+ * fetching an entity's avatar (rather than a still picture); the
+ * relay returns one
+ * {@link SmaxProfilePictureGetResponse.SuccessAvatarURLs.AvatarUrl}
+ * per pose-id requested.
+ *
+ * @implNote
+ * This implementation enforces the {@code 0..4} bound at construction
+ * time so {@link SmaxProfilePictureGetRequest#toNode()} can iterate
+ * without re-checking.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutProfilePictureAvatarMixin")
 public final class SmaxProfilePictureGetAvatarMixin {
     /**
-     * The list of {@code <avatar pose_id/>} children. Between
-     * {@code 0} and {@code 4} entries.
+     * The list of {@code <avatar pose_id/>} children; bounded to
+     * {@code 0..4} entries.
      */
     private final List<AvatarPose> avatarArgs;
 
     /**
-     * Constructs a new avatar payload.
+     * Constructs an avatar payload.
      *
-     * @param avatarArgs the avatar entries; never {@code null}; at
-     *                   most {@code 4} entries
+     * @apiNote
+     * Use this when assembling a {@link SmaxProfilePictureGetRequest}
+     * for an avatar fetch.
+     *
+     * @implNote
+     * This implementation defensively copies the input list via
+     * {@link List#copyOf(java.util.Collection)} so caller mutations
+     * do not affect the payload.
+     *
+     * @param avatarArgs the avatar entries; must contain at most
+     *                   {@code 4} entries
      * @throws NullPointerException     if {@code avatarArgs} is
      *                                  {@code null}
-     * @throws IllegalArgumentException if {@code avatarArgs} has
-     *                                  more than {@code 4} entries
+     * @throws IllegalArgumentException if {@code avatarArgs} exceeds
+     *                                  {@code 4} entries
      */
     public SmaxProfilePictureGetAvatarMixin(List<AvatarPose> avatarArgs) {
         Objects.requireNonNull(avatarArgs, "avatarArgs cannot be null");
@@ -50,12 +72,25 @@ public final class SmaxProfilePictureGetAvatarMixin {
     /**
      * Returns the avatar entries.
      *
+     * @apiNote
+     * Read by {@link SmaxProfilePictureGetRequest#toNode()} when
+     * fanning entries into {@code <avatar pose_id=...>} children.
+     *
      * @return an unmodifiable list; never {@code null}
      */
     public List<AvatarPose> avatarArgs() {
         return avatarArgs;
     }
 
+    /**
+     * Compares this payload to another for value equality on the
+     * avatar list.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxProfilePictureGetAvatarMixin} with an equal
+     *         entry list
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -68,18 +103,33 @@ public final class SmaxProfilePictureGetAvatarMixin {
         return Objects.equals(this.avatarArgs, that.avatarArgs);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(avatarArgs);
     }
 
+    /**
+     * Returns a debug-friendly representation of this payload.
+     *
+     * @apiNote
+     * Intended for logging; the format is not part of the public
+     * contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxProfilePictureGetAvatarMixin[avatarArgs=" + avatarArgs + ']';
     }
 
     /**
-     * A single {@code <avatar pose_id/>} entry.
+     * A single {@code <avatar pose_id/>} entry within an avatar
+     * payload.
      */
     public static final class AvatarPose {
         /**
@@ -88,7 +138,11 @@ public final class SmaxProfilePictureGetAvatarMixin {
         private final String avatarPoseId;
 
         /**
-         * Constructs a new pose entry.
+         * Constructs a pose entry.
+         *
+         * @apiNote
+         * Use this when assembling a
+         * {@link SmaxProfilePictureGetAvatarMixin}.
          *
          * @param avatarPoseId the pose id; never {@code null}
          * @throws NullPointerException if {@code avatarPoseId} is
@@ -110,6 +164,9 @@ public final class SmaxProfilePictureGetAvatarMixin {
         /**
          * Builds the {@code <avatar pose_id/>} node.
          *
+         * @apiNote
+         * Used by {@link SmaxProfilePictureGetRequest#toNode()}.
+         *
          * @return the {@link Node}
          */
         @WhatsAppWebExport(moduleName = "WASmaxOutProfilePictureAvatarMixin",
@@ -122,6 +179,14 @@ public final class SmaxProfilePictureGetAvatarMixin {
                     .build();
         }
 
+        /**
+         * Compares this entry to another for value equality on the
+         * pose id.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an
+         *         {@link AvatarPose} with an equal pose id
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -134,11 +199,25 @@ public final class SmaxProfilePictureGetAvatarMixin {
             return Objects.equals(this.avatarPoseId, that.avatarPoseId);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(avatarPoseId);
         }
 
+        /**
+         * Returns a debug-friendly representation of this entry.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetAvatarMixin.AvatarPose[avatarPoseId=" + avatarPoseId + ']';

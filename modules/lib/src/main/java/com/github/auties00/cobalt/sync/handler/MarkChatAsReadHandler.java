@@ -17,26 +17,40 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles mark chat as read sync actions.
+ * Applies the {@code markChatAsRead} app-state sync action that flips a
+ * chat's read or unread state across the user's linked devices.
  *
- * <p>This handler processes incoming mutations that mark a chat as read or
- * unread, resolves conflicts between local and remote mutations using message
- * range comparison, and builds outgoing mutations for user-initiated read-state
- * actions.
+ * @apiNote
+ * Drives the chat-list "Mark as read" / "Mark as unread" affordance:
+ * when the primary device toggles the read state the resulting bit
+ * fans out across the {@link SyncPatchType#REGULAR_LOW} collection so
+ * companions render the same unread badge. The mutation index keys
+ * each entry by the chat JID, formatted as
+ * {@snippet :
+ *     ["markChatAsRead", chatJid]
+ * }
  *
- * <p>The action is identified by the {@code "markChatAsRead"} action name in
- * {@code SyncActionValue.markChatAsReadAction}. The mutation index format is
- * {@code ["markChatAsRead", chatJid]}.
- *
- * <p>Per WhatsApp Web, this handler extends {@code ChatMessageRangeSyncdActionBase},
- * which provides shared message-range-based conflict resolution. In Cobalt this
- * logic is inlined since Java does not use the same inheritance hierarchy.
+ * @implNote
+ * This implementation applies the read-state change directly on the
+ * local {@link com.github.auties00.cobalt.model.chat.Chat}, replacing
+ * WA Web's
+ * {@code frontendSendAndReceive("updateChatReadStatus", ...)} RPC.
+ * For {@code read = true} the chat is marked as not unread with
+ * {@code unreadCount = 0}; for {@code read = false} it is marked as
+ * unread with {@code unreadCount = -1}, the
+ * {@code WAWebConstantsDeprecated.MARKED_AS_UNREAD} sentinel that WA
+ * Web uses on its own chat table. The
+ * {@code addActiveMessageRange} bookkeeping and the
+ * {@code RangeBEnclosesRangeA / RangesNotEnclosing} orphan branch
+ * driven by {@code $MarkChatAsReadSync$p_3} are not modelled because
+ * Cobalt does not maintain browser-side IndexedDB active message
+ * ranges.
  */
 @WhatsAppWebModule(moduleName = "WAWebMarkChatAsReadSync")
 public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs a new singleton {@link MarkChatAsReadHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public MarkChatAsReadHandler() {
@@ -44,8 +58,7 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for mark chat as read actions.
-     * @return the action name {@code "markChatAsRead"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -54,11 +67,7 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for mark chat as read actions.
-     *
-     * <p>Per WhatsApp Web, the handler's {@code collectionName} is set to
-     * {@code WASyncdConst.CollectionName.RegularLow} in the constructor.
-     * @return {@link SyncPatchType#REGULAR_LOW}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -67,8 +76,7 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for mark chat as read actions.
-     * @return the version number {@code 3}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -77,38 +85,19 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a mark chat as read mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebMarkChatAsReadSync.applyMutations}, for each
-     * mutation with {@code operation === "set"}:
-     * <ol>
-     *   <li>Extracts the chat JID from {@code indexParts[1]}; returns
-     *       {@code malformedActionIndex} if empty</li>
-     *   <li>Validates the sync action value via {@code validateSyncActionValue}
-     *       (checks {@code read} is not {@code null} and {@code messageRange} is
-     *       present and valid); returns {@code malformedActionValue} otherwise</li>
-     *   <li>Validates the JID is a valid WID via {@code WAWebWid.isWid}</li>
-     *   <li>Resolves the chat via {@code WAWebSyncdGetChat.resolveChatForMutationIndex}</li>
-     *   <li>Delegates to {@code $MarkChatAsReadSync$p_3} which compares the local
-     *       and remote message ranges and conditionally updates the chat's read
-     *       state via {@code frontendSendAndReceive("updateChatReadStatus", ...)}</li>
-     * </ol>
-     *
-     * <p>Non-{@code SET} operations return {@code Unsupported}. Exceptions are
-     * caught and return {@code Failed}.
-     *
-     * <p>In Cobalt, the active-message-range gating from {@code $MarkChatAsReadSync$p_3}
-     * is skipped because Cobalt does not maintain browser-side IndexedDB active
-     * message ranges. The read-state change is applied directly: when
-     * {@code read == true} the chat is marked as not unread with a zero unread count,
-     * and when {@code read == false} the chat is marked as unread with an unread
-     * count of {@code -1} (matching {@code WAWebConstantsDeprecated.MARKED_AS_UNREAD}).
-     * The WA Web {@code _} helper's orphan branch for
-     * {@code RangeBEnclosesRangeA}/{@code RangesNotEnclosing} is likewise skipped
-     * because it is driven by the active-range comparison that Cobalt omits.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation skips WA Web's
+     * {@code validateMessageRange} and
+     * {@code constructMessageRange + compareMessageRanges} chain
+     * because Cobalt does not maintain active message ranges; the
+     * read-state change is applied directly to the
+     * {@link com.github.auties00.cobalt.model.chat.Chat} so the
+     * companion view matches the primary's intent. Any thrown
+     * exception is mapped to
+     * {@link MutationApplicationResult#failed()} mirroring WA Web's
+     * try/catch shape.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = {"applyMutations", "validateSyncActionValue", "$MarkChatAsReadSync$p_3", "$MarkChatAsReadSync$p_1", "$MarkChatAsReadSync$p_2", "getMessageRange"}, adaptation = WhatsAppAdaptation.ADAPTED)
@@ -128,7 +117,7 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
             }
 
             var chatJid = Jid.of(chatJidString);
-            if (chatJid == null) { // ADAPTED: Jid.of returns null for null input; WA Web uses isWid() validation
+            if (chatJid == null) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
 
@@ -137,19 +126,11 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
                 return MutationApplicationResult.orphan(chatJidString, "Chat");
             }
 
-            // In Cobalt, MarkChatAsReadAction.read() null-coalesces to false, so a missing read
-            // is treated as "mark as unread" which is still a meaningful state. The messageRange
-            // validation is skipped because Cobalt does not maintain active message ranges
-            // (browser-specific IndexedDB concern). See $MarkChatAsReadSync$p_3 — the core
-            // read-state change is always applied.
-            // ADAPTED: Cobalt applies the read-state change directly on the local chat, matching
-            // the backend behavior that $p_1 would have triggered (unreadCount=0 / markedAsUnread=false
-            // for read=true; unreadCount=-1 / markedAsUnread=true for read=false, per
             if (action.read()) {
-                chat.get().setMarkedAsUnread(false); // ADAPTED: $p_1 -> backend updateChatReadStatus clears markedAsUnread
-                chat.get().setUnreadCount(0); // ADAPTED: $p_1 -> backend updateChatReadStatus zeroes unreadCount
+                chat.get().setMarkedAsUnread(false);
+                chat.get().setUnreadCount(0);
             } else {
-                chat.get().setMarkedAsUnread(true); // ADAPTED: $p_1 -> backend updateChatReadStatus sets markedAsUnread
+                chat.get().setMarkedAsUnread(true);
                 chat.get().setUnreadCount(-1);
             }
 
@@ -160,36 +141,22 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Resolves conflicts between a local pending mark-chat-as-read mutation and
-     * an incoming remote mark-chat-as-read mutation using message range comparison.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebMarkChatAsReadSync.resolveConflicts}:
-     * <ol>
-     *   <li>Decodes the local and remote {@code markChatAsReadAction} values</li>
-     *   <li>Compares their message ranges via
-     *       {@code WAWebMessageRangeUtils.compareMessageRanges(remote, local)}</li>
-     *   <li>Resolves based on the enclosure type:
-     *     <ul>
-     *       <li>{@code RangeAEnclosesRangeB} (remote encloses local): apply remote, drop local</li>
-     *       <li>{@code RangeBEnclosesRangeA} (local encloses remote): skip remote</li>
-     *       <li>{@code RangesAreEqual}: timestamp tiebreaker ({@code local <= remote}
-     *           means apply remote)</li>
-     *       <li>{@code RangesNotEnclosing}: merge the two ranges, pick the {@code read}
-     *           value from the newer mutation, and return
-     *           {@code SKIP_REMOTE_DROP_LOCAL} with the merged mutation</li>
-     *     </ul>
-     *   </li>
-     * </ol>
-     *
-     * <p>In WA Web, the merged mutation is applied directly inside
-     * {@code lockForMessageRangeSync} by calling {@code addActiveMessageRange} and
-     * {@code $MarkChatAsReadSync$p_1}. In Cobalt, the merged mutation is returned
-     * to the caller via {@link ConflictResolution#merged(DecryptedMutation.Trusted)}
-     * so that application and resolution remain decoupled.
-     * @param localMutation  the local pending mutation
-     * @param remoteMutation the incoming remote mutation
-     * @return the conflict resolution indicating which mutation to keep and
-     *         optionally a merged mutation
+     * @implNote
+     * This implementation decodes both
+     * {@link MarkChatAsReadAction} payloads and delegates the four-way
+     * enclosure decision to
+     * {@link MessageRangeUtils#compareMessageRanges}. When neither
+     * range encloses the other a merged action is built with the
+     * {@code read} flag drawn from the more-recent mutation and
+     * returned via {@link ConflictResolution#merged} for the caller to
+     * apply, separating resolution from application; WA Web instead
+     * applies the merged mutation immediately under
+     * {@code lockForMessageRangeSync}. A {@code null} action or
+     * {@code messageRange} on either side defaults to
+     * {@link ConflictResolutionState#APPLY_REMOTE_DROP_LOCAL} where WA
+     * Web would throw via {@code WANullthrows}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebMarkChatAsReadSync", exports = "resolveConflicts", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -203,15 +170,15 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
                 .map(a -> (MarkChatAsReadAction) a)
                 .orElse(null);
 
-        if (localAction == null || remoteAction == null) { // ADAPTED: WA Web uses WANullthrows which would throw; Cobalt gracefully falls back to apply remote
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL); // ADAPTED: defensive fallback
+        if (localAction == null || remoteAction == null) {
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         var localRange = localAction.messageRange().orElse(null);
         var remoteRange = remoteAction.messageRange().orElse(null);
 
-        if (localRange == null || remoteRange == null) { // ADAPTED: WA Web uses WANullthrows; Cobalt gracefully falls back
-            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL); // ADAPTED: defensive fallback
+        if (localRange == null || remoteRange == null) {
+            return ConflictResolution.of(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL);
         }
 
         return switch (MessageRangeUtils.compareMessageRanges(remoteRange, localRange)) {
@@ -232,7 +199,7 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
                         .messageRange(mergedRange)
                         .build();
                 var mergedValue = new SyncActionValueBuilder()
-                        .timestamp(remoteMutation.timestamp()) // ADAPTED: WA Web spreads all of l; in practice only timestamp and markChatAsReadAction are meaningful for this handler's collection
+                        .timestamp(remoteMutation.timestamp())
                         .markChatAsReadAction(mergedAction)
                         .build();
                 var merged = new DecryptedMutation.Trusted(
@@ -242,9 +209,6 @@ public final class MarkChatAsReadHandler implements WebAppStateActionHandler {
                         localMutation.timestamp(),
                         localMutation.actionVersion()
                 );
-                // ADAPTED: In WA Web, the merged mutation is applied to the chat DB immediately
-                // during conflict resolution via lockForMessageRangeSync. In Cobalt, the merged
-                // mutation is returned for the caller to apply, separating resolution from application.
                 yield ConflictResolution.merged(merged);
             }
         };

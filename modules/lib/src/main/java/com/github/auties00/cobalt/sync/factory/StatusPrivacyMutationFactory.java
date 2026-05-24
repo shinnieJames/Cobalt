@@ -17,14 +17,31 @@ import java.util.List;
 /**
  * Builds outgoing status-privacy sync mutations.
  *
- * <p>Mirrors the {@code getStatusPrivacySettingMutation} export of WhatsApp
- * Web's {@code WAWebStatusPrivacySettingSync} module. The factory is the
- * outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.StatusPrivacyHandler}.
+ * @apiNote
+ * Drives the Status privacy picker on the Settings privacy surface;
+ * supports the My-Contacts, allow-list, deny-list, close-friends, and
+ * custom-list modes that WA Web's
+ * {@code WAWebStatusSetAndSyncPrivacy} flow funnels through this
+ * builder. Mutations are consumed on receiving devices by
+ * {@link com.github.auties00.cobalt.sync.handler.StatusPrivacyHandler}
+ * which writes the relevant IDB rows and fires a
+ * {@code BackendEventBus.triggerUpdateStatusPrivacySettings} event.
+ *
+ * @implNote
+ * This implementation mirrors
+ * {@code WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation}
+ * but takes the {@link StatusPrivacyAction.StatusDistributionMode}
+ * directly rather than the WA Web {@code StatusPrivacySettingType} that
+ * WA Web maps onto the protobuf enum inside the builder.
  */
 public final class StatusPrivacyMutationFactory {
     /**
      * Constructs a status-privacy mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public status-privacy setter. The factory keeps
+     * no state, so a single instance is sufficient per client.
      */
     public StatusPrivacyMutationFactory() {
 
@@ -33,34 +50,34 @@ public final class StatusPrivacyMutationFactory {
     /**
      * Builds a pending SET mutation for the status privacy setting.
      *
-     * <p>Per WhatsApp Web {@code WAWebStatusPrivacySettingSync.getStatusPrivacySettingMutation}:
-     * <ol>
-     *   <li>Maps the {@code StatusPrivacySettingType} input to the matching
-     *       {@code StatusDistributionMode} enum value
-     *       ({@code Contact -> CONTACTS}, {@code AllowList -> ALLOW_LIST},
-     *       {@code DenyList -> DENY_LIST}).</li>
-     *   <li>Wraps the result in a {@code statusPrivacy} sub-message containing
-     *       {@code mode}, {@code userJid}, optionally {@code shareToFB} /
-     *       {@code shareToIG} (only when
-     *       {@code crosspostSettingsSyncSenderEnabled} is true), and an empty
-     *       {@code customLists} list.</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     *       with collection {@code RegularHigh}, empty index args, operation
-     *       {@code SET}, version {@code 7}, and action
-     *       {@code "status_privacy"}.</li>
-     * </ol>
+     * @apiNote
+     * Invoked from the public status-privacy setter on
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient}. The
+     * {@code userJids} argument is the whitelist when
+     * {@code mode == ALLOW_LIST}, the blacklist when
+     * {@code mode == DENY_LIST}, and may be empty (or {@code null}, in
+     * which case it is treated as empty) for the {@code CONTACTS},
+     * {@code CLOSE_FRIENDS}, and {@code CUSTOM_LIST} modes. Receiving
+     * devices route each non-user JID out of the resolved set before
+     * persistence.
      *
-     * <p>The {@code shareToFB} / {@code shareToIG} fields are gated by
-     * {@code crosspostSettingsSyncSenderEnabled} in WA Web; Cobalt has no
-     * equivalent AB-prop gating and no FB/IG persistence layer, so they are
-     * left unset. The {@code customLists} field is always passed as an empty
-     * list to mirror WA Web's unconditional {@code customLists: []} override.
+     * @implNote
+     * This implementation omits the {@code shareToFB}/{@code shareToIG}
+     * fields because Cobalt has no FB/IG cross-post persistence layer
+     * and no equivalent of WA Web's
+     * {@code crosspostSettingsSyncSenderEnabled} AB-prop gate; the
+     * {@code customLists} field is always emitted as an empty list to
+     * mirror WA Web's unconditional {@code customLists: []} override.
+     * The index carries only the action name because the setting is a
+     * singleton per account.
      *
-     * @param timestamp the mutation timestamp
+     * @param timestamp the mutation timestamp recorded on both the outer
+     *                  mutation and the inner {@code SyncActionValue}
      * @param mode      the target distribution mode
-     * @param userJids  the JIDs to associate with the mode (whitelist for
-     *                  {@code ALLOW_LIST}, blacklist for {@code DENY_LIST}, may
-     *                  be empty for {@code CONTACTS} or {@code CLOSE_FRIENDS})
+     * @param userJids  the JIDs associated with the mode (whitelist for
+     *                  {@code ALLOW_LIST}, blacklist for
+     *                  {@code DENY_LIST}, may be empty for
+     *                  {@code CONTACTS} or {@code CLOSE_FRIENDS})
      * @return the pending mutation ready for sync upload
      */
     @WhatsAppWebExport(moduleName = "WAWebStatusPrivacySettingSync", exports = "getStatusPrivacySettingMutation", adaptation = WhatsAppAdaptation.ADAPTED)

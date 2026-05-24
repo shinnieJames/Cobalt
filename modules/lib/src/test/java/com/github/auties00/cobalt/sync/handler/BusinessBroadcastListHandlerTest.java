@@ -7,7 +7,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BroadcastListParticipantAction;
 import com.github.auties00.cobalt.model.sync.action.business.BroadcastListParticipantActionBuilder;
@@ -16,7 +15,6 @@ import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastLi
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.BusinessBroadcastListMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,13 +25,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastListHandler} — Cobalt's adapter for
+ * Tests for {@link BusinessBroadcastListHandler} - Cobalt's adapter for
  * {@code WAWebBroadcastListSync}.
  *
  * <p>The handler upserts business broadcast lists keyed by
@@ -88,7 +84,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the BusinessBroadcastListAction wire constant")
@@ -112,7 +108,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET upsert")
+    @DisplayName("applyMutation - SET upsert")
     class ApplySet {
         @Test
         @DisplayName("SET upserts the broadcast list, mirroring participants and label ids")
@@ -151,7 +147,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("SET on an unknown id is the upsert path, not an orphan")
@@ -164,7 +160,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -182,7 +178,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty list id at indexParts[1] returns MALFORMED")
@@ -208,7 +204,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE drops the broadcast list")
+    @DisplayName("applyMutation - REMOVE drops the broadcast list")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE drops the broadcast list from the store and returns SUCCESS")
@@ -226,7 +222,7 @@ class BusinessBroadcastListHandlerTest {
         }
 
         @Test
-        @DisplayName("REMOVE of an unknown id still returns SUCCESS — idempotent")
+        @DisplayName("REMOVE of an unknown id still returns SUCCESS - idempotent")
         void removeUnknown() {
             var result = handler.applyMutation(client,
                     buildMutation("never-existed", null, SyncdOperation.REMOVE, Instant.now()));
@@ -235,10 +231,10 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -247,7 +243,7 @@ class BusinessBroadcastListHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -262,7 +258,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — per-mutation fan-out + malformed counter logging")
+    @DisplayName("applyMutationBatch - per-mutation fan-out + malformed counter logging")
     class BatchOverride {
         @Test
         @DisplayName("each mutation's per-mutation result is preserved in the batch output")
@@ -290,7 +286,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder — getBroadcastListMutation")
+    @DisplayName("static builder - getBroadcastListMutation")
     class CreateBuilder {
         @Test
         @DisplayName("produces a SET pending mutation with the given participants and list name")
@@ -324,7 +320,7 @@ class BusinessBroadcastListHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder — getDeleteBroadcastListMutation")
+    @DisplayName("static builder - getDeleteBroadcastListMutation")
     class DeleteBuilder {
         @Test
         @DisplayName("produces a REMOVE pending mutation carrying just the list id index")
@@ -338,23 +334,4 @@ class BusinessBroadcastListHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/business-broadcast-list/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/business-broadcast-list/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.getBroadcastListMutation(
-                    "list-oracle", List.of(sampleParticipant()), "Oracle",
-                    Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

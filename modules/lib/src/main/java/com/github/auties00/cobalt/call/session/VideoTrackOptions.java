@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.call.session;
 
-import com.github.auties00.cobalt.call.video.VideoCodec;
-import com.github.auties00.cobalt.call.video.VideoPipelineOptions;
+import com.github.auties00.cobalt.call.internal.video.VideoCodec;
+import com.github.auties00.cobalt.call.internal.video.VideoPipelineOptions;
 
 import java.util.Objects;
 

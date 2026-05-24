@@ -15,29 +15,43 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <statuses count …>}
- * payload in the canonical
- * {@code <iq xmlns="newsletter" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that fetches a slice of a newsletter's status
+ * (view-count and reaction) history.
+ *
+ * @apiNote
+ * Drives the Channels admin status panel surfaced through
+ * {@code WAWebNewsletterGetStatusesQuery.queryNewsletterStatuses},
+ * which is run with exponential back-off via
+ * {@code WAWebNewsletterRpcUtils.runWithBackoff}. The same
+ * {@link SmaxNewslettersGetNewsletterMessagesQueryParams} disjunction
+ * used for {@link SmaxNewslettersGetNewsletterMessagesRequest} also
+ * picks the addressing mode here. The resulting IQ has shape:
+ * {@snippet :
+ *     <iq xmlns="newsletter" type="get" to="s.whatsapp.net">
+ *         <statuses count="100" before="200">
+ *             <smax$any type="jid" jid="..." view_role="..."/>
+ *         </statuses>
+ *     </iq>
+ * }
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterStatusesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterStatusRequestIQPayloadMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterStatusRequestPayloadMixin")
 public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOperation.Request {
     /**
-     * The maximum number of {@code <status>} entries the relay should
-     * return.
+     * The cap on returned {@code <status>} entries per round-trip.
      */
     private final int count;
 
     /**
-     * The newsletter addressing parameters (jid or invite); reused
-     * from the {@link SmaxNewslettersGetNewsletterMessages} sibling.
+     * The newsletter addressing parameters; either
+     * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid} or
+     * {@link SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite}.
      */
     private final SmaxNewslettersGetNewsletterMessagesQueryParams queryParams;
 
     /**
-     * The optional pagination cursor; {@code null} fetches the latest
+     * The optional pagination cursor; {@code null} requests the latest
      * slice.
      */
     private final SmaxNewslettersGetNewsletterStatusesDirection direction;
@@ -45,9 +59,12 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
     /**
      * Constructs a new request.
      *
+     * @apiNote
+     * WA Web hard-codes {@code count} at {@code 100} on the admin
+     * status panel.
+     *
      * @param count       the per-call cap; must be non-negative
-     * @param queryParams the newsletter addressing parameters; never
-     *                    {@code null}
+     * @param queryParams the addressing parameters; never {@code null}
      * @param direction   the optional pagination cursor; may be
      *                    {@code null}
      * @throws NullPointerException if {@code queryParams} is
@@ -62,9 +79,9 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
     }
 
     /**
-     * Returns the per-call status cap.
+     * Returns the per-call cap on returned entries.
      *
-     * @return the count
+     * @return the cap
      */
     public int count() {
         return count;
@@ -90,7 +107,13 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza carrying the
+     * {@code <statuses>} payload.
+     *
+     * @apiNote
+     * The IQ targets {@code s.whatsapp.net} (not the newsletter JID)
+     * because the request fetches across the relay's newsletter index;
+     * the {@code <smax$any>} child encodes the addressing variant.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <statuses>} payload
@@ -131,6 +154,13 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
                 .content(statusesBuilder.build());
     }
 
+    /**
+     * Compares two requests for value equality on every field.
+     *
+     * @param obj the reference object to compare against
+     * @return {@code true} when {@code obj} is a request with equal
+     *         field values
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -145,11 +175,21 @@ public final class SmaxNewslettersGetNewsletterStatusesRequest implements SmaxOp
                 && Objects.equals(this.direction, that.direction);
     }
 
+    /**
+     * Returns the hash code derived from every field.
+     *
+     * @return the combined hash of every field
+     */
     @Override
     public int hashCode() {
         return Objects.hash(count, queryParams, direction);
     }
 
+    /**
+     * Returns a debug representation including every field.
+     *
+     * @return a record-like rendering of this request
+     */
     @Override
     public String toString() {
         return "SmaxNewslettersGetNewsletterStatusesRequest[count=" + count

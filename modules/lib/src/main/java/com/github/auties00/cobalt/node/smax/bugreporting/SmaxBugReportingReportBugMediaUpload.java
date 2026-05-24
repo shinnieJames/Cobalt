@@ -11,51 +11,86 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Typed projection of a single {@code <media iv cipherKey type?
- * fileName?>{bytes}</media>} attachment carried by a
- * {@link SmaxBugReportingReportBugRequest}.
+ * A single attachment carried by a {@link SmaxBugReportingReportBugRequest}.
+ *
+ * @apiNote
+ * Models one entry of the {@code mediaArgs} array that
+ * {@code WASmaxOutBugReportingReportBugRequest.makeReportBugRequest}
+ * folds into the outbound report stanza as a repeated
+ * {@code <media iv cipherKey type? fileName?>{bytes}</media>} child;
+ * Cobalt embedders attach screenshots, logcat dumps, and other binary
+ * artefacts to the same {@code submitBugReport} flow WA Web exposes via
+ * the Help and Feedback surface.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBugReportingReportBugRequest")
 public final class SmaxBugReportingReportBugMediaUpload {
     /**
-     * The 16-byte IV used to encrypt the upload (carried as a
-     * {@code CUSTOM_STRING} attribute, but always opaque bytes
-     * encoded as base64 / hex).
+     * The IV used to encrypt the upload.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code iv} attribute by
+     * {@link #toNode()} via the SMAX {@code CUSTOM_STRING} wrapper; the
+     * relay stores the bytes opaquely so any binary-safe encoding the
+     * caller picks (base64 / hex / raw) is preserved end to end.
      */
     private final String mediaIv;
 
     /**
-     * The 32-byte cipher key.
+     * The cipher key paired with {@link #mediaIv}.
+     *
+     * @apiNote
+     * Routed verbatim into the {@code cipherKey} attribute by
+     * {@link #toNode()} via the SMAX {@code CUSTOM_STRING} wrapper.
      */
     private final String mediaCipherKey;
 
     /**
-     * The optional MIME type (e.g. {@code "image/jpeg"}).
+     * The optional MIME type of the upload.
+     *
+     * @apiNote
+     * Stamped on the {@code type} attribute only when non-null; mirrors
+     * the {@code OPTIONAL(CUSTOM_STRING, mediaType)} attribute slot in
+     * {@code makeReportBugRequestMedia}.
      */
     private final String mediaType;
 
     /**
-     * The optional original file name.
+     * The optional original file name of the upload.
+     *
+     * @apiNote
+     * Stamped on the {@code fileName} attribute only when non-null;
+     * mirrors the {@code OPTIONAL(CUSTOM_STRING, mediaFileName)}
+     * attribute slot in {@code makeReportBugRequestMedia}.
      */
     private final String mediaFileName;
 
     /**
-     * The encrypted blob carried as the {@code <media>} child's
-     * content bytes.
+     * The encrypted blob carried as the {@code <media/>} content bytes.
+     *
+     * @apiNote
+     * Stored as a raw byte array because the wire layer transmits it
+     * verbatim; consumers are expected to have already encrypted the
+     * payload under {@link #mediaCipherKey} and {@link #mediaIv} before
+     * constructing this projection.
      */
     private final byte[] mediaElementValue;
 
     /**
-     * Constructs a new media upload entry.
+     * Constructs a new media-upload projection.
      *
-     * @param mediaIv             the IV. Never {@code null}
-     * @param mediaCipherKey      the cipher key. Never {@code null}
-     * @param mediaType           the optional MIME type. May be
+     * @apiNote
+     * Called by embedders building the {@code mediaUploads} list passed
+     * to {@link SmaxBugReportingReportBugRequest}; the request enforces
+     * the {@code REPEATED_CHILD(media, 0, 10)} ceiling so callers do
+     * not need to validate cardinality here.
+     *
+     * @param mediaIv             the encryption IV; never {@code null}
+     * @param mediaCipherKey      the cipher key; never {@code null}
+     * @param mediaType           the optional MIME type; may be
      *                            {@code null}
-     * @param mediaFileName       the optional file name. May be
+     * @param mediaFileName       the optional file name; may be
      *                            {@code null}
-     * @param mediaElementValue   the encrypted blob. Never
-     *                            {@code null}
+     * @param mediaElementValue   the encrypted blob; never {@code null}
      * @throws NullPointerException if any required argument is
      *                              {@code null}
      */
@@ -69,9 +104,14 @@ public final class SmaxBugReportingReportBugMediaUpload {
     }
 
     /**
-     * Returns the IV.
+     * Returns the encryption IV.
      *
-     * @return the IV. Never {@code null}
+     * @apiNote
+     * Consumed by {@link #toNode()} to populate the {@code iv}
+     * attribute; embedders that round-trip a parsed request also use
+     * this value to decrypt {@link #mediaElementValue}.
+     *
+     * @return the IV; never {@code null}
      */
     public String mediaIv() {
         return mediaIv;
@@ -80,7 +120,12 @@ public final class SmaxBugReportingReportBugMediaUpload {
     /**
      * Returns the cipher key.
      *
-     * @return the key. Never {@code null}
+     * @apiNote
+     * Consumed by {@link #toNode()} to populate the {@code cipherKey}
+     * attribute; the relay treats the value as an opaque string so any
+     * binary-safe encoding agreed with the decoder is acceptable.
+     *
+     * @return the cipher key; never {@code null}
      */
     public String mediaCipherKey() {
         return mediaCipherKey;
@@ -88,6 +133,10 @@ public final class SmaxBugReportingReportBugMediaUpload {
 
     /**
      * Returns the optional MIME type.
+     *
+     * @apiNote
+     * Empty when the embedder omitted it; the relay leaves the
+     * {@code type} attribute off the rendered child accordingly.
      *
      * @return an {@link Optional} carrying the MIME type
      */
@@ -98,6 +147,10 @@ public final class SmaxBugReportingReportBugMediaUpload {
     /**
      * Returns the optional file name.
      *
+     * @apiNote
+     * Empty when the embedder omitted it; the relay leaves the
+     * {@code fileName} attribute off the rendered child accordingly.
+     *
      * @return an {@link Optional} carrying the file name
      */
     public Optional<String> mediaFileName() {
@@ -107,7 +160,11 @@ public final class SmaxBugReportingReportBugMediaUpload {
     /**
      * Returns the encrypted blob.
      *
-     * @return the bytes. Never {@code null}
+     * @apiNote
+     * Returned as the underlying mutable array for zero-copy serialisation
+     * by {@link #toNode()}; callers must not mutate the buffer.
+     *
+     * @return the bytes; never {@code null}
      */
     public byte[] mediaElementValue() {
         return mediaElementValue;
@@ -117,7 +174,12 @@ public final class SmaxBugReportingReportBugMediaUpload {
      * Builds the {@code <media iv cipherKey type? fileName?>{bytes}</media>}
      * child node.
      *
-     * @return the {@link Node}
+     * @apiNote
+     * Folded into the parent {@code <iq/>} stanza by
+     * {@link SmaxBugReportingReportBugRequest#toNode()} as one entry of
+     * the {@code REPEATED_CHILD(media, 0, 10)} slot.
+     *
+     * @return the rendered {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutBugReportingReportBugRequest",
             exports = "makeReportBugRequestMedia",

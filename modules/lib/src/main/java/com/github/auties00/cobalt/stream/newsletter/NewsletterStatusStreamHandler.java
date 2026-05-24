@@ -16,68 +16,80 @@ import com.github.auties00.cobalt.stream.SocketStream;
 import java.time.Instant;
 
 /**
- * Handles incoming {@code <status>} stanzas from newsletter channels.
+ * Handles inbound {@code <status>} stanzas pushed from newsletter
+ * (channel) servers.
  *
- * <p>Newsletter status stanzas carry plaintext protobuf content for text
- * and media statuses, revoke instructions for admin revokes, and reaction
- * events.  Reaction and reaction-revoke stanzas are silently acknowledged
- * (no message is stored).  Text and media stanzas are decoded, stored in
- * the newsletter's message collection, and broadcast to listeners.
+ * @apiNote
+ * Surfaces the newsletter-status delivery pipeline that powers the
+ * WhatsApp Channels surface. Listeners registered on the client are
+ * notified of every text or media post published on a channel the
+ * current account follows; reaction and reaction-revoke events are
+ * acknowledged but not materialised, mirroring
+ * {@code WAWebHandleNewsletterStatus}'s short-circuit on
+ * {@code StatusNewsletterReaction} / {@code StatusNewsletterReactionRevoke}.
  *
- * <p>The stanza structure parsed by the SMAX layer includes:
- * <ul>
- *   <li>{@code from}: newsletter JID (required)</li>
- *   <li>{@code id}: stanza identifier (required)</li>
- *   <li>{@code server_id}: server-assigned message identifier (required, range 99..2147476647)</li>
- *   <li>{@code t}: epoch-second timestamp (required, range 1577865600..4102473600)</li>
- *   <li>{@code is_sender}: optional literal {@code "true"}</li>
- *   <li>{@code type}: {@code "text"} or {@code "media"}</li>
- *   <li>{@code edit}: {@code "8"} for admin revoke</li>
- *   <li>{@code offline}: optional offline indicator (0..12)</li>
- *   <li>{@code <plaintext>}: child node with protobuf payload bytes</li>
- *   <li>{@code <reaction>}: child node for reaction/reaction-revoke</li>
- * </ul>
- *
+ * @implNote
+ * This implementation decodes the {@code <plaintext>} child via
+ * {@link MessageContainerSpec#decode(byte[])} on the dispatch thread;
+ * decode failures are demoted to a debug log rather than thrown because
+ * a single malformed channel post must not poison the stream. Cobalt
+ * does not currently project admin revoke ({@code edit="8"}) stanzas
+ * into synthetic protocol-revoke messages the way
+ * {@code WAWebNewsletterStatusUtils.mapStatusRevokeToMsgData} does.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleNewsletterStatus")
 @WhatsAppWebModule(moduleName = "WAWebNewsletterStatusUtils")
 public final class NewsletterStatusStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic messages during newsletter status processing.
+     * Logger used for debug-level diagnostics while parsing newsletter
+     * status stanzas.
+     *
+     * @apiNote
+     * Receives debug entries for skipped revoke stanzas, missing
+     * plaintext payloads, and {@link MessageContainerSpec#decode} failures;
+     * downstream code never relies on these messages.
      */
     private static final System.Logger LOGGER = System.getLogger(NewsletterStatusStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client providing access to the store and listener notification.
+     * Reference to the owning {@link WhatsAppClient} used to access the
+     * store and broadcast new-message events to registered listeners.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new newsletter status stream handler with the required client dependency.
+     * Constructs a handler bound to the given {@link WhatsAppClient}.
      *
-     * @param whatsapp the WhatsApp client instance, must not be {@code null}
+     * @apiNote
+     * Invoked by the socket-stream wiring at client construction; user
+     * code does not instantiate handlers directly.
+     *
+     * @param whatsapp the owning {@link WhatsAppClient} instance
      */
     public NewsletterStatusStreamHandler(WhatsAppClient whatsapp) {
         this.whatsapp = whatsapp;
     }
 
     /**
-     * Handles an incoming {@code <status>} stanza from a newsletter channel.
+     * {@inheritDoc}
      *
-     * <p>The handler first validates that the stanza originates from a
-     * newsletter JID.  It then determines the content type by inspecting
-     * the stanza's child nodes and attributes:
-     * <ul>
-     *   <li>Stanzas with a {@code <reaction>} child are silently skipped
-     *       (reaction and reaction-revoke).</li>
-     *   <li>Text ({@code type="text"}) and media ({@code type="media"})
-     *       stanzas are decoded from protobuf and stored.</li>
-     *   <li>Revoke stanzas ({@code edit="8"}) are currently logged and
-     *       skipped, as Cobalt's revoke model is handled at a higher
-     *       layer.</li>
-     * </ul>
+     * @apiNote
+     * Decodes and stores the inbound newsletter post, then dispatches
+     * an {@code onNewMessage} callback to every listener registered on
+     * the store. Reaction and reaction-revoke variants are silently
+     * dropped, and admin-revoke variants ({@code edit="8"}) are logged
+     * and skipped pending higher-layer revoke modelling.
      *
-     * @param node the raw {@code <status>} stanza node
+     * @implNote
+     * This implementation refuses to materialise admin-revoke stanzas
+     * even though
+     * {@code WAWebNewsletterStatusUtils.mapStatusRevokeToMsgData} would
+     * synthesise a {@code MSG_TYPE.PROTOCOL} / {@code ProtocolRevoke}
+     * message; the revoke is left for a future higher-layer pathway.
+     * Stanzas missing a {@code from} attribute, a non-newsletter
+     * {@code from}, a missing {@code id}, or an empty {@code plaintext}
+     * are dropped before {@link MessageContainerSpec#decode(byte[])}
+     * runs.
      */
     @Override
     public void handle(Node node) {
@@ -97,7 +109,9 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
 
         var edit = node.getAttributeAsString("edit", null);
         if ("8".equals(edit)) {
-            // Cobalt handles revoke tombstones at a higher layer through listener-level revoke notifications, so it skips materialising a synthetic PROTOCOL/ProtocolRevoke message here.
+            // TODO: project admin revoke (edit="8") into a synthetic protocol
+            //       message the way WAWebNewsletterStatusUtils.mapStatusRevokeToMsgData
+            //       does, rather than dropping it here.
             LOGGER.log(System.Logger.Level.DEBUG,
                     "Skipping newsletter status revoke for {0} from {1}", id, from);
             return;
@@ -140,16 +154,24 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Decodes raw protobuf bytes into a {@link MessageContainer}.
+     * Decodes the raw plaintext payload carried by a newsletter status
+     * stanza into a typed {@link MessageContainer}.
      *
-     * <p>Returns {@code null} and logs a warning if decoding fails, rather
-     * than throwing, matching Cobalt's error model for non-fatal decode
-     * failures.
+     * @apiNote
+     * Returns {@code null} rather than throwing so that a single
+     * unparseable stanza cannot abort the dispatch loop.
      *
-     * @param id        the message identifier for log context
-     * @param plaintext the raw protobuf bytes from the {@code <plaintext>}
-     *                  child node
-     * @return the decoded message container, or {@code null} on failure
+     * @implNote
+     * This implementation logs the failure at {@code DEBUG} level and
+     * suppresses the exception; the {@code <status>} stanza is treated
+     * as if it had never arrived.
+     *
+     * @param id        the stanza identifier, included in the debug log
+     *                  message for traceability
+     * @param plaintext the raw protobuf bytes lifted from the
+     *                  {@code <plaintext>} child node
+     * @return the decoded {@link MessageContainer}, or {@code null}
+     *         when the bytes cannot be parsed
      */
     private MessageContainer decodeMessage(String id, byte[] plaintext) {
         try {
@@ -162,12 +184,17 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Resolves the epoch-second timestamp from the {@code t} attribute of
-     * the given node.
+     * Resolves the {@link Instant} represented by the stanza's {@code t}
+     * attribute.
      *
-     * @param node the stanza node containing the {@code t} attribute
-     * @return the resolved timestamp, or {@code null} if the attribute is
-     *         absent
+     * @apiNote
+     * Newsletter status stanzas carry their server-side publish time as
+     * an epoch-second long; consumers downstream expect an
+     * {@link Instant} or {@code null} when the attribute is absent.
+     *
+     * @param node the {@code <status>} stanza node
+     * @return the parsed {@link Instant}, or {@code null} when the
+     *         attribute is missing
      */
     private Instant resolveTimestamp(Node node) {
         var timestamp = node.getAttributeAsLong("t", (Long) null);
@@ -175,14 +202,25 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Stores a newsletter status message in the newsletter's message
-     * collection, creating the newsletter entity if it does not yet exist.
+     * Appends the decoded post to the newsletter's message collection
+     * and bumps the newsletter-level metadata.
      *
-     * <p>Also updates the newsletter timestamp and increments the unread
-     * message count for messages not sent by the current user.
+     * @apiNote
+     * Lazily creates the {@code Newsletter} store entry if the channel
+     * has never been seen on this device, mirroring the upstream
+     * pattern in {@code WAWebHandleNewsletterStatus} where
+     * {@code WAWebMessageQueue.onMessageQueue} is keyed by the channel
+     * {@link Jid}.
      *
-     * @param newsletterJid the newsletter JID
-     * @param info          the message to store
+     * @implNote
+     * This implementation increments the unread counter only for posts
+     * the current account did not author (the {@code is_sender="true"}
+     * attribute case is excluded), and updates the channel-level
+     * timestamp to the post's timestamp regardless of authorship.
+     *
+     * @param newsletterJid the channel {@link Jid} that owns the post
+     * @param info          the decoded {@link NewsletterMessageInfo} to
+     *                      persist
      */
     private void storeMessage(Jid newsletterJid, NewsletterMessageInfo info) {
         var newsletter = whatsapp.store()
@@ -196,13 +234,19 @@ public final class NewsletterStatusStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Notifies all registered listeners that a new newsletter status
-     * message has been received.
+     * Broadcasts an {@code onNewMessage} callback to every listener
+     * registered on the store.
      *
-     * <p>Each listener is notified on a dedicated virtual thread to avoid
-     * blocking the handler.
+     * @apiNote
+     * Used to surface inbound channel posts on the public listener
+     * surface so that application code can react to them.
      *
-     * @param info the received message info
+     * @implNote
+     * This implementation dispatches each callback on its own virtual
+     * thread so that a slow listener cannot block the socket-stream
+     * dispatch loop or starve other listeners.
+     *
+     * @param info the decoded {@link MessageInfo} to publish
      */
     private void notifyNewMessage(MessageInfo info) {
         for (var listener : whatsapp.store().listeners()) {

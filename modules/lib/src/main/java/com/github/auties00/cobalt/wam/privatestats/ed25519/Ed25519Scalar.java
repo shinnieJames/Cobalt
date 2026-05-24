@@ -3,32 +3,37 @@ package com.github.auties00.cobalt.wam.privatestats.ed25519;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 
 /**
- * Reduction of arbitrary-length unsigned integers modulo the Ed25519
- * group order
- * {@code L = 2^252 + 27742317777372353535851937790883648493}.
+ * Reduces arbitrary-length unsigned integers modulo the Ed25519
+ * group order {@code L = 2^252 + 27742317777372353535851937790883648493}.
  *
  * <p>Used to bring a 64-byte hash output, or any wide intermediate
  * scalar, into the canonical {@code [0, L)} range required for
  * scalar multiplication on the prime-order subgroup. Without this
  * reduction, scalar multiplication is still defined but no longer
- * constant-time and may leak information through subgroup-component
+ * constant time and may leak information through subgroup-component
  * drift.
  *
- * <p>Mirrors {@code lowlevel.modL} and {@code lowlevel.reduce} from
- * {@code tweetnacl-js} byte for byte. The work buffer is
- * {@code long[]} rather than {@code Float64Array} because
- * intermediate values can go negative. Java's arithmetic right shift
- * sign-extends correctly to match {@code Math.floor(v / 256)} on
- * {@code Number} values.
+ * @apiNote
+ * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+ * {@code lowlevel.modL} and {@code lowlevel.reduce}, ported from
+ * tweetnacl-js function-for-function.
+ *
+ * @implNote
+ * This implementation backs the work buffer with {@code long[]}
+ * rather than {@code Float64Array} because intermediate values can
+ * go negative. Java's arithmetic right shift sign-extends correctly
+ * to match the JS {@code Math.floor(v / 256)} on {@code Number}
+ * values.
  */
 @WhatsAppWebModule(moduleName = "WACryptoPrimitives")
 public final class Ed25519Scalar {
     /**
      * The Ed25519 group order {@code L} as 32 little-endian bytes.
      *
-     * <p>Bytes 0..15 hold the {@code 27742317777372353535851937790883648493}
-     * tail; bytes 16..30 are zero; byte 31 holds the {@code 2^252} contribution
-     * ({@code 0x10}).
+     * @apiNote
+     * Bytes 0..15 hold the {@code 27742317777372353535851937790883648493}
+     * tail, bytes 16..30 are zero, and byte 31 holds the {@code 2^252}
+     * contribution ({@code 0x10}).
      */
     private static final long[] L = {
             0xedL, 0xd3L, 0xf5L, 0x5cL, 0x1aL, 0x63L, 0x12L, 0x58L,
@@ -38,13 +43,13 @@ public final class Ed25519Scalar {
     };
 
     /**
-     * Number of bytes in a canonical scalar.
+     * The number of bytes in a canonical scalar.
      */
     public static final int SCALAR_BYTES = 32;
 
     /**
-     * Number of bytes in a wide pre-reduction buffer (matches a full
-     * SHA-512 digest).
+     * The number of bytes in a wide pre-reduction buffer (the full
+     * width of a SHA-512 digest).
      */
     public static final int WIDE_BYTES = 64;
 
@@ -58,18 +63,19 @@ public final class Ed25519Scalar {
     }
 
     /**
-     * Reduces a 64-element work buffer modulo {@code L} and writes the
-     * canonical 32-byte little-endian result to {@code r}.
+     * Reduces a 64-element work buffer modulo {@code L} and writes
+     * the canonical 32-byte little-endian result to {@code r}.
      *
-     * <p>The work buffer {@code x} is mutated in place. Each entry should be
-     * an integer-valued {@code long} in the byte range {@code [0, 256)} on
-     * input; intermediate values may go negative during the carry propagation
-     * but are renormalised before the final byte extraction.
-     *
-     * <p>Mirrors {@code lowlevel.modL}.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.modL}. Each entry of {@code x} should be an
+     * integer-valued {@code long} in the byte range {@code [0, 256)}
+     * on input; the work buffer is mutated in place during the carry
+     * propagation, with intermediate entries going negative before
+     * the final byte extraction renormalises them.
      *
      * @param r the 32-byte destination buffer
-     * @param x the 64-element work buffer (mutated)
+     * @param x the 64-element work buffer (mutated in place)
      */
     public static void modL(byte[] r, long[] x) {
         long carry;
@@ -100,14 +106,16 @@ public final class Ed25519Scalar {
     }
 
     /**
-     * Reduces a 64-byte little-endian buffer in place: the first 32 bytes of
-     * {@code r} are overwritten with the canonical scalar, the remaining 32
-     * bytes are zeroed.
+     * Reduces a 64-byte little-endian buffer in place: overwrites the
+     * first 32 bytes with the canonical scalar and zeroes the high
+     * 32 bytes.
      *
-     * <p>Mirrors {@code lowlevel.reduce}, which is the post-SHA-512 step in
-     * the EdDSA challenge derivation.
+     * @apiNote
+     * Mirrors {@link WhatsAppWebModule WACryptoPrimitives}
+     * {@code lowlevel.reduce}, the post-SHA-512 step of the EdDSA
+     * challenge derivation.
      *
-     * @param r the 64-byte buffer (mutated)
+     * @param r the 64-byte buffer (mutated in place)
      */
     public static void reduce(byte[] r) {
         var x = new long[WIDE_BYTES];

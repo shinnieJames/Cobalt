@@ -8,42 +8,34 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles {@link MaibaAIFeaturesControlAction} sync mutations
- * ({@code "maiba_ai_features_control"}).
+ * Applies the {@code maiba_ai_features_control} app-state sync action that
+ * persists the merchant AI business agent feature status.
  *
- * <p>Each mutation carries a single
+ * @apiNote
+ * Drives the SMB Maiba AI assistant control surface: each mutation
+ * carries a single
  * {@link MaibaAIFeaturesControlAction.MaibaAIFeatureStatus} value
- * (one of {@code ENABLED}, {@code ENABLED_HAS_LEARNING}, {@code DISABLED})
- * which is persisted on the local {@code WhatsAppStore} via
- * {@code setAiBusinessAgentStatus}. Only {@code SET} operations are accepted;
- * any other operation maps to
- * {@link MutationApplicationResult#unsupported()} and a missing or unparseable
- * value maps to {@link MutationApplicationResult#malformed()}.
+ * ({@code ENABLED}, {@code ENABLED_HAS_LEARNING} or
+ * {@code DISABLED}) which is persisted on the local store via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setAiBusinessAgentStatus(MaibaAIFeaturesControlAction.MaibaAIFeatureStatus)}
+ * so SMB-AI features can read the current opt-in state without
+ * re-decoding the protobuf.
  *
- * <p><b>NO_WA_BASIS:</b> The {@code SyncActionValue.MaibaAIFeaturesControlAction}
- * protobuf is defined in {@code WAWebProtobufSyncAction.pb} as field index
- * {@code 68} with a single {@code aiFeatureStatus} enum, but the current
- * WA Web snapshot does <em>not</em> ship a corresponding sync handler module
- * (no {@code WAWebMaibaAiFeaturesControlSync}). The action is also absent from
- * {@code WAWebCollectionHandlerActions.ActionHandlers}, the registry consumed
- * by {@code WAWebSyncdGetActionHandler.setActionHandlers}, so WA Web would
- * never dispatch any incoming mutation with this action. The closest WA Web
- * code paths that touch the {@code Maiba} surface are
- * {@code WAWebBizAiBridgeApi}, {@code WAWebHandleCloudApiThreadControlNotification}
- * and {@code WAWebChatModel} (per-chat {@code capiThreadControl} state) — none
- * of which consume {@code SyncActionValue.MaibaAIFeaturesControlAction}.
- *
- * <p>The Cobalt handler is a forward-looking implementation: it follows the
- * Cobalt sync handler conventions used by every other registered handler
- * (singleton, {@code applyMutation} producing a typed
- * {@link MutationApplicationResult}, eager store update on
- * {@code SET}). Every behavioural step here is Cobalt-inferred until WA Web
- * ships the matching {@code WAWebMaibaAiFeaturesControlSync} module.
+ * @implNote
+ * This implementation is forward-looking: WA Web ships the
+ * {@code SyncActionValue.MaibaAIFeaturesControlAction} field at index
+ * {@code 68} on {@code WAWebProtobufSyncAction.pb} but does not
+ * register a corresponding {@code WAWebMaibaAiFeaturesControlSync}
+ * module in
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}. The collection
+ * name, mutation behaviour and store target are therefore inferred
+ * from sibling preference-style handlers; every behavioural step is
+ * Cobalt-inferred until WA Web ships the matching module.
  */
 public final class MaibaAIFeaturesControlHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor that enforces the singleton pattern.
+     * Constructs a new singleton {@link MaibaAIFeaturesControlHandler}.
      */
     public MaibaAIFeaturesControlHandler() {
 
@@ -51,7 +43,6 @@ public final class MaibaAIFeaturesControlHandler implements WebAppStateActionHan
 
     /**
      * {@inheritDoc}
-     * @return the canonical {@code "maiba_ai_features_control"} string
      */
     @Override
     public String actionName() {
@@ -61,17 +52,19 @@ public final class MaibaAIFeaturesControlHandler implements WebAppStateActionHan
     /**
      * {@inheritDoc}
      *
-     * <p>Returns {@link SyncPatchType#REGULAR_HIGH} as an inferred default.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR_HIGH}
+     * because no WA Web sync handler declares a collection for
+     * {@code maiba_ai_features_control}; the value matches sibling
+     * preference-style handlers in the same registry.
      */
     @Override
     public SyncPatchType collectionName() {
-        return SyncPatchType.REGULAR_HIGH; // NO_WA_BASIS: no WA Web sync handler declares a collection for "maiba_ai_features_control"; REGULAR_HIGH matches sibling preference-style handlers
+        return SyncPatchType.REGULAR_HIGH;
     }
 
     /**
      * {@inheritDoc}
-     * @return the integer version constant declared on the action class
      */
     @Override
     public int version() {
@@ -79,33 +72,17 @@ public final class MaibaAIFeaturesControlHandler implements WebAppStateActionHan
     }
 
     /**
-     * Applies a Maiba AI features control mutation and returns the detailed
-     * outcome.
+     * {@inheritDoc}
      *
-     * <p>The processing pipeline is:
-     * <ol>
-     *   <li>If the operation is not {@link SyncdOperation#SET}, return
-     *       {@link MutationApplicationResult#unsupported()}. Only {@code SET}
-     *       mutations are accepted; the action carries a single mandatory
-     *       {@code aiFeatureStatus} enum and there is no semantic for
-     *       {@code REMOVE}.</li>
-     *   <li>Resolve the mutation value to a
-     *       {@link MaibaAIFeaturesControlAction}; if the value is missing or
-     *       of the wrong type, or if {@code aiFeatureStatus} is empty, return
-     *       {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>Persist the resolved
-     *       {@link MaibaAIFeaturesControlAction.MaibaAIFeatureStatus} on the
-     *       store via {@code WhatsAppStore.setAiBusinessAgentStatus} and
-     *       return {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>The store accessors {@code aiBusinessAgentStatus()} and
-     * {@code setAiBusinessAgentStatus(...)} already exist on
-     * {@code WhatsAppStore} / {@code AbstractWhatsAppStore}; this handler is
-     * the sole writer.
-     * @param client   the {@link WhatsAppClient} instance linked to the mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation accepts only
+     * {@link SyncdOperation#SET} because the action carries a single
+     * mandatory {@code aiFeatureStatus} enum and there is no semantic
+     * for {@link SyncdOperation#REMOVE}; an empty
+     * {@link MaibaAIFeaturesControlAction#aiFeatureStatus()} is
+     * reported as {@link MutationApplicationResult#malformed()} so the
+     * orchestrator does not silently overwrite the store with a
+     * default value.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

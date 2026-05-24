@@ -15,44 +15,54 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Fetches the number of administrators on a newsletter.
+ * Builds the MEX request that fetches the admin headcount on a newsletter.
  *
- * <p>This query reads the same {@code xwa2_newsletter_admin} root used by
- * {@code WAWebMexFetchNewsletterAdminInfoJob} but only exposes the
- * {@code admin_count} scalar field, which is enough to display an admin
- * headcount without loading full admin profile information.
+ * @apiNote
+ * Drives the per-channel admin-headcount lookup consumed by
+ * {@code WAWebNewsletterGetAdminInfoJob}. The relay returns the
+ * {@code admin_count} scalar on the {@code xwa2_newsletter_admin} root
+ * which the UI surfaces as an "N admins" affordance. WA Web's full
+ * response shape also carries {@code admin_profile} and
+ * {@code admin_settings} sub-objects, but Cobalt only exposes the count
+ * scalar via {@link FetchNewsletterAdminInfoMexResponse}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterAdminInfoJob")
 public final class FetchNewsletterAdminInfoMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterAdminInfo} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterAdminInfoJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
-    public static final String QUERY_ID = "34983385154639574";
+    public static final String QUERY_ID = "26278439461859188";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchNewsletterAdminInfo
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterAdminInfo";
+
+    /**
+     * The Jid string of the newsletter whose admin info is being fetched.
+     */
     private final String newsletterId;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request targeting the given newsletter.
      *
-     * @param newsletterId the newsletter id
+     * @param newsletterId the newsletter Jid string
      */
     public FetchNewsletterAdminInfoMexRequest(String newsletterId) {
         this.newsletterId = newsletterId;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -60,10 +70,10 @@ public final class FetchNewsletterAdminInfoMexRequest implements MexOperation.Re
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -71,11 +81,22 @@ public final class FetchNewsletterAdminInfoMexRequest implements MexOperation.Re
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id: "<id>"}}} payload;
+     * the {@code newsletter_id} entry is omitted when {@link #newsletterId}
+     * is {@code null} so the GraphQL schema never receives an explicit
+     * {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterAdminInfoJob", exports = "mexFetchNewsletterAdminInfo",
             adaptation = WhatsAppAdaptation.ADAPTED)

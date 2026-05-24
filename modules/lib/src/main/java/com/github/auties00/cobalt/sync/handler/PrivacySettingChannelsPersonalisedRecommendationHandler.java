@@ -6,62 +6,63 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingChannelsPersonalisedRecommendationAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles {@link PrivacySettingChannelsPersonalisedRecommendationAction} sync
- * mutations ({@code "setting_channels_personalised_recommendation_optout"}).
+ * Applies the {@code setting_channels_personalised_recommendation_optout}
+ * app-state action that distributes the user's opt-out preference for
+ * personalised channel recommendations across linked devices.
  *
- * <p>Each mutation carries a single {@code isUserOptedOut} boolean flag that
- * controls whether the linked WhatsApp account has opted out of personalised
- * channel recommendations. The flag is persisted on the local
- * {@code WhatsAppStore} via {@code setChannelsPersonalisedRecommendationOptOut}.
- * Only {@code SET} operations are accepted; any other operation maps to
- * {@link MutationApplicationResult#unsupported()} and a missing or wrong-typed
- * value maps to {@link MutationApplicationResult#malformed()}.
+ * @apiNote
+ * Persists a single {@code isUserOptedOut} flag on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+ * Channels personalised recommendation surface honours the opt-out
+ * uniformly across devices. Only {@link SyncdOperation#SET} is
+ * accepted; any other operation is reported as
+ * {@link MutationApplicationResult#unsupported()} and a wrong-typed
+ * value as {@link MutationApplicationResult#malformed()}.
  *
- * <p><b>NO_WA_BASIS:</b> The
+ * @implNote
+ * This implementation has no WA Web counterpart: the
  * {@code SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction}
- * protobuf is defined in {@code WAWebProtobufSyncAction.pb} (exported as
- * {@code SyncActionValue$PrivacySettingChannelsPersonalisedRecommendationActionSpec})
- * with one optional field ({@code isUserOptedOut: bool} at index {@code 1}),
- * and the {@code WAWebProtobufSyncAction.pb} collection-name resolver maps
- * {@code PRIVACY_SETTING_CHANNELS_PERSONALISED_RECOMMENDATION_ACTION} (numeric
- * id {@code 64}) to the {@code REGULAR} collection. However, the current WA
- * Web snapshot does <em>not</em> ship a corresponding sync handler module (no
- * {@code WAWebPrivacySettingChannelsPersonalisedRecommendationSync}). The
- * action is also absent from {@code WASyncdConst.Actions}, the action-name
- * enum consumed by {@code WAWebSyncdGetActionHandler}, and from
- * {@code WAWebCollectionHandlerActions.ActionHandlers}, the registry consumed
- * by {@code WAWebSyncdGetActionHandler.setActionHandlers}. Consequently WA Web
- * would never dispatch any incoming mutation with this action via
- * {@code WAWebSyncdGetActionHandler.getActionHandler("setting_channels_personalised_recommendation_optout")}
- * (the lookup would return {@code undefined} and the mutation would be
- * skipped). The string literal
- * {@code "setting_channels_personalised_recommendation_optout"} is only
- * present inside {@code WAWebProtobufSyncAction.pb} as the protobuf field
- * name; no other WA Web module references it.
- *
- * <p>The Cobalt handler is a forward-looking implementation: it follows the
- * Cobalt sync handler conventions used by every other registered handler
- * (singleton, {@code applyMutation} producing a typed
- * {@link MutationApplicationResult}, eager store update on {@code SET}). The
- * shape of the handler — only-{@code SET}, single-boolean payload, single
- * store setter — is inferred directly from the protobuf shape (one optional
- * boolean field) and from sibling boolean-flag privacy handlers such as
- * {@code DisableLinkPreviewsHandler} which follow the same
- * {@code single-boolean -> single store setter} pattern. Every behavioural
- * step here is Cobalt-inferred until WA Web ships the matching
- * {@code WAWebPrivacySettingChannelsPersonalisedRecommendationSync} module.
+ * protobuf (action index 64) is declared in
+ * {@code WAWebProtobufSyncAction.pb} but no
+ * {@code WAWebPrivacySettingChannelsPersonalisedRecommendationSync}
+ * module ships and the action is absent from
+ * {@code WASyncdConst.Actions} and from
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
+ * silently drops any incoming mutation. The
+ * {@link SyncPatchType#REGULAR} collection is taken directly from
+ * the inline router in {@code WAWebProtobufSyncAction.pb}; the
+ * single-{@code SET}, single-boolean apply path is inferred from
+ * sibling boolean-flag privacy handlers
+ * (e.g. {@link DisableLinkPreviewsHandler}).
  */
 public final class PrivacySettingChannelsPersonalisedRecommendationHandler implements WebAppStateActionHandler {
     /**
-     * The singleton instance of
-     * {@code PrivacySettingChannelsPersonalisedRecommendationHandler}.
+     * The shared singleton instance used by the sync handler registry.
+     *
+     * @apiNote
+     * Used for handlers that take no AB-prop / store / WAM dependency
+     * and benefit from process-wide reuse; held as the canonical
+     * instance.
+     *
+     * @implNote
+     * This implementation initialises the singleton eagerly because
+     * the constructor is private and stateless.
      */
     public static final PrivacySettingChannelsPersonalisedRecommendationHandler INSTANCE =
             new PrivacySettingChannelsPersonalisedRecommendationHandler();
 
     /**
-     * Private constructor that enforces the singleton pattern.
+     * Constructs the singleton handler instance.
+     *
+     * @apiNote
+     * Private to enforce singleton access via {@link #INSTANCE};
+     * consumers should never construct a new instance directly.
+     *
+     * @implNote
+     * This implementation is stateless; the constructor exists only
+     * so the static {@link #INSTANCE} field can be initialised once.
      */
     private PrivacySettingChannelsPersonalisedRecommendationHandler() {
 
@@ -69,9 +70,6 @@ public final class PrivacySettingChannelsPersonalisedRecommendationHandler imple
 
     /**
      * {@inheritDoc}
-     * @return the canonical
-     *         {@code "setting_channels_personalised_recommendation_optout"}
-     *         string
      */
     @Override
     public String actionName() {
@@ -81,10 +79,12 @@ public final class PrivacySettingChannelsPersonalisedRecommendationHandler imple
     /**
      * {@inheritDoc}
      *
-     * <p>Returns {@link SyncPatchType#REGULAR}, matching the
-     * {@code PRIVACY_SETTING_CHANNELS_PERSONALISED_RECOMMENDATION_ACTION ->
-     * REGULAR} mapping declared in {@code WAWebProtobufSyncAction.pb}.
-     * @return {@link SyncPatchType#REGULAR}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR} as
+     * declared by the inline router in
+     * {@code WAWebProtobufSyncAction.pb}
+     * ({@code PRIVACY_SETTING_CHANNELS_PERSONALISED_RECOMMENDATION_ACTION
+     * -> REGULAR}).
      */
     @Override
     public SyncPatchType collectionName() {
@@ -93,7 +93,6 @@ public final class PrivacySettingChannelsPersonalisedRecommendationHandler imple
 
     /**
      * {@inheritDoc}
-     * @return the integer version constant declared on the action class
      */
     @Override
     public int version() {
@@ -101,33 +100,18 @@ public final class PrivacySettingChannelsPersonalisedRecommendationHandler imple
     }
 
     /**
-     * Applies a personalised channel recommendation opt-out mutation and
-     * returns the detailed outcome.
+     * {@inheritDoc}
      *
-     * <p>The processing pipeline is:
-     * <ol>
-     *   <li>If the operation is not {@link SyncdOperation#SET}, return
-     *       {@link MutationApplicationResult#unsupported()}. Only {@code SET}
-     *       mutations are accepted; the action carries a single boolean
-     *       opt-out flag and there is no semantic for {@code REMOVE}.</li>
-     *   <li>Resolve the mutation value to a
-     *       {@link PrivacySettingChannelsPersonalisedRecommendationAction};
-     *       if the value is missing or of the wrong type, return
-     *       {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>Persist the resolved opt-out boolean on the store via
-     *       {@code WhatsAppStore.setChannelsPersonalisedRecommendationOptOut}
-     *       and return {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>The store accessors
-     * {@code channelsPersonalisedRecommendationOptOut()} and
-     * {@code setChannelsPersonalisedRecommendationOptOut(...)} already exist
-     * on {@code WhatsAppStore} / {@code AbstractWhatsAppStore}; this handler
-     * is the sole writer.
-     * @param client   the {@link WhatsAppClient} instance linked to the
-     *                 mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation accepts only {@link SyncdOperation#SET}: the
+     * action carries a single boolean opt-out flag and there is no
+     * semantic for {@code REMOVE}. A wrong-typed value surfaces as
+     * {@link MutationApplicationResult#malformed()}; on success the
+     * resolved boolean is written via
+     * {@code WhatsAppStore.setChannelsPersonalisedRecommendationOptOut}.
+     * The {@link PrivacySettingChannelsPersonalisedRecommendationAction#isUserOptedOut()}
+     * accessor coalesces a missing flag to {@code false} per the
+     * project nullable boolean rule.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

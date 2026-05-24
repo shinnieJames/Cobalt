@@ -14,80 +14,93 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Factory implementation that persists session metadata to a single
- * {@code store.proto} file and offloads message bodies to an embedded
- * {@link PersistentMessageStore LMDB} environment under each session directory.
+ * The {@link WhatsAppStoreFactory} that snapshots session metadata to {@code store.proto} and
+ * offloads message bodies to an embedded {@link PersistentMessageStore LMDB} env per session.
  *
- * <p>Each session lives under
- * {@code <baseDirectory>/<clientType>/<sessionId>/} and contains:
- * <ul>
- *   <li>{@code store.proto} — metadata snapshot for chats, newsletters,
- *       contacts, sync state, Signal-protocol state and AB-props.
- *   <li>{@code messages.lmdb/} — the LMDB env file pair holding chat
- *       messages, newsletter messages and the global status feed.
- * </ul>
+ * @apiNote
+ * Cobalt embedders obtain instances through {@link WhatsAppStoreFactory#persistent()} and its
+ * overloads; the class is package-private so the persistence strategy is not part of the public
+ * API surface. Each session lives under {@code <baseDirectory>/<clientType>/<sessionId>/} with a
+ * {@code store.proto} metadata snapshot beside a {@code messages.lmdb/} env directory.
  *
- * <p>On {@link #load} the factory deserialises the snapshot synchronously
- * and then walks the LMDB env once to recover orphan chats or
- * newsletters whose messages were committed but whose metadata did not
- * survive the post-commit window. Recovered entries are surfaced via the
- * normal {@link WhatsAppStore#chats()}
- * and {@link WhatsAppStore#newsletters()}
- * collections so callers see the same shape regardless of whether the
- * last shutdown was clean or crashy.
+ * @implNote
+ * This implementation runs an orphan-recovery pass on {@link #load load}: after the metadata
+ * snapshot deserialises, the factory walks the LMDB env once and inserts metadata stubs for any
+ * chat or newsletter that holds bodies in LMDB but is missing from the snapshot. This bridges the
+ * post-commit window where an LMDB write landed but the next metadata save never ran (process
+ * killed in between). Recovered entries surface through the normal
+ * {@link WhatsAppStore#chats()} and {@link WhatsAppStore#newsletters()} collections so callers
+ * see a consistent shape regardless of whether the previous shutdown was clean or crashy.
  */
 final class PersistentStoreFactory implements WhatsAppStoreFactory {
     /**
-     * Default root directory for Cobalt persistent sessions:
-     * {@code $HOME/.cobalt/proto}.
+     * The default root directory for Cobalt persistent sessions.
+     *
+     * @implNote
+     * This implementation resolves to {@code $HOME/.cobalt/proto}; embedders that need a custom
+     * location pass an explicit directory to {@link #PersistentStoreFactory(Path)} or
+     * {@link #PersistentStoreFactory(Path, long)}.
      */
     private static final Path DEFAULT_DIRECTORY = Path.of(System.getProperty("user.home"), ".cobalt", "proto");
 
     /**
-     * Default LMDB map size — 256&nbsp;MiB. On Windows this is the
-     * preallocated sparse file size, so anything much larger looks
-     * alarming in Explorer; the {@link PersistentMessageStore} doubles this on
-     * {@code MDB_MAP_FULL} so the cap rises automatically when needed.
+     * The default LMDB map size in bytes.
+     *
+     * @implNote
+     * This implementation uses 256 MiB. On Windows this is the preallocated sparse file size so a
+     * much larger default looks alarming in Explorer; the {@link PersistentMessageStore} doubles
+     * the map on {@code MDB_MAP_FULL}, so the cap rises automatically when traffic demands it.
      */
     private static final long DEFAULT_MAP_SIZE = 256L * 1024 * 1024;
 
     /**
-     * Root directory under which per-session folders are created.
+     * The root directory under which per-session folders are created.
      */
     private final Path directory;
 
     /**
-     * Initial LMDB map size for newly opened envs.
+     * The initial LMDB map size in bytes used for newly opened envs.
      */
     private final long mapSize;
 
     /**
-     * Constructs a new factory using the default storage directory and
-     * the default map size.
+     * Constructs a factory using {@link #DEFAULT_DIRECTORY} and {@link #DEFAULT_MAP_SIZE}.
+     *
+     * @apiNote
+     * Used by {@link WhatsAppStoreFactory#persistent()}.
      */
     PersistentStoreFactory() {
         this(DEFAULT_DIRECTORY, DEFAULT_MAP_SIZE);
     }
 
     /**
-     * Constructs a new factory using the given root directory and the
-     * default map size.
+     * Constructs a factory using the given root directory and {@link #DEFAULT_MAP_SIZE}.
      *
-     * @param directory the root directory under which per-session
-     *                  folders are created; must not be {@code null}
+     * @apiNote
+     * Used by {@link WhatsAppStoreFactory#persistent(Path)}.
+     *
+     * @param directory the root directory under which per-session folders are created; must not
+     *                  be {@code null}
      */
     PersistentStoreFactory(Path directory) {
         this(directory, DEFAULT_MAP_SIZE);
     }
 
     /**
-     * Constructs a new factory using the given root directory and
-     * initial map size.
+     * Constructs a factory using the given root directory and initial LMDB map size.
      *
-     * @param directory the root directory under which per-session
-     *                  folders are created; must not be {@code null}
-     * @param mapSize   the initial LMDB map size in bytes; must be
-     *                  positive
+     * @apiNote
+     * Used by {@link WhatsAppStoreFactory#persistent(Path, long)}.
+     *
+     * @implNote
+     * This implementation rejects non-positive {@code mapSize} eagerly so the failure surfaces at
+     * factory construction time rather than later inside the LMDB binding.
+     *
+     * @param directory the root directory under which per-session folders are created; must not
+     *                  be {@code null}
+     * @param mapSize   the initial LMDB map size in bytes; must be positive
+     * @throws IllegalArgumentException if {@code mapSize <= 0}
+     * @throws NullPointerException     if {@code directory} is {@code null}
      */
     PersistentStoreFactory(Path directory, long mapSize) {
         if (mapSize <= 0) {
@@ -97,6 +110,13 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
         this.mapSize = mapSize;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation forwards to {@link #loadSession(WhatsAppClientType, String)} with the
+     * UUID stringified.
+     */
     @Override
     public Optional<WhatsAppStore> load(WhatsAppClientType clientType, UUID uuid) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -104,12 +124,27 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
         return loadSession(clientType, uuid.toString());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation forwards to {@link #loadSession(WhatsAppClientType, String)} with the
+     * phone number stringified.
+     */
     @Override
     public Optional<WhatsAppStore> load(WhatsAppClientType clientType, long phoneNumber) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
         return loadSession(clientType, String.valueOf(phoneNumber));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation asks {@link StorePathUtils#getLatestSessionDirectory(WhatsAppClientType, Path)}
+     * for the most recently modified session folder and forwards its name to
+     * {@link #loadSession(WhatsAppClientType, String)}.
+     */
     @Override
     public Optional<WhatsAppStore> loadLatest(WhatsAppClientType clientType) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -121,16 +156,17 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
     }
 
     /**
-     * Loads the session identified by {@code sessionId} for the given
-     * client type, opens its LMDB env, attaches it to the deserialised
-     * store and runs the orphan-recovery pass.
+     * Loads the session identified by {@code sessionId} for the given client type, opens its
+     * LMDB env, attaches it to the deserialised store, and runs the orphan-recovery pass.
+     *
+     * @apiNote
+     * Internal helper for the three public {@code load} overloads.
      *
      * @param clientType the client type
-     * @param sessionId  the session uuid string or phone-number string
-     * @return the loaded store, or {@link Optional#empty()} if no
-     *         {@code store.proto} exists for that session
-     * @throws IOException if the metadata file cannot be read or
-     *                     decoded
+     * @param sessionId  the session UUID string or phone-number string
+     * @return the loaded store, or {@link Optional#empty()} if no {@code store.proto} exists for
+     *         that session
+     * @throws IOException if the metadata file cannot be read or decoded
      */
     private Optional<WhatsAppStore> loadSession(WhatsAppClientType clientType, String sessionId) throws IOException {
         var storeFile = PersistentStore.storeFilePath(clientType, directory, sessionId);
@@ -146,14 +182,21 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
     }
 
     /**
-     * Inserts metadata stubs for every chat or newsletter that holds
-     * messages in {@code messageStore} but has no corresponding entry in
-     * the deserialised metadata snapshot. Bridges the post-commit
-     * window where an LMDB write succeeded but the next metadata save
-     * never happened (e.g. process killed between the two).
+     * Inserts metadata stubs for every chat or newsletter that holds messages in
+     * {@code messageStore} but has no corresponding entry in the deserialised snapshot.
      *
-     * @param store         the freshly attached store
-     * @param messageStore  the just-opened LMDB facade
+     * @apiNote
+     * Bridges the post-commit window where an LMDB write succeeded but the next metadata save
+     * never happened (for example, the process was killed between the two).
+     *
+     * @implNote
+     * This implementation walks {@link PersistentMessageStore#distinctChatJids()} and
+     * {@link PersistentMessageStore#distinctNewsletterJids()} once and reuses
+     * {@link PersistentStore#addNewChat} and {@link PersistentStore#addNewNewsletter} to build the
+     * stubs so the inserted entries receive the same attachment handling as fresh ones.
+     *
+     * @param store        the freshly attached store
+     * @param messageStore the just-opened LMDB facade
      */
     private static void recoverOrphans(PersistentStore store, PersistentMessageStore messageStore) {
         for (var chatJid : messageStore.distinctChatJids()) {
@@ -168,6 +211,14 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation generates a random UUID when {@code uuid} is {@code null}, opens a
+     * fresh LMDB env, and returns an otherwise empty store with the platform-appropriate device
+     * descriptor.
+     */
     @Override
     public WhatsAppStore create(WhatsAppClientType clientType, UUID uuid) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -184,6 +235,13 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
         return store;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation keys the session directory by the stringified phone number and assigns
+     * a fresh random UUID.
+     */
     @Override
     public WhatsAppStore create(WhatsAppClientType clientType, long phoneNumber) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -200,6 +258,15 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
         return store;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation builds a web-device store seeded with the supplied Noise and identity
+     * key pairs, sets {@code registered=true} so the pairing pipeline is skipped, and assigns
+     * the user JID derived from the bundled phone number. Used to bootstrap a web session from a
+     * previously exported six-parts key blob without a fresh QR pairing flow.
+     */
     @Override
     public WhatsAppStore create(WhatsAppClientType clientType, WhatsAppClientSixPartsKeys sixPartsKeys) throws IOException {
         Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -224,13 +291,15 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
     }
 
     /**
-     * Opens a fresh LMDB env for {@code sessionId} and wires it into
-     * {@code store}. Used by every {@code create(...)} overload after
-     * the metadata builder produces an empty store.
+     * Opens a fresh LMDB env for {@code sessionId} and wires it into {@code store}.
+     *
+     * @apiNote
+     * Internal helper shared by every {@code create(...)} overload after the metadata builder
+     * produces an otherwise empty store.
      *
      * @param store      the freshly built store
      * @param clientType the client type
-     * @param sessionId  the session uuid string or phone-number string
+     * @param sessionId  the session UUID string or phone-number string
      * @throws IOException if the env directory cannot be created
      */
     private void attachFreshLmdb(PersistentStore store, WhatsAppClientType clientType, String sessionId) throws IOException {
@@ -239,8 +308,12 @@ final class PersistentStoreFactory implements WhatsAppStoreFactory {
     }
 
     /**
-     * Returns the synthetic device descriptor used for newly created
-     * sessions of the given client type.
+     * Returns the synthetic device descriptor used for newly created sessions of the given
+     * client type.
+     *
+     * @apiNote
+     * Internal helper that picks a desktop-shaped {@link WhatsAppDevice} for web sessions and an
+     * iOS-shaped descriptor for mobile sessions.
      *
      * @param clientType the client type
      * @return a fresh {@link WhatsAppDevice} suitable for the type

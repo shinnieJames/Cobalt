@@ -13,43 +13,43 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the
- * {@code <join_linked_group jid type/>} payload in the canonical
- * {@code <iq xmlns="w:g2" type="set" to="<parentGroupJid>">} envelope.
+ * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that joins a sub-group inside a community.
+ *
+ * @apiNote Drives the {@code WAWebGroupJoinSubgroupJob.joinSubgroup} flow used by the community sub-group preview UI;
+ * pass the parent community JID as {@link #parentGroupJid()}, the target sub-group JID as
+ * {@link #joinLinkedGroupJid()}, and a join-type discriminator: WA Web passes {@code "default_sub_group"} for linked
+ * announcement groups and {@code "sub_group"} for ordinary sub-groups.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsJoinLinkedGroupRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group JID to which the IQ is addressed.
-     * Routed verbatim into the IQ's {@code to} attribute.
+     * The parent (community) group {@link Jid} surfaced on the IQ's {@code to} attribute.
      */
     private final Jid parentGroupJid;
 
     /**
-     * The sub-group JID the caller wishes to join.
+     * The sub-group {@link Jid} the caller wishes to join.
      */
     private final Jid joinLinkedGroupJid;
 
     /**
-     * The optional join-type discriminator (e.g. {@code "default"});
-     * when {@code null} the {@code type} attribute is omitted.
+     * The optional join-type discriminator (typically {@code "sub_group"} or {@code "default_sub_group"}); when
+     * {@code null} the {@code type} attribute is omitted.
      */
     private final String joinLinkedGroupType;
 
     /**
      * Constructs a request.
      *
-     * @param parentGroupJid       the parent community JID; never
-     *                             {@code null}
-     * @param joinLinkedGroupJid   the sub-group JID to join; never
-     *                             {@code null}
-     * @param joinLinkedGroupType  the optional join-type
-     *                             discriminator; may be {@code null}
-     * @throws NullPointerException if {@code parentGroupJid} or
-     *                              {@code joinLinkedGroupJid} is
-     *                              {@code null}
+     * @apiNote WA Web passes {@code "default_sub_group"} for linked announcement groups and {@code "sub_group"}
+     * otherwise; passing {@code null} produces a request without a {@code type} attribute.
+     *
+     * @param parentGroupJid       the parent community {@link Jid}; never {@code null}
+     * @param joinLinkedGroupJid   the sub-group {@link Jid} to join; never {@code null}
+     * @param joinLinkedGroupType  the optional join-type discriminator; may be {@code null}
+     * @throws NullPointerException if {@code parentGroupJid} or {@code joinLinkedGroupJid} is {@code null}
      */
     public SmaxGroupsJoinLinkedGroupRequest(Jid parentGroupJid, Jid joinLinkedGroupJid, String joinLinkedGroupType) {
         this.parentGroupJid = Objects.requireNonNull(parentGroupJid, "parentGroupJid cannot be null");
@@ -58,18 +58,18 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
     }
 
     /**
-     * Returns the parent community group JID.
+     * Returns the parent community group {@link Jid}.
      *
-     * @return the parent group JID; never {@code null}
+     * @return the parent group {@link Jid}; never {@code null}
      */
     public Jid parentGroupJid() {
         return parentGroupJid;
     }
 
     /**
-     * Returns the sub-group JID being joined.
+     * Returns the sub-group {@link Jid} being joined.
      *
-     * @return the linked group JID; never {@code null}
+     * @return the linked group {@link Jid}; never {@code null}
      */
     public Jid joinLinkedGroupJid() {
         return joinLinkedGroupJid;
@@ -78,18 +78,25 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
     /**
      * Returns the optional join-type discriminator.
      *
-     * @return an {@link Optional} carrying the join-type string, or
-     *         empty when the request omits the {@code type} attribute
+     * @return an {@link Optional} carrying the join-type token, or empty when the request omits the {@code type}
+     *         attribute
      */
     public Optional<String> joinLinkedGroupType() {
         return Optional.ofNullable(joinLinkedGroupType);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <join_linked_group/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
+     *         <join_linked_group jid="<joinLinkedGroupJid>" type="<joinLinkedGroupType>"/>
+     *     </iq>
+     * }
+     * where the {@code type} attribute is omitted when {@link #joinLinkedGroupType()} is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <join_linked_group/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsJoinLinkedGroupRequest",
@@ -110,6 +117,12 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
                 .content(joinNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsJoinLinkedGroupRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -124,11 +137,21 @@ public final class SmaxGroupsJoinLinkedGroupRequest implements SmaxOperation.Req
                 && Objects.equals(this.joinLinkedGroupType, that.joinLinkedGroupType);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid, joinLinkedGroupJid, joinLinkedGroupType);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsJoinLinkedGroupRequest[parentGroupJid=" + parentGroupJid

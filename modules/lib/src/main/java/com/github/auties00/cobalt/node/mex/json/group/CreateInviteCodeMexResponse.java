@@ -15,33 +15,47 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Parsed response of the {@link CreateInviteCodeMexRequest} mutation, exposing
- * the freshly minted invite code returned by the server.
+ * Inbound parsed response of the {@link CreateInviteCodeMexRequest}
+ * mutation, exposing the freshly minted invite code scalar.
+ *
+ * @apiNote Returned by the relay when an invite-code rotation succeeds; the
+ * code is the opaque suffix of the resulting
+ * {@code chat.whatsapp.com/<code>} share link. WA Web's
+ * {@code WAWebOutContactInviteAction.sendInvite} composes the invite
+ * message text by passing this scalar to
+ * {@code WAWebOutContactInviteUtils.getInviteMessageTextWithCode}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexCreateInviteCodeJob")
 public final class CreateInviteCodeMexResponse implements MexOperation.Response.Json {
     /**
-     * The invite code scalar projected from
-     * {@code xwa2_growth_create_invite_code.code}.
+     * The freshly minted invite code scalar projected from
+     * {@code data.xwa2_growth_create_invite_code.code}.
      */
     private final String code;
 
     /**
-     * Constructs a response wrapping the invite {@code code} scalar parsed
-     * from the GraphQL envelope.
+     * Constructs a new response wrapping the parsed {@code code} scalar.
      *
-     * @param code the invite code returned by the relay, or {@code null} if absent
+     * @apiNote Package-private; instances are produced by the
+     * {@link #of(Node)} parser.
+     *
+     * @param code the freshly minted invite code, or {@code null} if absent
      */
     private CreateInviteCodeMexResponse(String code) {
         this.code = code;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the node is missing a result payload
+     * @apiNote Entry point for receivers handling the IQ reply of
+     * {@link CreateInviteCodeMexRequest}. The returned value is
+     * {@link Optional#empty()} when the reply lacks a {@code <result>} child
+     * or its JSON body cannot be parsed into the expected envelope.
+     *
+     * @param node the inbound IQ stanza carrying the {@code <result>} child
+     * @return the parsed response, or {@link Optional#empty()} if the
+     *         expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexCreateInviteCodeJob", exports = "mexCreateInviteCode",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -52,7 +66,11 @@ public final class CreateInviteCodeMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Returns the freshly minted invite code.
+     * Returns the freshly minted invite code scalar.
+     *
+     * @apiNote The opaque suffix of the resulting
+     * {@code chat.whatsapp.com/<code>} share link; absent when the relay
+     * omitted the field.
      *
      * @return an {@link Optional} containing the value, or empty if absent
      */
@@ -61,12 +79,18 @@ public final class CreateInviteCodeMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses a {@link CreateInviteCodeMexResponse} from the raw JSON bytes
-     * of the {@code <result>} child.
+     * Parses the JSON payload carried by the {@code <result>} child into a
+     * {@link CreateInviteCodeMexResponse}.
+     *
+     * @implNote This implementation walks the
+     * {@code data.xwa2_growth_create_invite_code} envelope and returns
+     * {@link Optional#empty()} when any intermediate object is missing,
+     * mirroring the WA Web optional-chain
+     * {@code (a = u.xwa2_growth_create_invite_code) == null ? void 0 : a.code}.
      *
      * @param json the UTF-8 encoded JSON payload
      * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing expected fields
+     *         if the {@code data.xwa2_growth_create_invite_code} envelope is absent
      */
     private static Optional<CreateInviteCodeMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

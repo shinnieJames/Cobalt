@@ -15,33 +15,60 @@ import java.util.Objects;
 /**
  * Builds outgoing notification-activity-setting sync mutations.
  *
- * <p>The factory is the outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the per-device notification activity preference on the Settings
+ * notifications surface; one call produces a single
+ * {@link SyncPendingMutation} that is consumed on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.NotificationActivitySettingHandler}.
+ *
+ * @implNote
+ * This implementation has no direct WA Web counterpart: the
+ * {@code notificationActivitySetting} action is declared only as a
+ * protobuf shape in {@code WAWebProtobufSyncAction.pb} and has no
+ * dedicated {@code WAWebNotificationActivitySettingSync} module in the
+ * current bundle. The shape follows
+ * {@code WAWebSyncdActionUtils.buildPendingMutation} as used by every
+ * other sibling {@code AccountSyncdActionBase} subclass.
  */
 public final class NotificationActivitySettingMutationFactory {
     /**
      * Constructs a notification-activity-setting mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public notification-activity setter. The factory
+     * keeps no state, so a single instance is sufficient per client.
      */
     public NotificationActivitySettingMutationFactory() {
 
     }
 
     /**
-     * Builds a pending {@code notificationActivitySetting} mutation carrying
-     * the given notification activity preference.
+     * Builds a pending {@code notificationActivitySetting} mutation
+     * carrying the given notification activity preference.
      *
-     * <p>NO_WA_BASIS: WA Web has no outgoing helper for this action; the shape
-     * follows {@code WAWebSyncdActionUtils.buildPendingMutation} as used by
-     * every other sibling {@code AccountSyncdActionBase} subclass. Cobalt
-     * surfaces the helper so the public
-     * {@code WhatsAppClient.editNotificationActivity} setter can build a single
-     * mutation without hand-rolling the protobuf wrapping.
+     * @apiNote
+     * Invoked from the public notification-activity setter; the index
+     * carries only the action name because the preference is a singleton
+     * per account. Receiving devices store the
+     * {@link NotificationActivitySettingAction.NotificationActivitySetting}
+     * value verbatim in their local prefs.
      *
-     * @param timestamp the mutation timestamp
-     * @param setting   the new {@link NotificationActivitySettingAction.NotificationActivitySetting}
-     * @return a pending mutation carrying the {@code notificationActivitySetting}
-     *         action
-     * @throws NullPointerException if {@code timestamp} or {@code setting} is {@code null}
+     * @implNote
+     * This implementation models the
+     * {@code SyncActionValue.notificationActivitySettingAction} protobuf
+     * shape as used by {@code WAWebSyncdActionUtils.buildPendingMutation};
+     * the mutation is routed through the {@code Regular} collection
+     * alongside the other account-scoped settings.
+     *
+     * @param timestamp the mutation timestamp recorded on both the outer
+     *                  mutation and the inner {@code SyncActionValue}
+     * @param setting   the new
+     *                  {@link NotificationActivitySettingAction.NotificationActivitySetting}
+     * @return a pending mutation carrying the
+     *         {@code notificationActivitySetting} action
+     * @throws NullPointerException if {@code timestamp} or {@code setting}
+     *                              is {@code null}
      */
     public SyncPendingMutation getNotificationActivityMutation(Instant timestamp, NotificationActivitySettingAction.NotificationActivitySetting setting) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");

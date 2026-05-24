@@ -28,12 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link AgentActionHandler} — Cobalt's adapter for
+ * Tests for {@link AgentActionHandler} - Cobalt's adapter for
  * {@code WAWebAgentSync}.
  *
  * <p>The handler maintains the business-account agent roster. SET mutations
  * merge the {@link AgentAction} payload into the store (even when the
- * {@code isDeleted} flag is set — the action is stored as-is). REMOVE
+ * {@code isDeleted} flag is set - the action is stored as-is). REMOVE
  * mutations drop the agent from the store. These tests pin the wire
  * metadata, the SET/REMOVE behaviour, the malformed-input fallbacks, and
  * the default timestamp-based conflict resolution.
@@ -74,7 +74,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the AgentAction wire constant")
@@ -98,7 +98,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET upsert")
+    @DisplayName("applyMutation - SET upsert")
     class ApplySet {
         @Test
         @DisplayName("a SET upserts the agent state into the store")
@@ -121,7 +121,7 @@ class AgentActionHandlerTest {
         }
 
         @Test
-        @DisplayName("a SET with isDeleted=true still upserts the agent — store as-is")
+        @DisplayName("a SET with isDeleted=true still upserts the agent - store as-is")
         void deletedFlagStored() {
             // Per WA Web, the handler merges the agent regardless of the deleted flag; the
             // tombstone is preserved so other devices can converge on the same state.
@@ -141,7 +141,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("SET on an unknown agent id is the upsert path, not an orphan")
@@ -157,7 +157,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -175,7 +175,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty agent id at indexParts[1] returns MALFORMED")
@@ -201,7 +201,7 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE removes the agent")
+    @DisplayName("applyMutation - REMOVE removes the agent")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE drops the agent from the store and returns SUCCESS")
@@ -221,7 +221,7 @@ class AgentActionHandlerTest {
         }
 
         @Test
-        @DisplayName("REMOVE of an unknown agent still returns SUCCESS — idempotent")
+        @DisplayName("REMOVE of an unknown agent still returns SUCCESS - idempotent")
         void removeUnknownAgent() {
             var result = handler.applyMutation(client,
                     buildMutation("never-existed", null, SyncdOperation.REMOVE, Instant.now()));
@@ -230,10 +230,10 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -242,7 +242,7 @@ class AgentActionHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps — APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps - APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -250,7 +250,7 @@ class AgentActionHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -265,10 +265,10 @@ class AgentActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("AgentActionHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("AgentActionHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
             // AgentActionHandler is an inbound-only handler in Cobalt. The outbound path is
             // handled elsewhere (Cobalt does not currently emit deviceAgent mutations from this

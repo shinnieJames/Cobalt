@@ -21,37 +21,67 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * Fetches a lightweight dehydrated representation of a newsletter.
+ * Builds the MEX request that fetches a dehydrated representation of a
+ * newsletter.
  *
- * <p>The dehydrated form carries only the minimal identifiers and state needed to display the newsletter in a list without triggering a full metadata hydration. WA Web uses it on chat-list rendering paths and follow suggestions.
+ * @apiNote
+ * Drives the lightweight newsletter lookup WA Web runs to verify
+ * subscription count, WAMo subscription state and verification status
+ * without triggering a full metadata hydration. The {@code key} may be a
+ * newsletter Jid or an invite token; this implementation derives the
+ * {@code type} discriminator from {@link Jid#hasNewsletterServer()}
+ * mirroring WA Web's {@code WAWebWid.isNewsletter} check.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterDehydratedJob")
 public final class FetchNewsletterDehydratedMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterDehydrated} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterDehydratedJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "30328461880085868";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexGetNewsletterDehydrated
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexGetNewsletterDehydrated";
+
+    /**
+     * The newsletter Jid (when fetching by id) or invite token (when
+     * fetching by invite).
+     */
     private final Jid key;
+
+    /**
+     * The {@code view_role} GraphQL variable that selects which viewer-role
+     * fragment the relay populates.
+     */
     private final String viewRole;
+
+    /**
+     * Whether the response should carry the optional {@code wamo_sub}
+     * fragment selections.
+     */
     private final boolean fetchWamoSub;
 
     /**
      * Constructs a request for the dehydrated representation of the given
      * newsletter key.
      *
+     * @apiNote
+     * Pass a newsletter-server Jid to look up by id (the {@code type}
+     * discriminator becomes {@code "JID"}); pass any other Jid to look up
+     * by invite token (the discriminator becomes {@code "INVITE"}).
+     *
      * @param key          the newsletter Jid or invite identifier
-     * @param viewRole     the GraphQL {@code view_role} variable
-     * @param fetchWamoSub whether to request the optional
-     *                     {@code wamo_sub} fragment selections
+     * @param viewRole     the {@code view_role} GraphQL variable
+     * @param fetchWamoSub whether to request the optional {@code wamo_sub}
+     *                     fragment selections
+     * @throws NullPointerException if {@code key} is {@code null}
      */
     public FetchNewsletterDehydratedMexRequest(Jid key, String viewRole, boolean fetchWamoSub) {
         this.key = Objects.requireNonNull(key, "key cannot be null");
@@ -60,10 +90,10 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -71,10 +101,10 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -82,11 +112,23 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {key, type, view_role}, fetch_wamo_sub}}}
+     * payload; the {@code type} discriminator is derived from
+     * {@link Jid#hasNewsletterServer()} so newsletter Jids resolve to
+     * {@code "JID"} and any other Jid resolves to {@code "INVITE"}.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterDehydratedJob", exports = "mexGetNewsletterDehydrated",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -106,7 +148,6 @@ public final class FetchNewsletterDehydratedMexRequest implements MexOperation.R
             writer.writeString(key.toString());
             writer.writeName("type");
             writer.writeColon();
-            // WAWebWid.isNewsletter(t) ? "JID" : "INVITE"
             writer.writeString(key.hasNewsletterServer() ? "JID" : "INVITE");
             writer.writeName("view_role");
             writer.writeColon();

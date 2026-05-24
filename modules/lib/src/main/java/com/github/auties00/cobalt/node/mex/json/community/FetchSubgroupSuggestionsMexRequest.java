@@ -12,28 +12,41 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the list of public subgroups suggested to the user as candidates
- * for a given community.
+ * Outbound MEX request that fetches the list of public subgroups suggested
+ * to the user as candidates for a given community.
  *
- * <p>Suggestions include existing groups the user belongs to that could be
- * moved into the community, along with metadata such as creator, subject,
- * description, creation timestamp, participant count and whether the group is
- * hidden from directory listings. The result drives the "suggested subgroups"
- * picker in the community management UI.
+ * @apiNote Drives the "suggested subgroups" picker in the community
+ * management UI. Suggestions include existing groups the user already
+ * belongs to that could be moved into the community; each entry carries
+ * id, subject, description, creator, creation timestamp, participant count
+ * and the hidden-from-directory flag. Surfaced from
+ * {@code WAWebQueryAndUpdateSubgroupSuggestionsJob} via
+ * {@code WAWebMexFetchSubgroupSuggestionsJob.mexFetchSubgroupSuggestions},
+ * called with {@code query_context="INTERACTIVE"} when the user opens the
+ * picker.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchSubgroupSuggestionsJob")
 public final class FetchSubgroupSuggestionsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebMexFetchSubgroupSuggestionsJobQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexFetchSubgroupSuggestionsJobQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexFetchSubgroupSuggestionsJobQuery.graphql}. The relay
+     * maps this id to its persisted operation; the GraphQL text is never
+     * sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchSubgroupSuggestionsJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "23972005349071865";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchSubgroupSuggestionsJob", exports = "mexFetchSubgroupSuggestions",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -45,6 +58,12 @@ public final class FetchSubgroupSuggestionsMexRequest implements MexOperation.Re
 
     /**
      * Constructs a new request with the three GraphQL variables.
+     *
+     * @apiNote {@code queryContext} mirrors the WA Web {@code "INTERACTIVE"}
+     * marker used when the user is browsing the picker. The
+     * {@code subGroupHintId} lets the relay prioritise suggestions around a
+     * known subgroup; all three fields are dropped from the wire payload
+     * when {@code null}.
      *
      * @param groupId        the community parent group id, may be
      *                       {@code null} to omit
@@ -60,9 +79,7 @@ public final class FetchSubgroupSuggestionsMexRequest implements MexOperation.Re
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -70,9 +87,7 @@ public final class FetchSubgroupSuggestionsMexRequest implements MexOperation.Re
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -80,8 +95,14 @@ public final class FetchSubgroupSuggestionsMexRequest implements MexOperation.Re
     }
 
     /**
-     * Serialises the GraphQL variables and wraps them in a {@code w:mex} IQ
-     * stanza.
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter} and only emits the optional
+     * {@code group_id}, {@code query_context} and {@code sub_group_hint_id}
+     * fields when their corresponding constructor argument is non-null.
+     * The wrapped envelope is built through
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      *
      * @return the IQ {@link NodeBuilder} ready to be built and dispatched
      */

@@ -12,44 +12,98 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of the
- * {@code <notification type="link_code_companion_reg"
- * stage="refresh_code">} stanza.
+ * The typed projection of the inbound
+ * {@code <notification type="link_code_companion_reg" stage="refresh_code">}
+ * stanza pushed to a companion when the primary device rotates the
+ * link-code pairing reference.
+ *
+ * @apiNote
+ * Surfaced to companion-side embedders so they can rerender the eight
+ * character link-code display when the rolling pairing window expires
+ * or when the user explicitly requests a new code on the primary. WA
+ * Web routes the parsed payload to either
+ * {@code WAWebBackendApi.frontendFireAndForget("refreshAltLinkingCode")}
+ * (natural cadence) or {@code "forceManualRefresh"} (manual primary
+ * trigger) depending on the {@code force_manual_refresh} attribute.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code parseRefreshCodeNotifyCompanionRequest} validation set: the
+ * tag is {@code notification}, the {@code type} is
+ * {@code link_code_companion_reg}, the {@code from} is the
+ * {@code s.whatsapp.net} domain, the nested
+ * {@code <link_code_companion_reg/>} child carries
+ * {@code stage="refresh_code"}, the optional
+ * {@code force_manual_refresh} attribute is constrained to the
+ * {@code ENUM_FALSE_TRUE} enum, and the new
+ * {@code <link_code_pairing_ref/>} child resolves to non-empty bytes.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMdRefreshCodeNotifyCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdServerNotificationMixin")
 public final class SmaxMdRefreshCodeNotifyCompanionResponse implements SmaxOperation.Response {
     /**
-     * The notification id (echoed back into the ack).
+     * The {@code id} attribute of the inbound notification.
+     *
+     * @apiNote
+     * Echoed back into the
+     * {@link SmaxMdRefreshCodeNotifyCompanionAcknowledgement} stanza's
+     * {@code id} attribute by
+     * {@link SmaxMdRefreshCodeNotifyCompanionAcknowledgement#from(SmaxMdRefreshCodeNotifyCompanionResponse)}.
      */
     private final String notificationId;
 
     /**
-     * The notification {@code from} JID (always the WA server domain).
+     * The {@code from} JID of the inbound notification, always the
+     * {@code s.whatsapp.net} server domain.
+     *
+     * @apiNote
+     * Echoed back as the ack's {@code to} attribute by
+     * {@link SmaxMdRefreshCodeNotifyCompanionAcknowledgement#from(SmaxMdRefreshCodeNotifyCompanionResponse)}.
      */
     private final Jid notificationFrom;
 
     /**
-     * Optional {@code force_manual_refresh} flag . {@code "true"}
-     * when the rotation was manually requested by the primary device,
-     * {@code "false"} (or absent) when it is part of the natural
-     * cadence.
+     * The optional {@code force_manual_refresh} attribute on the
+     * nested {@code <link_code_companion_reg/>}, restricted to
+     * {@code "true"} or {@code "false"}.
+     *
+     * @apiNote
+     * {@code "true"} signals that the primary device user pressed the
+     * "regenerate code" button and surfaces as a different WAM marker
+     * point ({@code receive_force_refresh_code} versus
+     * {@code receive_refresh_code}); {@code "false"} or absent denotes
+     * the natural rotation cadence. WA Web rejects any other value
+     * during parsing.
      */
     private final String linkCodeCompanionRegForceManualRefresh;
 
     /**
-     * The new pairing-reference bytes echoed by the relay.
+     * The new pairing-reference bytes carried in
+     * {@code <link_code_pairing_ref/>}.
+     *
+     * @apiNote
+     * Replaces the previously displayed ref on the companion only when
+     * it matches the ref the companion already holds; WA Web's
+     * {@code handleAltDeviceLinkingNotification} compares via
+     * {@code WACryptoUtils.uint8ArraysEqual} and silently drops
+     * mismatches.
      */
     private final byte[] linkCodePairingRef;
 
     /**
-     * Constructs a new {@code SmaxMdRefreshCodeNotifyCompanionResponse} projection.
+     * Constructs the typed projection from already-validated component
+     * fields.
+     *
+     * @apiNote
+     * Library code does not normally call this constructor; it is the
+     * target of {@link #of(Node)} after parsing has succeeded. Public
+     * visibility is preserved so unit tests can construct fixtures.
      *
      * @param notificationId                         the notification id; never {@code null}
-     * @param notificationFrom                       the notification from JID; never {@code null}
-     * @param linkCodeCompanionRegForceManualRefresh the optional force-manual-refresh flag; may be {@code null}
-     * @param linkCodePairingRef                     the new pairing-reference bytes; never {@code null}
-     * @throws NullPointerException if any of the required arguments is {@code null}
+     * @param notificationFrom                       the notification sender JID; never {@code null}
+     * @param linkCodeCompanionRegForceManualRefresh the optional {@code force_manual_refresh} flag; may be {@code null}
+     * @param linkCodePairingRef                     the pairing-reference bytes; never {@code null}
+     * @throws NullPointerException if any required argument is {@code null}
      */
     public SmaxMdRefreshCodeNotifyCompanionResponse(String notificationId,
                    Jid notificationFrom,
@@ -71,7 +125,11 @@ public final class SmaxMdRefreshCodeNotifyCompanionResponse implements SmaxOpera
     }
 
     /**
-     * Returns the notification from JID.
+     * Returns the notification sender JID.
+     *
+     * @apiNote
+     * Always the {@code s.whatsapp.net} server domain; validated by
+     * {@link #of(Node)} during parsing.
      *
      * @return the JID; never {@code null}
      */
@@ -80,10 +138,16 @@ public final class SmaxMdRefreshCodeNotifyCompanionResponse implements SmaxOpera
     }
 
     /**
-     * Returns the optional force-manual-refresh flag.
+     * Returns the optional {@code force_manual_refresh} flag.
      *
-     * @return an {@link Optional} carrying the value, or empty when
-     *         the relay omitted it
+     * @apiNote
+     * Callers should treat {@link Optional#empty()} as equivalent to
+     * {@code "false"}; WA Web makes the same equivalence inside
+     * {@code handleAltDeviceLinkingNotification}.
+     *
+     * @return an {@link Optional} carrying {@code "true"} or
+     *         {@code "false"}, or empty when the relay omitted the
+     *         attribute
      */
     public Optional<String> linkCodeCompanionRegForceManualRefresh() {
         return Optional.ofNullable(linkCodeCompanionRegForceManualRefresh);
@@ -92,17 +156,39 @@ public final class SmaxMdRefreshCodeNotifyCompanionResponse implements SmaxOpera
     /**
      * Returns the new pairing-reference bytes.
      *
-     * @return the bytes; never {@code null}
+     * @apiNote
+     * Compare byte-for-byte against the companion's currently displayed
+     * ref before adopting; non-matching refs are silently dropped per
+     * WA Web's {@code handleAltDeviceLinkingNotification} logic.
+     *
+     * @return the new pairing-reference bytes; never {@code null}
      */
     public byte[] linkCodePairingRef() {
         return linkCodePairingRef;
     }
 
     /**
-     * Tries to parse an {@link SmaxMdRefreshCodeNotifyCompanionResponse} projection.
+     * Parses a {@code <notification type="link_code_companion_reg" stage="refresh_code"/>}
+     * stanza into a typed projection.
      *
-     * @param node the inbound notification stanza; never {@code null}
-     * @return an {@link Optional} carrying the projection
+     * @apiNote
+     * Companions call this on every inbound notification of that type
+     * to decide whether to rerender the displayed code; the returned
+     * {@link Optional} is empty when the stanza shape diverges from
+     * the documented schema.
+     *
+     * @implNote
+     * This implementation enforces WA Web's full check set: tag
+     * equality on {@code notification}, attribute literal on
+     * {@code type}, domain-JID literal on {@code from}, stage literal
+     * on the nested {@code <link_code_companion_reg/>}, optional
+     * {@code force_manual_refresh} constrained to the
+     * {@code ENUM_FALSE_TRUE} pair, and a non-empty
+     * {@code <link_code_pairing_ref/>} content body.
+     *
+     * @param node the inbound notification stanza
+     * @return an {@link Optional} carrying the projection, or empty
+     *         when the stanza shape diverges
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMdRefreshCodeNotifyCompanionRequest",

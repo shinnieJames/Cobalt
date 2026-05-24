@@ -19,22 +19,47 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Response variant for {@link FetchNewsletterMessageReactionSenderListMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the
+ * fetch-newsletter-message-reaction-sender-list query built by
+ * {@link FetchNewsletterMessageReactionSenderListMexRequest}.
+ *
+ * @apiNote
+ * Exposes the per-emoji reaction sender groups echoed under
+ * {@code xwa2_newsletters_reaction_sender_list}; each {@link Reactions}
+ * carries one reaction code and the Relay-style edges of senders that
+ * used it.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterMessageReactionSenderListJob")
 public final class FetchNewsletterMessageReactionSenderListMexResponse implements MexOperation.Response.Json {
+    /**
+     * The per-reaction sender groups.
+     */
     private final List<Reactions> reactions;
 
+    /**
+     * Constructs a response wrapping the parsed reaction groups.
+     *
+     * @apiNote
+     * Reserved for the static parser.
+     *
+     * @param reactions the per-reaction sender groups
+     */
     private FetchNewsletterMessageReactionSenderListMexResponse(List<Reactions> reactions) {
         this.reactions = reactions;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletters_reaction_sender_list} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<FetchNewsletterMessageReactionSenderListMexResponse> of(Node node) {
         return node.getChild("result")
@@ -43,117 +68,199 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
     }
 
     /**
-     * Returns the {@code reactions} field.
+     * Returns the per-reaction sender groups.
      *
-     * @return the list of values, empty if absent
+     * @return the parsed groups, empty when the relay returned none
      */
     public List<Reactions> reactions() {
         return reactions;
     }
 
     /**
-     * A parsed {@code Reactions} object.
+     * Wraps one reaction-emoji group.
+     *
+     * @apiNote
+     * Carries the {@code reaction_code} (the emoji used) and the
+     * {@link SenderList} of users that reacted with it.
      */
     public static final class Reactions {
+        /**
+         * The reaction code (emoji).
+         */
         private final String reactionCode;
+
+        /**
+         * The senders that used the reaction.
+         */
         private final SenderList senderList;
 
+        /**
+         * Constructs a reaction-group wrapper from the parsed sub-fields.
+         *
+         * @apiNote
+         * Reserved for the static parser.
+         *
+         * @param reactionCode the reaction code (emoji)
+         * @param senderList   the senders that used the reaction
+         */
         private Reactions(String reactionCode, SenderList senderList) {
             this.reactionCode = reactionCode;
             this.senderList = senderList;
         }
 
         /**
-         * Returns the {@code reaction_code} field.
+         * Returns the reaction code (emoji).
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @return the reaction code, or empty when the relay omitted the
+         *         field
          */
         public Optional<String> reactionCode() {
             return Optional.ofNullable(reactionCode);
         }
 
         /**
-         * Returns the {@code sender_list} field.
+         * Returns the senders that used the reaction.
          *
-     * @return an {@link Optional} containing the value, or empty if absent
+         * @return the parsed {@link SenderList}, or empty when the relay
+         *         omitted the field
          */
         public Optional<SenderList> senderList() {
             return Optional.ofNullable(senderList);
         }
 
         /**
-         * A parsed {@code SenderList} object.
+         * Wraps the {@code sender_list} sub-object.
+         *
+         * @apiNote
+         * Holds the Relay-style {@code edges} array of reactors.
          */
         public static final class SenderList {
+            /**
+             * The Relay-style edges.
+             */
             private final List<Edges> edges;
 
+            /**
+             * Constructs a sender-list wrapper from the parsed sub-fields.
+             *
+             * @apiNote
+             * Reserved for the static parser.
+             *
+             * @param edges the Relay-style edges
+             */
             private SenderList(List<Edges> edges) {
                 this.edges = edges;
             }
 
             /**
-             * Returns the {@code edges} field.
+             * Returns the Relay-style edges.
              *
-     * @return the list of values, empty if absent
+             * @return the parsed edges, empty when the relay returned none
              */
             public List<Edges> edges() {
                 return edges;
             }
 
             /**
-             * A parsed {@code Edges} object.
+             * Wraps one entry of the {@code edges} array.
+             *
+             * @apiNote
+             * Carries one sender's profile {@link Node}.
              */
             public static final class Edges {
+                /**
+                 * The reactor profile sub-object.
+                 */
                 private final Node node;
 
+                /**
+                 * Constructs an edge wrapper from the parsed sub-fields.
+                 *
+                 * @apiNote
+                 * Reserved for the static parser.
+                 *
+                 * @param node the reactor profile sub-object
+                 */
                 private Edges(Node node) {
                     this.node = node;
                 }
 
                 /**
-                 * Returns the {@code node} field.
+                 * Returns the reactor profile sub-object.
                  *
-     * @return an {@link Optional} containing the value, or empty if absent
+                 * @return the parsed {@link Node}, or empty when the relay
+                 *         omitted the field
                  */
                 public Optional<Node> node() {
                     return Optional.ofNullable(node);
                 }
 
                 /**
-                 * A parsed {@code Node} object.
+                 * Wraps the reactor profile {@code node} sub-object.
+                 *
+                 * @apiNote
+                 * Carries the reactor's Jid string ({@code id}) and the
+                 * direct-path of the reactor's profile picture; WA Web
+                 * resolves the Jid via {@code WAWebWidFactory.createWid}
+                 * for downstream consumers.
                  */
                 public static final class Node {
+                    /**
+                     * The reactor Jid string.
+                     */
                     private final String id;
+
+                    /**
+                     * The direct-path of the reactor profile picture.
+                     */
                     private final String profilePicDirectPath;
 
+                    /**
+                     * Constructs a node wrapper from the parsed sub-fields.
+                     *
+                     * @apiNote
+                     * Reserved for the static parser.
+                     *
+                     * @param id                   the reactor Jid string
+                     * @param profilePicDirectPath the direct-path of the
+                     *                             reactor profile picture
+                     */
                     private Node(String id, String profilePicDirectPath) {
                         this.id = id;
                         this.profilePicDirectPath = profilePicDirectPath;
                     }
 
                     /**
-                     * Returns the {@code id} field.
+                     * Returns the reactor Jid string.
                      *
-     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the Jid string, or empty when the relay
+                     *         omitted the field
                      */
                     public Optional<String> id() {
                         return Optional.ofNullable(id);
                     }
 
                     /**
-                     * Returns the {@code profile_pic_direct_path} field.
+                     * Returns the direct-path of the reactor profile
+                     * picture.
                      *
-     * @return an {@link Optional} containing the value, or empty if absent
+                     * @return the direct path, or empty when the relay
+                     *         omitted the field
                      */
                     public Optional<String> profilePicDirectPath() {
                         return Optional.ofNullable(profilePicDirectPath);
                     }
 
                     /**
-                     * Parses a {@code Node} from the given JSON object.
+                     * Parses a {@link Node} from the given JSON object.
                      *
-     * @param obj the JSON object to parse
-                     * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                     * @apiNote
+                     * Used by {@link Edges#of(JSONObject)} to hydrate the
+                     * nested {@code node} entry.
+                     *
+                     * @param obj the JSON object to parse
+                     * @return the parsed entry, or empty when {@code obj}
+                     *         is {@code null}
                      */
                     static Optional<Node> of(JSONObject obj) {
                         if (obj == null) {
@@ -166,10 +273,15 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
                     }
 
                     /**
-                     * Parses a list of {@code Node} from the given JSON array.
+                     * Parses a list of {@link Node} entries from the given
+                     * JSON array.
                      *
-     * @param arr the JSON array to parse
-                     * @return the list of parsed results, empty if {@code arr} is {@code null}
+                     * @apiNote
+                     * Provided for symmetry.
+                     *
+                     * @param arr the JSON array to parse
+                     * @return the parsed list, empty when {@code arr} is
+                     *         {@code null}
                      */
                     static List<Node> ofArray(JSONArray arr) {
                         if (arr == null) {
@@ -185,10 +297,15 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
                 }
 
                 /**
-                 * Parses a {@code Edges} from the given JSON object.
+                 * Parses an {@link Edges} from the given JSON object.
                  *
-     * @param obj the JSON object to parse
-                 * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+                 * @apiNote
+                 * Used by {@link SenderList#of(JSONObject)} to hydrate one
+                 * entry of the {@code edges} array.
+                 *
+                 * @param obj the JSON object to parse
+                 * @return the parsed entry, or empty when {@code obj} is
+                 *         {@code null}
                  */
                 static Optional<Edges> of(JSONObject obj) {
                     if (obj == null) {
@@ -200,10 +317,16 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
                 }
 
                 /**
-                 * Parses a list of {@code Edges} from the given JSON array.
+                 * Parses a list of {@link Edges} entries from the given
+                 * JSON array.
                  *
-     * @param arr the JSON array to parse
-                 * @return the list of parsed results, empty if {@code arr} is {@code null}
+                 * @apiNote
+                 * Used by {@link SenderList#of(JSONObject)} to hydrate the
+                 * {@code edges} array.
+                 *
+                 * @param arr the JSON array to parse
+                 * @return the parsed list, empty when {@code arr} is
+                 *         {@code null}
                  */
                 static List<Edges> ofArray(JSONArray arr) {
                     if (arr == null) {
@@ -219,10 +342,15 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
             }
 
             /**
-             * Parses a {@code SenderList} from the given JSON object.
+             * Parses a {@link SenderList} from the given JSON object.
              *
-     * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+             * @apiNote
+             * Used by {@link Reactions#of(JSONObject)} to hydrate the
+             * nested {@code sender_list} entry.
+             *
+             * @param obj the JSON object to parse
+             * @return the parsed entry, or empty when {@code obj} is
+             *         {@code null}
              */
             static Optional<SenderList> of(JSONObject obj) {
                 if (obj == null) {
@@ -234,10 +362,16 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
             }
 
             /**
-             * Parses a list of {@code SenderList} from the given JSON array.
+             * Parses a list of {@link SenderList} entries from the given
+             * JSON array.
              *
-     * @param arr the JSON array to parse
-             * @return the list of parsed results, empty if {@code arr} is {@code null}
+             * @apiNote
+             * Provided for symmetry; the envelope does not carry a
+             * {@code sender_list} array.
+             *
+             * @param arr the JSON array to parse
+             * @return the parsed list, empty when {@code arr} is
+             *         {@code null}
              */
             static List<SenderList> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -253,10 +387,16 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
         }
 
         /**
-         * Parses a {@code Reactions} from the given JSON object.
+         * Parses a {@link Reactions} from the given JSON object.
          *
-     * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed result, or empty if {@code obj} is {@code null}
+         * @apiNote
+         * Used by
+         * {@link FetchNewsletterMessageReactionSenderListMexResponse#of(byte[])}
+         * to hydrate one entry of the {@code reactions} array.
+         *
+         * @param obj the JSON object to parse
+         * @return the parsed entry, or empty when {@code obj} is
+         *         {@code null}
          */
         static Optional<Reactions> of(JSONObject obj) {
             if (obj == null) {
@@ -269,10 +409,16 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
         }
 
         /**
-         * Parses a list of {@code Reactions} from the given JSON array.
+         * Parses a list of {@link Reactions} entries from the given JSON
+         * array.
          *
-     * @param arr the JSON array to parse
-         * @return the list of parsed results, empty if {@code arr} is {@code null}
+         * @apiNote
+         * Used by
+         * {@link FetchNewsletterMessageReactionSenderListMexResponse#of(byte[])}
+         * to hydrate the {@code reactions} array.
+         *
+         * @param arr the JSON array to parse
+         * @return the parsed list, empty when {@code arr} is {@code null}
          */
         static List<Reactions> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -288,12 +434,21 @@ public final class FetchNewsletterMessageReactionSenderListMexResponse implement
     }
 
     /**
-     * Parses a {@link FetchNewsletterMessageReactionSenderListMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletters_reaction_sender_list}
+     *         root
      */
     private static Optional<FetchNewsletterMessageReactionSenderListMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

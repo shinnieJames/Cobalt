@@ -20,8 +20,6 @@ function generateABPropJava(props: readonly ABPropDef[], pkg: string): string {
 
     lines.push(`package ${pkg};`);
     lines.push("");
-    lines.push("import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;");
-    lines.push("");
     lines.push("import java.util.Objects;");
     lines.push("import java.util.OptionalDouble;");
     lines.push("import java.util.OptionalInt;");
@@ -51,7 +49,6 @@ function generateABPropJava(props: readonly ABPropDef[], pkg: string): string {
     lines.push(" * @param debugDefaultValue the debug/beta default value used when the user has joined the");
     lines.push(" *                          WhatsApp Web Beta programme, must not be {@code null}");
     lines.push(" */");
-    lines.push(`@WhatsAppWebModule(moduleName = "WAWebABPropsConfigs")`);
     lines.push("public record ABProp(int code, String defaultValue, String debugDefaultValue) {");
 
     // Generate constants sorted by code for stable output

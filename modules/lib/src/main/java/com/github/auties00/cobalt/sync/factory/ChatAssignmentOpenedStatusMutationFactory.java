@@ -15,36 +15,59 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing chat-assignment-opened-status sync mutations.
+ * Builds outgoing app-state mutations that record whether a Business agent has opened a chat.
  *
- * <p>Mirrors the {@code createChatOpenedMutations} export of WhatsApp Web's
- * {@code WAWebChatAssignmentOpenedStatusSync} module. The factory is the
- * outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the team-inbox "agent has read this chat" signal that
+ * {@code WAWebBizChatAssignmentOpenedAction} surfaces: when an agent opens
+ * (or closes) an assigned chat, the resulting mutation is pushed via
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService} so the
+ * primary device and other agent devices see the same open state. The
+ * factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.ChatAssignmentOpenedStatusHandler}.
+ *
+ * @implNote
+ * This implementation accepts only a single triple per call, unlike WA Web's
+ * batched {@code createChatOpenedMutations(list)}; Cobalt callers loop at
+ * their own level when several open-state transitions must be flushed
+ * together.
  */
 public final class ChatAssignmentOpenedStatusMutationFactory {
     /**
-     * Constructs a chat-assignment-opened-status mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public ChatAssignmentOpenedStatusMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation that records whether the given agent has
-     * opened the given chat.
+     * Returns a SET mutation that records whether the given agent has the chat open.
      *
-     * <p>Per WhatsApp Web
-     * {@code WAWebChatAssignmentOpenedStatusSync.default.createChatOpenedMutations},
-     * the mutation carries a {@link ChatAssignmentOpenedStatusAction} whose
-     * {@code chatOpened} flag records the agent's open state. The index is
-     * {@code ["agentChatAssignmentOpenedStatus", chatJid, agentId]}.
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["agentChatAssignmentOpenedStatus", chatJid.toString(), agentId]
+     * }
+     * and the {@link ChatAssignmentOpenedStatusAction} sub-message carries
+     * the {@code chatOpened} flag. The composite index allows multiple
+     * agents to record open state for the same chat independently.
      *
-     * @param chatJid     the JID of the chat
-     * @param agentId     the agent identifier
-     * @param chatOpened  {@code true} when the agent has opened the chat
-     * @param timestamp   the mutation timestamp
-     * @return the pending mutation for the opened-state change
+     * @implNote
+     * This implementation pins the action version through
+     * {@link ChatAssignmentOpenedStatusAction#ACTION_VERSION}, which is the
+     * shared {@code CHAT_ASSIGNMENT_SYNC_VERSION} constant; the receive-side
+     * handler orphans the mutation if the underlying chat-assignment row
+     * does not yet exist in the agent collection.
+     *
+     * @param chatJid    the chat {@link Jid} whose open state is being recorded
+     * @param agentId    the identifier of the agent whose state changed
+     * @param chatOpened {@code true} when the agent has the chat open, {@code false} when they have left it
+     * @param timestamp  the mutation timestamp
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebChatAssignmentOpenedStatusSync", exports = "createChatOpenedMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation createChatOpenedMutation(

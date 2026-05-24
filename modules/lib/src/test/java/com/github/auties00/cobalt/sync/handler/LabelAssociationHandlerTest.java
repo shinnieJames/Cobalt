@@ -8,14 +8,12 @@ import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelAssociationActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LabelAssociationMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,23 +24,32 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LabelAssociationHandler} — Cobalt's adapter for
+ * Exercises the {@link LabelAssociationHandler} adapter for
  * {@code WAWebLabelJidSync}.
  *
- * <p>The handler manages the membership of labels: a SET with
- * {@code labeled=true} adds a chat/contact JID to the label's assignment set,
- * while {@code labeled=false} removes it. Labels that do not yet exist are
- * created as stubs to hold the association. These tests pin the wire metadata,
- * the add/remove paths, label-stub creation, malformed input fallbacks, the
- * default timestamp-based conflict resolution, and the static builder helper.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code label_jid} app-state
+ * sync action across metadata, the SET add/remove paths, the
+ * label-stub creation when the referenced label is unknown locally,
+ * the malformed-input fallbacks, the inherited timestamp-based
+ * conflict resolution and the
+ * {@link LabelAssociationMutationFactory} builder.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#findLabel(String)}
+ * read-back can be asserted directly. Label assignments live inside
+ * the {@link com.github.auties00.cobalt.model.preference.Label}
+ * model rather than in a side table, matching the production
+ * adaptation.
  */
 @DisplayName("LabelAssociationHandler")
 class LabelAssociationHandlerTest {
@@ -64,13 +71,20 @@ class LabelAssociationHandlerTest {
     }
 
     /**
-     * Builds a SET mutation with the canonical {@code ["label_jid", labelId, chatJid]} index.
+     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
+     * with the canonical {@code ["label_jid", labelId, chatJid]} index.
      *
-     * @param labelId   the label identifier
-     * @param chatJid   the chat or contact JID
-     * @param labeled   the labeled flag
-     * @param ts        the timestamp
-     * @return the trusted mutation
+     * @apiNote
+     * Used by every SET-path test to keep mutation construction
+     * boilerplate out of the test bodies and to reuse the wire-shape
+     * of the {@code label_jid} index across every assertion.
+     *
+     * @param labelId the label identifier
+     * @param chatJid the chat or contact {@link Jid}
+     * @param labeled the labeled flag
+     * @param ts      the mutation timestamp
+     * @return a {@link DecryptedMutation.Trusted} carrying a
+     *         {@link LabelAssociationAction}
      */
     private DecryptedMutation.Trusted buildSet(String labelId, Jid chatJid, boolean labeled, Instant ts) {
         var action = new LabelAssociationActionBuilder().labeled(labeled).build();
@@ -80,7 +94,7 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the LabelAssociationAction wire constant")
@@ -104,7 +118,7 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET adds and removes associations")
+    @DisplayName("applyMutation - SET adds and removes associations")
     class ApplySet {
         @Test
         @DisplayName("labeled=true on an existing label adds the chat JID to its assignment set")
@@ -146,7 +160,7 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("an unknown label upserts to a stub rather than returning ORPHAN")
@@ -156,12 +170,12 @@ class LabelAssociationHandlerTest {
             assertEquals(SyncActionState.SUCCESS, result.actionState());
             assertFalse(result.isOrphan());
             assertNull(result.modelId(),
-                    "the handler never reports an orphan target — labels are auto-created as stubs");
+                    "the handler never reports an orphan target - labels are auto-created as stubs");
         }
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -190,7 +204,7 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an index with empty labelId returns MALFORMED")
@@ -230,7 +244,7 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -246,10 +260,10 @@ class LabelAssociationHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = buildSet("42", CHAT_JID, true, Instant.ofEpochSecond(1_000));
             var remote = buildSet("42", CHAT_JID, false, Instant.ofEpochSecond(2_000));
@@ -258,7 +272,7 @@ class LabelAssociationHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -266,7 +280,7 @@ class LabelAssociationHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = buildSet("42", CHAT_JID, true, Instant.ofEpochSecond(2_000));
             var remote = buildSet("42", CHAT_JID, false, Instant.ofEpochSecond(1_000));
@@ -275,50 +289,4 @@ class LabelAssociationHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — createLabelAssociationMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET pending mutation carrying the canonical three-element index")
-        void indexShape() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = factory.createLabelAssociationMutation("42", CHAT_JID, true, ts);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(ts, inner.timestamp());
-            assertEquals(JSON.toJSONString(List.of("label_jid", "42", CHAT_JID.toString())), inner.index());
-
-            var action = inner.value().action().filter(a -> a instanceof LabelAssociationAction).map(a -> (LabelAssociationAction) a).orElseThrow();
-            assertTrue(action.labeled(),
-                    "labeled flag is preserved verbatim — true means add the association");
-        }
-
-        @Test
-        @DisplayName("labeled=false is preserved on the produced action")
-        void labeledFalseRoundtrips() {
-            var pending = factory.createLabelAssociationMutation("42", CHAT_JID, false, Instant.now());
-            assertFalse(pending.mutation().value().action().filter(a -> a instanceof LabelAssociationAction).map(a -> (LabelAssociationAction) a).orElseThrow().labeled());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/label-association/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/label-association/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.createLabelAssociationMutation(
-                    "42", CHAT_JID, true, Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

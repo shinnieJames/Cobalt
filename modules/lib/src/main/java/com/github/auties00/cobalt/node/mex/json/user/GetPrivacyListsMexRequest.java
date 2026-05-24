@@ -22,60 +22,88 @@ import java.util.Optional;
 import java.util.SequencedCollection;
 
 /**
- * Fetches the contents of a privacy contact list for a user, identified by the privacy list category, type and content
- * hash.
+ * Builds the MEX IQ stanza that fetches a server-side privacy contact list.
  *
- * <p>Privacy lists are the server-side allow/deny rosters that gate features such as last-seen visibility, profile
- * photo visibility, status visibility and call eligibility. The query is keyed by the requesting user's JID plus the
- * {@code (dhash, category, type)} triple that identifies the specific list variant. The {@code dhash} is the digest of
- * the locally cached list used to support delta refreshes, {@code category} encodes the privacy domain and
- * {@code type} encodes the allow/deny polarity.
+ * @apiNote Powers privacy-list refreshes for features such as the call
+ * deny-list (see WA Web's
+ * {@code WAWebQueryPrivacyDisallowedListMexJob.fetchDisallowedList}). The
+ * {@code dhash} field carries the digest of the locally cached list and
+ * lets the relay reply with a delta rather than the full roster when the
+ * cache is current. Pair the dispatched stanza with
+ * {@link GetPrivacyListsMexResponse} to consume the reply.
+ *
+ * @implNote This implementation embeds the full
+ * {@code {jid, privacy_contact_list_type: {dhash, category, type}}}
+ * shape inline. WA Web's mirror constructs it via
+ * {@code {input: {query_input: [...]}}} from a typed {@code GetPrivacyListInput}
+ * payload; Cobalt accepts the components individually and writes the same
+ * wire shape.
+ *
+ * @see GetPrivacyListsMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexGetPrivacyList")
 public final class GetPrivacyListsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier of the compiled privacy-list query.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexGetPrivacyListsQuery.graphql} for the snapshot this
+     * file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacyListsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "26806428515612550";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexGetPrivacyListsQuery.graphql}; WA Web tags the value to
+     * {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacyListsQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "fetchPrivacyList";
 
     /**
-     * The requesting user's JID.
+     * The {@code jid} field of the {@code query_input[0]} entry.
      */
     private final Jid jid;
 
     /**
-     * The digest of the locally cached list, used to drive delta refreshes against the server-side state.
+     * The {@code dhash} of the locally cached list, possibly {@code null}.
      */
     private final String dhash;
 
     /**
-     * The privacy list domain (for example {@code "ALL"}).
+     * The {@code category} string identifying the privacy domain.
      */
     private final String category;
 
     /**
-     * The allow/deny polarity for the list.
+     * The {@code type} string identifying the allow/deny polarity.
      */
     private final String type;
 
     /**
-     * Constructs a request for the contents of a privacy contact list.
+     * Constructs a privacy-list fetch request.
      *
-     * @apiNote {@code category} and {@code type} hold WA enum strings declared elsewhere in the JS source and are
-     *          forwarded verbatim to the relay.
-     * @param jid the requesting user's JID, must not be {@code null}
-     * @param dhash the digest of the locally cached list used for delta refreshes
-     * @param category the privacy list domain
-     * @param type the allow/deny polarity for the list
+     * @apiNote {@code category} and {@code type} are WA enum tokens declared
+     * elsewhere in the WA Web JS source (for example {@code "CALL"} +
+     * {@code "DENYLIST"} for the call deny-list); both are forwarded
+     * verbatim. Pass the empty string for {@code dhash} when fetching a
+     * fresh list, or the previously observed {@link Jid} digest to receive a
+     * delta refresh.
+     *
+     * @param jid the requesting user's JID
+     * @param dhash the digest of the locally cached list, or {@code null}
+     *              to omit the variable
+     * @param category the privacy list domain, or {@code null} to omit the
+     *                 variable
+     * @param type the allow/deny polarity, or {@code null} to omit the
+     *             variable
+     * @throws NullPointerException if {@code jid} is {@code null}
      */
     public GetPrivacyListsMexRequest(Jid jid, String dhash, String category, String type) {
         this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -85,9 +113,7 @@ public final class GetPrivacyListsMexRequest implements MexOperation.Request.Jso
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -95,9 +121,7 @@ public final class GetPrivacyListsMexRequest implements MexOperation.Request.Jso
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -105,8 +129,15 @@ public final class GetPrivacyListsMexRequest implements MexOperation.Request.Jso
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp relay.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the serialised GraphQL variables
+     * {@inheritDoc}
+     *
+     * @implNote This implementation serialises
+     * {@code {"variables": {"input": {"query_input": [{"jid": ..., "privacy_contact_list_type": {"dhash"?, "category"?, "type"?}}]}}}}
+     * and defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}. The
+     * three optional sub-fields are emitted only when non-{@code null};
+     * {@code query_input} is always a single-element array since the
+     * Cobalt API takes one {@link Jid} per request.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetPrivacyList", exports = "fetchPrivacyList",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -122,7 +153,6 @@ public final class GetPrivacyListsMexRequest implements MexOperation.Request.Jso
             writer.writeColon();
             writer.startObject();
 
-            // Single-element array carrying the JID plus the privacy_contact_list_type triple.
             writer.writeName("query_input");
             writer.writeColon();
             writer.startArray();

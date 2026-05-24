@@ -11,46 +11,72 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound notification. The relay's PSA-class push carrying the
- * {@code <surfaces/>} subtree.
+ * The inbound projection of a server-pushed quick-promotion (QP)
+ * surfaces notification.
+ *
+ * @apiNote
+ * Surfaces the relay's PSA-class push that carries the
+ * {@code <surfaces/>} subtree of QP promotions and triggers. WA Web's
+ * {@code WAWebParseQPSurfacesNotification} consumes this projection,
+ * fans out the contained promotions through the QP UI pipeline, and
+ * acknowledges receipt via
+ * {@link SmaxQpQpNotificationAcknowledgement#from(SmaxQpQpNotificationResponse)};
+ * embedders that surface QP promotions follow the same parse-then-ack
+ * cadence.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesQPNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesQPSurfacesMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInQpSurfacesServerNotificationMixin")
 public final class SmaxQpQpNotificationResponse implements SmaxOperation.Response {
     /**
-     * The notification id. Echoed verbatim into the ack stanza.
+     * The notification id; echoed verbatim into the ack stanza.
      */
     private final String notificationId;
 
     /**
-     * The notification sender JID. Becomes the ack's {@code to}.
+     * The notification sender JID; becomes the ack's {@code to}.
      */
     private final Jid notificationFrom;
 
     /**
-     * The notification type. Always {@code "psa"} on the QP surface
-     * channel but kept as a typed field so the ack can echo it.
+     * The notification type.
+     *
+     * @implNote
+     * This implementation always stores the literal {@code "psa"}
+     * after a successful parse; the field is preserved as typed state
+     * rather than elided so the ack can echo it without a second
+     * lookup against the original stanza.
      */
     private final String notificationType;
 
     /**
-     * The raw {@code <surfaces/>} subtree carrying the QP surfaces /
-     * promotion / triggers payload. Consumers re-parse it through the
-     * dedicated protobuf pipeline.
+     * The raw {@code <surfaces/>} subtree carrying the QP surfaces,
+     * promotions, and triggers payload.
+     *
+     * @implNote
+     * This implementation keeps the subtree as a raw {@link Node}
+     * rather than re-parsing it through the typed surfaces mixin;
+     * consumers route it through their own protobuf pipeline. WA
+     * Web's {@code WASmaxInQpSurfacesQPSurfacesMixin} performs the
+     * equivalent typed parse upstream, but Cobalt has no per-surface
+     * typed model and forwards the subtree verbatim.
      */
     private final Node surfacesNode;
 
     /**
      * Constructs a new inbound projection.
      *
-     * @param notificationId   the notification id. Never {@code null}
-     * @param notificationFrom the notification sender JID. Never
+     * @apiNote
+     * Used by {@link #of(Node)} after the stanza shape has been
+     * validated; embedders typically do not instantiate this
+     * directly.
+     *
+     * @param notificationId the notification id; never {@code null}
+     * @param notificationFrom the notification sender JID; never
      *                         {@code null}
-     * @param notificationType the notification type. Never
-     *                         {@code null}
-     * @param surfacesNode     the raw {@code <surfaces/>} subtree;
-     *                         never {@code null}
+     * @param notificationType the notification type; never {@code null}
+     * @param surfacesNode the raw {@code <surfaces/>} subtree; never
+     *                     {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxQpQpNotificationResponse(String notificationId, Jid notificationFrom, String notificationType,
@@ -64,7 +90,7 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
     /**
      * Returns the notification id.
      *
-     * @return the id. Never {@code null}
+     * @return the id; never {@code null}
      */
     public String notificationId() {
         return notificationId;
@@ -73,7 +99,7 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
     /**
      * Returns the notification sender JID.
      *
-     * @return the sender JID. Never {@code null}
+     * @return the sender JID; never {@code null}
      */
     public Jid notificationFrom() {
         return notificationFrom;
@@ -82,7 +108,7 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
     /**
      * Returns the notification type.
      *
-     * @return the type. Never {@code null}
+     * @return the type; never {@code null}
      */
     public String notificationType() {
         return notificationType;
@@ -91,19 +117,37 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
     /**
      * Returns the raw {@code <surfaces/>} subtree.
      *
-     * @return the {@code <surfaces/>} node. Never {@code null}
+     * @apiNote
+     * Embedders re-parse this node through the QP-surfaces protobuf
+     * pipeline; Cobalt does not project it into typed state.
+     *
+     * @return the {@code <surfaces/>} node; never {@code null}
      */
     public Node surfacesNode() {
         return surfacesNode;
     }
 
     /**
-     * Tries to parse an {@link SmaxQpQpNotificationResponse} projection from the given
-     * {@code <notification/>} stanza.
+     * Parses an {@link SmaxQpQpNotificationResponse} projection from
+     * the given {@code <notification/>} stanza.
      *
-     * @param node the inbound notification stanza. Never {@code null}
+     * @apiNote
+     * Returns {@link Optional#empty()} when the envelope is not a
+     * {@code <notification type="psa">} carrying a non-null
+     * {@code id}, a non-null {@code from}, and a {@code <surfaces/>}
+     * child.
+     *
+     * @implNote
+     * This implementation skips the typed surfaces and
+     * server-notification mixins WA Web composes inside
+     * {@code parseQPNotificationRequest}; both produce data the
+     * consumer would simply forward to the QP pipeline, so the
+     * subtree is kept as a raw {@link Node} and the typed parse is
+     * deferred.
+     *
+     * @param node the inbound notification stanza; never {@code null}
      * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza doesn't match the expected shape
+     *         when the stanza shape does not match
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInQpSurfacesQPNotificationRequest",
@@ -132,6 +176,14 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
         return Optional.of(new SmaxQpQpNotificationResponse(id, from, "psa", surfaces));
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxQpQpNotificationResponse} with equal echoed
+     * attributes and surfaces subtree.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when every field matches
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -147,11 +199,26 @@ public final class SmaxQpQpNotificationResponse implements SmaxOperation.Respons
                 && Objects.equals(this.surfacesNode, that.surfacesNode);
     }
 
+    /**
+     * Returns a hash code derived from every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(notificationId, notificationFrom, notificationType, surfacesNode);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this
+     * projection.
+     *
+     * @apiNote
+     * The {@code <surfaces/>} subtree is intentionally omitted from
+     * the output so logs do not blow up on multi-promotion pushes.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxQpQpNotificationResponse[notificationId=" + notificationId

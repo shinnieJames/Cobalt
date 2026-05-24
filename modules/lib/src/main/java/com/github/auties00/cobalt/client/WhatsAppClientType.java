@@ -3,18 +3,14 @@ package com.github.auties00.cobalt.client;
 import it.auties.protobuf.annotation.ProtobufEnum;
 
 /**
- * Enumerates the supported WhatsApp client flavours.
+ * Names the product flavour a {@link WhatsAppClient} impersonates on the
+ * wire.
  *
- * <p>Cobalt can operate in two distinct modes that correspond to different
- * WhatsApp product surfaces: a web companion that mirrors WhatsApp Web and
- * Desktop, and a primary mobile client that directly registers a phone
- * number. The selected flavour affects registration, handshake payloads,
- * device capabilities, history sync behaviour and the set of listener
- * callbacks that fire.
- *
- * <p>This value is persisted in the store so that a previously registered
- * session can be loaded back with the correct client type and is also
- * emitted over the wire as part of the handshake.
+ * @apiNote
+ * Picked at builder time and persisted in the store so the same flavour
+ * is used on every reconnect. The value drives transport selection,
+ * handshake payload shape, registration code paths, history-sync
+ * behaviour, and which {@link WhatsAppClientListener} callbacks fire.
  *
  * @see WhatsAppClientBuilder
  * @see WhatsAppDevice
@@ -22,24 +18,27 @@ import it.auties.protobuf.annotation.ProtobufEnum;
 @ProtobufEnum
 public enum WhatsAppClientType {
     /**
-     * A web companion client that attaches to a primary mobile device via
-     * QR code or pairing code, mirroring WhatsApp Web and Desktop.
+     * A companion that links to an existing primary mobile account.
      *
-     * <p>In this mode the client does not own the phone number: it
-     * exchanges identity with an existing primary account and operates as
-     * a linked device. The companion-linking ceremony is driven by
-     * {@link WhatsAppClientVerificationHandler.Web}.
+     * @apiNote
+     * Selected by {@link WhatsAppClientBuilder#webClient()}. The
+     * companion does not own a phone number; it goes through the linked-device
+     * ceremony driven by {@link WhatsAppClientVerificationHandler.Web}
+     * (QR code or pairing code) and inherits the primary device's
+     * identity.
      */
     WEB,
 
     /**
-     * A primary mobile client that registers a phone number directly with
-     * the WhatsApp servers.
+     * A primary client that registers a phone number directly with the
+     * WhatsApp servers.
      *
-     * <p>In this mode the client owns the phone number, so it must go through
-     * the full mobile registration flow (SMS/voice/WhatsApp verification code
-     * delivery) and will receive registration-only events such as
-     * {@link WhatsAppClientListener#onRegistrationCode(WhatsAppClient, long)}.
+     * @apiNote
+     * Selected by {@link WhatsAppClientBuilder#mobileClient()}. The
+     * client owns the phone number and runs the full SMS, voice, or
+     * in-app verification flow, surfacing
+     * {@link WhatsAppClientListener#onRegistrationCode(WhatsAppClient, long)}
+     * during registration.
      */
     MOBILE
 }

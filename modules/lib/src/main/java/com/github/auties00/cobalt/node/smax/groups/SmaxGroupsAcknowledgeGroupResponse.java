@@ -13,23 +13,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsAcknowledgeGroupRequest}.
+ * The sealed reply family for a {@link SmaxGroupsAcknowledgeGroupRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's
+ * {@code Success}/{@code ClientError}/{@code ServerError} cases. The caller in
+ * {@code WAWebConversationSpamUtils.acknowledgeGroupAsNotSpam} dispatches fire-and-forget and discards every
+ * variant; this type still ships the typed reply for callers that want richer error reporting.
  */
 public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation.Response
         permits SmaxGroupsAcknowledgeGroupResponse.Success, SmaxGroupsAcknowledgeGroupResponse.ClientError, SmaxGroupsAcknowledgeGroupResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsAcknowledgeGroupResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsAcknowledgeGroupResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsAcknowledgeGroupRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound {@link SmaxGroupsAcknowledgeGroupRequest} stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsAcknowledgeGroupRPC",
@@ -49,31 +56,31 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The {@code Success} reply variant — the relay accepted the
-     * acknowledgement.
+     * The reply variant emitted when the relay accepted the acknowledgement.
      *
-     * <p>Carries no payload beyond the envelope echo: the WA Web
-     * parser only validates the {@code <iq from id type="result">}
-     * shape and produces a singleton {@code {type: "result"}}
+     * @apiNote Carries no payload beyond the envelope echo; the WA Web parser only validates the
+     * {@code <iq from="..." id="..." type="result">} shape and emits a singleton {@code {type: "result"}}
      * record.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseSuccess")
     final class Success implements SmaxGroupsAcknowledgeGroupResponse {
         /**
-         * Constructs a new successful reply.
+         * Constructs a marker {@link Success}.
+         *
+         * @apiNote The instance carries no payload; the relay's envelope is the only signal.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseAcknowledgeGroupResponseSuccess}: the IQ must be a
+         * valid {@code type="result"} echo of the request.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseSuccess",
                 exports = "parseAcknowledgeGroupResponseSuccess",
@@ -85,6 +92,12 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return Optional.of(new Success());
         }
 
+        /**
+         * Compares this marker to {@code obj} for value equality.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -93,11 +106,21 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a constant hash shared by every {@link Success} instance.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * Returns the marker's debug representation.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAcknowledgeGroupResponse.Success[]";
@@ -105,28 +128,26 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * request as malformed, unauthorised, or referencing a
-     * non-existent group.
+     * The reply variant emitted when the relay rejected the acknowledgement as malformed, unauthorised, or
+     * referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseClientError")
     final class ClientError implements SmaxGroupsAcknowledgeGroupResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -134,7 +155,7 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -143,24 +164,23 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseClientError",
                 exports = "parseAcknowledgeGroupResponseClientError",
@@ -173,6 +193,12 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -185,11 +211,21 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAcknowledgeGroupResponse.ClientError[errorCode=" + errorCode
@@ -198,27 +234,25 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure while processing the request.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseServerError")
     final class ServerError implements SmaxGroupsAcknowledgeGroupResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -226,7 +260,7 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -235,24 +269,23 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAcknowledgeGroupResponseServerError",
                 exports = "parseAcknowledgeGroupResponseServerError",
@@ -265,6 +298,12 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -277,11 +316,21 @@ public sealed interface SmaxGroupsAcknowledgeGroupResponse extends SmaxOperation
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAcknowledgeGroupResponse.ServerError[errorCode=" + errorCode

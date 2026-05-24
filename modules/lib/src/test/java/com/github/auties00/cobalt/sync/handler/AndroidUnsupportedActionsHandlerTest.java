@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link AndroidUnsupportedActionsHandler} â€” Cobalt's adapter for
+ * Tests for {@link AndroidUnsupportedActionsHandler} - Cobalt's adapter for
  * {@code WAWebAndroidUnsupportedActionsSync}.
  *
  * <p>The handler toggles {@code primaryAllowsAllMutations} when the incoming
@@ -138,7 +138,7 @@ class AndroidUnsupportedActionsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index â€” n/a (singleton index)")
+    @DisplayName("applyMutation: malformed index - n/a (singleton index)")
     class MalformedIndexNa {
         @Test
         @DisplayName("the handler does not inspect indexParts[1]")
@@ -164,7 +164,7 @@ class AndroidUnsupportedActionsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -179,7 +179,7 @@ class AndroidUnsupportedActionsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” n/a, default implementation is per-item")
+    @DisplayName("applyMutationBatch - n/a, default implementation is per-item")
     class BatchNa {
         @Test
         @DisplayName("the default applyMutationBatch dispatches per-mutation")

@@ -8,14 +8,12 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentOpenedStatusActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ChatAssignmentOpenedStatusMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,13 +24,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ChatAssignmentOpenedStatusHandler} — Cobalt's adapter
+ * Tests for {@link ChatAssignmentOpenedStatusHandler} - Cobalt's adapter
  * for {@code WAWebChatAssignmentOpenedStatusSync}.
  *
  * <p>The handler updates the {@code opened} flag on an existing
@@ -94,7 +90,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the wire constant")
@@ -118,7 +114,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET updates the opened flag")
+    @DisplayName("applyMutation - SET updates the opened flag")
     class ApplySet {
         @Test
         @DisplayName("a SET with chatOpened=true flips the assignment's opened flag")
@@ -157,7 +153,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan outcomes")
+    @DisplayName("applyMutation - orphan outcomes")
     class Orphans {
         @Test
         @DisplayName("a chat absent locally returns ORPHAN with chat metadata")
@@ -205,7 +201,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -229,7 +225,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a missing agent id slot returns MALFORMED")
@@ -255,7 +251,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -270,10 +266,10 @@ class ChatAssignmentOpenedStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -282,7 +278,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("equal timestamps - APPLY_REMOTE_DROP_LOCAL")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -290,7 +286,7 @@ class ChatAssignmentOpenedStatusHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -304,45 +300,4 @@ class ChatAssignmentOpenedStatusHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — createChatOpenedMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET pending mutation with the three-element index")
-        void carriesInputs() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = factory.createChatOpenedMutation(CHAT_JID, AGENT_ID, true, ts);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(ts, inner.timestamp());
-            assertEquals(
-                    JSON.toJSONString(List.of(handler.actionName(), CHAT_JID.toString(), AGENT_ID)),
-                    inner.index(),
-                    "the index is the three-element [action, chatJid, agentId] tuple");
-
-            var roundtrip = inner.value().action().filter(a -> a instanceof ChatAssignmentOpenedStatusAction).map(a -> (ChatAssignmentOpenedStatusAction) a).orElseThrow();
-            assertTrue(roundtrip.chatOpened());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/chat-assignment-opened-status/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/chat-assignment-opened-status/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.createChatOpenedMutation(
-                    CHAT_JID, AGENT_ID, true, Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

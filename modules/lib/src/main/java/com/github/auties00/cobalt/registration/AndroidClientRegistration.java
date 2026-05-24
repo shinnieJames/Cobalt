@@ -16,66 +16,95 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Mobile registration driver that impersonates the native Android
+ * Mobile registration driver impersonating the native Android
  * WhatsApp application.
  *
  * <p>Adds Android-specific behaviour on top of
  * {@link MobileClientRegistration}:
  * <ul>
- *   <li>{@link #createRequest(String, String, String)} attaches the Android
- *       User-Agent derived from the store's device description plus the
- *       {@code WaMsysRequest} and {@code request_token} headers the
- *       Android app sends.</li>
- *   <li>{@link #getRequestVerificationCodeParameters(String)} populates
- *       the long list of Android-only form fields that the
- *       {@code /code} endpoint expects (SIM MCC/MNC, advertising ID,
- *       backup token, cellular signal strength, client metrics, and so
- *       on) and now appends the Play Integrity attestation triple
- *       ({@code gpia}, {@code _gg}, {@code _gi}, {@code _gp}) produced
- *       by the configured
- *       {@link WhatsAppDeviceAttestor.Android}.</li>
- *   <li>{@link #generateFdid()} formats the device family UUID in lower
- *       case, matching the Android behaviour.</li>
+ *   <li>{@link #createRequest(String, String, String)} attaches the
+ *       Android User-Agent plus the {@code WaMsysRequest} and
+ *       {@code request_token} headers the native client emits.</li>
+ *   <li>{@link #getRequestVerificationCodeParameters(String)}
+ *       populates the long list of Android-only form fields the
+ *       {@code /code} endpoint expects (SIM MCC/MNC, advertising id,
+ *       backup token, cellular strength, client metrics, etc.).</li>
+ *   <li>{@link #attestBody(byte[])} HMAC-signs the body via the
+ *       configured {@link WhatsAppDeviceAttestor.Android} and
+ *       packages the result into the {@code H=} suffix plus the
+ *       {@code Authorization} certificate-chain header.</li>
+ *   <li>{@link #attestationFields()} ships the Play Integrity
+ *       sextuple and the FCM {@code push_token} on every attested
+ *       endpoint.</li>
+ *   <li>{@link #generateFdid()} formats the device family UUID in
+ *       lowercase, matching the native client.</li>
  * </ul>
  *
- * @apiNote Android-specific driver for the native mobile registration
- *          protocol. Not present in WA Web. Package-private because
- *          callers should always go through
- *          {@link MobileClientRegistration#newRegistration} rather
- *          than constructing this class directly.
+ * @apiNote
+ * Android-specific subclass of {@link MobileClientRegistration}.
+ * Package-private because embedders construct this through
+ * {@link MobileClientRegistration#newRegistration(WhatsAppStore,
+ * WhatsAppClientVerificationHandler.Mobile, WhatsAppDeviceAttestor,
+ * WhatsAppDevicePushClient)} rather than directly.
+ *
+ * @implNote
+ * This implementation reproduces the exact wire shape captured from a
+ * live native Android client via Frida-instrumented
+ * {@code mbedtls_gcm_crypt_and_tag} (used inside
+ * {@code libwhatsapp.so}) on a
+ * {@code method=voice} run. Every form field name and default value
+ * here matches what the native client emits for a fresh device, so
+ * the registration server cannot fingerprint Cobalt by absent or
+ * surplus fields.
+ *
  * @see MobileClientRegistration
  */
 final class AndroidClientRegistration extends MobileClientRegistration {
     /**
-     * The Android device attestor the registration consults before each
-     * outgoing request. Never {@code null}: the constructor substitutes
+     * The Android device attestor consulted before each outgoing
+     * request.
+     *
+     * @apiNote
+     * Never {@code null}: the constructor substitutes
      * {@link WhatsAppDeviceAttestor.Android#NONE} when the caller
-     * supplies {@code null}.
+     * supplies {@code null}. The {@code NONE} fallback produces
+     * empty Play Integrity and signature output, which the server
+     * tolerates as a low-trust signal.
      */
     private final WhatsAppDeviceAttestor.Android attestor;
 
     /**
-     * The push client the registration consults for the {@code push_token}
-     * and {@code push_code} form fields. Never {@code null}: the
-     * constructor substitutes {@link WhatsAppDevicePushClient#noop()} when the
-     * caller supplies {@code null}.
+     * The push client consulted for the FCM {@code push_token} and
+     * silent-push {@code push_code} form fields.
+     *
+     * @apiNote
+     * Never {@code null}: the constructor substitutes
+     * {@link WhatsAppDevicePushClient#noop()} when the caller
+     * supplies {@code null}. The {@code noop} fallback returns empty
+     * strings, which the server tolerates.
      */
     private final WhatsAppDevicePushClient pushClient;
 
     /**
-     * Constructs a new Android registration bound to the given store,
-     * verification handler, attestor, and push client.
+     * Constructs an Android registration bound to the given
+     * collaborators.
      *
-     * @param store the store carrying identity keys and phone number
-     * @param verification the verification handler supplying the method
-     *                     and the user-entered code
-     * @param attestor the Android device attestor, or {@code null} to
-     *                 use the low-trust
-     *                 {@link WhatsAppDeviceAttestor.Android#NONE}
-     *                 fallback
-     * @param pushClient the push client, or {@code null} to use the
-     *                   low-trust {@link WhatsAppDevicePushClient#noop()}
-     *                   fallback
+     * @apiNote
+     * Called only from
+     * {@link MobileClientRegistration#newRegistration(WhatsAppStore,
+     * WhatsAppClientVerificationHandler.Mobile,
+     * WhatsAppDeviceAttestor, WhatsAppDevicePushClient)}.
+     *
+     * @param store        the store carrying identity keys and the
+     *                     phone number
+     * @param verification the verification handler supplying the
+     *                     method and the user-entered code
+     * @param attestor     the Android device attestor, or
+     *                     {@code null} to fall back to
+     *                     {@link WhatsAppDeviceAttestor.Android#NONE}
+     * @param pushClient   the push client, or {@code null} to fall
+     *                     back to
+     *                     {@link WhatsAppDevicePushClient#noop()}
      */
     AndroidClientRegistration(
             WhatsAppStore store,
@@ -88,22 +117,19 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Builds an HTTP POST request to the registration endpoint with the
-     * pre-assembled body and the Android-specific headers.
+     * {@inheritDoc}
      *
-     * <p>The {@code body} argument is already in its final wire form:
-     * the base class has prepended the {@code ENC=} envelope marker and,
-     * when an Android keystore signature was produced, appended the
-     * {@code &H=<hex>} fragment. When {@code authorizationHeader} is
-     * non-{@code null} the {@code Authorization} header carrying the
-     * keystore attestation certificate chain is attached as well.
-     *
-     * @param path the API sub-path ({@code /exist}, {@code /code},
-     *             {@code /register}, {@code /challenge}, {@code /security})
-     * @param body the fully-assembled request body
-     * @param authorizationHeader the {@code Authorization} header value,
-     *                            or {@code null} to omit the header
-     * @return a ready-to-send HTTP request
+     * @implNote
+     * This implementation sets the Android User-Agent derived from
+     * the configured device description, fixes
+     * {@code Content-Type} to
+     * {@code application/x-www-form-urlencoded}, fixes
+     * {@code Accept} to {@code text/json}, advertises
+     * {@code WaMsysRequest: 1} (the marker the native Android
+     * registration stack adds), and attaches a fresh random
+     * {@code request_token} UUID on every call. Each of these
+     * headers was observed verbatim on a live native Android
+     * registration capture.
      */
     @Override
     protected HttpRequest createRequest(String path, String body, String authorizationHeader) {
@@ -122,24 +148,25 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Signs the base64 ENC body with the configured
-     * {@link WhatsAppDeviceAttestor.Android} and packages the result
-     * into the {@code H=} suffix and {@code Authorization} header.
+     * {@inheritDoc}
      *
-     * <p>The attestor's {@link WhatsAppDeviceAttestor.Android#sign sign}
-     * call returns raw signature bytes and a raw certificate chain. This
-     * method hex-encodes the signature (lowercase, no separator, the
-     * format the WhatsApp server expects) and URL-safe-base64-encodes the
-     * certificate chain without padding. When either component comes back
-     * empty the {@link WhatsAppDeviceAttestor.Android#NONE} attestor is
-     * in effect and {@link BodyAttestation#EMPTY} is returned, which
-     * tells the base class to skip both the {@code &H=} fragment and the
-     * header.
+     * @apiNote
+     * Concretely on Android: hex-encodes the signature returned by
+     * {@link WhatsAppDeviceAttestor.Android#sign} (lowercase, no
+     * separator, the format the WhatsApp server expects in the
+     * {@code &H=} suffix) and URL-safe-base64-encodes the
+     * certificate chain without padding (the format the server
+     * expects in the {@code Authorization} header).
      *
-     * @param encBodyBytes the UTF-8 bytes of the base64 ENC body to sign
-     * @return the packaged signature and header value, or
-     *         {@link BodyAttestation#EMPTY} when no real signature is
-     *         available
+     * @implNote
+     * This implementation returns {@link BodyAttestation#EMPTY}
+     * when the signature is empty, which signals that the
+     * {@link WhatsAppDeviceAttestor.Android#NONE} fallback is in
+     * effect; the base class then skips both wire slots. A non-empty
+     * signature with an empty chain yields a populated suffix and a
+     * {@code null} {@code Authorization} header, matching the
+     * native client's behaviour for builds that produce a Keystore
+     * signature but withhold the chain.
      */
     @Override
     protected BodyAttestation attestBody(byte[] encBodyBytes) {
@@ -157,22 +184,34 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the large set of Android-specific form fields that the
-     * {@code /code} endpoint expects in addition to the shared
-     * registration parameters.
+     * {@inheritDoc}
      *
-     * <p>The exact field set was verified by hooking
-     * {@code mbedtls_gcm_crypt_and_tag} (mbedTLS AES-GCM, used inside
-     * {@code libwhatsapp.so}) on a live Android client and dumping the
-     * pre-encryption form body. Every name and default value here is
-     * what the native client emits for a {@code method=voice} run on a
-     * fresh device. The Play Integrity sextuple
-     * ({@code gpia, _gg, _gi, _gp, _ge, _ga}) is not emitted here
-     * because it is added on every attested endpoint by
+     * @apiNote
+     * Concretely on Android, the returned fields include
+     * {@code sim_mcc}/{@code sim_mnc}, {@code reason},
+     * {@code mcc}/{@code mnc},
+     * {@code feo2_query_status} (always
+     * {@code "error_security_exception"} so the server's anti-abuse
+     * pipeline interprets Cobalt as a device whose Play Integrity
+     * minting failed), {@code db}, {@code sim_type},
+     * {@code recaptcha} (the always-{@code "ABPROP_DISABLED"}
+     * stage), {@code network_radio_type},
+     * {@code prefer_sms_over_flash}, {@code simnum},
+     * {@code airplane_mode_type}, {@code client_metrics} (a
+     * URL-encoded JSON object built by {@link #buildClientMetrics}),
+     * {@code mistyped}, {@code advertising_id},
+     * {@code hasinrc}, {@code roaming_type}, {@code device_ram},
+     * {@code education_screen_displayed}, {@code pid},
+     * {@code cellular_strength}, {@code backup_token},
+     * {@code tos_version}, {@code call_log_permission},
+     * {@code manage_call_permission},
+     * {@code clicked_education_link}, {@code aid}, and
+     * {@code push_code}.
+     *
+     * @implNote
+     * This implementation does not include the Play Integrity
+     * sextuple here because it ships on every attested endpoint via
      * {@link #attestationFields()}.
-     *
-     * @param method the verification method chosen by the user
-     * @return the alternating name/value form parameters
      */
     @Override
     protected String[] getRequestVerificationCodeParameters(String method) {
@@ -211,24 +250,26 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the Play Integrity sextuple ({@code gpia}, {@code _gg},
-     * {@code _gi}, {@code _gp}, {@code _ge}, {@code _ga}) produced by
-     * the configured {@link WhatsAppDeviceAttestor.Android} plus the FCM
-     * device {@code push_token} produced by the configured
-     * {@link WhatsAppDevicePushClient}, ready for injection into every attested
-     * request body.
+     * {@inheritDoc}
      *
-     * <p>Both groups are routed through here because they share a
-     * lifecycle: {@code push_token} is sent on every attested endpoint
-     * (matching the live native-client capture for {@code /v2/exist})
-     * and the Play Integrity values are required on every attested
-     * endpoint too. The {@link WhatsAppDeviceAttestor.Android#NONE}
-     * attestor returns six empty strings for Play Integrity and the
-     * {@link WhatsAppDevicePushClient#noop()} push client returns an empty
-     * {@code push_token}, which the registration server tolerates as a
-     * low-trust signal.
+     * @apiNote
+     * Concretely on Android, returns the Play Integrity sextuple
+     * ({@code gpia}, {@code _gg}, {@code _gi}, {@code _gp},
+     * {@code _ge}, {@code _ga}) produced by the configured
+     * {@link WhatsAppDeviceAttestor.Android} plus the FCM
+     * {@code push_token} produced by the configured push client.
      *
-     * @return the alternating name/value form parameters
+     * @implNote
+     * This implementation pairs the attestation and the push token
+     * together because they share the same per-endpoint lifecycle:
+     * both ship on {@code /v2/exist} (matching the native-client
+     * capture for that path) and on every other attested endpoint,
+     * and both are suppressed on the funnel endpoints by the base
+     * class. The {@link WhatsAppDeviceAttestor.Android#NONE}
+     * attestor returns six empty strings and the
+     * {@link WhatsAppDevicePushClient#noop()} push client returns
+     * an empty {@code push_token}, all of which the registration
+     * server accepts as low-trust signals.
      */
     @Override
     protected String[] attestationFields() {
@@ -245,10 +286,12 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Returns the device family identifier formatted as a lower-case UUID,
-     * matching the Android client's {@code fdid} scheme.
+     * {@inheritDoc}
      *
-     * @return the lower-case UUID string
+     * @apiNote
+     * Concretely on Android, the UUID is formatted in lowercase
+     * with hyphens, matching the native client's {@code fdid}
+     * scheme.
      */
     @Override
     protected String generateFdid() {
@@ -256,16 +299,25 @@ final class AndroidClientRegistration extends MobileClientRegistration {
     }
 
     /**
-     * Builds the percent-encoded {@code client_metrics} JSON payload
-     * tracking the real attempt count driven by the base class's retry
-     * loop.
+     * Builds the percent-encoded {@code client_metrics} JSON
+     * payload tracking the current retry attempt.
      *
-     * <p>Reproduces the shape captured from a live native Android client
-     * via Frida-instrumented {@code mbedtls_gcm_crypt_and_tag} on a
+     * @apiNote
+     * Internal helper for
+     * {@link #getRequestVerificationCodeParameters(String)}. The
+     * field is consulted by WhatsApp's anti-abuse pipeline to
+     * detect uninstall-reinstall loops and persistent
+     * registration-spam patterns.
+     *
+     * @implNote
+     * This implementation reproduces the shape captured from a live
+     * native Android client via Frida-instrumented
+     * {@code mbedtls_gcm_crypt_and_tag} on a
      * {@code method=voice} run: {@code attempts} integer,
-     * {@code app_campaign_download_source} string, and
-     * {@code is_sim_absent} boolean. Field order matches what the
-     * native client emits.
+     * {@code app_campaign_download_source} string,
+     * {@code is_sim_absent} boolean. Field order matches the native
+     * client's emission order, which the server's strict JSON
+     * parser is known to enforce.
      *
      * @return the percent-encoded JSON string
      */

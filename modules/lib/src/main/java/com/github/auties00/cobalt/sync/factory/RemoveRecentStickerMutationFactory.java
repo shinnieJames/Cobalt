@@ -16,14 +16,32 @@ import java.util.List;
 /**
  * Builds outgoing remove-recent-sticker sync mutations.
  *
- * <p>Mirrors the {@code generateRemoveStickerMutation} export of WhatsApp
- * Web's {@code WAWebStickersRemoveRecentSyncAction} module. The factory is
- * the outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the long-press "remove from recents" gesture on the stickers
+ * tray; the WA Web entry point is
+ * {@code WAWebRemoveStickerJob} which wraps a single
+ * {@code generateRemoveStickerMutation} call in a
+ * {@code lockForSync} transaction. Mutations produced here are consumed
+ * on receiving devices by
  * {@link com.github.auties00.cobalt.sync.handler.RemoveRecentStickerHandler}.
+ *
+ * @implNote
+ * This implementation mirrors
+ * {@code WAWebStickersRemoveRecentSyncAction.generateRemoveStickerMutation}.
+ * The receiver-side branch gates application on
+ * {@code WAWebMiscGatingUtils.isRecentStickersMDEnabled} and only
+ * removes the local entry when its timestamp is at most the carried
+ * {@code lastStickerSentTs} value.
  */
 public final class RemoveRecentStickerMutationFactory {
     /**
      * Constructs a remove-recent-sticker mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public recent-sticker-removal entry point. The
+     * factory keeps no state, so a single instance is sufficient per
+     * client.
      */
     public RemoveRecentStickerMutationFactory() {
 
@@ -33,15 +51,27 @@ public final class RemoveRecentStickerMutationFactory {
      * Builds a pending outgoing mutation that removes a sticker from the
      * recent-stickers collection across linked devices.
      *
-     * <p>Per WhatsApp Web {@code WAWebStickersRemoveRecentSyncAction}: emits a
-     * SET mutation at {@code ["removeRecentSticker", stickerFileHash]} in the
-     * REGULAR_LOW collection with {@code version = 7} and a
-     * {@code removeRecentStickerAction} sub-message carrying the current
-     * timestamp as {@code lastStickerSentTs}. Receiving devices compare this
-     * timestamp against their local recent-sticker entry to decide whether to
-     * remove it.
+     * @apiNote
+     * Invoked from the public recent-sticker-removal entry point; the
+     * receiver compares the carried {@code lastStickerSentTs} against
+     * its own recent-sticker entry's timestamp and only removes it when
+     * the local entry is at most as recent as the carried value. This
+     * ensures a sticker sent on another device after this remove arrives
+     * is not retroactively dropped.
      *
-     * @param stickerHash the sticker file hash used as the mutation index
+     * @implNote
+     * This implementation stamps {@link Instant#now()} on both the
+     * outer mutation timestamp and the inner
+     * {@link RemoveRecentStickerAction#lastStickerSentTs()}, matching
+     * {@code WAWebStickersRemoveRecentSyncAction.generateRemoveStickerMutation}'s
+     * single call to {@code WATimeUtils.unixTimeMs}. The index follows
+     * the standard {@code [actionName, stickerFileHash]} shape and
+     * writes into the {@code RegularLow} collection.
+     *
+     * @param stickerHash the sticker file hash used as the mutation
+     *                    index; matches the
+     *                    {@code RecentStickerCollectionMd} key on the
+     *                    receiver
      * @return the pending mutation ready to be pushed via
      *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
      */

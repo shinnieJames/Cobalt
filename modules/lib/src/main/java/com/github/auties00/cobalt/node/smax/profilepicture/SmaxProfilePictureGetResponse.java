@@ -16,22 +16,42 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants. Five success shapes
- * plus one error shape.
+ * The reply produced by the relay for a
+ * {@link SmaxProfilePictureGetRequest}: one of four success arms
+ * (URL, avatar URLs, inlined blob, or no-data) or an error envelope.
+ *
+ * @apiNote
+ * Returned by the smax send pipeline that
+ * {@code WASmaxProfilePictureGetRPC.sendGetRPC} drives. The four
+ * success variants map onto the WA Web
+ * {@code WAWebGetProfilePicJob} branches: {@link SuccessPictureURL}
+ * for the CDN-hosted-URL case, {@link SuccessAvatarURLs} for
+ * persona avatars, {@link SuccessPictureBlob} for inlined small
+ * pictures, and {@link SuccessNoData} for the no-picture case. The
+ * {@link Error} arm carries one of seven documented {@code (code,
+ * text)} pairs.
  */
 public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Response
         permits SmaxProfilePictureGetResponse.SuccessPictureURL, SmaxProfilePictureGetResponse.SuccessAvatarURLs,
         SmaxProfilePictureGetResponse.SuccessPictureBlob, SmaxProfilePictureGetResponse.SuccessNoData, SmaxProfilePictureGetResponse.Error {
 
     /**
-     * Tries each {@link SmaxProfilePictureGetResponse} variant in priority order.
+     * Resolves an inbound IQ reply into the first matching variant
+     * in URL-then-avatar-then-blob-then-no-data-then-error priority.
+     *
+     * @apiNote
+     * Called by the smax send pipeline after dispatching a
+     * {@link SmaxProfilePictureGetRequest}.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code sendGetRPC}
+     * disjunction's priority order.
      *
      * @param node    the inbound IQ stanza; never {@code null}
-     * @param request the original outbound stanza; never
+     * @param request the originating outbound IQ stanza; never
      *                {@code null}
      * @return an {@link Optional} carrying the parsed variant
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxProfilePictureGetRPC",
             exports = "sendGetRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -58,54 +78,68 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code SuccessPictureURL} reply variant. The relay
-     * returns a CDN-hosted picture URL plus content hash.
+     * The CDN-hosted picture-URL reply variant. Carries the picture
+     * id, type, URL, direct-path segment, and optional integrity
+     * fields.
+     *
+     * @apiNote
+     * Surfaced when the relay resolves the request to a remote
+     * picture stored on the WhatsApp CDN; callers compose a full
+     * media URL from {@link #pictureUrl()} (already absolute) or
+     * from {@link #pictureDirectPath()} (segment only) plus the
+     * media-host pool.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureGetResponseSuccessPictureURL")
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureIQResultResponseMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureEnums")
     final class SuccessPictureURL implements SmaxProfilePictureGetResponse {
         /**
-         * The opaque picture id (used as a cache key on subsequent
-         * requests).
+         * The opaque picture id; usable as a cache key on subsequent
+         * fetches.
          */
         private final String pictureId;
 
         /**
-         * The picture type. One of {@code "image"} /
+         * The picture type literal; one of {@code "image"} or
          * {@code "preview"}.
          */
         private final String pictureType;
 
         /**
-         * The CDN URL.
+         * The absolute CDN URL of the picture.
          */
         private final String pictureUrl;
 
         /**
-         * The CDN direct-path segment (used by the local download
-         * pipeline to compose a full media URL).
+         * The CDN direct-path segment.
+         *
+         * @apiNote
+         * Used by the local download pipeline to compose a full
+         * media URL against the active media-host pool.
          */
         private final String pictureDirectPath;
 
         /**
-         * The optional content hash.
+         * The optional content hash for integrity-checking.
          */
         private final String pictureHash;
 
         /**
-         * The optional {@code has_staging} marker. One of
-         * {@code "false"} / {@code "true"}.
+         * The optional {@code has_staging} marker; one of
+         * {@code "false"} or {@code "true"}.
          */
         private final String pictureHasStaging;
 
         /**
-         * Constructs a new picture-URL reply.
+         * Constructs a picture-URL reply.
          *
-         * @param pictureId         the id; never {@code null}
-         * @param pictureType       the type; never {@code null}
-         * @param pictureUrl        the URL; never {@code null}
-         * @param pictureDirectPath the direct path; never
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
+         *
+         * @param pictureId         the picture id; never {@code null}
+         * @param pictureType       the picture type; never {@code null}
+         * @param pictureUrl        the CDN URL; never {@code null}
+         * @param pictureDirectPath the direct-path segment; never
          *                          {@code null}
          * @param pictureHash       the optional hash; may be
          *                          {@code null}
@@ -153,7 +187,7 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the CDN direct path.
+         * Returns the CDN direct-path segment.
          *
          * @return the path; never {@code null}
          */
@@ -164,7 +198,8 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         /**
          * Returns the optional content hash.
          *
-         * @return an {@link Optional} carrying the hash
+         * @return an {@link Optional} carrying the hash, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<String> pictureHash() {
             return Optional.ofNullable(pictureHash);
@@ -173,17 +208,31 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         /**
          * Returns the optional staging marker.
          *
-         * @return an {@link Optional} carrying the marker
+         * @return an {@link Optional} carrying the marker, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<String> pictureHasStaging() {
             return Optional.ofNullable(pictureHasStaging);
         }
 
         /**
-         * Tries to parse a {@link SuccessPictureURL} variant.
+         * Parses a {@code SuccessPictureURL} reply from the given
+         * inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} for any deviation from the
+         * documented URL schema (missing or wrong type, missing url
+         * or direct_path, malformed staging marker).
+         *
+         * @implNote
+         * This implementation delegates IQ-envelope validation to
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)} and
+         * accepts only the {@code "image"} / {@code "preview"} type
+         * literals matching WA Web's
+         * {@code parseGetResponseSuccessPictureURL} gate.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseSuccessPictureURL",
@@ -221,6 +270,14 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Optional.of(new SuccessPictureURL(id, type, url, directPath, hash, hasStaging));
         }
 
+        /**
+         * Compares this picture-URL reply to another for value
+         * equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link SuccessPictureURL} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -238,12 +295,26 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
                     && Objects.equals(this.pictureHasStaging, that.pictureHasStaging);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(pictureId, pictureType, pictureUrl, pictureDirectPath,
                     pictureHash, pictureHasStaging);
         }
 
+        /**
+         * Returns a debug-friendly representation of this reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetResponse.SuccessPictureURL[pictureId=" + pictureId
@@ -256,20 +327,32 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code SuccessAvatarURLs} reply variant. The entity
-     * uses an avatar; the relay returns between {@code 1} and
-     * {@code 4} avatar URLs (one per pose-id).
+     * The avatar-URL list reply variant. Surfaced for entities that
+     * use a multi-pose avatar; carries one URL per requested pose.
+     *
+     * @apiNote
+     * Returned when the originating
+     * {@link SmaxProfilePictureGetRequest} carried an
+     * {@link SmaxProfilePictureGetAvatarMixin}; one
+     * {@link AvatarUrl} per requested pose-id, between {@code 1} and
+     * {@code 4} entries.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureGetResponseSuccessAvatarURLs")
     final class SuccessAvatarURLs implements SmaxProfilePictureGetResponse {
         /**
-         * The list of avatar entries. Between {@code 1} and
-         * {@code 4} entries.
+         * The avatar entries; between {@code 1} and {@code 4}.
          */
         private final List<AvatarUrl> avatars;
 
         /**
-         * Constructs a new avatar-URLs reply.
+         * Constructs an avatar-URLs reply.
+         *
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
+         *
+         * @implNote
+         * This implementation defensively copies the input list via
+         * {@link List#copyOf(java.util.Collection)}.
          *
          * @param avatars the avatar entries; never {@code null}
          * @throws NullPointerException if {@code avatars} is
@@ -290,10 +373,21 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link SuccessAvatarURLs} variant.
+         * Parses a {@code SuccessAvatarURLs} reply from the given
+         * inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} for any deviation from the
+         * documented avatar schema or for an empty / oversize list.
+         *
+         * @implNote
+         * This implementation enforces the {@code 1..4} bound after
+         * parsing the children; the WA Web parser enforces the same
+         * bound via
+         * {@code mapChildrenWithTag(avatar, 1, 4)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseSuccessAvatarURLs",
@@ -317,6 +411,14 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Optional.of(new SuccessAvatarURLs(avatars));
         }
 
+        /**
+         * Compares this avatar-URLs reply to another for value
+         * equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link SuccessAvatarURLs} with equal entries
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -329,11 +431,25 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Objects.equals(this.avatars, that.avatars);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(avatars);
         }
 
+        /**
+         * Returns a debug-friendly representation of this reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetResponse.SuccessAvatarURLs[avatars=" + avatars + ']';
@@ -344,7 +460,7 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
          */
         public static final class AvatarUrl {
             /**
-             * The CDN URL.
+             * The CDN URL of this avatar pose.
              */
             private final String url;
 
@@ -359,7 +475,10 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             private final String hash;
 
             /**
-             * Constructs a new avatar-URL entry.
+             * Constructs an avatar-URL entry.
+             *
+             * @apiNote
+             * Called by {@link #of(Node)} after a successful parse.
              *
              * @param url    the URL; never {@code null}
              * @param poseId the pose id; never {@code null}
@@ -394,16 +513,22 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             /**
              * Returns the optional content hash.
              *
-             * @return an {@link Optional} carrying the hash
+             * @return an {@link Optional} carrying the hash, or
+             *         {@link Optional#empty()} when omitted
              */
             public Optional<String> hash() {
                 return Optional.ofNullable(hash);
             }
 
             /**
-             * Tries to parse an avatar-URL entry.
+             * Parses an avatar-URL entry from the given {@code <avatar>}
+             * child.
              *
-             * @param node the {@code <avatar/>} child
+             * @apiNote
+             * Returns {@link Optional#empty()} for any deviation from
+             * the avatar-entry schema.
+             *
+             * @param node the {@code <avatar>} child
              * @return an {@link Optional} carrying the parsed entry
              */
             @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseSuccessAvatarURLs",
@@ -426,6 +551,13 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
                 return Optional.of(new AvatarUrl(url, poseId, hash));
             }
 
+            /**
+             * Compares this entry to another for value equality.
+             *
+             * @param obj the object to compare against
+             * @return {@code true} when {@code obj} is an
+             *         {@link AvatarUrl} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -440,11 +572,26 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
                         && Objects.equals(this.hash, that.hash);
             }
 
+            /**
+             * Returns a hash code consistent with
+             * {@link #equals(Object)}.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(url, poseId, hash);
             }
 
+            /**
+             * Returns a debug-friendly representation of this entry.
+             *
+             * @apiNote
+             * Intended for logging; the format is not part of the
+             * public contract.
+             *
+             * @return the string form
+             */
             @Override
             public String toString() {
                 return "SmaxProfilePictureGetResponse.SuccessAvatarURLs.AvatarUrl[url=" + url
@@ -455,9 +602,13 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code SuccessPictureBlob} reply variant. The picture
-     * is small enough to be inlined as raw bytes content of the
-     * {@code <picture>} child.
+     * The inlined-blob reply variant. Surfaced when the relay
+     * decided the picture is small enough to ship inline as the
+     * {@code <picture/>} element value.
+     *
+     * @apiNote
+     * Lets callers skip the separate CDN fetch round-trip for small
+     * pictures; the bytes are already in hand.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureGetResponseSuccessPictureBlob")
     final class SuccessPictureBlob implements SmaxProfilePictureGetResponse {
@@ -467,7 +618,7 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         private final String pictureId;
 
         /**
-         * The picture type. One of {@code "image"} /
+         * The picture type literal; one of {@code "image"} or
          * {@code "preview"}.
          */
         private final String pictureType;
@@ -478,18 +629,23 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         private final String pictureHasStaging;
 
         /**
-         * The raw picture bytes.
+         * The inlined raw picture bytes.
          */
         private final byte[] pictureElementValue;
 
         /**
-         * Constructs a new picture-blob reply.
+         * Constructs a picture-blob reply.
          *
-         * @param pictureId           the id; never {@code null}
-         * @param pictureType         the type; never {@code null}
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
+         *
+         * @param pictureId           the picture id; never
+         *                            {@code null}
+         * @param pictureType         the picture type; never
+         *                            {@code null}
          * @param pictureHasStaging   the optional staging marker;
          *                            may be {@code null}
-         * @param pictureElementValue the raw picture bytes; never
+         * @param pictureElementValue the raw bytes; never
          *                            {@code null}
          * @throws NullPointerException if any required argument is
          *                              {@code null}
@@ -524,14 +680,15 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         /**
          * Returns the optional staging marker.
          *
-         * @return an {@link Optional} carrying the marker
+         * @return an {@link Optional} carrying the marker, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<String> pictureHasStaging() {
             return Optional.ofNullable(pictureHasStaging);
         }
 
         /**
-         * Returns the raw picture bytes.
+         * Returns the inlined picture bytes.
          *
          * @return the bytes; never {@code null}
          */
@@ -540,10 +697,16 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link SuccessPictureBlob} variant.
+         * Parses a {@code SuccessPictureBlob} reply from the given
+         * inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} for any deviation from the
+         * documented blob schema (missing or wrong type, malformed
+         * staging marker, empty element value).
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseSuccessPictureBlob",
@@ -576,6 +739,13 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Optional.of(new SuccessPictureBlob(id, type, hasStaging, bytes));
         }
 
+        /**
+         * Compares this blob reply to another for value equality.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link SuccessPictureBlob} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -591,6 +761,16 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
                     && Arrays.equals(this.pictureElementValue, that.pictureElementValue);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @implNote
+         * This implementation mixes
+         * {@link Arrays#hashCode(byte[])} of the picture bytes into
+         * the hash so byte-array contents drive the result.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             var result = Objects.hash(pictureId, pictureType, pictureHasStaging);
@@ -598,6 +778,15 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return result;
         }
 
+        /**
+         * Returns a debug-friendly representation of this reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetResponse.SuccessPictureBlob[pictureId=" + pictureId
@@ -609,23 +798,39 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code SuccessNoData} reply variant. The entity has no
-     * picture / avatar set; the relay returns a bare result IQ
-     * envelope with no payload children.
+     * The no-picture reply variant. Surfaced when the entity has not
+     * set a picture or avatar; the relay returns a bare result IQ
+     * with no payload children.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureGetResponseSuccessNoData")
     final class SuccessNoData implements SmaxProfilePictureGetResponse {
         /**
-         * Constructs a new no-data reply.
+         * Constructs a no-data reply.
+         *
+         * @apiNote
+         * The marker variant carries no fields; callers branch on
+         * the sealed-interface arm and render the default-avatar
+         * fallback.
          */
         public SuccessNoData() {
         }
 
         /**
-         * Tries to parse a {@link SuccessNoData} variant.
+         * Parses a {@code SuccessNoData} reply from the given inbound
+         * stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the stanza carries a
+         * {@code <picture>} or {@code <avatar>} child (which would
+         * indicate one of the picture-bearing variants instead).
+         *
+         * @implNote
+         * This implementation guards against false positives even
+         * when invoked directly, in addition to the
+         * dispatcher-priority guarantee in {@link #of(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseSuccessNoData",
@@ -635,9 +840,6 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // Disambiguate from the picture-bearing success variants. Those
-            // are tried first by the dispatcher but, when this static factory
-            // is invoked directly, we want to ensure no false positive.
             if (node.getChild("picture").isPresent()) {
                 return Optional.empty();
             }
@@ -647,6 +849,17 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Optional.of(new SuccessNoData());
         }
 
+        /**
+         * Compares this reply to another for type equality.
+         *
+         * @apiNote
+         * All {@link SuccessNoData} instances compare equal; the
+         * variant carries no state.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is a
+         *         {@link SuccessNoData}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -655,11 +868,25 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns the class-level constant hash code.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return SuccessNoData.class.hashCode();
         }
 
+        /**
+         * Returns a debug-friendly representation of this reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetResponse.SuccessNoData[]";
@@ -667,18 +894,19 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Error} reply variant. One of seven documented
-     * IQ-error sub-mixins.
+     * The error reply variant carrying the rejection code-text pair.
      *
-     * <p>Carries one of the following {@code (code, text)} pairs:
+     * @apiNote
+     * Carries one of the seven documented
+     * {@code (code, text)} pairs:
      * <ul>
-     *   <li>{@code (400, "bad-request")}
-     *   <li>{@code (401, "not-authorized")}
-     *   <li>{@code (404, "item-not-found")}
-     *   <li>{@code (429, "rate-overlimit")}
-     *   <li>{@code (500, "internal-server-error")}
-     *   <li>{@code (501, "feature-not-implemented")}
-     *   <li>{@code (503, "service-unavailable")}
+     *   <li>{@code (400, "bad-request")}</li>
+     *   <li>{@code (401, "not-authorized")}</li>
+     *   <li>{@code (404, "item-not-found")}</li>
+     *   <li>{@code (429, "rate-overlimit")}</li>
+     *   <li>{@code (500, "internal-server-error")}</li>
+     *   <li>{@code (501, "feature-not-implemented")}</li>
+     *   <li>{@code (503, "service-unavailable")}</li>
      * </ul>
      */
     @WhatsAppWebModule(moduleName = "WASmaxInProfilePictureGetResponseError")
@@ -697,12 +925,15 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         private final int errorCode;
 
         /**
-         * The error text.
+         * The optional error text.
          */
         private final String errorText;
 
         /**
-         * Constructs a new error reply.
+         * Constructs an error reply.
+         *
+         * @apiNote
+         * Called by {@link #of(Node, Node)} after a successful parse.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be
@@ -725,24 +956,37 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
         /**
          * Returns the optional error text.
          *
-         * @return an {@link Optional} carrying the text
+         * @return an {@link Optional} carrying the text, or
+         *         {@link Optional#empty()} when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse an {@link Error} variant.
+         * Parses an {@code Error} reply from the given inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when neither the
+         * client-error nor the server-error envelope matched, or
+         * when the code-text pair is not one of the seven documented
+         * variants.
+         *
+         * @implNote
+         * This implementation tries the 4xx client-error envelope
+         * first then falls through to the 5xx server-error envelope;
+         * the code-text pair is then cross-checked against the
+         * documented list. A pair outside the list collapses to
+         * {@link Optional#empty()}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the originating outbound IQ stanza
          * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInProfilePictureGetResponseError",
                 exports = "parseGetResponseError",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<Error> of(Node node, Node request) {
-            // 4xx → ClientError envelope, 5xx → ServerError envelope.
             var clientEnvelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
             var serverEnvelope = clientEnvelope == null
                     ? SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null)
@@ -753,7 +997,6 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             }
             var code = envelope.code();
             var text = envelope.text();
-            // Validate the code/text pair against the documented disjunction.
             if ((code == 400 && "bad-request".equals(text))
                     || (code == 401 && "not-authorized".equals(text))
                     || (code == 404 && "item-not-found".equals(text))
@@ -766,6 +1009,14 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
             return Optional.empty();
         }
 
+        /**
+         * Compares this error reply to another for value equality on
+         * the code-text pair.
+         *
+         * @param obj the object to compare against
+         * @return {@code true} when {@code obj} is an {@link Error}
+         *         with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -779,11 +1030,25 @@ public sealed interface SmaxProfilePictureGetResponse extends SmaxOperation.Resp
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code consistent with {@link #equals(Object)}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug-friendly representation of this reply.
+         *
+         * @apiNote
+         * Intended for logging; the format is not part of the public
+         * contract.
+         *
+         * @return the string form
+         */
         @Override
         public String toString() {
             return "SmaxProfilePictureGetResponse.Error[errorCode=" + errorCode

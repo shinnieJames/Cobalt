@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
@@ -13,54 +14,75 @@ import com.github.auties00.cobalt.stream.control.OfflineNotificationsReporter;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**
- * Routes inbound device-category notification stanzas to specialised
- * handlers based on the stanza's {@code type} attribute.
+ * Routes inbound {@code <notification>} stanzas covering device-fanout,
+ * companion linking, server-issued cryptographic notifications, and
+ * server-driven app-state sync to the matching per-type handler.
  *
- * <p>This dispatcher owns one instance of each concrete device-category
- * handler: device list changes, companion linking, server-issued crypto
- * rotations, and server-driven app-state sync notifications.
+ * @apiNote
+ * Cobalt's {@code NotificationStreamHandler} forwards every stanza whose
+ * {@code type} attribute falls in the device branch
+ * ({@code devices}, {@code companion_reg_refresh},
+ * {@code link_code_companion_reg}, {@code waffle}, {@code hosted},
+ * {@code w:growth}, {@code psa}, {@code newsletter}, {@code encrypt},
+ * {@code mediaretry}, {@code server}, {@code registration},
+ * {@code server_sync}) to this dispatcher. Embedders do not invoke it
+ * directly.
+ *
+ * @implNote
+ * This implementation groups four otherwise-unrelated sub-handlers
+ * because the dispatcher in {@code NotificationStreamHandler} maps all
+ * thirteen notification types to one of these four handlers; WA Web's
+ * {@code WAWebCommsHandleLoggedInStanza} fans them out to thirteen
+ * separate module-scoped handler functions.
  */
-@WhatsAppWebModule(moduleName = "WAWebHandleNotification")
+@WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class NotificationDeviceDispatcher implements SocketStream.Handler {
     /**
-     * Handler for {@code devices} notifications that update the cached
-     * device list for a user.
+     * Handler for {@code type="devices"} notifications carrying device
+     * add, remove, or update actions for a user's device list.
      */
     private final NotificationDeviceStreamHandler notificationDeviceHandler;
 
     /**
-     * Handler for companion linking related notifications such as
-     * {@code companion_reg_refresh}, {@code hosted}, {@code link_code_companion_reg},
-     * {@code newsletter}, {@code psa}, {@code w:growth} and {@code waffle}.
+     * Handler for the companion-linking notification family
+     * ({@code companion_reg_refresh}, {@code link_code_companion_reg},
+     * {@code waffle}, {@code hosted}, {@code w:growth}, {@code psa},
+     * {@code newsletter}).
      */
     private final NotificationLinkingStreamHandler notificationLinkingHandler;
 
     /**
-     * Handler for server-issued crypto and error notifications such as
-     * {@code encrypt}, {@code mediaretry}, {@code registration} and {@code server}.
+     * Handler for the server-issued cryptographic notification family
+     * ({@code encrypt}, {@code mediaretry}, {@code registration},
+     * {@code server}).
      */
     private final NotificationServerCryptoStreamHandler notificationServerCryptoHandler;
 
     /**
-     * Handler for {@code server_sync} notifications that request an
-     * application-state sync from the primary device.
+     * Handler for {@code type="server_sync"} notifications announcing
+     * app-state collection updates the client needs to pull.
      */
     private final NotificationSyncStreamHandler notificationSyncHandler;
 
     /**
-     * Constructs a new dispatcher and instantiates every sub-handler with
-     * the shared dependencies.
+     * Constructs the dispatcher and eagerly instantiates every
+     * sub-handler with the shared dependencies.
      *
-     * @param whatsapp                     the non-{@code null} client providing store and network access
-     * @param deviceLinkingService         the alt-device-linking service consumed by the linking handler
-     * @param abPropsService               the A/B props service consumed by the server-crypto handler
-     * @param deviceService                the device service consumed by the device-list handler
-     * @param offlineNotificationsReporter the shared reporter that records per-collection
-     *                                     offline {@code server_sync} notification counts for the
-     *                                     {@code MdAppStateOfflineNotifications} WAM event; forwarded to
-     *                                     the server-sync handler
-     * @param wamService                   the WAM telemetry service forwarded to the linking and
-     *                                     server-crypto handlers
+     * @apiNote
+     * Called once during
+     * {@link SocketStream} setup;
+     * embedders do not construct it directly.
+     *
+     * @param whatsapp                     the {@link WhatsAppClient} forwarded to every sub-handler for store and node access
+     * @param deviceLinkingService         the {@link CompanionPairingService} consumed by the linking handler for the pairing-code handshake
+     * @param abPropsService               the {@link ABPropsService} consumed by the server-crypto handler for {@code server/abprops} resync
+     * @param deviceService                the {@link DeviceService} consumed by the device-list handler for {@code add}/{@code remove}/{@code update} dispatch
+     * @param offlineNotificationsReporter the {@link OfflineNotificationsReporter} consumed by the sync handler for the {@code MdAppStateOfflineNotifications} WAM event
+     * @param wamService                   the {@link WamService} consumed by the linking and server-crypto handlers for the {@code GroupJoinC}, {@code WaOldCode}, and {@code ChatMessageCounts} events
+     * @param ackSender                    the {@link AckSender} forwarded
+     *                                     to every sub-handler for
+     *                                     emitting the per-notification
+     *                                     outbound {@code <ack>} stanza
      */
     public NotificationDeviceDispatcher(
             WhatsAppClient whatsapp,
@@ -68,21 +90,26 @@ public final class NotificationDeviceDispatcher implements SocketStream.Handler 
             ABPropsService abPropsService,
             DeviceService deviceService,
             OfflineNotificationsReporter offlineNotificationsReporter,
-            WamService wamService
+            WamService wamService,
+            AckSender ackSender
     ) {
-        this.notificationDeviceHandler = new NotificationDeviceStreamHandler(whatsapp, deviceService);
-        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, deviceLinkingService, wamService);
-        this.notificationServerCryptoHandler = new NotificationServerCryptoStreamHandler(whatsapp, abPropsService, wamService);
-        this.notificationSyncHandler = new NotificationSyncStreamHandler(whatsapp, offlineNotificationsReporter);
+        this.notificationDeviceHandler = new NotificationDeviceStreamHandler(whatsapp, deviceService, ackSender);
+        this.notificationLinkingHandler = new NotificationLinkingStreamHandler(whatsapp, deviceLinkingService, wamService, ackSender);
+        this.notificationServerCryptoHandler = new NotificationServerCryptoStreamHandler(whatsapp, abPropsService, wamService, ackSender);
+        this.notificationSyncHandler = new NotificationSyncStreamHandler(whatsapp, offlineNotificationsReporter, ackSender);
     }
 
     /**
-     * Dispatches the incoming node to the appropriate device-category
-     * handler based on the stanza's {@code type} attribute.
+     * Forwards {@code node} to the sub-handler whose category matches the
+     * stanza's {@code type} attribute; drops stanzas this dispatcher does
+     * not own.
      *
-     * @param node the incoming notification stanza
+     * @apiNote
+     * Invoked by the parent {@code NotificationStreamHandler}.
+     *
+     * @param node the incoming {@code <notification>} stanza
      */
-    @WhatsAppWebExport(moduleName = "WAWebHandleNotification", exports = "handleNotification", adaptation = WhatsAppAdaptation.ADAPTED)
+    @WhatsAppWebExport(moduleName = "WAWebCommsHandleLoggedInStanza", exports = "handleLoggedInStanza", adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
     public void handle(Node node) {
         var type = node.getAttributeAsString("type", null);
@@ -104,8 +131,11 @@ public final class NotificationDeviceDispatcher implements SocketStream.Handler 
     }
 
     /**
-     * Fans out a reset call to every sub-handler so that any cached state
-     * is discarded on a socket reconnect.
+     * Propagates {@link SocketStream.Handler#reset()} to every sub-handler.
+     *
+     * @apiNote
+     * Invoked by the parent {@code NotificationStreamHandler} when the
+     * stream reset signal fires. Embedders do not call this directly.
      */
     @Override
     public void reset() {

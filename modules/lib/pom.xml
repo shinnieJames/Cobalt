@@ -44,9 +44,7 @@
             Native-bundle JARs — opt-in per-classifier artifacts for
             consumers that don't want the runtime download. The
             default `cobalt` artifact ships no binaries; the loader
-            fetches them from
-            https://github.com/Auties00/Cobalt/raw/v<version>/dependencies/<lib>/bin/<classifier>/...
-            on first use, verifies the SHA-256 against the bundled
+            fetches them from Github on first use, verifies the SHA-256 against the bundled
             META-INF/native-checksums.json manifest, and caches the
             result under ${user.home}/.cobalt/natives/.
 
@@ -233,7 +231,12 @@
             <version>${curve25519.version}</version>
         </dependency>
 
-        <!-- BouncyCastle: required by bctls-jdk18on (DTLS-SRTP handshake) -->
+        <!-- BouncyCastle -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
@@ -299,6 +302,13 @@
             <version>${lmdbjava.version}</version>
         </dependency>
 
+        <!-- PDF rendering for document thumbnails in the upload transcoder -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
+
         <!-- Testing framework -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -311,13 +321,6 @@
             <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
-        </dependency>
-
-        <!-- Bouncy Castle PKIX (test certificate generation; runtime DTLS-SRTP cert/fingerprint) -->
-        <dependency>
-            <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk18on</artifactId>
-            <version>${bouncycastle.version}</version>
         </dependency>
 
         <!-- Selenium for TLS fingerprint verification -->

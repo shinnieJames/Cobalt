@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.socket.datagram;
 
 import com.github.auties00.cobalt.util.GcmUtils;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -9,123 +10,182 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.GeneralSecurityException;
+import java.security.Provider;
 import java.util.Objects;
 
 /**
- * Continuous {@link FilterInputStream} that exposes the
- * {@code int24}-prefixed, AES-GCM-encrypted WhatsApp datagram wire as a
- * plain byte stream.
+ * A continuous {@link FilterInputStream} that exposes the
+ * {@code int24}-prefixed, AES-GCM-encrypted WhatsApp datagram wire as
+ * a plain byte stream.
  *
  * <p>The wire is a sequence of {@code int24}-prefixed datagrams. Each
- * datagram is its own AES-GCM ciphertext: the cipher must be
- * re-initialised with a fresh nonce at every datagram boundary, the
- * ciphertext bytes are fed through {@link Cipher#update}, and
- * {@link Cipher#doFinal} verifies the authentication tag at the end of
- * each datagram. Datagram boundaries are <strong>invisible</strong> to
- * the consumer: {@link #read()} returns plaintext bytes continuously
- * across datagram boundaries and only signals {@code -1} on a clean
- * end of the underlying stream.
+ * datagram is its own AES-GCM ciphertext: the cipher is re-initialised
+ * with a fresh nonce at every datagram boundary, the ciphertext bytes
+ * are fed through {@link Cipher#update}, and {@link Cipher#doFinal}
+ * verifies the authentication tag at the end of each datagram.
+ * Datagram boundaries are invisible to the consumer: {@link #read()}
+ * yields plaintext bytes continuously across datagram boundaries and
+ * only signals {@code -1} on a clean end of the underlying stream.
  *
  * <p>This continuous mode is the natural fit for the post-handshake
- * reader thread, which decodes one {@link com.github.auties00.cobalt.node.Node}
- * per datagram via {@link com.github.auties00.cobalt.node.binary.NodeReader}:
- * each {@code readNode()} call consumes exactly one node's worth of
- * bytes (the wire format pairs one node body to one datagram), so the
- * cursor naturally arrives at the next datagram boundary without the
- * caller having to manage framing.
+ * reader thread, which decodes one
+ * {@link com.github.auties00.cobalt.node.Node} per datagram via
+ * {@link com.github.auties00.cobalt.node.binary.NodeReader}: each
+ * {@code readNode()} call consumes exactly one node's worth of bytes
+ * (the wire pairs one node body to one datagram), so the cursor
+ * naturally arrives at the next datagram boundary without the caller
+ * having to manage framing.
  *
- * <p>For the Noise XX handshake, where the consumer
- * ({@link it.auties.protobuf.stream.ProtobufInputStream}) needs an
+ * <p>For the Noise XX handshake, where the consumer (a
+ * {@link it.auties.protobuf.stream.ProtobufInputStream}) needs an
  * {@link InputStream} that bounds reads to one handshake message,
  * {@link #readDatagramLength()} exposes the plaintext length of the
  * next datagram so a bounded view can be assembled around the
  * continuous {@link #read()}.
  *
  * <p>The stream owns two fixed-size buffers and nothing else: an 8 KiB
- * {@link #ibuffer} for one batched read from the underlying stream,
- * and a 16-byte {@link #finalStash} that catches the at-most-one-tag
- * worth of plaintext bytes that {@link Cipher#doFinal} releases when
- * the caller's {@code dst} is too small to receive them directly.
- * Neither buffer ever grows. Cipher output is written
- * <strong>directly into the caller's destination array</strong> from
- * {@link Cipher#update(byte[], int, int, byte[], int)} — there is no
- * intermediate output buffer.
+ * {@code ibuffer} for one batched read from the underlying stream, and
+ * an 8 KiB plus tag-margin {@code plaintextChunk} that captures the
+ * plaintext released by one round of {@link Cipher#update} plus any
+ * trailing bytes that {@link Cipher#doFinal} emits for the last
+ * partial AES block of the datagram. Neither buffer grows with the
+ * datagram size.
  *
  * <p>Before the Noise handshake completes the stream is in
  * <strong>pre-handshake mode</strong>: {@code int24}-framed bytes are
  * still consumed from the underlying stream, but no cipher is applied
- * and the bytes are copied through {@link #ibuffer} into the caller's
- * {@code dst} verbatim. The caller flips the stream to encrypted mode
- * by invoking {@link #setReadKey(SecretKey)} once both Noise keys
- * have been derived.
+ * and the bytes are copied through {@code ibuffer} into
+ * {@code plaintextChunk} verbatim. The caller flips the stream to
+ * encrypted mode by invoking {@link #setReadKey(SecretKey)} once both
+ * Noise keys have been derived.
  *
- * <p>Instances are <strong>not</strong> thread-safe — one input
- * stream is intended to be owned by a single reader thread.
+ * <p>Instances are <strong>not</strong> thread-safe; one input stream
+ * is intended to be owned by a single reader thread.
  *
- * @implNote The state machine has three states keyed off
- *     {@link #textRemaining}: {@code < 0} means "no active
- *     datagram, read the next {@code int24} length";
- *     {@code > 0} means "feed more ciphertext through
- *     {@code cipher.update}"; {@code 0} means "all ciphertext has
- *     been consumed for this datagram, call {@code cipher.doFinal}".
+ * @implNote
+ * This implementation sources the AES-GCM cipher from the BouncyCastle
+ * JCE provider rather than the JDK's default SunJCE because
+ * BouncyCastle's {@code GCMBlockCipher} streams plaintext out of
+ * {@link Cipher#update} block by block (deferring only the tag check
+ * to {@link Cipher#doFinal}), whereas SunJCE buffers the entire
+ * ciphertext internally and releases the full plaintext only at
+ * {@code doFinal}. Streaming lets the output buffer stay at a fixed
+ * 8 KiB regardless of how large a single datagram is. The state
+ * machine keys off {@code textRemaining}: {@code < 0} means "no active
+ * datagram, read the next {@code int24} length"; {@code > 0} means
+ * "feed more ciphertext through {@code cipher.update}"; {@code 0} is
+ * the transient state just before {@code cipher.doFinal} fires and is
+ * then reset to {@link #NO_ACTIVE_DATAGRAM}.
  */
 public final class WhatsAppDatagramInputStream extends FilterInputStream {
 
     /**
-     * Number of bytes in the {@code int24} length prefix that frames
-     * every datagram on the wire.
-     */
-    private static final int INT24_BYTE_SIZE = 3;
-
-    /**
-     * Size in bytes of the AES-GCM authentication tag.
+     * The size in bytes of the AES-GCM authentication tag.
      */
     private static final int GCM_TAG_BYTE_SIZE = 16;
 
     /**
-     * Size of the fixed read buffer; one read from the underlying
+     * The maximum wire byte count encodable in the {@code int24} length
+     * prefix that frames every datagram, mirroring the
+     * {@code 1 << 24} threshold guarded by
+     * {@code WAFrameSocket.sendFrame} on the WA Web side.
+     */
+    private static final int MAX_DATAGRAM_LENGTH = 0xFF_FFFF;
+
+    /**
+     * The minimum acceptable wire byte count for a pre-handshake
+     * datagram: at least one plaintext byte must follow the
+     * {@code int24} prefix.
+     */
+    private static final int MIN_PRE_HANDSHAKE_DATAGRAM_LENGTH = 1;
+
+    /**
+     * The minimum acceptable wire byte count for a post-handshake
+     * datagram: at least one plaintext byte plus the
+     * {@value #GCM_TAG_BYTE_SIZE}-byte GCM tag.
+     */
+    private static final int MIN_POST_HANDSHAKE_DATAGRAM_LENGTH = GCM_TAG_BYTE_SIZE + 1;
+
+    /**
+     * The size of the fixed read buffer; one read from the underlying
      * stream draws at most this many bytes.
      */
     private static final int INPUT_BUFFER_SIZE = 8192;
 
     /**
-     * Sentinel value for {@link #textRemaining} meaning "no
+     * The headroom appended to {@link #plaintextChunk} to absorb the
+     * worst-case overshoot from BouncyCastle's AES-GCM
+     * {@link Cipher#update} plus the trailing partial-block bytes
+     * that {@link Cipher#doFinal} releases.
+     *
+     * @apiNote
+     * Empirically bounded at {@code GCM_TAG_BYTE_SIZE - 1 = 15} bytes
+     * for the {@code update} overshoot when small unaligned input
+     * chunks straddle an AES block boundary, plus another 15 bytes
+     * for the {@code doFinal} tail; rounded up to
+     * {@code 2 * GCM_TAG_BYTE_SIZE = 32} for headroom.
+     */
+    private static final int PLAINTEXT_CHUNK_OVERFLOW = 2 * GCM_TAG_BYTE_SIZE;
+
+    /**
+     * The sentinel value for {@link #textRemaining} meaning "no
      * datagram is currently in flight; the next call must read the
      * next {@code int24} length prefix".
      */
     private static final int NO_ACTIVE_DATAGRAM = -1;
 
     /**
-     * Fixed-size buffer used by {@link #produceMoreData(byte[], int, int)}
-     * to read one chunk from the underlying stream before handing it
-     * to {@link Cipher#update}.
+     * The shared BouncyCastle JCE provider instance handed to every
+     * {@link Cipher#getInstance(String, Provider)} call.
+     *
+     * @apiNote
+     * Holding the provider here means the JVM never needs to (and
+     * does not) register BouncyCastle globally; isolating the
+     * dependency to this stream avoids pulling in BouncyCastle's
+     * other providers system-wide.
+     */
+    private static final Provider BOUNCY_CASTLE = new BouncyCastleProvider();
+
+    /**
+     * The fixed-size buffer used by {@link #produceMoreData()} to read
+     * one chunk from the underlying stream before handing it to
+     * {@link Cipher#update}.
      */
     private final byte[] ibuffer = new byte[INPUT_BUFFER_SIZE];
 
     /**
-     * Fixed-size stash that catches the trailing plaintext bytes that
-     * {@link Cipher#doFinal} releases when the caller's {@code dst}
-     * is too small to receive them directly. Bounded by the GCM tag
-     * size so it never needs to grow.
+     * The fixed-size buffer that captures the plaintext emitted by
+     * one {@link Cipher#update} call (sized to absorb the
+     * up-to-15-byte BouncyCastle excess) plus any trailing bytes
+     * released by {@link Cipher#doFinal} at the end of the datagram.
+     *
+     * @apiNote
+     * Drained incrementally into the caller's {@code dst} by
+     * {@link #drainPlaintextChunk(byte[], int, int)} across successive
+     * {@link #read(byte[], int, int)} calls so the consumer can
+     * receive bytes without seeing datagram boundaries.
      */
-    private final byte[] finalStash = new byte[GCM_TAG_BYTE_SIZE];
+    private final byte[] plaintextChunk = new byte[INPUT_BUFFER_SIZE + PLAINTEXT_CHUNK_OVERFLOW];
 
     /**
-     * Read cursor in {@link #finalStash}; bytes from
-     * {@code finalStashStart} (inclusive) to {@link #finalStashEnd}
-     * (exclusive) are valid plaintext waiting to be delivered.
+     * The read cursor in {@link #plaintextChunk}; bytes from
+     * {@code plaintextChunkStart} (inclusive) to
+     * {@link #plaintextChunkEnd} (exclusive) are valid plaintext
+     * waiting to be delivered.
      */
-    private int finalStashStart;
+    private int plaintextChunkStart;
 
     /**
-     * Write cursor in {@link #finalStash}; one past the last valid
-     * stashed plaintext byte.
+     * The write cursor in {@link #plaintextChunk}; one past the last
+     * valid plaintext byte produced by the most recent
+     * {@link #produceMoreData()} call.
      */
-    private int finalStashEnd;
+    private int plaintextChunkEnd;
 
     /**
-     * Reusable single-byte buffer used by {@link #read()} to delegate
-     * to the bulk-read code path without per-call allocation.
+     * The reusable single-byte buffer used by {@link #read()} to
+     * delegate to the bulk-read code path without per-call
+     * allocation.
      */
     private final byte[] oneByteBuf = new byte[1];
 
@@ -136,7 +196,7 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
     private final Cipher cipher;
 
     /**
-     * Number of ciphertext bytes still to be fed through
+     * The number of ciphertext bytes still to be fed through
      * {@link Cipher#update} for the current datagram, or
      * {@link #NO_ACTIVE_DATAGRAM} when the next call must read the
      * length prefix.
@@ -146,20 +206,23 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
     /**
      * The current AES-GCM read key, or {@code null} before the Noise
      * handshake completes (the stream is in pre-handshake passthrough
-     * mode). Volatile so the handshake thread's
+     * mode).
+     *
+     * @apiNote
+     * Declared {@code volatile} so the handshake thread's
      * {@link #setReadKey(SecretKey)} call is visible to the reader
-     * thread that subsequently runs.
+     * thread that subsequently runs against this stream.
      */
     private volatile SecretKey readKey;
 
     /**
-     * Monotonic counter that seeds the AES-GCM nonce for the next
+     * The monotonic counter that seeds the AES-GCM nonce for the next
      * datagram. Incremented every time the cipher is re-initialised.
      */
     private long readCounter;
 
     /**
-     * Sticky end-of-stream flag set when the underlying stream
+     * The sticky end-of-stream flag set when the underlying stream
      * returned {@code -1} between datagrams (a clean disconnect).
      */
     private boolean endOfStream;
@@ -167,19 +230,24 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
     /**
      * Builds a datagram input stream wrapping {@code in}.
      *
-     * <p>The stream starts in pre-handshake passthrough mode; bytes
-     * are int24-deframed but not decrypted until
-     * {@link #setReadKey(SecretKey)} supplies a key.
+     * @apiNote
+     * The stream starts in pre-handshake passthrough mode; bytes are
+     * int24-deframed but not decrypted until
+     * {@link #setReadKey(SecretKey)} supplies a key. The expected
+     * caller is
+     * {@link com.github.auties00.cobalt.socket.WhatsAppSocketClient}
+     * which constructs the stream over the transport-layer
+     * {@link InputStream} before running the Noise handshake on top.
      *
      * @param in the underlying byte stream
-     * @throws IOException          if the JDK cannot instantiate the
-     *                              AES-GCM cipher
+     * @throws IOException          if BouncyCastle cannot instantiate
+     *                              the AES-GCM cipher
      * @throws NullPointerException if {@code in} is {@code null}
      */
     public WhatsAppDatagramInputStream(InputStream in) throws IOException {
         super(Objects.requireNonNull(in, "in"));
         try {
-            this.cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            this.cipher = Cipher.getInstance("AES/GCM/NoPadding", BOUNCY_CASTLE);
         } catch (GeneralSecurityException exception) {
             throw new IOException("Failed to initialise AES-GCM cipher", exception);
         }
@@ -189,9 +257,12 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      * Installs the AES-GCM read key derived from the Noise handshake
      * and resets the nonce counter to zero.
      *
-     * <p>Subsequent datagrams are decrypted under {@code key} with
+     * @apiNote
+     * Subsequent datagrams are decrypted under {@code key} with
      * monotonically increasing nonces. Call exactly once after the
-     * handshake completes and before starting the reader loop.
+     * handshake completes and before starting the reader loop;
+     * calling twice resets the nonce counter and produces unreadable
+     * traffic.
      *
      * @param key the read key
      * @throws NullPointerException if {@code key} is {@code null}
@@ -207,39 +278,37 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      * fresh nonce, and returns the number of plaintext bytes that
      * will follow on the stream.
      *
-     * <p>Combines what would otherwise be three separate calls — read
-     * the {@code int24}, set up the cipher state, expose the
-     * plaintext length to the caller — into one public entry point so
-     * a bounded {@link InputStream} (as used by the Noise XX
-     * handshake to feed
+     * @apiNote
+     * Combines three otherwise-separate steps (read the {@code int24},
+     * set up the cipher state, expose the plaintext length to the
+     * caller) into one public entry point so a bounded
+     * {@link InputStream} (as used by the Noise XX handshake to feed
      * {@link it.auties.protobuf.stream.ProtobufInputStream#fromStream(InputStream)})
      * can be assembled without duplicating any of the framing logic.
-     *
-     * <p>The returned length is the <em>plaintext</em> byte count:
-     * the wire's {@code int24} value in pre-handshake mode, and the
+     * The returned length is the <em>plaintext</em> byte count: the
+     * wire's {@code int24} value in pre-handshake mode, and the
      * wire's {@code int24} value minus the 16-byte GCM tag in
      * post-handshake mode. {@link #read()} will yield exactly that
      * many plaintext bytes for the current datagram before the next
-     * {@code readDatagramLength()} call advances to the next one.
+     * call advances to the next one.
      *
      * @return the plaintext length of the next datagram, or
      *         {@code -1} on clean end-of-stream at the datagram
      *         boundary
      * @throws IllegalStateException if a previous {@code read} call
      *                               left the stream mid-datagram
-     * @throws IOException           if the underlying read fails,
-     *                               the declared length is invalid,
-     *                               or the cipher cannot be
-     *                               initialised
+     * @throws IOException           if the underlying read fails, the
+     *                               declared length is invalid, or
+     *                               the cipher cannot be initialised
      */
     public int readDatagramLength() throws IOException {
         if (textRemaining != NO_ACTIVE_DATAGRAM) {
             throw new IllegalStateException("Cannot read a new datagram length: "
                     + textRemaining + " ciphertext byte(s) still pending in the current datagram");
         }
-        if (finalStashStart < finalStashEnd) {
+        if (plaintextChunkStart < plaintextChunkEnd) {
             throw new IllegalStateException("Cannot read a new datagram length: "
-                    + (finalStashEnd - finalStashStart) + " plaintext byte(s) still stashed from the previous datagram");
+                    + (plaintextChunkEnd - plaintextChunkStart) + " plaintext byte(s) still buffered from the previous chunk");
         }
         if (endOfStream) {
             return -1;
@@ -253,12 +322,13 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
     }
 
     /**
-     * Reads one byte of plaintext.
+     * {@inheritDoc}
      *
-     * @return the next plaintext byte in {@code 0..255}, or
-     *         {@code -1} on end-of-stream
-     * @throws IOException if the underlying read or cipher operation
-     *                     fails
+     * @implNote
+     * This implementation delegates to {@link #read(byte[], int, int)}
+     * through {@link #oneByteBuf} so the cipher-state machine has a
+     * single code path; per-call allocation is avoided by reusing the
+     * one-byte scratch buffer.
      */
     @Override
     public int read() throws IOException {
@@ -267,123 +337,111 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
     }
 
     /**
-     * Reads up to {@code len} bytes of plaintext into {@code dst}.
+     * {@inheritDoc}
      *
-     * <p>The flow per call: any bytes left in {@link #finalStash}
-     * (residue from a previous {@code doFinal}) are drained first;
-     * then {@link #produceMoreData(byte[], int, int)} is invoked in a
-     * loop until it yields at least one plaintext byte or signals
-     * end-of-stream. {@code cipher.update} is allowed to return zero
-     * bytes (GCM can hold back the trailing 16 bytes pending tag
-     * verification), so the loop is essential.
-     *
-     * @param dst the destination byte array
-     * @param off the offset in {@code dst} of the first byte to fill
-     * @param len the maximum number of bytes to fill
-     * @return the number of bytes copied, or {@code -1} on
-     *         end-of-stream
-     * @throws IOException if the underlying read or cipher operation
-     *                     fails
+     * @implNote
+     * This implementation delivers plaintext from
+     * {@link #plaintextChunk}: if the chunk still has bytes from a
+     * previous decrypt step they are drained first; otherwise
+     * {@link #produceMoreData()} runs one wire-chunk decrypt step
+     * into {@code plaintextChunk} and the resulting bytes are then
+     * drained. A single call returns at most
+     * {@code plaintextChunk}-worth of bytes; the caller invokes
+     * {@code read} repeatedly to consume a multi-chunk datagram.
      */
     @Override
     public int read(byte[] dst, int off, int len) throws IOException {
         if (len == 0) {
             return 0;
         }
-        if (finalStashStart < finalStashEnd) {
-            return drainFinalStash(dst, off, len);
+        while (plaintextChunkStart >= plaintextChunkEnd) {
+            if (endOfStream) {
+                return -1;
+            }
+            if (!produceMoreData()) {
+                return -1;
+            }
         }
-        if (endOfStream) {
-            return -1;
-        }
-        int produced;
-        while ((produced = produceMoreData(dst, off, len)) == 0) {
-            // cipher.update can legitimately return zero bytes when
-            // the chunk is held back pending tag verification; loop
-            // until we observe progress, an EOF, or an exception.
-        }
-        return produced;
+        return drainPlaintextChunk(dst, off, len);
     }
 
     /**
-     * Copies the pending {@link #finalStash} bytes into {@code dst}.
+     * Copies the pending {@link #plaintextChunk} bytes into
+     * {@code dst}.
      *
      * @param dst the destination byte array
      * @param off the offset in {@code dst}
      * @param len the maximum number of bytes to copy
      * @return the number of bytes copied
      */
-    private int drainFinalStash(byte[] dst, int off, int len) {
-        var n = Math.min(finalStashEnd - finalStashStart, len);
-        System.arraycopy(finalStash, finalStashStart, dst, off, n);
-        finalStashStart += n;
+    private int drainPlaintextChunk(byte[] dst, int off, int len) {
+        var n = Math.min(plaintextChunkEnd - plaintextChunkStart, len);
+        System.arraycopy(plaintextChunk, plaintextChunkStart, dst, off, n);
+        plaintextChunkStart += n;
         return n;
     }
 
     /**
-     * Advances the cipher state machine by exactly one step: starts a
-     * new datagram, processes one chunk of ciphertext through
-     * {@link Cipher#update} writing the plaintext directly into
-     * {@code dst}, or finalises the current datagram with
-     * {@link Cipher#doFinal} (either into {@code dst} or into the
-     * {@link #finalStash} when {@code dst} is too small).
+     * Advances the cipher state machine by one wire chunk.
      *
-     * <p>Returns the number of plaintext bytes deposited into
-     * {@code dst} on this step. {@code 0} means the cipher held bytes
-     * back and the caller should re-invoke. {@code -1} means clean
-     * end-of-stream at a datagram boundary.
+     * @apiNote
+     * Starts a new datagram if needed, then either pumps one chunk of
+     * ciphertext through {@link Cipher#update} or finalises the
+     * current datagram with {@link Cipher#doFinal}, in both cases
+     * appending the resulting plaintext to {@link #plaintextChunk}.
      *
-     * @param dst the destination byte array
-     * @param off the offset in {@code dst} of the first byte to fill
-     * @param len the maximum number of bytes to fill
-     * @return the number of plaintext bytes produced, or {@code -1}
-     *         on end-of-stream
+     * @implNote
+     * This implementation may return {@code true} with the chunk
+     * still empty: BouncyCastle's {@code update} can hold back the
+     * tail of a partial AES block until the next call, and the
+     * {@code read} loop handles this by re-invoking until the chunk
+     * is non-empty or end-of-stream is observed.
+     *
+     * @return {@code true} if the cipher state machine advanced one
+     *         step, {@code false} on clean end-of-stream
      * @throws IOException if the underlying read fails, the cipher
      *                     rejects the tag, or the datagram length is
      *                     out of bounds
      */
-    private int produceMoreData(byte[] dst, int off, int len) throws IOException {
+    private boolean produceMoreData() throws IOException {
         if (textRemaining == NO_ACTIVE_DATAGRAM) {
             var plaintextLen = readDatagramLength();
             if (plaintextLen < 0) {
-                return -1;
+                return false;
             }
         }
-
-        if (textRemaining == 0) {
-            return finalizeDatagram(dst, off, len);
-        }
-
-        var toRead = Math.min(Math.min(textRemaining, len), ibuffer.length);
-        var n = in.read(ibuffer, 0, toRead);
-        if (n < 0) {
-            throw new IOException("Unexpected end of stream mid-datagram (expected "
-                    + textRemaining + " more byte(s))");
-        }
-        textRemaining -= n;
-        var produced = decryptChunk(n, dst, off);
-
-        if (textRemaining == 0) {
-            var space = Math.max(0, len - produced);
-            var extra = finalizeDatagram(dst, off + produced, space);
-            if (extra > 0) {
-                produced += extra;
+        plaintextChunkStart = 0;
+        plaintextChunkEnd = 0;
+        if (textRemaining > 0) {
+            var toRead = Math.min(textRemaining, ibuffer.length);
+            var n = in.read(ibuffer, 0, toRead);
+            if (n < 0) {
+                throw new IOException("Unexpected end of stream mid-datagram (expected "
+                        + textRemaining + " more byte(s))");
             }
+            textRemaining -= n;
+            decryptChunk(n);
         }
-        return produced;
+        if (textRemaining == 0) {
+            finalizeDatagram();
+        }
+        return true;
     }
 
     /**
      * Reads the next {@code int24} length prefix from the underlying
-     * stream, returning the wire byte count (ciphertext plus GCM tag
-     * in post-handshake mode, plaintext length in pre-handshake mode)
-     * or {@code -1} if the underlying stream is cleanly exhausted at
-     * the datagram boundary.
+     * stream and returns the wire byte count.
      *
-     * @return the next datagram wire length, or {@code -1} on clean
-     *         EOS
-     * @throws IOException if the underlying read fails or the length
-     *                     is out of bounds
+     * @apiNote
+     * The wire byte count is ciphertext plus GCM tag in post-handshake
+     * mode and plaintext length in pre-handshake mode; the caller is
+     * responsible for converting to plaintext length when needed.
+     *
+     * @return the next datagram wire length, or {@code -1} if the
+     *         underlying stream is cleanly exhausted at the datagram
+     *         boundary
+     * @throws IOException if the underlying read fails before the full
+     *                     three-byte prefix has been consumed
      */
     private int readWireLength() throws IOException {
         var b0 = in.read();
@@ -395,11 +453,7 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
         if (b1 < 0 || b2 < 0) {
             throw new IOException("Unexpected end of stream while reading datagram length prefix");
         }
-        var length = (b0 << 16) | (b1 << 8) | b2;
-        if (length == 0) {
-            throw new IOException("Invalid datagram length: 0");
-        }
-        return length;
+        return (b0 << 16) | (b1 << 8) | b2;
     }
 
     /**
@@ -408,27 +462,36 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
      * plaintext byte count that the consumer can expect to receive
      * for this datagram.
      *
-     * <p>In pre-handshake mode no cipher operation occurs; the
-     * datagram bytes will be copied through {@link #ibuffer} into
-     * {@code dst} verbatim by {@link #decryptChunk(int, byte[], int)}
+     * @apiNote
+     * In pre-handshake mode no cipher operation occurs; the datagram
+     * bytes will be copied through {@link #ibuffer} into
+     * {@link #plaintextChunk} verbatim by {@link #decryptChunk(int)}
      * and the plaintext length equals the wire length. In
      * post-handshake mode the cipher is initialised with a fresh
      * nonce and the plaintext length is what
-     * {@link Cipher#getOutputSize(int)} reports for the just-read
-     * ciphertext (i.e. wire length minus the 16-byte GCM tag).
+     * {@link Cipher#getOutputSize(int)} reports for the ciphertext
+     * about to be processed (wire length minus the 16-byte GCM tag).
      *
      * @param length the wire byte count read from the {@code int24}
      *               prefix
      * @return the plaintext byte count for this datagram
-     * @throws IOException if the cipher cannot be initialised or the
-     *                     ciphertext is too short to contain a tag
+     * @throws IOException if the cipher cannot be initialised, the
+     *                     wire length falls below the mode-specific
+     *                     minimum ({@value #MIN_PRE_HANDSHAKE_DATAGRAM_LENGTH}
+     *                     pre-handshake; {@value #MIN_POST_HANDSHAKE_DATAGRAM_LENGTH}
+     *                     post-handshake), or the wire length exceeds
+     *                     {@value #MAX_DATAGRAM_LENGTH}
      */
     private int startDatagram(int length) throws IOException {
         var key = readKey;
+        var min = key == null ? MIN_PRE_HANDSHAKE_DATAGRAM_LENGTH : MIN_POST_HANDSHAKE_DATAGRAM_LENGTH;
+        if (length < min) {
+            throw new IOException("Datagram length " + length + " is below the minimum of " + min);
+        }
+        if (length > MAX_DATAGRAM_LENGTH) {
+            throw new IOException("Datagram length " + length + " exceeds the maximum of " + MAX_DATAGRAM_LENGTH);
+        }
         if (key != null) {
-            if (length <= GCM_TAG_BYTE_SIZE) {
-                throw new IOException("Datagram too short to contain a GCM tag: " + length);
-            }
             try {
                 cipher.init(Cipher.DECRYPT_MODE, key, GcmUtils.createNonce(readCounter++));
             } catch (GeneralSecurityException exception) {
@@ -441,68 +504,53 @@ public final class WhatsAppDatagramInputStream extends FilterInputStream {
 
     /**
      * Feeds {@code n} bytes from {@link #ibuffer} through
-     * {@link Cipher#update} (or copies them verbatim in pre-handshake
-     * mode), depositing the result directly into {@code dst}.
+     * {@link Cipher#update}, or copies them verbatim in pre-handshake
+     * mode, appending the result to {@link #plaintextChunk}.
      *
-     * @param n   the number of bytes in {@link #ibuffer} to process
-     * @param dst the destination byte array
-     * @param off the offset in {@code dst}
-     * @return the number of plaintext bytes written to {@code dst}
-     * @throws IOException if the cipher operation fails
+     * @param n the number of bytes in {@link #ibuffer} to process
+     * @throws IOException if the cipher operation fails or
+     *                     BouncyCastle releases more bytes than the
+     *                     plaintext chunk buffer can hold
      */
-    private int decryptChunk(int n, byte[] dst, int off) throws IOException {
+    private void decryptChunk(int n) throws IOException {
         var key = readKey;
         if (key == null) {
-            System.arraycopy(ibuffer, 0, dst, off, n);
-            return n;
+            System.arraycopy(ibuffer, 0, plaintextChunk, plaintextChunkEnd, n);
+            plaintextChunkEnd += n;
+            return;
         }
         try {
-            return cipher.update(ibuffer, 0, n, dst, off);
+            var produced = cipher.update(ibuffer, 0, n, plaintextChunk, plaintextChunkEnd);
+            plaintextChunkEnd += produced;
         } catch (ShortBufferException exception) {
-            throw new IOException("AES-GCM update produced more bytes than caller's buffer allowed", exception);
+            throw new IOException("AES-GCM update produced more bytes than the plaintext chunk buffer allowed", exception);
         }
     }
 
     /**
-     * Calls {@link Cipher#doFinal} to release any held-back plaintext
-     * and verify the GCM tag, writing the output into {@code dst}
-     * when the caller's slice can fit a full tag's worth of bytes, or
-     * into {@link #finalStash} otherwise.
+     * Calls {@link Cipher#doFinal} to release the trailing plaintext
+     * for the current datagram, verify the GCM tag and append the
+     * resulting bytes to {@link #plaintextChunk}; in pre-handshake
+     * mode it only resets {@link #textRemaining}.
      *
-     * <p>The {@code finalStash} fallback is sized at exactly the GCM
-     * tag length: {@link Cipher#doFinal} on a DECRYPT-mode AES-GCM
-     * cipher cannot produce more bytes than that.
-     *
-     * @param dst the destination byte array
-     * @param off the offset in {@code dst}
-     * @param len the maximum number of bytes the caller can accept
-     * @return the number of plaintext bytes deposited (possibly
-     *         {@code 0} if doFinal produced nothing)
      * @throws IOException if the GCM tag fails to authenticate
      */
-    private int finalizeDatagram(byte[] dst, int off, int len) throws IOException {
+    private void finalizeDatagram() throws IOException {
         var key = readKey;
         textRemaining = NO_ACTIVE_DATAGRAM;
         if (key == null) {
-            return 0;
+            return;
         }
         try {
-            if (len >= GCM_TAG_BYTE_SIZE) {
-                return cipher.doFinal(dst, off);
-            }
-            var produced = cipher.doFinal(finalStash, 0);
-            finalStashStart = 0;
-            finalStashEnd = produced;
-            return drainFinalStash(dst, off, len);
+            var produced = cipher.doFinal(plaintextChunk, plaintextChunkEnd);
+            plaintextChunkEnd += produced;
         } catch (GeneralSecurityException exception) {
             throw new IOException("AES-GCM decryption failed (bad MAC)", exception);
         }
     }
 
     /**
-     * Closes the underlying stream.
-     *
-     * @throws IOException if closing the underlying stream fails
+     * {@inheritDoc}
      */
     @Override
     public void close() throws IOException {

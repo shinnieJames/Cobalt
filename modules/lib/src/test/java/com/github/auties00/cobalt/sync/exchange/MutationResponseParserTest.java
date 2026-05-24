@@ -19,35 +19,48 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for {@link MutationResponseParser} — Cobalt's adapter for
- * {@code WAWebSyncdResponseParser.syncResponseParser}.
+ * Pins each branch of {@link MutationResponseParser}.
  *
- * <p>The parser is pure: it consumes a Cobalt {@code Node} (as the relay
- * would deliver it) and produces a {@link MutationSyncResponse}. These tests
- * pin down each branch:
+ * @apiNote
+ * Covers every observable branch of the parser:
  * <ul>
- *   <li><b>Happy path</b> — snapshot-only, patches-only, version/has_more attrs.</li>
- *   <li><b>Collection-level errors</b> — {@code <collection type="error">} with codes
- *       409 (Conflict / ConflictHasMore), 400/404 (fatal UnexpectedError),
- *       anything else (retryable).</li>
- *   <li><b>IQ-level errors</b> — codes 400/404/405/406 are fatal, anything else is
- *       retryable with an optional {@code backoff} attribute.</li>
- *   <li><b>Malformed bytes</b> — non-protobuf payload in {@code <patch>}/{@code <snapshot>}
- *       deserialises to {@link WhatsAppWebAppStateSyncException.UnexpectedError}.</li>
- *   <li><b>Structural failures</b> — missing {@code <sync>} or {@code <collection>},
- *       unknown collection name.</li>
- *   <li><b>Batched parse</b> — multiple collections under one {@code <sync>},
- *       per-collection error captured on the response object.</li>
+ * <li><b>Happy path</b>: snapshot-only, patches-only, version, has_more
+ * <li><b>Collection-level errors</b>: 409 (Conflict / ConflictHasMore), 400/404 (fatal),
+ *     anything else (retryable)
+ * <li><b>IQ-level errors</b>: 400/404/405/406 fatal, anything else retryable with the
+ *     {@code backoff} attribute preserved
+ * <li><b>Malformed bytes</b>: non-protobuf {@code <patch>} or {@code <snapshot>} content
+ *     deserialises to {@link WhatsAppWebAppStateSyncException.UnexpectedError}
+ * <li><b>Structural failures</b>: missing {@code <sync>} or {@code <collection>}, unknown
+ *     collection name
+ * <li><b>Batched parse</b>: multiple collections under one {@code <sync>}, per-collection
+ *     errors captured on the response
  * </ul>
+ *
+ * @implNote
+ * This implementation is pure and stateless; every test builds the input
+ * {@link Node} via the per-test helpers at the bottom of
+ * the class so each test body stays focused on the assertion.
  */
 @DisplayName("MutationResponseParser")
 class MutationResponseParserTest {
 
+    /**
+     * The shared parser instance; the parser is stateless so a single instance is reused
+     * across every test.
+     */
     private static final MutationResponseParser PARSER = new MutationResponseParser();
 
+    /**
+     * Tests for the happy paths (snapshot, patches, version, has_more).
+     */
     @Nested
-    @DisplayName("happy path — patches and snapshot responses")
+    @DisplayName("happy path - patches and snapshot responses")
     class HappyPath {
+        /**
+         * Asserts that a patches-only collection produces the right type/version/has_more
+         * and patch list.
+         */
         @Test
         @DisplayName("collection with patches yields the right type/version/has_more and patch list")
         void patchesOnly() {
@@ -74,6 +87,10 @@ class MutationResponseParserTest {
             assertTrue(response.collectionError().isEmpty());
         }
 
+        /**
+         * Asserts that a snapshot-only collection produces the parsed external blob
+         * reference.
+         */
         @Test
         @DisplayName("collection with snapshot yields the parsed external blob reference")
         void snapshotOnly() {
@@ -97,6 +114,10 @@ class MutationResponseParserTest {
             assertTrue(response.patches().isEmpty());
         }
 
+        /**
+         * Asserts that an empty collection (neither snapshot nor patches) parses without
+         * error.
+         */
         @Test
         @DisplayName("empty collection (no snapshot, no patches) is a valid no-op response")
         void emptyCollection() {
@@ -108,6 +129,9 @@ class MutationResponseParserTest {
             assertFalse(response.isSnapshot());
         }
 
+        /**
+         * Asserts that a missing {@code version} attribute defaults to zero.
+         */
         @Test
         @DisplayName("missing version attribute defaults to 0")
         void missingVersionDefaultsToZero() {
@@ -116,9 +140,16 @@ class MutationResponseParserTest {
         }
     }
 
+    /**
+     * Tests for the collection-level error routing in the throwing single-collection
+     * parse mode.
+     */
     @Nested
-    @DisplayName("collection-level errors — codes route to specific exception subtypes")
+    @DisplayName("collection-level errors - codes route to specific exception subtypes")
     class CollectionErrors {
+        /**
+         * Asserts that a 409 collection error throws {@link WhatsAppWebAppStateSyncException.Conflict}.
+         */
         @Test
         @DisplayName("409 throws Conflict in parseSyncResponse (single-collection mode)")
         void code409Throws() {
@@ -129,6 +160,9 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a 409 with {@code has_more_patches} sets {@code Conflict.hasMore}.
+         */
         @Test
         @DisplayName("409 with has_more_patches sets Conflict.hasMore=true")
         void code409HasMoreSet() {
@@ -142,6 +176,10 @@ class MutationResponseParserTest {
             assertTrue(exception.hasMorePatches(), "Conflict.hasMore must reflect collection-level has_more_patches");
         }
 
+        /**
+         * Asserts that a 400 collection error throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("400 throws UnexpectedError (fatal)")
         void code400Throws() {
@@ -152,6 +190,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a 404 collection error throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("404 throws UnexpectedError (fatal)")
         void code404Throws() {
@@ -162,6 +204,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that any other collection-level code throws
+         * {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
+         */
         @Test
         @DisplayName("unmapped collection-level code throws RetryableServerError")
         void otherCodeIsRetryable() {
@@ -173,9 +219,16 @@ class MutationResponseParserTest {
         }
     }
 
+    /**
+     * Tests for the IQ-level error routing.
+     */
     @Nested
-    @DisplayName("IQ-level errors — fatal vs retryable")
+    @DisplayName("IQ-level errors - fatal vs retryable")
     class IqLevelErrors {
+        /**
+         * Asserts that an IQ-level 400 throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("type=error code=400 is fatal (UnexpectedError)")
         void iq400IsFatal() {
@@ -184,6 +237,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that an IQ-level 404 throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("type=error code=404 is fatal")
         void iq404IsFatal() {
@@ -191,6 +248,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(errorIq(404, null)));
         }
 
+        /**
+         * Asserts that an IQ-level 405 throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("type=error code=405 is fatal")
         void iq405IsFatal() {
@@ -198,6 +259,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(errorIq(405, null)));
         }
 
+        /**
+         * Asserts that an IQ-level 406 throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("type=error code=406 is fatal")
         void iq406IsFatal() {
@@ -205,6 +270,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(errorIq(406, null)));
         }
 
+        /**
+         * Asserts that an IQ-level 503 throws
+         * {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
+         */
         @Test
         @DisplayName("type=error code=503 is retryable (RetryableServerError)")
         void iq503IsRetryable() {
@@ -212,20 +281,29 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(errorIq(503, null)));
         }
 
+        /**
+         * Asserts that the {@code backoff} attribute on the IQ-level error is preserved
+         * on the {@link WhatsAppWebAppStateSyncException.RetryableServerError}.
+         */
         @Test
         @DisplayName("type=error with backoff attribute is preserved in RetryableServerError")
         void retryableServerCarriesBackoff() {
             var ex = assertThrows(WhatsAppWebAppStateSyncException.RetryableServerError.class,
                     () -> PARSER.parseSyncResponse(errorIq(429, 1500L)));
-            // The retryable exception carries the server-supplied backoff if WA Web does;
-            // structure check is enough — Conflict captures hasMore, RetryableServerError captures backoff
             assertNotNull(ex);
         }
     }
 
+    /**
+     * Tests for the structural-failure paths.
+     */
     @Nested
-    @DisplayName("structural failures — missing required nodes / unknown collection")
+    @DisplayName("structural failures - missing required nodes / unknown collection")
     class StructuralFailures {
+        /**
+         * Asserts that a response missing the {@code <sync>} child throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("response missing <sync> throws UnexpectedError")
         void missingSync() {
@@ -234,6 +312,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a response missing the {@code <collection>} child throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("response missing <collection> throws UnexpectedError")
         void missingCollection() {
@@ -243,6 +325,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a collection without a {@code name} attribute throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("collection missing 'name' attribute throws UnexpectedError")
         void missingCollectionName() {
@@ -252,6 +338,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that an unknown collection name throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("unknown collection name throws UnexpectedError")
         void unknownCollectionName() {
@@ -261,9 +351,16 @@ class MutationResponseParserTest {
         }
     }
 
+    /**
+     * Tests for the malformed-bytes paths.
+     */
     @Nested
-    @DisplayName("malformed bytes — non-protobuf <patch>/<snapshot> content")
+    @DisplayName("malformed bytes - non-protobuf <patch>/<snapshot> content")
     class MalformedBytes {
+        /**
+         * Asserts that non-protobuf patch bytes throw
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("non-protobuf patch bytes throw UnexpectedError")
         void malformedPatch() {
@@ -278,6 +375,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a content-less {@code <patch>} throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("patch node with no content throws UnexpectedError")
         void patchWithoutContent() {
@@ -290,6 +391,10 @@ class MutationResponseParserTest {
                     () -> PARSER.parseSyncResponse(iq));
         }
 
+        /**
+         * Asserts that a content-less {@code <snapshot>} throws
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError}.
+         */
         @Test
         @DisplayName("snapshot node with no content throws UnexpectedError")
         void snapshotWithoutContent() {
@@ -301,9 +406,16 @@ class MutationResponseParserTest {
         }
     }
 
+    /**
+     * Tests for the multi-collection batched parse mode.
+     */
     @Nested
-    @DisplayName("parseBatchedSyncResponse — multiple collections, per-collection errors captured")
+    @DisplayName("parseBatchedSyncResponse - multiple collections, per-collection errors captured")
     class BatchedResponse {
+        /**
+         * Asserts that multiple collections under one {@code <sync>} produce one response
+         * per collection in document order.
+         */
         @Test
         @DisplayName("multiple collections produce one MutationSyncResponse per child")
         void multipleCollections() {
@@ -325,6 +437,10 @@ class MutationResponseParserTest {
             assertEquals(3L, responses.get(2).version());
         }
 
+        /**
+         * Asserts that a collection-level error in a batched response is captured on the
+         * response rather than thrown.
+         */
         @Test
         @DisplayName("collection-level errors are captured on the response, not thrown")
         void errorCapturedNotThrown() {
@@ -345,6 +461,9 @@ class MutationResponseParserTest {
                     "409 must be captured as Conflict on the failing collection");
         }
 
+        /**
+         * Asserts that an empty {@code <sync>} produces an empty response list.
+         */
         @Test
         @DisplayName("empty <sync> returns an empty list")
         void emptySync() {
@@ -354,6 +473,10 @@ class MutationResponseParserTest {
             assertTrue(PARSER.parseBatchedSyncResponse(iq).isEmpty());
         }
 
+        /**
+         * Asserts that an IQ-level error short-circuits the batched parse with the same
+         * exception as the single-collection parse.
+         */
         @Test
         @DisplayName("IQ-level error short-circuits the batched parse")
         void iqLevelErrorShortCircuits() {
@@ -362,8 +485,17 @@ class MutationResponseParserTest {
         }
     }
 
-    // ---------- helpers ----------
-
+    /**
+     * Builds a single-collection IQ wrapper with the given inner collection node.
+     *
+     * @apiNote
+     * Helper that centralises the standard {@code <iq><sync><collection>} skeleton so
+     * each test body stays focused on the collection-specific shape.
+     *
+     * @param iqType the {@code type} attribute on the {@code <iq>}
+     * @param collectionNode the inner {@code <collection>} node
+     * @return the built {@link Node}
+     */
     private static Node iq(String iqType, Node collectionNode) {
         return new NodeBuilder().description("iq").attribute("type", iqType)
                 .content(new NodeBuilder().description("sync")
@@ -371,6 +503,17 @@ class MutationResponseParserTest {
                 .build();
     }
 
+    /**
+     * Builds an IQ-level error node with the given code and optional backoff attribute.
+     *
+     * @apiNote
+     * Helper for the IQ-level error tests; the {@code backoff} attribute is omitted when
+     * {@code backoffMs} is {@code null}.
+     *
+     * @param code the IQ error code
+     * @param backoffMs the backoff in milliseconds, or {@code null} to omit
+     * @return the built {@link Node}
+     */
     private static Node errorIq(int code, Long backoffMs) {
         var error = new NodeBuilder().description("error").attribute("code", String.valueOf(code));
         if (backoffMs != null) error.attribute("backoff", String.valueOf(backoffMs));
@@ -378,11 +521,36 @@ class MutationResponseParserTest {
                 .content(error.build()).build();
     }
 
+    /**
+     * Functional shim that lets tests configure attributes on a {@link NodeBuilder} via a
+     * lambda.
+     *
+     * @apiNote
+     * Used by {@link #collection(String, AttrConfig, Node...)} so each test can supply
+     * its own attributes inline.
+     */
     @FunctionalInterface
     private interface AttrConfig {
+        /**
+         * Applies attribute configuration to the supplied {@link NodeBuilder}.
+         *
+         * @param builder the builder to configure
+         */
         void apply(NodeBuilder builder);
     }
 
+    /**
+     * Builds a {@code <collection>} node with the given name, attributes and child nodes.
+     *
+     * @apiNote
+     * Helper used by every test in this class to build the collection child of an IQ
+     * response without repeating the boilerplate.
+     *
+     * @param name the collection name
+     * @param config the attribute configurer
+     * @param children the optional child nodes
+     * @return the built {@link Node}
+     */
     private static Node collection(String name, AttrConfig config, Node... children) {
         var builder = new NodeBuilder().description("collection").attribute("name", name);
         config.apply(builder);

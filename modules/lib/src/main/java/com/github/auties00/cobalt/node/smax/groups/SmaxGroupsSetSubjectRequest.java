@@ -14,27 +14,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that replaces a group's subject (display name).
+ *
+ * @apiNote Drives the "Edit group name" affordance on the group-info screen. The relay returns a bare
+ * {@link SmaxGroupsSetSubjectResponse.Success} envelope on success; the subject change is broadcast back to all
+ * participants via a separate notification path.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetSubjectRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsSetSubjectChangeSubjectMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request {
     /**
-     * The group JID whose subject is being changed.
+     * The group {@link Jid} whose subject is being mutated.
      */
     private final Jid groupJid;
 
     /**
-     * The new subject text (UTF-8 string, server-bounded length).
+     * The new subject text (UTF-8, server-bounded length).
      */
     private final String subject;
 
     /**
-     * Constructs a request.
+     * Constructs a set-subject request.
      *
-     * @param groupJid the group JID; never {@code null}
-     * @param subject  the new subject text; never {@code null}
+     * @param groupJid the group {@link Jid}
+     * @param subject  the new subject text; the relay enforces a server-side length cap
      * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxGroupsSetSubjectRequest(Jid groupJid, String subject) {
@@ -43,9 +47,11 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
@@ -54,17 +60,23 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
     /**
      * Returns the new subject text.
      *
-     * @return the subject
+     * @return the new subject; never {@code null}
      */
     public String subject() {
         return subject;
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         {@code <subject/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <subject>...UTF-8 bytes...</subject>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <subject>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsSetSubjectRequest",
@@ -82,6 +94,12 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
                 .content(subjectNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across both fields.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsSetSubjectRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -94,11 +112,21 @@ public final class SmaxGroupsSetSubjectRequest implements SmaxOperation.Request 
         return Objects.equals(this.groupJid, that.groupJid) && Objects.equals(this.subject, that.subject);
     }
 
+    /**
+     * Returns a hash composed of both fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, subject);
     }
 
+    /**
+     * Returns a debug string carrying both fields.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsSetSubjectRequest[groupJid=" + groupJid + ", subject=" + subject + ']';

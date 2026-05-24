@@ -29,14 +29,26 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MarketingMessageBroadcastHandler} — Cobalt's adapter
- * for {@code WAWebPremiumMessageBroadcastSync}.
+ * Exercises the {@link MarketingMessageBroadcastHandler} adapter for
+ * {@code WAWebPremiumMessageBroadcastSync}.
  *
- * <p>The handler associates a sent message id with a premium-message
- * template. SET mutations require the template to already exist locally
- * (otherwise the result is an orphan). These tests pin down the wire
- * metadata, the SET behaviour, the orphan branch, the malformed-input
- * fallbacks, and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Verifies parity with WA Web for the
+ * {@code marketingMessageBroadcast} app-state sync action across
+ * metadata, the SET happy path that records the
+ * (premium template, sent message) association, the orphan branch
+ * when the referenced template is unknown, the malformed-input
+ * fallbacks, the REMOVE rejection and the inherited timestamp-based
+ * conflict resolution.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#findMarketingMessage(String)} read-back can
+ * be asserted directly. Premium templates are pre-seeded through
+ * {@link MarketingMessageBuilder} so the orphan branch can be
+ * verified independently.
  */
 @DisplayName("MarketingMessageBroadcastHandler")
 class MarketingMessageBroadcastHandlerTest {
@@ -55,14 +67,27 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation whose value carries the given broadcast action.
+     * Builds a {@link DecryptedMutation.Trusted} carrying the given
+     * broadcast action with explicit control over both index slots.
      *
-     * @param indexPremiumId the premium template id placed in {@code indexParts[1]}, may be {@code null}
-     * @param indexMessageId the sent message id placed in {@code indexParts[2]}, may be {@code null}
-     * @param action         the broadcast action payload, may be {@code null}
-     * @param operation      the sync operation
+     * @apiNote
+     * Used by every test to centralise mutation construction; the
+     * nullable index slots and nullable {@code action} let the
+     * malformed-index and malformed-value paths be exercised without
+     * re-implementing the envelope.
+     *
+     * @param indexPremiumId the premium template id placed in
+     *                       {@code indexParts[1]}, may be
+     *                       {@code null}
+     * @param indexMessageId the sent message id placed in
+     *                       {@code indexParts[2]}, may be
+     *                       {@code null}
+     * @param action         the broadcast action payload, may be
+     *                       {@code null}
+     * @param operation      the {@link SyncdOperation} to wrap
      * @param ts             the mutation timestamp
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} with the requested
+     *         shape
      */
     private DecryptedMutation.Trusted buildMutation(String indexPremiumId, String indexMessageId,
                                                     MarketingMessageBroadcastAction action,
@@ -94,7 +119,7 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the broadcast action wire constant")
@@ -118,7 +143,7 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET associates messageId with the premium template")
+    @DisplayName("applyMutation - SET associates messageId with the premium template")
     class ApplySet {
         @Test
         @DisplayName("SET with a known premium template id records the (messageId, premiumId) pair")
@@ -137,7 +162,7 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan when premium template is unknown")
+    @DisplayName("applyMutation - orphan when premium template is unknown")
     class OrphanTemplate {
         @Test
         @DisplayName("a SET targeting an absent template returns ORPHAN")
@@ -152,15 +177,15 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value dimension is n/a")
+    @DisplayName("applyMutation - malformed value dimension is n/a")
     class MalformedValue {
         @Test
-        @DisplayName("the handler never reads value.marketingMessageBroadcastAction — value content is irrelevant")
+        @DisplayName("the handler never reads value.marketingMessageBroadcastAction - value content is irrelevant")
         void valueIgnored() {
             seedTemplate("tpl-2");
             var ts = Instant.now();
             // Drop in a value that carries the wrong (pin) action to demonstrate the broadcast
-            // handler does not gate on action-type at all — only on the (premiumId, messageId)
+            // handler does not gate on action-type at all - only on the (premiumId, messageId)
             // index tuple plus template existence.
             var value = new SyncActionValueBuilder()
                     .timestamp(ts)
@@ -170,12 +195,12 @@ class MarketingMessageBroadcastHandlerTest {
             var mutation = new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, handler.version());
 
             assertEquals(SyncActionState.SUCCESS, handler.applyMutation(client, mutation).actionState(),
-                    "WAWebPremiumMessageBroadcastSync reads only the index — no malformed-value path exists");
+                    "WAWebPremiumMessageBroadcastSync reads only the index - no malformed-value path exists");
         }
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a missing premium id at indexParts[1] returns MALFORMED")
@@ -202,7 +227,7 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -218,10 +243,10 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -230,7 +255,7 @@ class MarketingMessageBroadcastHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("equal timestamps - APPLY_REMOTE_DROP_LOCAL")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -238,7 +263,7 @@ class MarketingMessageBroadcastHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -253,10 +278,10 @@ class MarketingMessageBroadcastHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("MarketingMessageBroadcastHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("MarketingMessageBroadcastHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
             assertNotNull(new MarketingMessageBroadcastHandler(),
                     "MarketingMessageBroadcastHandler instantiates with a no-arg constructor and exposes no builder method");

@@ -6,37 +6,50 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Produces an {@link SSLContext} and matching {@link SSLParameters} that
- * mimic Chrome's TLS client hello so JA3-fingerprinting endpoints
- * (including WhatsApp) do not reject the connection.
+ * Default {@link WhatsAppSslContextFactory} that produces an
+ * {@link SSLContext} and matching {@link SSLParameters} which mimic
+ * Chrome's TLS client hello, so JA3-fingerprinting endpoints accept
+ * the connection.
  *
- * <p>The parameters advertise ALPN {@code http/1.1}, enable HTTPS
- * hostname verification, and pin the cipher suite ordering to the
- * Chrome 147 list (minus GREASE, which the JDK cannot produce, and
- * minus the legacy {@code TLS_RSA_*} suites, which the JDK pins on
- * {@code jdk.tls.disabledAlgorithms} too early to override reliably).
- * The remaining 11 ECDHE + TLS 1.3 ciphers in Chrome's exact order
- * cover what WhatsApp actually negotiates in practice.
+ * @apiNote
+ * Returned by {@link WhatsAppSslContextFactory#chrome()} and used for
+ * every outbound WhatsApp TLS hop unless the caller supplies a custom
+ * factory. The parameters advertise ALPN {@code http/1.1}, enable
+ * HTTPS hostname verification, and pin the cipher suite ordering to
+ * the live Chrome 147 list (minus GREASE, which the JDK cannot emit,
+ * and minus the legacy {@code TLS_RSA_*} suites, which the JDK pins on
+ * {@code jdk.tls.disabledAlgorithms} too early to override
+ * reliably).
+ *
+ * @implNote
+ * This implementation initialises the {@link SSLContext} once at
+ * construction with the JDK's default trust and key managers, then
+ * publishes the singleton via {@link #INSTANCE}. JA3 fingerprinting is
+ * sensitive to the order ciphers appear in the client hello, so the
+ * cipher list is laid down byte-for-byte and must never be sorted.
  */
 final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     /**
-     * Cipher suite ordering captured from a live Chrome 147 instance via
+     * The Chrome 147 cipher suite ordering, captured from
      * {@code https://www.howsmyssl.com/a/check}, with the four
      * deprecated {@code TLS_RSA_*} entries dropped.
      *
-     * <p>Chrome's actual hello also offers the four legacy {@code
-     * TLS_RSA_WITH_AES_*} suites for backward compatibility with old
-     * servers. Modern OpenJDK pins {@code TLS_RSA_*} on the
-     * {@code jdk.tls.disabledAlgorithms} list and caches that
-     * constraint at JSSE class-init time, before any user code can
-     * reset the property reliably (especially in IDE runs with a
-     * debugger agent loaded earlier). Dropping them here lets the wire
-     * and the configuration agree; WhatsApp servers negotiate ECDHE in
-     * practice so the legacy entries are never actually used.
+     * @apiNote
+     * Chrome's hello also offers the legacy {@code TLS_RSA_WITH_AES_*}
+     * suites for backward compatibility with old servers; WhatsApp's
+     * edge negotiates ECDHE in practice so the legacy entries are
+     * never actually used and dropping them keeps the wire and the
+     * configuration in agreement.
      *
-     * <p>Servers that JA3-fingerprint the client hello reject any
-     * ordering that does not match a known browser, so the order here
-     * is load-bearing and must not be sorted.
+     * @implNote
+     * This implementation must not sort or otherwise reorder the
+     * array; JA3 hashes the cipher list as encountered and a sorted
+     * variant would surface as a different fingerprint, triggering
+     * server-side rejection. Modern OpenJDK pins {@code TLS_RSA_*} on
+     * {@code jdk.tls.disabledAlgorithms} and caches that constraint at
+     * JSSE class-init time, before any user code can reset the
+     * property reliably (especially in IDE runs with a debugger agent
+     * loaded earlier), which is why those suites are absent here.
      */
     private static final String[] CHROME_CIPHER_SUITES = {
             "TLS_AES_128_GCM_SHA256",
@@ -53,29 +66,45 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     };
 
     /**
-     * ALPN protocol identifier advertised inside the client hello.
+     * The ALPN protocol identifier advertised inside the client hello.
+     *
+     * @apiNote
+     * WhatsApp's edge only accepts {@code http/1.1}; HTTP/2 was not
+     * adopted in the public web bundle.
      */
     private static final String[] ALPN_PROTOCOLS = {"http/1.1"};
 
     /**
-     * Endpoint identification algorithm used for hostname verification
-     * against the server certificate.
+     * The endpoint identification algorithm used for hostname
+     * verification against the server certificate.
+     *
+     * @apiNote
+     * {@code "HTTPS"} engages the JDK's RFC 2818 / RFC 6125 logic so
+     * leaf certificates are matched against the SNI server name; not
+     * setting this would skip hostname verification entirely.
      */
     private static final String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
 
     /**
-     * The shared singleton instance.
+     * The shared singleton instance returned by
+     * {@link WhatsAppSslContextFactory#chrome()}.
      */
     static final ChromeSslContextFactory INSTANCE = new ChromeSslContextFactory();
 
     /**
-     * The shared default TLS context, initialised once at construction.
+     * The shared default TLS context, initialised once at
+     * construction.
      */
     private final SSLContext sslContext;
 
     /**
-     * Prevents external instantiation; callers obtain the factory through
-     * {@link #INSTANCE}.
+     * Constructs the singleton.
+     *
+     * @apiNote
+     * Private so callers obtain the factory through
+     * {@link #INSTANCE}; the constructor pre-initialises the
+     * {@link SSLContext} so {@link #sslContext()} can return without
+     * re-throwing checked exceptions.
      *
      * @throws IllegalStateException if the JDK cannot provide a TLS
      *         {@link SSLContext}
@@ -91,9 +120,7 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     }
 
     /**
-     * Returns the shared TLS context.
-     *
-     * @return the {@link SSLContext}
+     * {@inheritDoc}
      */
     @Override
     public SSLContext sslContext() {
@@ -101,11 +128,14 @@ final class ChromeSslContextFactory implements WhatsAppSslContextFactory {
     }
 
     /**
-     * Returns a fresh {@link SSLParameters} carrying Chrome's cipher
-     * suite ordering, ALPN advertisement and HTTPS endpoint
-     * identification.
+     * {@inheritDoc}
      *
-     * @return the parameters
+     * @implNote
+     * This implementation returns a fresh {@link SSLParameters}
+     * carrying {@link #CHROME_CIPHER_SUITES}, {@link #ALPN_PROTOCOLS}
+     * and {@link #ENDPOINT_IDENTIFICATION_ALGORITHM} on every call so
+     * caller-side mutation (typically setting SNI server names) does
+     * not affect other connections sharing the same factory.
      */
     @Override
     public SSLParameters sslParameters() {

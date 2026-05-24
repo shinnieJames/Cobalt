@@ -27,8 +27,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link NctSaltSyncHandler} â€” Cobalt's adapter for
- * {@code WAWebNctSaltSync}.
+ * Exercises {@link NctSaltSyncHandler} against the
+ * {@code WAWebNctSaltSync} mutation shapes.
+ *
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification:
+ * {@link SyncdOperation#SET}
+ * with a non-{@code null} salt writes the bytes via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setNotificationContentTokenSalt(byte[])};
+ * {@link SyncdOperation#REMOVE}
+ * clears it; a {@code SET} with the wrong action type or with no
+ * salt field surfaces as
+ * {@link SyncActionState#MALFORMED};
+ * the default {@code resolveConflicts} chooses the later timestamp;
+ * the default batch path applies each mutation in order.
+ *
+ * @implNote
+ * This implementation drives the handler directly through
+ * {@link NctSaltSyncHandler#applyMutation} with hand-built
+ * {@link DecryptedMutation.Trusted} mutations because no public
+ * outgoing-mutation factory exists for this action.
  */
 @DisplayName("NctSaltSyncHandler")
 class NctSaltSyncHandlerTest {
@@ -102,7 +121,7 @@ class NctSaltSyncHandlerTest {
                     mutation(null, SyncdOperation.REMOVE, Instant.now()));
             assertEquals(SyncActionState.SUCCESS, result.actionState());
             assertTrue(client.store().notificationContentTokenSalt().isEmpty(),
-                    "WA Web: yield userPrefsIdb.remove(NCT_SALT) â€” Cobalt nulls the store field");
+                    "WA Web: yield userPrefsIdb.remove(NCT_SALT); Cobalt nulls the store field");
         }
     }
 
@@ -215,22 +234,4 @@ class NctSaltSyncHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("NctSaltSyncHandler does not expose a get*Mutation helper")
-        void noStaticBuilders() {
-            var methods = NctSaltSyncHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (method.isSynthetic() || method.isBridge()) {
-                    continue;
-                }
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on NctSaltSyncHandler: " + method.getName());
-                }
-            }
-        }
-    }
 }

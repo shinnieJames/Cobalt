@@ -12,27 +12,50 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Transfers ownership of a community from the current owner to another admin,
- * updating the server-side role mapping for the group.
+ * Outbound MEX mutation that transfers ownership of a community from the
+ * current owner to another admin.
  *
- * <p>This mutation is issued from the "transfer ownership" action in the
- * community settings. The response echoes the affected group id and the
- * resulting LID migration state (addressing mode) so that the client can
- * update its local view of the community before replaying cached actions.
+ * @apiNote Drives the "transfer ownership" action in the community settings.
+ * The mutation updates the server-side role mapping for the group; the
+ * response echoes the affected group id and the resulting LID migration
+ * state (addressing mode) so callers can update their local view of the
+ * community before replaying cached actions. Surfaced from
+ * {@code WAWebTransferCommunityOwnershipAction} via
+ * {@code WAWebMexTransferCommunityOwnershipJob.mexTransferCommunityOwnershipJob};
+ * WA Web follows the mutation with
+ * {@code WAWebGroupQueryJob.queryAndUpdateGroupMetadataById} when the
+ * addressing mode actually changed.
+ *
+ * @implNote This implementation accepts the GraphQL {@code input} variable
+ * as a single opaque pre-serialised JSON string rather than modelling its
+ * inner shape ({@code community_id}, the {@code users_role} update list and
+ * the {@code localParentGroupAddressingMode} flag). Callers serialise the
+ * input themselves and pass the resulting JSON; the field is dropped from
+ * the wire payload when {@code null}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexTransferCommunityOwnershipJob")
 public final class TransferCommunityOwnershipMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebMexTransferCommunityOwnershipJobMutation} GraphQL mutation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexTransferCommunityOwnershipJobMutation} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexTransferCommunityOwnershipJobMutation.graphql}. The
+     * relay maps this id to its persisted operation; the GraphQL text is
+     * never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexTransferCommunityOwnershipJobMutation.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "29643783178598899";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this mutation is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this mutation is
+     * dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the mutation in
+     * latency and error metrics; Cobalt keeps the name on the request for
+     * embedders mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexTransferCommunityOwnershipJob", exports = "mexTransferCommunityOwnershipJob",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -44,6 +67,13 @@ public final class TransferCommunityOwnershipMexRequest implements MexOperation.
      * Constructs a new request carrying the serialised input payload with
      * the community id and the new owner's id.
      *
+     * @apiNote The WA Web {@code input} variable nests
+     * {@code community_id}, a {@code users_role} array (the new
+     * {@code "SUPERADMIN_MEMBER"} promotion) and the
+     * {@code localParentGroupAddressingMode} flag. Callers serialise this
+     * themselves and pass the resulting JSON string; passing {@code null}
+     * omits the field entirely.
+     *
      * @param input the serialised input variable, may be {@code null} to
      *              omit
      */
@@ -52,9 +82,7 @@ public final class TransferCommunityOwnershipMexRequest implements MexOperation.
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -62,9 +90,7 @@ public final class TransferCommunityOwnershipMexRequest implements MexOperation.
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -72,8 +98,13 @@ public final class TransferCommunityOwnershipMexRequest implements MexOperation.
     }
 
     /**
-     * Serialises the GraphQL variables and wraps them in a {@code w:mex} IQ
-     * stanza.
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter} and only emits the {@code input} field
+     * when the constructor argument is non-null. The wrapped envelope is
+     * built through
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      *
      * @return the IQ {@link NodeBuilder} ready to be built and dispatched
      */

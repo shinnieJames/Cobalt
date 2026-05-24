@@ -4,57 +4,58 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
 /**
- * Root sealed type for every typed SMAX operation modelled in Cobalt.
+ * The closed root of every typed SMAX operation modelled in Cobalt.
  *
- * <p>SMAX is WhatsApp's typed-stanza-builder framework — a layer above raw
- * {@code <iq>} / {@code <presence>} / {@code <message>} stanzas that
- * replaces ad-hoc node construction with a declarative request/response
- * schema. Each SMAX RPC in WA Web ships as three modules:
- * <ul>
- *   <li>{@code WASmaxOut...Request} — the outbound stanza shape
- *   <li>{@code WASmaxIn...Response*} — one or more inbound reply variants
- *       (typically {@code Success}, {@code ClientError}, {@code ServerError},
- *       plus per-RPC alternates such as {@code SuccessWithMatch},
- *       {@code MigratedSuccess}, etc.)
- *   <li>{@code WASmax...RPC} — the {@code sendXxxRPC} / {@code castXxxRPC}
- *       / {@code receiveXxxRPC} export that wires the request and response
- *       parsers together
- * </ul>
+ * <p>SMAX is WhatsApp's typed-stanza-builder framework, a layer above raw
+ * {@code <iq>}, {@code <presence>}, and {@code <message>} stanzas that
+ * replaces ad-hoc node construction with a declarative request and
+ * response schema. Each SMAX RPC in WA Web ships as up to three companion
+ * modules: an {@code Out*Request} module that defines the outbound stanza
+ * shape, one or more {@code In*Response*} modules that parse the documented
+ * reply variants ({@code Success}, {@code ClientError}, {@code ServerError},
+ * and per-RPC alternates such as {@code SuccessWithMatch} or
+ * {@code MigratedSuccess}), and an aggregating {@code *RPC} module that
+ * exposes the {@code sendXxxRPC}, {@code castXxxRPC}, or
+ * {@code receiveXxxRPC} export used by feature code.
  *
- * <p>Cobalt models every SMAX RPC as a pair of independent top-level types
- * — a {@code Smax<Op>Request} class implementing {@link Request} and a
- * {@code Smax<Op>Response} sealed interface implementing {@link Response}
- * whose permits enumerate the documented reply variants. {@code Cast}-shape
- * RPCs (one-way outbound) only ship a {@code Request}; {@code Receive}-shape
- * RPCs (server-pushed) only ship a {@code Response} with a
- * {@code Response.of(Node)} static factory.
+ * <p>Cobalt collapses every SMAX RPC into a pair of independent top-level
+ * Java types: a concrete {@code Smax<Op>Request} class implementing
+ * {@link Request} and a {@code Smax<Op>Response} sealed interface
+ * implementing {@link Response} whose permits enumerate the documented
+ * reply variants. {@code Cast}-shape RPCs (one-way outbound) ship only a
+ * {@code Request}; {@code Receive}-shape RPCs (server-pushed) ship only a
+ * {@code Response} with a static {@code of(Node)} factory.
  *
- * <p>The sealed hierarchy permits exactly two participants — {@link Request}
- * and {@link Response} — so every SMAX operation handle is statically
- * classified as one or the other. {@link Request} declares the
- * {@code toNode()} contract used by
- * {@code WhatsAppClient.sendNode(SmaxOperation.Request)} to dispatch the
- * operation; {@link Response} carries no methods today and exists purely
- * as the closed counterpart of {@code Request}.
+ * @apiNote
+ * Library consumers rarely depend on this root type directly. Concrete
+ * SMAX requests are passed to
+ * {@link com.github.auties00.cobalt.client.WhatsAppClient}'s typed
+ * dispatch methods, and concrete responses are returned through those
+ * same call sites; the sealed hierarchy exists so that every SMAX
+ * handle can be statically classified as either outbound or inbound.
  */
 @WhatsAppWebModule(moduleName = "WAComms")
 public sealed interface SmaxOperation permits SmaxOperation.Request, SmaxOperation.Response {
     /**
-     * The outbound side of a SMAX operation — every concrete operation's
-     * {@code Smax<Op>Request} class implements this interface.
+     * The outbound side of a SMAX operation.
      *
-     * <p>Carries the {@code toNode()} factory required by
-     * {@code WhatsAppClient.sendNode(SmaxOperation.Request)} so that call
-     * sites can dispatch a request by passing the typed value directly.
+     * @apiNote
+     * Every concrete {@code Smax<Op>Request} class implements this
+     * interface; the {@link #toNode()} factory is the single contract
+     * that lets the dispatch path serialise the typed value into the
+     * canonical {@code <iq>}, {@code <presence>}, or {@code <message>}
+     * envelope expected by the relay without knowing the operation's
+     * concrete type.
      */
     non-sealed interface Request extends SmaxOperation {
         /**
-         * Builds the outbound SMAX stanza for this request.
+         * Returns the outbound SMAX stanza for this request.
          *
-         * <p>Each concrete {@code Smax<Op>Request} implementation
-         * serialises its typed fields into the canonical {@code <iq>} /
-         * {@code <presence>} / {@code <message>} envelope expected by
-         * the relay.
+         * @implSpec
+         * Implementations serialise the request's typed fields into the
+         * canonical envelope expected by the relay and return the
+         * {@link NodeBuilder} unbuilt so the dispatch path can stamp a
+         * fresh {@code id} attribute before flushing the stanza.
          *
          * @return the outbound stanza builder; never {@code null}
          */
@@ -62,13 +63,14 @@ public sealed interface SmaxOperation permits SmaxOperation.Request, SmaxOperati
     }
 
     /**
-     * The inbound side of a SMAX operation — every concrete operation's
-     * {@code Smax<Op>Response} sealed interface (or its individual
-     * variant classes) implements this interface.
+     * The inbound side of a SMAX operation.
      *
-     * <p>Carries no abstract methods today; the type exists purely as
-     * the closed counterpart of {@link Request} so the entire SMAX
-     * surface can be reasoned about as a single sealed hierarchy.
+     * @apiNote
+     * Every concrete {@code Smax<Op>Response} sealed interface (or its
+     * individual permitted variant classes) implements this type. It
+     * carries no abstract methods today and exists purely as the
+     * closed counterpart of {@link Request} so the whole SMAX surface
+     * can be reasoned about as a single sealed hierarchy.
      */
     non-sealed interface Response extends SmaxOperation {
     }

@@ -14,26 +14,34 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Parsed response for the LID-change notification query. Carries the previous and current linked-identity values
- * projected from {@code data.xwa2_notify_lid_change}.
+ * Decoded reply to the LID-change notification query.
+ *
+ * @apiNote Consume after dispatching {@link LidChangeNotificationMexRequest}.
+ * Carries the {@code old}/{@code new} LID pair from
+ * {@code xwa2_notify_lid_change}. WA Web's
+ * {@code WAWebMexLidChangeNotification.parseLidChangeNotification} treats
+ * a missing {@code old} or {@code new} field as a hard error; Cobalt
+ * exposes both as {@link Optional} so callers can react without throwing.
+ *
+ * @see LidChangeNotificationMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLidChangeNotification")
 public final class LidChangeNotificationMexResponse implements MexOperation.Response.Json {
     /**
-     * The previous LID value reported by the relay.
+     * The {@code old} field carrying the previous LID, possibly {@code null}.
      */
     private final String oldValue;
 
     /**
-     * The new LID value reported by the relay.
+     * The {@code new} field carrying the new LID, possibly {@code null}.
      */
     private final String newValue;
 
     /**
-     * Constructs a new response with the given old and new LID values.
+     * Wraps the decoded {@code old}/{@code new} LID pair.
      *
-     * @param oldValue the previous LID value
-     * @param newValue the new LID value
+     * @param oldValue the {@code old} field
+     * @param newValue the {@code new} field
      */
     private LidChangeNotificationMexResponse(String oldValue, String newValue) {
         this.oldValue = oldValue;
@@ -41,10 +49,14 @@ public final class LidChangeNotificationMexResponse implements MexOperation.Resp
     }
 
     /**
-     * Parses the MEX response carried by an inbound IQ stanza.
+     * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
+     * @apiNote Pass the IQ node received in reply to a stanza dispatched
+     * with {@link LidChangeNotificationMexRequest#toNode()}.
+     *
+     * @param node the IQ reply stanza
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLidChangeNotification", exports = "parseLidChangeNotification",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -55,29 +67,40 @@ public final class LidChangeNotificationMexResponse implements MexOperation.Resp
     }
 
     /**
-     * Returns the previous LID value reported by the relay.
+     * Returns the previous LID value.
      *
-     * @return an {@link Optional} containing the previous LID, or empty if absent
+     * @return the previous LID wrapped in an {@link Optional}, or
+     *         {@link Optional#empty()} when the relay omitted the field
      */
     public Optional<String> oldValue() {
         return Optional.ofNullable(oldValue);
     }
 
     /**
-     * Returns the new LID value reported by the relay.
+     * Returns the new LID value.
      *
-     * @apiNote The accessor is named {@code newValue()} to avoid clashing with the Java {@code new} keyword.
-     * @return an {@link Optional} containing the new LID, or empty if absent
+     * @apiNote The accessor is named {@code newValue()} to avoid clashing
+     * with the {@code new} Java keyword that the wire field name maps to.
+     *
+     * @return the new LID wrapped in an {@link Optional}, or
+     *         {@link Optional#empty()} when the relay omitted the field
      */
     public Optional<String> newValue() {
         return Optional.ofNullable(newValue);
     }
 
     /**
-     * Parses the response from the raw JSON payload bytes.
+     * Decodes the {@code <result>} payload bytes into a {@link LidChangeNotificationMexResponse}.
      *
-     * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty if the envelope is missing
+     * @implNote This implementation projects
+     * {@code data.xwa2_notify_lid_change}; missing intermediate envelopes
+     * yield {@link Optional#empty()}. Unlike WA Web's parser, missing
+     * {@code old}/{@code new} sub-fields are surfaced as null Optionals on
+     * the returned response rather than raised as errors.
+     *
+     * @param json the raw {@code <result>} payload bytes
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload does not parse or lacks the {@code data} envelope
      */
     private static Optional<LidChangeNotificationMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

@@ -1,12 +1,17 @@
 package com.github.auties00.cobalt.client;
 
+import com.github.auties00.cobalt.call.CallInteraction;
+import com.github.auties00.cobalt.call.CallLink;
 import com.github.auties00.cobalt.model.chat.Chat;
 import com.github.auties00.cobalt.model.chat.group.GroupPastParticipant;
 import com.github.auties00.cobalt.model.message.MessageInfo;
+import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
 import com.github.auties00.cobalt.model.sync.SyncAction;
 import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
-import com.github.auties00.cobalt.call.signaling.CallEndReason;
-import com.github.auties00.cobalt.call.signaling.CallPeerState;
+import com.github.auties00.cobalt.call.CallEndReason;
+import com.github.auties00.cobalt.call.internal.signaling.CallPeerState;
 import com.github.auties00.cobalt.call.IncomingCall;
 import com.github.auties00.cobalt.model.contact.Contact;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -117,6 +122,12 @@ public interface WhatsAppClientListener {
      * Notifies the listener that the full contact list has been received
      * from WhatsApp.
      *
+     * <p>Fires exactly once per login. On a fresh session it fires after
+     * the initial-bootstrap history-sync chunk has been processed; on a
+     * reconnect it fires from the cached store immediately after the
+     * {@code <success>} stanza. The callback fires even when the
+     * contact list is empty.
+     *
      * @param whatsapp the client emitting the event
      * @param contacts the collection of contacts
      */
@@ -138,11 +149,16 @@ public interface WhatsAppClientListener {
      * Notifies the listener that the full chat list has been received
      * from WhatsApp.
      *
-     * <p>When this event fires, all chat metadata is available, excluding
-     * message content. For message content refer to
-     * {@link #onWebHistorySyncMessages(WhatsAppClient, Chat, boolean)}.
-     * Particularly old chats may be loaded later through the history-sync
-     * process.
+     * <p>Fires exactly once per login, after the chat metadata is
+     * complete and independently of message backfill. On a fresh
+     * session it fires after the initial-bootstrap history-sync chunk
+     * has been processed; on a reconnect it fires from the cached
+     * store immediately after the {@code <success>} stanza. Message
+     * content for each chat continues to stream in through
+     * {@link #onWebHistorySyncMessages(WhatsAppClient, Chat, boolean)}
+     * after this callback returns; particularly old chats may also be
+     * discovered later through the history-sync process. The callback
+     * fires even when the chat list is empty.
      *
      * @param whatsapp the client emitting the event
      * @param chats    the collection of chats
@@ -154,10 +170,32 @@ public interface WhatsAppClientListener {
      * Notifies the listener that the full newsletter list has been
      * received from WhatsApp.
      *
+     * <p>Fires exactly once per login. On a fresh session it fires
+     * after {@link WhatsAppClient#refreshNewsletters()} completes
+     * during the post-success bootstrap; on a reconnect it fires from
+     * the cached store immediately after the {@code <success>} stanza.
+     * The callback fires even when the newsletter list is empty.
+     *
      * @param whatsapp    the client emitting the event
      * @param newsletters the collection of newsletters
      */
     default void onNewsletters(WhatsAppClient whatsapp, Collection<Newsletter> newsletters) {
+    }
+
+    /**
+     * Notifies the listener that the full groups list has been
+     * refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time {@link WhatsAppClient#refreshGroups()} commits
+     * a fresh server-authoritative view of the groups this account
+     * participates in. Use to redraw the groups section of the chat
+     * list against the new authoritative set.
+     *
+     * @param whatsapp the client emitting the event
+     * @param groups   the collection of groups
+     */
+    default void onGroups(WhatsAppClient whatsapp, Collection<Chat> groups) {
     }
 
     /**
@@ -235,6 +273,12 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that the full status feed has been received
      * from WhatsApp.
+     *
+     * <p>Fires exactly once per login. On a fresh session it fires
+     * after the initial-status-v3 history-sync chunk has been
+     * processed; on a reconnect it fires from the cached store
+     * immediately after the {@code <success>} stanza. The callback
+     * fires even when the status feed is empty.
      *
      * @param whatsapp the client emitting the event
      * @param status   the collection of status updates
@@ -314,12 +358,126 @@ public interface WhatsAppClientListener {
     }
 
     /**
-     * Notifies the listener that a contact has been blocked or unblocked.
+     * Notifies the listener that a single contact's blocked state was
+     * toggled.
+     *
+     * @apiNote
+     * Fires after a local {@link WhatsAppClient#blockContact(JidProvider)}
+     * or {@link WhatsAppClient#unblockContact(JidProvider)} succeeds, so
+     * the UI can give immediate feedback on the action the user just
+     * took. Bulk reconciliations of the Blocked Contacts privacy list
+     * surface through
+     * {@link #onBlockedContacts(WhatsAppClient, Collection)} instead.
      *
      * @param whatsapp the client emitting the event
      * @param contact  the contact that was blocked or unblocked
      */
     default void onContactBlocked(WhatsAppClient whatsapp, Jid contact) {
+    }
+
+    /**
+     * Notifies the listener that the marketing-message opt-out list
+     * for one category was refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time
+     * {@link WhatsAppClient#refreshOptOutList(String)} commits a
+     * fresh server-authoritative view of that category. Use to redraw
+     * the marketing-message opt-out settings surface against the new
+     * authoritative set.
+     *
+     * @param whatsapp the client emitting the event
+     * @param category the opt-out category that was refreshed
+     * @param entries  the new authoritative entries for that
+     *                 category; may be empty
+     */
+    default void onOptOutList(WhatsAppClient whatsapp, String category, List<OptOutEntry> entries) {
+    }
+
+    /**
+     * Notifies the listener that the per-axis privacy contact
+     * blacklist for one category was refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time
+     * {@link WhatsAppClient#refreshContactBlacklist(String, com.github.auties00.cobalt.model.setting.privacy.ContactBlacklistAddressingMode)}
+     * commits a fresh server-authoritative view of that category. Use
+     * to redraw the privacy settings surface against the new
+     * authoritative set.
+     *
+     * @param whatsapp the client emitting the event
+     * @param category the privacy axis category that was refreshed
+     * @param blockedContacts the new authoritative entries for that
+     *                        category; may be empty
+     */
+    default void onContactBlacklist(WhatsAppClient whatsapp, String category, Collection<Jid> blockedContacts) {
+    }
+
+    /**
+     * Notifies the listener that the list of devices linked to this
+     * account was refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time {@link WhatsAppClient#refreshLinkedDevices()}
+     * commits a fresh server-authoritative copy of the paired-device
+     * list. Use to redraw the Linked Devices settings surface.
+     *
+     * @param whatsapp       the client emitting the event
+     * @param linkedDevices  the new authoritative set of device JIDs;
+     *                       may be empty
+     */
+    default void onLinkedDevices(WhatsAppClient whatsapp, Collection<Jid> linkedDevices) {
+    }
+
+    /**
+     * Notifies the listener that the Status story privacy setting
+     * was refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time {@link WhatsAppClient#refreshStatusPrivacy()}
+     * commits a fresh server-authoritative value, regardless of
+     * whether the value changed.
+     *
+     * @param whatsapp      the client emitting the event
+     * @param statusPrivacy the new authoritative status privacy setting
+     */
+    default void onStatusPrivacyChanged(WhatsAppClient whatsapp, StatusPrivacySetting statusPrivacy) {
+    }
+
+    /**
+     * Notifies the listener that the account-level Disappearing
+     * Messages setting was refreshed against the server.
+     *
+     * @apiNote
+     * Fires each time
+     * {@link WhatsAppClient#refreshDisappearingMode()} commits a
+     * fresh server-authoritative value, regardless of whether the
+     * value changed.
+     *
+     * @param whatsapp         the client emitting the event
+     * @param disappearingMode the new authoritative disappearing mode
+     */
+    default void onDisappearingModeChanged(WhatsAppClient whatsapp, AccountDisappearingMode disappearingMode) {
+    }
+
+    /**
+     * Notifies the listener that the Blocked Contacts privacy list was
+     * refreshed against the server.
+     *
+     * @apiNote
+     * Fires once each time
+     * {@link WhatsAppClient#refreshBlockList()} commits a fresh
+     * server-authoritative copy of the list, regardless of whether
+     * individual entries changed. Use to redraw the Blocked Contacts
+     * settings surface against the new authoritative set. The
+     * collection is the same view returned by
+     * {@link WhatsAppStore#blockedContacts()} after the refresh.
+     *
+     * @param whatsapp        the client emitting the event
+     * @param blockedContacts the new authoritative set of blocked
+     *                        contacts; may be empty
+     */
+    default void onBlockedContacts(WhatsAppClient whatsapp, Collection<Jid> blockedContacts) {
     }
 
     /**
@@ -373,7 +531,7 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that a call has terminated.
      *
-     * <p>Fired by the {@link com.github.auties00.cobalt.call.signaling.CallReceiver}
+     * <p>Fired by the {@link com.github.auties00.cobalt.call.internal.signaling.CallReceiver}
      * when a {@code <call><terminate>} stanza is parsed. The
      * {@code reason} carries the {@code reason} attribute the peer sent on
      * the wire (for example {@code "timeout"} or {@code "hangup"}); it is
@@ -437,7 +595,8 @@ public interface WhatsAppClientListener {
 
     /**
      * Notifies the listener that the peer is asking to upgrade an
-     * audio-only call to audio + video — the M4 video-upgrade flow.
+     * audio-only call to audio plus video; this is the M4
+     * video-upgrade flow.
      *
      * <p>The application can call
      * {@link com.github.auties00.cobalt.call.ActiveCall#acceptVideoUpgrade}
@@ -457,7 +616,7 @@ public interface WhatsAppClientListener {
     /**
      * Notifies the listener that someone has clicked a call-link the
      * local user owns and is now waiting in the lobby for the host
-     * to admit them — the M6 lobby-flow signal.
+     * to admit them; this is the M6 lobby-flow signal.
      *
      * <p>The application can call
      * {@code whatsapp.admitCallLinkParticipant(token, peer)} or
@@ -469,12 +628,12 @@ public interface WhatsAppClientListener {
      * @param peer     the JID of the joiner waiting in the lobby
      */
     default void onCallLinkLobbyJoinRequest(WhatsAppClient whatsapp,
-                                            com.github.auties00.cobalt.call.signaling.CallLink link, Jid peer) {
+                                            CallLink link, Jid peer) {
     }
 
     /**
      * Notifies the listener that the host of a call-link they
-     * clicked has admitted them out of the lobby — the call is now
+     * clicked has admitted them out of the lobby; the call is now
      * starting. Followed by a regular {@code onCall} once the
      * underlying call session is created.
      *
@@ -482,25 +641,25 @@ public interface WhatsAppClientListener {
      * @param link     the link that was admitted
      */
     default void onCallLinkAdmitted(WhatsAppClient whatsapp,
-                                    com.github.auties00.cobalt.call.signaling.CallLink link) {
+                                    CallLink link) {
     }
 
     /**
      * Notifies the listener that the host of a call-link declined
-     * the local user's join request — terminal for that link
+     * the local user's join request; terminal for that link
      * attempt.
      *
      * @param whatsapp the client emitting the event
      * @param link     the link that was denied
      */
     default void onCallLinkDenied(WhatsAppClient whatsapp,
-                                  com.github.auties00.cobalt.call.signaling.CallLink link) {
+                                  CallLink link) {
     }
 
     /**
      * Notifies the listener that a peer broadcast an in-call
-     * interaction — emoji reaction, raise/lower hand, peer-mute
-     * request, or keyframe request — the M8 in-call UX surface.
+     * interaction (emoji reaction, raise/lower hand, peer-mute
+     * request, or keyframe request); this is the M8 in-call UX surface.
      *
      * @param whatsapp    the client emitting the event
      * @param callId      the identifier of the call
@@ -509,7 +668,7 @@ public interface WhatsAppClientListener {
      * @param interaction the typed interaction payload
      */
     default void onCallInteraction(WhatsAppClient whatsapp, String callId, Jid fromJid,
-                                   com.github.auties00.cobalt.call.signaling.CallInteraction interaction) {
+                                   CallInteraction interaction) {
     }
 
     /**

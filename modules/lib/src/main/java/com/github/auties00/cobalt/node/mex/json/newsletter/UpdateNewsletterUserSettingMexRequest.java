@@ -18,35 +18,84 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Updates the authenticated user's personal settings for a newsletter.
+ * Builds the MEX request that flips a per-user newsletter setting.
  *
- * <p>User-scoped newsletter settings include notification mutes and other per-viewer preferences. This mutation applies the supplied setting change and returns the updated setting object.
+ * @apiNote
+ * Drives the newsletter mute toggles surfaced by
+ * {@code WAWebNewsletterUpdateUserSettingJob.updateNewsletterUserSetting}:
+ * when the local user toggles "mute admin notifications" or "mute follower
+ * notifications" on a newsletter, the action runs this mutation with
+ * {@code type} set to {@code "MUTE_ADMIN_ACTIVITY"} or
+ * {@code "MUTE_FOLLOWER_ACTIVITY"} and {@code value} set to {@code "ON"}
+ * or {@code "OFF"}. Build via the constructor with the newsletter Jid,
+ * the setting type, and the new value; submit through the MEX IQ
+ * dispatcher and pair the result with
+ * {@link UpdateNewsletterUserSettingMexResponse#of(Node)}.
+ *
+ * @implNote
+ * WA Web's caller wraps the underlying mutation in
+ * {@code WAWebNewsletterRpcUtils.runWithBackoff} and forwards the result
+ * to {@code WAWebMexNewsletterUtils.convertMutationResponse}; Cobalt
+ * expects the caller to own the retry policy and to merge the result into
+ * the local newsletter cache.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateNewsletterUserSetting")
 public final class UpdateNewsletterUserSettingMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code UpdateNewsletterUserSetting} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexUpdateNewsletterUserSettingJobMutation.graphql} on
+     * the WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child;
+     * the WhatsApp relay refuses requests whose persisted-query id is unknown.
      */
     public static final String QUERY_ID = "31938993655691868";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexUpdateNewsletterUserSetting
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this mutation.
+     *
+     * @apiNote
+     * Reported to observability sinks that key telemetry on the operation
+     * name; mirrors the export name exposed by
+     * {@code WAWebMexUpdateNewsletterUserSetting}.
      */
     public static final String OPERATION_NAME = "mexUpdateNewsletterUserSetting";
+
+    /**
+     * The Jid string of the newsletter whose per-user setting is being
+     * changed.
+     */
     private final String newsletterId;
+
+    /**
+     * The setting-type identifier (for example
+     * {@code "MUTE_ADMIN_ACTIVITY"}).
+     */
     private final String type;
+
+    /**
+     * The new setting value (for example {@code "ON"} or {@code "OFF"}).
+     */
     private final String value;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request that flips a per-user setting on a newsletter.
      *
-     * @param newsletterId the newsletter id
-     * @param type the type
-     * @param value the value
+     * @apiNote
+     * The {@code type} string mirrors WA Web's
+     * {@code WAWebNewsletterModelUtils} constants
+     * ({@code "MUTE_ADMIN_ACTIVITY"} for admin notifications,
+     * {@code "MUTE_FOLLOWER_ACTIVITY"} for follower notifications). The
+     * {@code value} string is the relay-defined toggle state
+     * ({@code "ON"} for muted, {@code "OFF"} for unmuted in the mute
+     * surface).
+     *
+     * @param newsletterId the newsletter Jid whose setting is being
+     *                     changed
+     * @param type         the setting-type identifier
+     * @param value        the new setting value
      */
     public UpdateNewsletterUserSettingMexRequest(String newsletterId, String type, String value) {
         this.newsletterId = newsletterId;
@@ -55,10 +104,11 @@ public final class UpdateNewsletterUserSettingMexRequest implements MexOperation
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}, the persisted-query identifier of the
+     * mutation.
      */
     @Override
     public String id() {
@@ -66,10 +116,11 @@ public final class UpdateNewsletterUserSettingMexRequest implements MexOperation
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}, the value WA Web's
+     * {@code MexPerfTracker} reports for this mutation.
      */
     @Override
     public String name() {
@@ -77,11 +128,26 @@ public final class UpdateNewsletterUserSettingMexRequest implements MexOperation
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be
+     * dispatched through the WhatsApp relay.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {newsletter_id?, type?, value?}}}}
+     * payload consumed by the persisted-query identified by
+     * {@link #QUERY_ID}; each entry is omitted when {@code null} so the
+     * GraphQL schema never receives explicit {@code null} variables.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and delegates IQ envelope construction to
+     * {@link Json#createMexNode(String, String)}; any {@link IOException}
+     * raised by the in-memory writer is wrapped in an
+     * {@link UncheckedIOException} since neither sink can fail in practice.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateNewsletterUserSetting", exports = "mexUpdateNewsletterUserSetting",
             adaptation = WhatsAppAdaptation.ADAPTED)

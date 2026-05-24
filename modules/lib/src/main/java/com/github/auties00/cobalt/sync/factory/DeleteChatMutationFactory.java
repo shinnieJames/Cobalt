@@ -16,54 +16,64 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing delete-chat sync mutations.
+ * Builds outgoing app-state mutations that delete a chat entirely (storage row, messages, AI threads).
  *
- * <p>Mirrors the {@code getDeleteChatMutation} export of WhatsApp Web's
- * {@code WAWebDeleteChatSync} module. The factory is the outgoing-mutation
- * counterpart of
+ * @apiNote
+ * Drives the chat-delete UI affordance: when the user removes a chat the
+ * resulting {@link SyncPendingMutation} is pushed via
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService} so linked
+ * devices delete the same chat row through
+ * {@code WAWebChatDeleteBridge.deleteFromStorage} and drop the associated
+ * AI threads. The factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.DeleteChatHandler}.
+ *
+ * @implNote
+ * This implementation accepts a caller-supplied {@link SyncActionMessageRange}
+ * because Cobalt does not run the
+ * {@code WAWebMessageRangeUtils.constructForwardMovingMessageRange} pipeline,
+ * which is tied to the browser-side active-message-range IndexedDB tables.
+ * WA Web's {@code WAWebDeleteChatSync.getDeleteChatMutation} also emits a
+ * {@code WAWebMdSyncdDogfoodingFeatureUsageWamEvent}; the WAM event is
+ * dispatched from the caller layer in Cobalt because this factory has no
+ * {@link com.github.auties00.cobalt.wam.WamService} handle.
  */
 public final class DeleteChatMutationFactory {
     /**
-     * Constructs a delete-chat mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public DeleteChatMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation that deletes a chat.
+     * Returns a SET mutation that deletes the given chat.
      *
-     * <p>Per WhatsApp Web {@code WAWebDeleteChatSync.getDeleteChatMutation}:
-     * <pre>{@code
-     * getDeleteChatMutation(timestamp, chatWid, deleteMediaFiles) {
-     *   var indexJid = yield getChatJidMutationIndexForChat(chatWid, Actions.DeleteChat);
-     *   var indexWid = createWid(indexJid);
-     *   var forwardRange = yield constructForwardMovingMessageRange(chatWid, indexJid);
-     *   var indexArgs = buildDeleteChatIndexArgs(indexWid, deleteMediaFiles);
-     *   return buildDeleteChatMutation({timestamp, indexWid, mergedRange, deleteMediaFiles});
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["deleteChat", chatJid.toString(), deleteMediaFiles ? "1" : "0"]
      * }
-     * buildDeleteChatIndexArgs(t, n) { return [t.toJid(), n ? "1" : "0"] }
-     * }</pre>
+     * which matches WA Web's {@code buildDeleteChatIndexArgs}. The
+     * {@link DeleteChatAction} sub-message carries the
+     * {@link SyncActionMessageRange} that bounds the delete; passing
+     * {@code messageRange == null} emits a delete with no range, suitable
+     * for chats that hold no messages.
      *
-     * <p>The index format is {@code ["deleteChat", chatJid, deleteMedia]} where
-     * {@code deleteMedia} is written as {@code "1"} when {@code true} and
-     * {@code "0"} when {@code false}, matching {@code buildDeleteChatIndexArgs}.
-     *
-     * <p>In Cobalt the caller supplies the message range because Cobalt does
-     * not maintain the active-message-range infrastructure (browser-specific
-     * IndexedDB concern). The WAM telemetry commit
-     * ({@code MdSyncdDogfoodingFeatureUsageWamEvent}) is performed at the caller
-     * ({@code WhatsAppClient.deleteChat}) since this method has no
-     * {@link com.github.auties00.cobalt.wam.WamService} handle.
+     * @implNote
+     * This implementation does not coalesce against existing pending
+     * mutations the way WA Web's {@code getDeleteChatMutation} does via
+     * {@code WAWebSyncdDb.getPendingMutationsRowsByIndex}; Cobalt's
+     * app-state pipeline merges at a higher layer.
      *
      * @param timestamp        the mutation timestamp
-     * @param chatJid          the JID of the chat to delete
-     * @param deleteMediaFiles whether media files should be deleted
-     * @param messageRange     the message range covering the messages to
-     *                         delete; may be {@code null} when the chat has
-     *                         no messages and the caller wants a full delete
-     * @return the pending mutation for the delete-chat action
+     * @param chatJid          the chat {@link Jid} being deleted
+     * @param deleteMediaFiles {@code true} if the on-disk media files must be deleted as well
+     * @param messageRange     the pre-built range covering the messages to delete, or {@code null}
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebDeleteChatSync", exports = {"getDeleteChatMutation", "buildDeleteChatMutation", "buildDeleteChatIndexArgs"}, adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getDeleteChatMutation(
@@ -93,6 +103,6 @@ public final class DeleteChatMutationFactory {
                 timestamp,
                 DeleteChatAction.ACTION_VERSION
         );
-        return new SyncPendingMutation(mutation, 0); // ADAPTED: WA Web returns the raw mutation object; Cobalt wraps it in SyncPendingMutation for the outgoing queue
+        return new SyncPendingMutation(mutation, 0);
     }
 }

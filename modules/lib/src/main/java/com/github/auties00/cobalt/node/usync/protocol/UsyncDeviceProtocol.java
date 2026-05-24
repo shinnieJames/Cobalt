@@ -16,8 +16,16 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * USync {@code devices} protocol descriptor. Asks the relay for each peer's
- * device list and signed key-index metadata.
+ * USync {@code devices} protocol descriptor.
+ *
+ * @apiNote
+ * Asks the relay for each peer's device list and the signed key-index
+ * envelope; used by every device sync flow (see
+ * {@code WAWebAdvSyncDeviceListApi.syncDeviceList} and
+ * {@code WAWebContactSyncApi}). Pair each {@link UsyncUser} with the locally
+ * cached device hash through
+ * {@link UsyncUser#withDeviceHash(String)} so the relay can return an omit
+ * response when the cache is still in sync.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsyncDevice")
 public final class UsyncDeviceProtocol implements UsyncProtocol {
@@ -35,7 +43,11 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     public static final int PROTOCOL_VERSION = 2;
 
     /**
-     * Constructs a default device-protocol descriptor.
+     * Builds a default device-protocol descriptor.
+     *
+     * @apiNote
+     * The descriptor is stateless; per-user state lives on each
+     * {@link UsyncUser}.
      */
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
             exports = "USyncDeviceProtocol", adaptation = WhatsAppAdaptation.DIRECT)
@@ -43,9 +55,7 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     }
 
     /**
-     * Returns the wire literal for this protocol's tag name.
-     *
-     * @return the tag name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
@@ -55,10 +65,12 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds the {@code <devices>} query element carrying the
-     * {@link #PROTOCOL_VERSION} on the {@code version} attribute.
+     * {@inheritDoc}
      *
-     * @return the query-element node
+     * @implNote
+     * This implementation always emits {@code version="2"} on the
+     * {@code <devices>} element, matching the {@code e=2} constant the JS
+     * module ships with.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
@@ -71,12 +83,14 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     }
 
     /**
-     * Builds the per-user {@code <devices>} child carrying the cached device
-     * hash, the cache timestamp, and the expected timestamp when any of those
-     * are populated. Returns empty when the user has no cache state to send.
+     * {@inheritDoc}
      *
-     * @param user the user the {@code <user>} entry refers to
-     * @return the per-user element, or empty
+     * @implNote
+     * This implementation skips the per-user element when none of
+     * {@code device_hash}, {@code ts}, or {@code expected_ts} is populated,
+     * matching the JS {@code null} return in {@code USyncDeviceProtocol.getUserElement}.
+     * The relay then assumes the local cache is empty and ships the full
+     * device list back.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
@@ -96,12 +110,16 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
     }
 
     /**
-     * Parses the {@code <devices>} child of a {@code <user>} response into a
-     * {@link DeviceResult} or a per-protocol error.
+     * {@inheritDoc}
      *
-     * @param child the protocol-tagged response node
-     * @return the parsed result
-     * @throws IllegalStateException if the node tag is not {@link #NAME}
+     * @implNote
+     * This implementation reads both the optional {@code <key-index-list>}
+     * (signed key-index envelope, with timestamp and optional
+     * {@code expected_ts}) and the optional {@code <device-list>}
+     * (per-device id, key-index, hosted flag), matching the JS
+     * {@code deviceParser}. The hosted-device flag is parsed unconditionally;
+     * the JS {@code WAWebBizCoexGatingUtils.bizHostedDevicesEnabled} gate
+     * happens server-side, so an unwanted {@code true} is impossible.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUsyncDevice",
@@ -115,19 +133,19 @@ public final class UsyncDeviceProtocol implements UsyncProtocol {
             return error.get();
         }
 
-        DeviceResult.KeyIndex keyIndex = child.getChild("key-index-list").map(node -> {
+        var keyIndex = child.getChild("key-index-list").map(node -> {
             var timestamp = Instant.ofEpochSecond(node.getRequiredAttributeAsLong("ts"));
             var expected = node.getAttributeAsLong("expected_ts").stream()
                     .mapToObj(Instant::ofEpochSecond).findFirst().orElse(null);
-            byte[] signed = node.toContentBytes().orElse(null);
+            var signed = node.toContentBytes().orElse(null);
             return new DeviceResult.KeyIndex(timestamp, signed, expected);
         }).orElse(null);
 
-        List<DeviceResult.Device> devices = child.getChild("device-list")
+        var devices = child.getChild("device-list")
                 .map(list -> {
                     var out = new ArrayList<DeviceResult.Device>();
                     list.streamChildren("device").forEach(d -> {
-                        int id = d.getRequiredAttributeAsInt("id");
+                        var id = d.getRequiredAttributeAsInt("id");
                         var ki = d.getAttributeAsInt("key-index", null);
                         var hosted = d.getAttributeAsBool("is_hosted", false);
                         out.add(new DeviceResult.Device(id, ki, hosted));

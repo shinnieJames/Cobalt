@@ -13,23 +13,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the bare {@code <live_updates/>}
- * payload in the canonical
- * {@code <iq xmlns="newsletter" type="set" to="<newsletterJid>">}
- * envelope.
+ * The outbound stanza that opts the connected client into live
+ * updates for a newsletter.
+ *
+ * @apiNote
+ * Drives WA Web's
+ * {@code WAWebNewsletterSubscribeToLiveUpdatesQuery.subscribeToLiveUpdatesQuery},
+ * which is run with exponential back-off via
+ * {@code WAWebNewsletterRpcUtils.runWithBackoff}. Once the relay
+ * accepts the subscription it will push
+ * {@link SmaxNewslettersLiveUpdatesNotificationResponse} stanzas for
+ * the requested newsletter until the TTL surfaced by
+ * {@link SmaxNewslettersSubscribeToLiveUpdatesResponse.Success#duration()}
+ * elapses. The resulting IQ has shape:
+ * {@snippet :
+ *     <iq xmlns="newsletter" type="set" to="<newsletterJid>">
+ *         <live_updates/>
+ *     </iq>
+ * }
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersSubscribeToLiveUpdatesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersBaseIQSetRequestMixin")
 public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID to subscribe to. Routed verbatim into the IQ's
-     * {@code to} attribute.
+     * The newsletter {@link Jid} to subscribe to; routed verbatim into
+     * the IQ's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
     /**
-     * Constructs a request for the given newsletter.
+     * Constructs a new subscription request.
      *
      * @param newsletterJid the newsletter to subscribe to; never
      *                      {@code null}
@@ -43,14 +57,15 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
     /**
      * Returns the newsletter being subscribed to.
      *
-     * @return the newsletter JID; never {@code null}
+     * @return the newsletter {@link Jid}; never {@code null}
      */
     public Jid newsletterJid() {
         return newsletterJid;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza carrying the bare
+     * {@code <live_updates/>} payload.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <live_updates/>} payload
@@ -70,6 +85,14 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
                 .content(liveUpdatesNode);
     }
 
+    /**
+     * Compares two requests for value equality on
+     * {@link #newsletterJid()}.
+     *
+     * @param obj the reference object to compare against
+     * @return {@code true} when {@code obj} is a request carrying an
+     *         equal {@link #newsletterJid()}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -82,11 +105,22 @@ public final class SmaxNewslettersSubscribeToLiveUpdatesRequest implements SmaxO
         return Objects.equals(this.newsletterJid, that.newsletterJid);
     }
 
+    /**
+     * Returns the hash code derived from {@link #newsletterJid()}.
+     *
+     * @return the {@link Jid}'s hash
+     */
     @Override
     public int hashCode() {
         return Objects.hash(newsletterJid);
     }
 
+    /**
+     * Returns a debug representation including the newsletter
+     * {@link Jid}.
+     *
+     * @return a record-like rendering of this request
+     */
     @Override
     public String toString() {
         return "SmaxNewslettersSubscribeToLiveUpdatesRequest[newsletterJid=" + newsletterJid + ']';

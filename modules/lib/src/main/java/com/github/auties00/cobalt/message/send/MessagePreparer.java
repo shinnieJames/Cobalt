@@ -28,45 +28,59 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Builds a fully populated {@link ChatMessageInfo} or
- * {@link NewsletterMessageInfo} from a raw {@link MessageContainer} so the
- * downstream send pipeline can dispatch it.
+ * Converts a raw {@link MessageContainer} into a fully-populated
+ * {@link MessageInfo} ready for dispatch.
  *
- * <p>The pipeline generates a unique message id and a 32-byte
- * {@code messageSecret}, validates addon encryption state, auto-converts
- * {@link ReactionMessage} to {@link EncReactionMessage} for CAG groups,
- * stamps the secret onto the {@code messageContextInfo}, and wraps the
- * result in the appropriate {@link MessageInfo}. Device list metadata
- * (ICDC) is populated later by the per-device encryption stage, and random
- * padding is applied at the Signal binary level by {@code MessageEncryption}.
+ * <p>The preparer generates the wire id and a 32-byte per-message secret,
+ * stamps the secret onto both the resulting info and the container's
+ * {@code messageContextInfo} so the encryption stage can read it back, and
+ * auto-promotes a {@link ReactionMessage} or {@link CommentMessage} into the
+ * corresponding {@code Enc*} addon variant when the chat is a CAG default
+ * subgroup. ICDC metadata is populated later by the per-device encryption
+ * stage; random padding is added at the Signal binary level by
+ * {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption}.
  */
 @WhatsAppWebModule(moduleName = "WAWebOutgoingMessage")
 @WhatsAppWebModule(moduleName = "WAWebE2EProtoGenerator")
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryptAddonMsgData")
 final class MessagePreparer {
     /**
-     * Holds the logger used for preparation diagnostics.
+     * The {@link System.Logger} used for preparation diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(MessagePreparer.class.getName());
 
     /**
-     * Holds the size, in bytes, of the per-message secret generated for every
-     * outbound chat message.
+     * The byte length of the per-message {@code messageSecret} generated for
+     * every outbound chat message.
+     *
+     * @apiNote
+     * The same 32-byte size is asserted on the receiver side by WA Web's
+     * {@code getValidatedMessageSecret}; a mismatch causes the receiver to
+     * reject the message with the
+     * {@link com.github.auties00.cobalt.ack.NackReason#MISSING_MESSAGE_SECRET}
+     * nack.
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptionError", exports = "getValidatedMessageSecret",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int MESSAGE_SECRET_SIZE = 32;
 
     /**
-     * Holds the store consulted for self-JID resolution, newsletter lookups,
-     * and group-metadata queries.
+     * The {@link WhatsAppStore} consulted for self-JID resolution, newsletter
+     * lookups, chat metadata, and parent-message resolution during addon
+     * promotion.
      */
     private final WhatsAppStore store;
 
     /**
-     * Constructs a preparer bound to the given store.
+     * Constructs a {@link MessagePreparer} bound to the supplied store.
      *
-     * @param store the store providing JID and metadata lookups
+     * @apiNote
+     * Constructed once by {@link MessageSendingService}; embedders should
+     * not instantiate directly.
+     *
+     * @param store the {@link WhatsAppStore} providing JID and metadata
+     *              lookups
+     * @throws NullPointerException if {@code store} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoGenerator", exports = "getProtobufMessage",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -75,14 +89,19 @@ final class MessagePreparer {
     }
 
     /**
-     * Prepares the given container for sending to a chat by producing a fully
-     * populated {@link ChatMessageInfo}. The {@code messageSecret} is set on
-     * both the container's {@code messageContextInfo} and the resulting info
-     * object; ICDC metadata is populated later in the pipeline.
+     * Builds a fully-populated {@link ChatMessageInfo} for the supplied chat
+     * {@link Jid} and {@link MessageContainer}.
      *
-     * @param chatJid   the recipient chat JID
-     * @param container the raw message container
-     * @return the prepared message info, ready for the send pipeline
+     * @apiNote
+     * Generates a {@link MessageIdVersion#V2} wire id, samples a fresh
+     * 32-byte {@code messageSecret}, runs the addon validation/auto-promotion
+     * pipeline, and stamps the secret onto both the info and the inner
+     * container's {@code messageContextInfo}. The {@code broadcast} flag is
+     * set when the chat is the status broadcast account.
+     *
+     * @param chatJid   the recipient chat {@link Jid}
+     * @param container the raw {@link MessageContainer}
+     * @return the prepared {@link ChatMessageInfo}
      * @throws NullPointerException  if any argument is {@code null}
      * @throws IllegalStateException if the client is not logged in
      */
@@ -129,17 +148,22 @@ final class MessagePreparer {
     }
 
     /**
-     * Prepares the given container for sending to a newsletter by producing a
-     * fully populated {@link NewsletterMessageInfo}. Newsletters do not use
-     * E2E encryption so neither a {@code messageSecret} nor an ICDC stage is
-     * involved.
+     * Builds a fully-populated {@link NewsletterMessageInfo} for the
+     * supplied newsletter {@link Jid} and {@link MessageContainer}.
      *
-     * @param newsletterJid the newsletter JID
-     * @param container     the raw message container
-     * @return the prepared message info, ready for the send pipeline
+     * @apiNote
+     * Newsletter sends are plaintext SMAX publishes so no
+     * {@code messageSecret} is generated and no addon stage runs; the only
+     * extras over a chat prepare are looking up the newsletter to derive the
+     * monotonically-increasing {@code serverId} and the membership precondition.
+     *
+     * @param newsletterJid the newsletter {@link Jid}
+     * @param container     the raw {@link MessageContainer}
+     * @return the prepared {@link NewsletterMessageInfo}
      * @throws NullPointerException     if any argument is {@code null}
      * @throws IllegalStateException    if the client is not logged in
-     * @throws IllegalArgumentException if the user has not joined the newsletter
+     * @throws IllegalArgumentException if the user has not joined the
+     *                                  newsletter
      */
     @WhatsAppWebExport(moduleName = "WAWebNewsletterSendMessageQueryJob", exports = "querySendNewsletterMessage",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -170,17 +194,26 @@ final class MessagePreparer {
     }
 
     /**
-     * Validates the addon-encryption state of the container and auto-converts
-     * a {@link ReactionMessage} or {@link CommentMessage} into its encrypted
-     * counterpart when the target chat is a CAG group.
+     * Validates the addon-encryption state of the container and auto-promotes
+     * a {@link ReactionMessage} or {@link CommentMessage} to its
+     * {@code Enc*} variant when the target is a CAG default subgroup.
      *
-     * @param container the original message container
-     * @param chatJid   the target chat JID
-     * @param selfJid   the sender's own JID
+     * @apiNote
+     * Plain-content payloads pass through unchanged. CAG reactions and
+     * comments are promoted via {@link EncMessageFactory} using the resolved
+     * parent message; payloads already in {@code Enc*} form (or
+     * {@link SecretEncMessage}) must carry both their {@code encPayload} and
+     * {@code encIv}, otherwise the call fails fast.
+     *
+     * @param container the raw {@link MessageContainer}
+     * @param chatJid   the target chat {@link Jid}
+     * @param selfJid   the sender's own {@link Jid}
      * @return the container, possibly with addon content converted in place
-     * @throws IllegalArgumentException if a poll vote is missing its encrypted
-     *                                  metadata or an encrypted addon is missing
-     *                                  its payload or IV
+     * @throws IllegalArgumentException if a poll vote is missing its
+     *                                  encrypted metadata, an
+     *                                  {@code Enc*}-typed addon is missing
+     *                                  its payload or IV, or a CAG addon
+     *                                  cannot resolve its parent message
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -257,12 +290,18 @@ final class MessagePreparer {
     }
 
     /**
-     * Returns whether a reaction or comment to this chat must be sent as the
-     * encrypted addon variant. Encrypted addons are required for CAG default
-     * subgroups using LID addressing.
+     * Returns whether a reaction or comment to the supplied chat must be
+     * sent as an encrypted addon.
      *
-     * @param chatJid the target chat JID
-     * @return {@code true} when the chat requires encrypted addons
+     * @apiNote
+     * Encrypted addons are required for CAG default subgroups (the same
+     * branch WA Web's {@code isCagAddon} guards); standard groups, 1:1
+     * chats, and non-default community subgroups use the plain reaction
+     * payload.
+     *
+     * @param chatJid the target chat {@link Jid}
+     * @return {@code true} when {@code chatJid} resolves to a CAG default
+     *         subgroup
      */
     @WhatsAppWebExport(moduleName = "WAWebSendGroupMsgJob", exports = "isCagAddon",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -279,9 +318,16 @@ final class MessagePreparer {
     /**
      * Resolves the parent chat message referenced by the given key.
      *
-     * @param parentJid the chat JID containing the parent message
-     * @param key       the message key referencing the parent, or {@code null}
-     * @return the resolved parent message, or empty when not found
+     * @apiNote
+     * Used by the addon-promotion branches to fetch the target message; the
+     * encryption helper needs the parent's id and sender to derive the
+     * addon's symmetric key.
+     *
+     * @param parentJid the chat {@link Jid} containing the parent message
+     * @param key       the {@link MessageKey} referencing the parent, or
+     *                  {@code null}
+     * @return the resolved {@link ChatMessageInfo}, or
+     *         {@link Optional#empty()} when not found
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryptAddonMsgData", exports = "encryptAddOn",
             adaptation = WhatsAppAdaptation.ADAPTED)

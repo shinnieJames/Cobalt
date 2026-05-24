@@ -14,22 +14,48 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Response variant for {@link RevokeNewsletterAdminInviteMexRequest} carrying the parsed server reply.
+ * Parses the MEX response of the revoke-newsletter-admin-invite mutation
+ * built by {@link RevokeNewsletterAdminInviteMexRequest}.
+ *
+ * @apiNote
+ * Hands back the newsletter id echoed under
+ * {@code xwa2_newsletter_admin_invite_revoke.id} after the invite has
+ * been removed server-side; consumers use it to confirm which newsletter
+ * just had its pending admin invite cancelled.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexRevokeNewsletterAdminInviteJob")
 public final class RevokeNewsletterAdminInviteMexResponse implements MexOperation.Response.Json {
+    /**
+     * The newsletter Jid string echoed under
+     * {@code xwa2_newsletter_admin_invite_revoke.id}.
+     */
     private final String id;
 
+    /**
+     * Constructs a response wrapping the echoed newsletter id.
+     *
+     * @apiNote
+     * Reserved for the static parser; external callers obtain instances via
+     * {@link #of(Node)}.
+     *
+     * @param id the newsletter Jid string echoed by the relay
+     */
     private RevokeNewsletterAdminInviteMexResponse(String id) {
         this.id = id;
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by the given IQ result node.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the node is missing a result payload
+     * @apiNote
+     * Drains the {@code <result>} child's byte content into the JSON parser;
+     * the returned {@link Optional} is empty when the result child is
+     * missing or when the JSON envelope omits the expected
+     * {@code data.xwa2_newsletter_admin_invite_revoke} root.
+     *
+     * @param node the IQ result node received from the relay
+     * @return the parsed response, or empty when the node does not carry a
+     *         well-formed result payload
      */
     public static Optional<RevokeNewsletterAdminInviteMexResponse> of(Node node) {
         return node.getChild("result")
@@ -38,21 +64,36 @@ public final class RevokeNewsletterAdminInviteMexResponse implements MexOperatio
     }
 
     /**
-     * Returns the {@code id} field.
+     * Returns the newsletter Jid string echoed by the relay.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @apiNote
+     * Empty when the GraphQL envelope omits {@code id}; otherwise carries
+     * the same Jid string sent in
+     * {@link RevokeNewsletterAdminInviteMexRequest}.
+     *
+     * @return the echoed newsletter id, or empty when omitted
      */
     public Optional<String> id() {
         return Optional.ofNullable(id);
     }
 
     /**
-     * Parses a {@link RevokeNewsletterAdminInviteMexResponse} from the raw JSON bytes of the
+     * Parses the response from the raw UTF-8 JSON payload of the
      * {@code <result>} child.
      *
+     * @apiNote
+     * Reserved for the public {@link #of(Node)} overload; callers should not
+     * hold raw JSON bytes.
+     *
+     * @implNote
+     * This implementation guards every nested object lookup so a malformed
+     * envelope produces {@link Optional#empty()} rather than a parser
+     * exception, mirroring the defensive null-checks in WA Web's caller.
+     *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or
-     *         empty if the envelope is missing expected fields
+     * @return the parsed response, or empty when the envelope lacks the
+     *         expected {@code data.xwa2_newsletter_admin_invite_revoke}
+     *         root
      */
     private static Optional<RevokeNewsletterAdminInviteMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

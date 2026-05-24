@@ -9,9 +9,19 @@ import com.github.auties00.cobalt.model.device.DeviceListMetadataBuilder;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 
 /**
- * Populates ICDC (Identity Change Detection Consistency) metadata on outgoing
- * message containers so recipients can detect changes in the sender's or
- * recipient's device list since the last key exchange.
+ * Stamps ICDC (identity-change detection consistency) device-list metadata on
+ * outgoing message containers.
+ *
+ * @apiNote
+ * Invoked by the per-recipient fanout writer (mirroring WA Web's
+ * {@code WAWebICDCMetaApi.populateICDCMeta} and
+ * {@code WAWebE2EProtoGenerator.populateMessageContextInfo}) so the recipient
+ * can detect any change to the sender's or recipient's device list since the
+ * last key exchange. The output is consumed by the receiver-side device-sync
+ * pipeline; messages that omit ICDC silently lose the integrity check, they
+ * are not rejected. Used internally by
+ * {@link com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution}
+ * and the device-stanza writer; embedders do not call it.
  */
 @WhatsAppWebModule(moduleName = "WAWebE2EProtoGenerator")
 @WhatsAppWebModule(moduleName = "WAWebICDCMetaApi")
@@ -26,19 +36,34 @@ public final class IcdcEnricher {
     }
 
     /**
-     * Returns a copy of the container with ICDC metadata merged into its
-     * {@code messageContextInfo}.
+     * Returns a copy of {@code container} with ICDC device-list metadata
+     * merged into its {@code messageContextInfo}.
      *
-     * <p>Performs a spread-equivalent merge that preserves every existing field
-     * on the container's {@code ChatMessageContextInfo} while adding or
-     * replacing the {@code deviceListMetadata} and setting
-     * {@code deviceListMetadataVersion} to {@code 2}.
+     * @apiNote
+     * Mirrors WA Web's {@code populateMessageContextInfo}: the supplied
+     * sender/recipient {@link IcdcResult} pair populates a
+     * {@link com.github.auties00.cobalt.model.device.DeviceListMetadata} on
+     * the container's {@link com.github.auties00.cobalt.model.chat.ChatMessageContextInfo},
+     * leaves every other context-info field intact, and pins
+     * {@code deviceListMetadataVersion = 2}. When both {@link IcdcResult}
+     * inputs are {@code null} this is a no-op and the original container is
+     * returned by reference; that short-circuit matches the
+     * {@code populateICDCMeta} caller branches that pass {@code (icdcMeta, null)}
+     * or {@code (null, null)}.
+     * @implNote
+     * This implementation performs the equivalent of WA Web's JS spread merge
+     * by copying every present field of an existing
+     * {@link com.github.auties00.cobalt.model.chat.ChatMessageContextInfo} into
+     * a fresh builder before overwriting {@code deviceListMetadata} and
+     * {@code deviceListMetadataVersion}; the {@link MessageContainer} itself
+     * is replaced via {@link MessageContainer#withMessageContextInfo} so the
+     * caller can keep the original instance.
      *
-     * @param container     the original message container
-     * @param senderIcdc    the sender's ICDC result, or {@code null}
-     * @param recipientIcdc the recipient's ICDC result, or {@code null}
-     * @return the enriched container, unchanged when both ICDC inputs are
-     *         {@code null}
+     * @param container     the original {@link MessageContainer}
+     * @param senderIcdc    the sender's {@link IcdcResult}, or {@code null}
+     * @param recipientIcdc the recipient's {@link IcdcResult}, or {@code null}
+     * @return the enriched container; the original instance when both ICDC
+     *         inputs are {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoGenerator", exports = "populateMessageContextInfo",
             adaptation = WhatsAppAdaptation.DIRECT)

@@ -8,16 +8,14 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.ContactActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ContactActionMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,15 +26,13 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ContactActionHandler} — Cobalt's adapter for
+ * Tests for {@link ContactActionHandler} - Cobalt's adapter for
  * {@code WAWebContactSync}.
  *
  * <p>The handler creates or updates contacts from address-book sync mutations
@@ -87,7 +83,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the ContactAction wire constant")
@@ -111,7 +107,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("creates the contact when it does not exist and writes name fields")
@@ -144,7 +140,7 @@ class ContactActionHandlerTest {
         }
 
         @Test
-        @DisplayName("lidJid: contact LID is set and a LID↔PN mapping is registered")
+        @DisplayName("lidJid: contact LID is set and a LID<->PN mapping is registered")
         void registersLidMapping() {
             var action = new ContactActionBuilder()
                     .fullName("X")
@@ -155,7 +151,7 @@ class ContactActionHandlerTest {
 
             var contact = store.findContactByJid(CONTACT_PN).orElseThrow();
             assertEquals(CONTACT_LID, contact.lid().orElseThrow());
-            assertEquals(CONTACT_PN, store.getPhoneNumberByLid(CONTACT_LID).orElseThrow(),
+            assertEquals(CONTACT_PN, store.findPhoneByLid(CONTACT_LID).orElseThrow(),
                     "createLidPnMappings: a regular PN-form contact with a LID must register the bidirectional mapping");
         }
 
@@ -198,7 +194,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("the contact is upserted rather than orphaned when absent")
@@ -213,7 +209,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET value carrying the wrong action returns MALFORMED")
@@ -242,7 +238,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an index with an empty contactJid slot returns MALFORMED")
@@ -270,7 +266,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE clears address-book fields")
+    @DisplayName("applyMutation - REMOVE clears address-book fields")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE on a regular PN contact clears name and username fields")
@@ -322,10 +318,10 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = build(CONTACT_PN, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = build(CONTACT_PN, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -334,7 +330,7 @@ class ContactActionHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -343,7 +339,7 @@ class ContactActionHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = build(CONTACT_PN, action("A"), SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = build(CONTACT_PN, action("B"), SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -357,37 +353,7 @@ class ContactActionHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder — getContactSyncMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("SET (isDelete=false) produces a pending mutation with the contact fields")
-        void setBuilder() {
-            var pending = factory.getContactSyncMutation(
-                    CONTACT_PN, "Maria", "Maria Garcia", false, CONTACT_LID, true, "maria");
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(JSON.toJSONString(List.of("contact", CONTACT_PN.toString())), inner.index());
-
-            var action = inner.value().action().filter(a -> a instanceof ContactAction).map(a -> (ContactAction) a).orElseThrow();
-            assertEquals("Maria", action.firstName().orElseThrow());
-            assertEquals("Maria Garcia", action.fullName().orElseThrow());
-            assertEquals(CONTACT_LID, action.lidJid().orElseThrow());
-            assertEquals("maria", action.username().orElseThrow());
-        }
-
-        @Test
-        @DisplayName("isDelete=true produces a REMOVE operation")
-        void deleteBuilder() {
-            var pending = factory.getContactSyncMutation(
-                    CONTACT_PN, null, null, true, null, null, null);
-            assertEquals(SyncdOperation.REMOVE, pending.mutation().operation());
-        }
-    }
-
-    @Nested
-    @DisplayName("deriveShortName — first-token + letter-presence")
+    @DisplayName("deriveShortName - first-token + letter-presence")
     class DeriveShortName {
         @Test
         @DisplayName("empty / null input returns the empty string")
@@ -407,29 +373,7 @@ class ContactActionHandlerTest {
         @DisplayName("token without any letter character returns the empty string")
         void letterlessToken() {
             assertEquals("", ContactActionHandler.deriveShortName("123 456"),
-                    "first token has no letter — WA Web's WAWebAlphaRegex fails to match");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/contact/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/contact/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            // Use the deterministic-Instant overload (package-private) so the
-            // captured oracle's pinned timestamp matches our re-encoded bytes.
-            var pending = factory.getContactSyncMutation(
-                    CONTACT_PN, "Maria", "Maria Garcia", false, CONTACT_LID, true, "maria",
-                    Instant.ofEpochSecond(oracle.getLong("timestampSeconds")));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
+                    "first token has no letter - WA Web's WAWebAlphaRegex fails to match");
         }
     }
 

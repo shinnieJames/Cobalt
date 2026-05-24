@@ -12,50 +12,104 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Projection of the optional {@code <encryption-metadata/>} child
- * carried by the {@code <pair-success/>} stanza.
+ * The typed projection of the optional
+ * {@code <encryption-metadata version="1" algorithm="aes-256-gcm"/>}
+ * child element nested inside a {@code <pair-success/>} stanza.
+ *
+ * @apiNote
+ * WA Web's pair-success flow uses this AES-256-GCM-wrapped envelope to
+ * deliver per-account post-pairing key material (currently the ADV
+ * canonical-registration payload consumed by
+ * {@code WAWebHandleCanonicalRegistration.handleCanonicalRegistration}).
+ * Cobalt surfaces it through
+ * {@link SmaxMdSetRegResponse#pairSuccessEncryptionMetadata()} so the
+ * registration handler can unwrap the inner payload after the device
+ * identity has been verified.
+ *
+ * @implNote
+ * This implementation enforces the same literals as WA Web's
+ * {@code parseAESEncryptionMetadataMixin}: {@code version="1"} and
+ * {@code algorithm="aes-256-gcm"} are required, and the four nested
+ * byte-payload children {@code encrypted_key}, {@code nonce},
+ * {@code encrypted_data} and {@code auth_tag} must each resolve to
+ * non-empty bytes. Upstream additionally constrains the byte lengths
+ * to inclusive ranges ({@code 1..2048}, {@code 1..128},
+ * {@code 1..8192}, {@code 1..128}); Cobalt accepts any non-empty
+ * payload here and defers length validation to the GCM unwrap step.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMdAESEncryptionMetadataMixin")
 public final class SmaxMdSetRegEncryptionMetadata {
     /**
-     * The {@code version} attribute (always {@code "1"}).
+     * The {@code version} attribute literal, always {@code "1"}.
+     *
+     * @apiNote
+     * Reserved for forward-compatibility; only schema version 1 is
+     * defined today and the parser rejects any other value.
      */
     private final String version;
 
     /**
-     * The {@code algorithm} attribute (always {@code "aes-256-gcm"}).
+     * The {@code algorithm} attribute literal, always
+     * {@code "aes-256-gcm"}.
+     *
+     * @apiNote
+     * Pinned by WA Web's parser; any deviation surfaces as
+     * {@link Optional#empty()} from {@link #of(Node)}.
      */
     private final String algorithm;
 
     /**
-     * The {@code <encrypted_key/>} content bytes.
+     * The wrapped key material carried in {@code <encrypted_key/>}.
+     *
+     * @apiNote
+     * The AES-256-GCM-encrypted symmetric key that the GCM unwrap step
+     * recovers; the recipient decrypts it using the ADV secret key.
      */
     private final byte[] encryptedKey;
 
     /**
-     * The {@code <nonce/>} content bytes.
+     * The GCM nonce carried in {@code <nonce/>}.
+     *
+     * @apiNote
+     * Combined with {@link #encryptedKey()} during the GCM unwrap step
+     * to recover the inner ciphertext key.
      */
     private final byte[] nonce;
 
     /**
-     * The {@code <encrypted_data/>} content bytes.
+     * The wrapped payload carried in {@code <encrypted_data/>}.
+     *
+     * @apiNote
+     * The AES-256-GCM ciphertext that, once decrypted, yields the inner
+     * post-pairing payload consumed by
+     * {@code handleCanonicalRegistration}.
      */
     private final byte[] encryptedData;
 
     /**
-     * The {@code <auth_tag/>} content bytes.
+     * The GCM authentication tag carried in {@code <auth_tag/>}.
+     *
+     * @apiNote
+     * Verifies the integrity of {@link #encryptedData()} during the
+     * GCM unwrap step.
      */
     private final byte[] authTag;
 
     /**
-     * Constructs a new metadata projection.
+     * Constructs the typed projection from already-validated component
+     * fields.
+     *
+     * @apiNote
+     * Library code does not normally call this constructor; it is the
+     * target of {@link #of(Node)} after parsing has succeeded. Public
+     * visibility is preserved so unit tests can construct fixtures.
      *
      * @param version       the version literal; never {@code null}
      * @param algorithm     the algorithm literal; never {@code null}
      * @param encryptedKey  the wrapped key bytes; never {@code null}
      * @param nonce         the GCM nonce bytes; never {@code null}
      * @param encryptedData the ciphertext bytes; never {@code null}
-     * @param authTag       the GCM auth tag bytes; never {@code null}
+     * @param authTag       the GCM auth-tag bytes; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxMdSetRegEncryptionMetadata(String version, String algorithm,
@@ -72,7 +126,7 @@ public final class SmaxMdSetRegEncryptionMetadata {
     /**
      * Returns the version literal.
      *
-     * @return the version; never {@code null}
+     * @return the version; never {@code null} and always {@code "1"}
      */
     public String version() {
         return version;
@@ -81,14 +135,15 @@ public final class SmaxMdSetRegEncryptionMetadata {
     /**
      * Returns the algorithm literal.
      *
-     * @return the algorithm; never {@code null}
+     * @return the algorithm; never {@code null} and always
+     *         {@code "aes-256-gcm"}
      */
     public String algorithm() {
         return algorithm;
     }
 
     /**
-     * Returns the wrapped-key bytes.
+     * Returns the wrapped key bytes.
      *
      * @return the bytes; never {@code null}
      */
@@ -97,7 +152,7 @@ public final class SmaxMdSetRegEncryptionMetadata {
     }
 
     /**
-     * Returns the nonce bytes.
+     * Returns the GCM nonce bytes.
      *
      * @return the bytes; never {@code null}
      */
@@ -115,7 +170,7 @@ public final class SmaxMdSetRegEncryptionMetadata {
     }
 
     /**
-     * Returns the auth-tag bytes.
+     * Returns the GCM auth-tag bytes.
      *
      * @return the bytes; never {@code null}
      */
@@ -124,10 +179,26 @@ public final class SmaxMdSetRegEncryptionMetadata {
     }
 
     /**
-     * Tries to parse an {@link SmaxMdSetRegEncryptionMetadata} projection.
+     * Parses an {@code <encryption-metadata/>} child stanza into a
+     * typed projection.
      *
-     * @param node the {@code <encryption-metadata/>} child; never {@code null}
+     * @apiNote
+     * Invoked by {@link SmaxMdSetRegResponse#of(Node)} for the optional
+     * {@code <encryption-metadata/>} child of {@code <pair-success/>};
+     * surfaces {@link Optional#empty()} when the inner shape fails any
+     * of the schema checks rather than throwing, matching WA Web's
+     * {@code optionalChildWithTag} behaviour.
+     *
+     * @implNote
+     * This implementation enforces tag-content matching on the four
+     * nested byte payloads ({@code encrypted_key}, {@code nonce},
+     * {@code encrypted_data}, {@code auth_tag}) but skips WA Web's
+     * inclusive byte-length range checks; the GCM unwrap step rejects
+     * malformed payloads downstream.
+     *
+     * @param node the {@code <encryption-metadata/>} child stanza
      * @return an {@link Optional} carrying the projection, or empty
+     *         when the stanza shape diverges from the schema
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMdAESEncryptionMetadataMixin",
             exports = "parseAESEncryptionMetadataMixin",

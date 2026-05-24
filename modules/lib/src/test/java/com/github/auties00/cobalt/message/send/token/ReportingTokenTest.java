@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.message.send.token;
 
 import com.github.auties00.cobalt.model.jid.Jid;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -13,13 +14,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ReportingToken}, mirroring
- * {@code WAWebReportingTokenUtils.genReportingToken}.
+ * Structural and binding tests for {@link ReportingToken#generate}.
  *
- * <p>The token is the first {@code TOKEN_LENGTH} (=16) bytes of an HMAC
- * over the message protobuf content using a 32-byte HKDF-derived key
- * keyed off the message secret, stanza id, sender JID, remote JID, and
- * a {@code "Report Token"} info label.
+ * @apiNote
+ * Mirrors WA Web's {@code WAWebReportingTokenUtils.genReportingToken}: the
+ * token is the first 16 bytes of an HMAC-SHA-256 over the franking content
+ * keyed by a 32-byte HKDF-SHA-256 derivation of the message secret bound to
+ * the stanza id, sender JID, remote JID, and a {@code "Report Token"} info
+ * label. Each binding input must be load-bearing; flipping any one of them
+ * must change the token bytes, or the server-side validation would not be
+ * able to detect tampering.
+ * @implNote
+ * Uses synthetic 32-byte secrets and a hand-rolled stanza id rather than
+ * captured live data, because the structural assertions (length, version
+ * echo, empty-content sentinel, per-input determinism) do not depend on
+ * matching a specific WA Web vector. The byte-equal KAT is captured
+ * separately.
  */
 @DisplayName("ReportingToken")
 class ReportingTokenTest {
@@ -32,6 +42,11 @@ class ReportingTokenTest {
     private static final byte[] CONTENT = "message body".getBytes();
     private static final int VERSION = 2;
 
+    /**
+     * Verifies that a populated input returns a
+     * {@link ReportingTokenResult} carrying a 16-byte token and the
+     * caller-supplied version.
+     */
     @Test
     @DisplayName("generate: returns a 16-byte token wrapped in ReportingTokenResult")
     void generateBasic() throws GeneralSecurityException {
@@ -41,6 +56,10 @@ class ReportingTokenTest {
         assertEquals(16, result.token().length, "token must be 16 bytes (TOKEN_LENGTH)");
     }
 
+    /**
+     * Pins the empty-content branch: an empty franking content yields an
+     * empty {@link java.util.Optional}.
+     */
     @Test
     @DisplayName("generate: empty content returns empty Optional (storage-size sentinel)")
     void emptyContentReturnsEmpty() throws GeneralSecurityException {
@@ -48,6 +67,10 @@ class ReportingTokenTest {
                 "empty content must produce empty Optional");
     }
 
+    /**
+     * Pins the {@code null} content branch: an unsupported message type
+     * yields an empty {@link java.util.Optional}.
+     */
     @Test
     @DisplayName("generate: null content returns empty Optional")
     void nullContentReturnsEmpty() throws GeneralSecurityException {
@@ -55,17 +78,23 @@ class ReportingTokenTest {
                 "null content must produce empty Optional");
     }
 
+    /**
+     * Verifies that the same inputs produce a byte-identical token.
+     */
     @Test
     @DisplayName("generate: same inputs yield deterministic token")
     void deterministicForSameInputs() throws GeneralSecurityException {
         var first = ReportingToken.generate(SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
         var second = ReportingToken.generate(SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
-        org.junit.jupiter.api.Assertions.assertArrayEquals(first.token(), second.token(),
-                "token is a deterministic HMAC — same inputs → same bytes");
+        Assertions.assertArrayEquals(first.token(), second.token(),
+                "token is a deterministic HMAC; same inputs yield same bytes");
     }
 
+    /**
+     * Verifies that the message secret is bound into the HKDF derivation.
+     */
     @Test
-    @DisplayName("generate: different secret → different token")
+    @DisplayName("generate: different secret yields different token")
     void secretBindsToken() throws GeneralSecurityException {
         var first = ReportingToken.generate(SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
         var second = ReportingToken.generate(OTHER_SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
@@ -73,16 +102,23 @@ class ReportingTokenTest {
                 "different secret must produce different token (HKDF key isolation)");
     }
 
+    /**
+     * Verifies that the stanza id is bound into the HKDF info parameter.
+     */
     @Test
-    @DisplayName("generate: different stanza id → different token")
+    @DisplayName("generate: different stanza id yields different token")
     void stanzaIdBindsToken() throws GeneralSecurityException {
         var first = ReportingToken.generate(SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
         var second = ReportingToken.generate(SECRET, STANZA_ID + "-tamper", SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
         assertNotEquals(toHex(first.token()), toHex(second.token()));
     }
 
+    /**
+     * Verifies that the sender and remote JIDs are bound into the HKDF info
+     * parameter.
+     */
     @Test
-    @DisplayName("generate: different sender / remote JID → different token")
+    @DisplayName("generate: different sender / remote JID yields different token")
     void jidsBindToken() throws GeneralSecurityException {
         var baseline = ReportingToken.generate(SECRET, STANZA_ID, SENDER, REMOTE, CONTENT, VERSION).orElseThrow();
         var otherSender = ReportingToken.generate(SECRET, STANZA_ID,
@@ -95,6 +131,10 @@ class ReportingTokenTest {
                 "remote change must alter token");
     }
 
+    /**
+     * Verifies that every required argument rejects {@code null} via
+     * {@link NullPointerException}.
+     */
     @Test
     @DisplayName("generate: null required arg throws NullPointerException")
     void nullArgsThrow() {
@@ -111,6 +151,10 @@ class ReportingTokenTest {
     /**
      * Returns a byte array of {@code len} bytes filled with {@code b}.
      *
+     * @apiNote
+     * Helper for the {@link #SECRET} and {@link #OTHER_SECRET} constants;
+     * avoids enumerating the 32 bytes inline.
+     *
      * @param len the array length
      * @param b   the fill byte
      * @return the filled array
@@ -122,10 +166,14 @@ class ReportingTokenTest {
     }
 
     /**
-     * Returns the lowercase hex representation of {@code bytes}.
+     * Returns the lowercase hex representation of the supplied bytes.
      *
-     * @param bytes the input
-     * @return hex string
+     * @apiNote
+     * Test helper used to compare tokens via string equality rather than
+     * {@code Arrays.equals}, so assertion failures print a readable diff.
+     *
+     * @param bytes the bytes to encode
+     * @return the lowercase hex string
      */
     private static String toHex(byte[] bytes) {
         var sb = new StringBuilder(bytes.length * 2);

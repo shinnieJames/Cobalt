@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link CtwaPerCustomerDataSharingHandler} â€” Cobalt's adapter for
+ * Tests for {@link CtwaPerCustomerDataSharingHandler} - Cobalt's adapter for
  * {@code WAWebCtwaPerCustomerDataSharingSync}.
  *
  * <p>Unique among the User-prefs bucket because it explicitly supports REMOVE
@@ -184,7 +184,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
     }
 
     @Nested
-    @DisplayName("getCtwaPerCustomerDataSharingMutation â€” builder helper")
+    @DisplayName("getCtwaPerCustomerDataSharingMutation - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the requested accountLid and flag")
@@ -202,7 +202,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -217,7 +217,7 @@ class CtwaPerCustomerDataSharingHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” n/a, default implementation")
+    @DisplayName("applyMutationBatch - n/a, default implementation")
     class BatchNa {
         @Test
         @DisplayName("default applyMutationBatch delegates per mutation")

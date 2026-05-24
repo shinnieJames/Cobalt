@@ -15,10 +15,27 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <question_responses>}
- * payload in the canonical
- * {@code <iq xmlns="newsletter" type="get" to=NEWSLETTER_JID>}
- * envelope.
+ * The outbound stanza that fetches the per-subscriber responses to a
+ * newsletter question post.
+ *
+ * @apiNote
+ * Drives the Channels admin "question responses" panel surfaced
+ * through
+ * {@code WAWebNewsletterGetQuestionResponsesQuery.getQuestionResponsesQuery}.
+ * Combine an optional
+ * {@link SmaxNewslettersGetNewsletterResponsesFilter} (contacts /
+ * replied) and an optional free-text search string of at least three
+ * characters (WA Web's filter threshold). The relay echoes the
+ * matching {@link SmaxNewslettersGetNewsletterResponsesResponse}. The
+ * resulting IQ has shape:
+ * {@snippet :
+ *     <iq xmlns="newsletter" type="get" to="<newsletterJid>">
+ *         <question_responses server_id="120" count="50" before="<cursor>">
+ *             <filters><contacts/></filters>
+ *             <search text="abc"/>
+ *         </question_responses>
+ *     </iq>
+ * }
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersGetNewsletterResponsesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersNewsletterIQGetRequestMixin")
@@ -28,8 +45,8 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersSearchQuestionResponseMixinMixin")
 public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxOperation.Request {
     /**
-     * The newsletter JID being queried; routed verbatim into the IQ's
-     * {@code to} attribute.
+     * The newsletter {@link Jid} being queried; routed verbatim into
+     * the IQ's {@code to} attribute.
      */
     private final Jid newsletterJid;
 
@@ -40,8 +57,8 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     private final long questionResponsesServerId;
 
     /**
-     * The maximum number of {@code <question_response>} entries the
-     * relay should return in this slice.
+     * The cap on returned {@code <question_response>} entries per
+     * round-trip.
      */
     private final int questionResponsesCount;
 
@@ -52,7 +69,7 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     private final String questionResponsesBefore;
 
     /**
-     * The optional contacts/replied filter; {@code null} disables
+     * The optional contacts / replied filter; {@code null} disables
      * filtering.
      */
     private final SmaxNewslettersGetNewsletterResponsesFilter filter;
@@ -66,7 +83,12 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     /**
      * Constructs a new request.
      *
-     * @param newsletterJid             the newsletter JID; never
+     * @apiNote
+     * WA Web only forwards {@code searchText} when its length is at
+     * least three; Cobalt does not enforce that bound here. Callers
+     * targeting WA Web parity should clamp before invoking.
+     *
+     * @param newsletterJid             the newsletter {@link Jid}; never
      *                                  {@code null}
      * @param questionResponsesServerId the question's server-id
      * @param questionResponsesCount    the per-call entry cap
@@ -91,9 +113,9 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     }
 
     /**
-     * Returns the newsletter JID being queried.
+     * Returns the newsletter {@link Jid} being queried.
      *
-     * @return the JID; never {@code null}
+     * @return the {@link Jid}; never {@code null}
      */
     public Jid newsletterJid() {
         return newsletterJid;
@@ -102,7 +124,7 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     /**
      * Returns the question's server-id.
      *
-     * @return the server-id
+     * @return the question server-id
      */
     public long questionResponsesServerId() {
         return questionResponsesServerId;
@@ -111,14 +133,14 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     /**
      * Returns the per-call entry cap.
      *
-     * @return the count
+     * @return the entry cap
      */
     public int questionResponsesCount() {
         return questionResponsesCount;
     }
 
     /**
-     * Returns the optional pagination cursor.
+     * Returns the optional opaque pagination cursor.
      *
      * @return an {@link Optional} carrying the cursor, or empty when
      *         requesting the first slice
@@ -128,7 +150,7 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     }
 
     /**
-     * Returns the optional contacts/replied filter.
+     * Returns the optional contacts / replied filter.
      *
      * @return an {@link Optional} carrying the filter, or empty when
      *         no filter is applied
@@ -148,7 +170,13 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza carrying the
+     * {@code <question_responses>} payload.
+     *
+     * @apiNote
+     * The {@code <filters>} block is only emitted when {@link #filter()}
+     * is present; the {@code <search>} child is only emitted when
+     * {@link #searchText()} is present.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <question_responses>} payload
@@ -195,6 +223,13 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
                 .content(qrBuilder.build());
     }
 
+    /**
+     * Compares two requests for value equality on every field.
+     *
+     * @param obj the reference object to compare against
+     * @return {@code true} when {@code obj} is a request with equal
+     *         field values
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -212,12 +247,22 @@ public final class SmaxNewslettersGetNewsletterResponsesRequest implements SmaxO
                 && Objects.equals(this.searchText, that.searchText);
     }
 
+    /**
+     * Returns the hash code derived from every field.
+     *
+     * @return the combined hash of every field
+     */
     @Override
     public int hashCode() {
         return Objects.hash(newsletterJid, questionResponsesServerId, questionResponsesCount,
                 questionResponsesBefore, filter, searchText);
     }
 
+    /**
+     * Returns a debug representation including every field.
+     *
+     * @return a record-like rendering of this request
+     */
     @Override
     public String toString() {
         return "SmaxNewslettersGetNewsletterResponsesRequest[newsletterJid=" + newsletterJid

@@ -1,30 +1,23 @@
 package com.github.auties00.cobalt.client;
 
 /**
- * Platform-specific device-attestation payload produced by a
+ * The platform-specific device-attestation payload produced by a
  * {@link WhatsAppDeviceIntegritySupplier}.
  *
- * <p>The mobile WhatsApp client proves to the registration server that the
- * request originates from a real, Google- or Apple-certified device by
- * attaching a signed attestation token. The token's form differs per
- * platform: Android clients embed a Google Play Integrity JWS under the
- * {@code gpia} form field plus three adjacent Google Mobile Services tokens
- * under {@code _gg}, {@code _gi}, and {@code _gp}; iOS clients embed an
- * Apple App Attest assertion together with the key identifier it was
- * produced under.
+ * <p>The sealed hierarchy has one variant per attestation scheme:
+ * {@link PlayIntegrity} for Android and {@link AppAttest} for iOS. Both
+ * variants reject {@code null} components at construction so that
+ * registration code can append every field to a request body without a
+ * preliminary null check.
  *
- * <p>The sealed hierarchy guarantees that every result is one of the two
- * shapes the WhatsApp registration API understands, and that
- * platform-specific registration code can {@code switch} over the result
- * exhaustively without a default branch.
+ * @apiNote
+ * Cobalt cannot mint attestation tokens itself, because Play Integrity
+ * and App Attest both require platform-controlled cryptographic material
+ * that is unavailable to a plain JVM. Produce instances through a
+ * {@link WhatsAppDeviceIntegritySupplier} the embedding application
+ * supplies, typically by delegating the minting to a real device it
+ * controls.
  *
- * @apiNote Cobalt does not produce attestation tokens itself: Play Integrity
- *          and App Attest both require platform-controlled cryptographic
- *          material that is unavailable to a plain JVM. Instances of this
- *          record are created by a
- *          {@link WhatsAppDeviceIntegritySupplier} the embedding
- *          application provides, typically by delegating the minting to a
- *          real device it controls.
  * @see WhatsAppDeviceIntegritySupplier
  */
 public sealed interface WhatsAppDeviceIntegrityResult
@@ -32,36 +25,31 @@ public sealed interface WhatsAppDeviceIntegrityResult
                 WhatsAppDeviceIntegrityResult.AppAttest {
 
     /**
-     * Android Play Integrity verdict and the three adjacent Google Mobile
-     * Services tokens the native WhatsApp Android client submits alongside
-     * it.
+     * The Android Play Integrity verdict and the three adjacent Google
+     * Mobile Services tokens that accompany it.
      *
-     * <p>Each component maps one-to-one to a form field the Android
-     * registration code path appends to every {@code /v2/exist},
-     * {@code /v2/code}, {@code /v2/register}, {@code /v2/security}, and
-     * {@code /v2/challenge} request body:
-     * <ul>
-     *   <li>{@code gpia} carries the Play Integrity JWS, base64url-encoded,
-     *       signed by Google over a nonce the server re-derives from the
-     *       request body;</li>
-     *   <li>{@code _gg}, {@code _gi}, and {@code _gp} carry the Gaia,
-     *       Instance, and Package Manager tokens the native client reads
-     *       from Google Play Services.</li>
-     * </ul>
-     * Each component is never {@code null}: a supplier that cannot produce
-     * a particular token returns the empty string for it, which the
-     * registration server tolerates but treats as a low-trust signal.
+     * <p>Each component maps one-to-one to a form field that the Android
+     * registration path appends to its request bodies: {@code gpia}
+     * carries the base64url-encoded Play Integrity JWS signed by Google
+     * over a server-rederived nonce, while {@code gg}, {@code gi}, and
+     * {@code gp} carry the Gaia, Instance, and Package Manager tokens read
+     * from Google Play Services. A supplier that cannot produce a given
+     * token returns the empty string for it; the server tolerates the
+     * empty value but treats it as a low-trust signal.
      *
-     * @param gpia the Play Integrity verdict token or empty string
-     * @param gg the value for the {@code _gg} form field, or empty string
-     * @param gi the value for the {@code _gi} form field, or empty string
-     * @param gp the value for the {@code _gp} form field, or empty string
+     * @param gpia the Play Integrity verdict token, or empty string
+     * @param gg   the value for the {@code _gg} form field, or empty
+     *             string
+     * @param gi   the value for the {@code _gi} form field, or empty
+     *             string
+     * @param gp   the value for the {@code _gp} form field, or empty
+     *             string
      */
     record PlayIntegrity(String gpia, String gg, String gi, String gp)
             implements WhatsAppDeviceIntegrityResult {
         /**
-         * Compact canonical constructor that rejects {@code null} components
-         * to keep the contract uniform with its iOS counterpart.
+         * Rejects {@code null} components so the contract stays uniform
+         * with {@link AppAttest}.
          *
          * @throws NullPointerException if any component is {@code null}
          */
@@ -73,8 +61,8 @@ public sealed interface WhatsAppDeviceIntegrityResult
     }
 
     /**
-     * Apple App Attest assertion and the key identifier under which it was
-     * produced.
+     * The Apple App Attest assertion together with the key identifier
+     * under which it was produced.
      *
      * <p>The assertion binds the outgoing registration request to a key
      * pair that Apple's DeviceCheck attestation service has previously
@@ -84,14 +72,14 @@ public sealed interface WhatsAppDeviceIntegrityResult
      * from the same attested key.
      *
      * @param attestation the base64-encoded App Attest assertion
-     * @param keyId the base64-encoded App Attest key identifier the
-     *              assertion was produced under
+     * @param keyId       the base64-encoded App Attest key identifier the
+     *                    assertion was produced under
      */
     record AppAttest(String attestation, String keyId)
             implements WhatsAppDeviceIntegrityResult {
         /**
-         * Compact canonical constructor that rejects {@code null} components
-         * to keep the contract uniform with its Android counterpart.
+         * Rejects {@code null} components so the contract stays uniform
+         * with {@link PlayIntegrity}.
          *
          * @throws NullPointerException if any component is {@code null}
          */

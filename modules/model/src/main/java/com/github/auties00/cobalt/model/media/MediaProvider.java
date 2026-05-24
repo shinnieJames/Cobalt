@@ -1,6 +1,7 @@
 package com.github.auties00.cobalt.model.media;
 
 import com.github.auties00.cobalt.model.message.system.history.HistorySyncNotification;
+import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.message.media.MediaMessage;
 import com.github.auties00.cobalt.model.preference.Sticker;
@@ -28,7 +29,7 @@ import java.util.OptionalLong;
  * always retrieved through the direct path.
  */
 public sealed interface MediaProvider
-        permits StickerAction, MediaMessage, Sticker, ExternalBlobReference, HistorySyncNotification, LinkPreviewThumbnail {
+        permits StickerAction, MediaMessage, Sticker, ExternalBlobReference, HistorySyncNotification, ExtendedTextMessage {
     /**
      * Returns the CDN URL at which the encrypted media can be downloaded.
      *

@@ -5,7 +5,7 @@ import com.github.auties00.cobalt.device.icdc.IcdcResult;
 import com.github.auties00.cobalt.exception.WhatsAppCorruptedStoreException;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
-import com.github.auties00.cobalt.message.send.ack.AckResult;
+import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.icdc.IcdcEnricher;
@@ -45,7 +45,7 @@ import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
 import com.github.auties00.cobalt.model.message.text.ReactionMessage;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.wam.WamService;
@@ -63,50 +63,66 @@ import java.io.IOException;
 import java.util.*;
 
 /**
- * Provides the shared cryptographic, stanza-attribute resolution, and encoding
- * utilities used by every chat-type-specific message sender. Subclasses focus
- * on orchestration logic and inherit per-device encryption, stanza type/edit/
- * decrypt-fail resolution, identity node construction, and the WAM emission
- * helpers.
+ * Sealed base of the per-chat-kind senders.
+ *
+ * <p>Concrete subclasses ({@link UserMessageSender}, {@link GroupMessageSender},
+ * {@link StatusMessageSender}, {@link NewsletterMessageSender},
+ * {@link PeerMessageSender}) implement the chat-kind-specific orchestration
+ * and reuse this class for the cross-cutting helpers: per-device Signal
+ * encryption with ICDC enrichment, the {@code type}/{@code edit}/
+ * {@code decrypt-fail}/{@code mediatype}/{@code native_flow_name} attribute
+ * resolvers, the {@code <device-identity>} child builder, and the WAM
+ * emission helpers that record per-send Signal cipher results.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCommonApi")
 @WhatsAppWebModule(moduleName = "WAWebE2EProtoUtils")
 @WhatsAppWebModule(moduleName = "WAWebAdvSignatureApi")
 @WhatsAppWebModule(moduleName = "WAWebBackendJobsCommon")
-abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSender, GroupMessageSender, StatusMessageSender, NewsletterMessageSender, PeerMessageSender {
+abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSender, GroupMessageSender, StatusMessageSender, BroadcastMessageSender, NewsletterMessageSender, PeerMessageSender {
     /**
-     * Holds the logger used during per-device encryption diagnostics.
+     * The {@link System.Logger} used to surface per-device encryption
+     * failures from {@link #encryptForDevices}.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageSender.class.getName());
 
     /**
-     * Holds the client used to dispatch wire stanzas and report failures.
+     * The {@link WhatsAppClient} used to dispatch wire stanzas and to surface
+     * fatal store-persistence failures to the embedder's error handler.
      */
     final WhatsAppClient client;
 
     /**
-     * Holds the store carrying Signal sessions, device lists, identity records,
-     * and the rest of the shared send-path state.
+     * The {@link WhatsAppStore} carrying Signal sessions, device-list state,
+     * identity records, sender-key distribution flags, chat metadata, and
+     * receipt records consulted by every subclass.
      */
     final WhatsAppStore store;
 
     /**
-     * Holds the AB-props service consulted on the resend timeout path and by
-     * subclasses for feature-gating decisions.
+     * The {@link ABPropsService} consulted by the base class for the resend
+     * timeout AB prop and by subclasses for feature-gating decisions.
      */
     final ABPropsService abPropsService;
 
     /**
-     * Holds the WAM telemetry service used to commit per-send events.
+     * The {@link WamService} used to commit per-send WAM events.
      */
     final WamService wamService;
 
     /**
-     * Constructs a sender bound to the given client and WAM service.
+     * Constructs a {@link MessageSender} bound to the supplied dependencies.
      *
-     * @param client         the WhatsApp client used to dispatch stanzas
-     * @param abPropsService the AB-props service used for feature gating
-     * @param wamService     the WAM telemetry service for send-path events
+     * @apiNote
+     * Invoked only by the sealed subclasses; the package-private visibility
+     * is intentional.
+     *
+     * @param client         the {@link WhatsAppClient} used to dispatch
+     *                       stanzas and surface failures
+     * @param abPropsService the {@link ABPropsService} consulted for
+     *                       feature-gating decisions
+     * @param wamService     the {@link WamService} that records per-send
+     *                       events
+     * @throws NullPointerException if any argument is {@code null}
      */
     MessageSender(WhatsAppClient client, ABPropsService abPropsService, WamService wamService) {
         this.client = Objects.requireNonNull(client, "client");
@@ -116,16 +132,29 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Sends the given message to the specified chat.
+     * Dispatches the supplied {@link MessageInfo} to the given chat or
+     * audience JID.
      *
-     * @param chatJid     the target chat JID
-     * @param messageInfo the outgoing message and its metadata
-     * @return the server ack result
+     * @implSpec
+     * Each subclass implements the chat-kind-specific stanza shape and
+     * encryption flow; the dispatch from
+     * {@link MessageSendingService#send(MessageInfo)} routes by JID server.
+     *
+     * @param chatJid     the target chat, group, status, newsletter, or
+     *                    peer-device JID
+     * @param messageInfo the prepared message info
+     * @return the parsed server {@link AckResult}
      */
     abstract AckResult send(Jid chatJid, T messageInfo);
 
     /**
-     * Blocks until the offline-message queue has been drained.
+     * Blocks the current virtual thread until the offline-message backlog has
+     * been fully replayed.
+     *
+     * @apiNote
+     * Every subclass calls this before composing the outbound stanza so that
+     * sends issued mid-reconnect are emitted only after the local store has
+     * caught up with the queue the server held while the client was offline.
      */
     @WhatsAppWebExport(moduleName = "WAWebEventsWaitForOfflineDeliveryEnd", exports = "waitForOfflineDeliveryEnd",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -134,9 +163,18 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the maximum age, in seconds, of an outgoing message that may
-     * still be resent after a phash mismatch or other server-driven retry.
-     * When the elapsed time exceeds this threshold the resend path is skipped.
+     * Returns the maximum age, in seconds, a previously-sent message may
+     * still be resent at after a server-driven retry signal.
+     *
+     * @apiNote
+     * Backed by the {@code WEB_E2E_BACKFILL_EXPIRE_TIME} AB prop (a minute
+     * value); the resend pipeline skips messages older than this threshold
+     * to avoid replaying stale backfill traffic.
+     *
+     * @implNote
+     * This implementation falls back to {@code 5} minutes when the AB prop
+     * is missing or non-positive, mirroring WA Web's default literal in
+     * {@code getResendTimeoutInSeconds}.
      *
      * @return the resend timeout in seconds
      */
@@ -151,8 +189,18 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Persists the store's encryption state to disk so session keys and
-     * pre-keys survive an unexpected shutdown after the wire stanza is sent.
+     * Flushes the {@link WhatsAppStore} to its persistent backing so the
+     * Signal session ratchets and pre-key updates produced by the encryption
+     * step survive a process crash that follows immediately after the wire
+     * write.
+     *
+     * @apiNote
+     * Called by every subclass after building the stanza and before invoking
+     * {@link WhatsAppClient#sendNode(Node)} or
+     * {@link WhatsAppClient#sendNode(NodeBuilder)}; a persistence failure is
+     * routed through the client's
+     * {@link WhatsAppClient#handleFailure(Throwable) error handler} as a
+     * {@link WhatsAppCorruptedStoreException}.
      */
     @WhatsAppWebExport(moduleName = "WAWebSignalProtocolStore", exports = "flushBufferToDiskIfNotMemOnlyMode",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -165,9 +213,13 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the JID of the currently logged-in device.
+     * Returns the {@link Jid} of the currently-paired device or fails fast.
      *
-     * @return the self JID
+     * @apiNote
+     * Use whenever a send path needs the local PN JID and treats a missing
+     * pairing as a programming error rather than a recoverable miss.
+     *
+     * @return the self PN {@link Jid}
      * @throws IllegalStateException if the client is not logged in
      */
     Jid requireSelfJid() {
@@ -176,31 +228,43 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the LID of the currently logged-in device, falling back to the
-     * PN JID when no LID is registered.
+     * Returns the local LID JID, or the PN JID when no LID is paired.
      *
-     * @return the self LID, or the PN JID when LID is unavailable
+     * @apiNote
+     * Used by the group, status, and CAG paths to pick the addressing-mode
+     * sender JID; CAG and LID-addressed groups need the LID, but legacy PN
+     * groups still address the sender by PN.
+     *
+     * @return the self LID JID, or the PN JID when no LID is paired
      */
     Jid selfLidOrPn() {
         return store.lid().orElseGet(this::requireSelfJid);
     }
 
     /**
-     * Encrypts the given container for each device in {@code devices},
-     * populating ICDC metadata per device before serialisation. Companion
-     * devices receive a {@code DeviceSentMessage} wrapper with only the
-     * sender's ICDC metadata; recipient devices receive both sender and
-     * recipient ICDC metadata.
+     * Encrypts {@code container} for each device in {@code devices} and
+     * returns the per-device payloads, populating ICDC metadata before
+     * serialisation.
      *
-     * @param encryption     the encryption service to use
-     * @param devices        the device JIDs to encrypt for
-     * @param container      the source message container
+     * @apiNote
+     * Companion devices receive a {@code DeviceSentMessage}-wrapped copy
+     * carrying only the sender ICDC; non-self recipient devices receive both
+     * the sender and recipient ICDC. Devices whose encryption raises any
+     * exception are logged and dropped from the result; the receipts
+     * recorded against them via {@link WhatsAppStore#updateIdentityRange}
+     * still cover the full input list so identity ranges stay aligned with
+     * the dispatched fanout.
+     *
+     * @param encryption     the {@link MessageEncryption} service to use
+     * @param devices        the device {@link Jid}s to encrypt for
+     * @param container      the source {@link MessageContainer}
      * @param destinationJid the chat recipient JID, written into the
-     *                       {@code DeviceSentMessage} wrapper for companions
-     * @param senderIcdc     the sender's ICDC metadata, or {@code null}
-     * @param recipientIcdc  the recipient's ICDC metadata, or {@code null}
-     * @return the encrypted payloads, possibly smaller than {@code devices}
-     *         when some per-device encryptions fail
+     *                       {@code DeviceSentMessage} wrapper sent to self
+     *                       devices
+     * @param senderIcdc     the sender's ICDC, or {@code null}
+     * @param recipientIcdc  the recipient's ICDC, or {@code null}
+     * @return the encrypted payloads, possibly shorter than {@code devices}
+     *         when per-device encryption failed
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -262,11 +326,19 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the stanza {@code type} attribute from the message content.
+     * Returns the wire-level {@code type} attribute value for the given
+     * {@link MessageContainer}.
      *
-     * @param container the message container
-     * @return one of {@code "text"}, {@code "media"}, {@code "reaction"},
-     *         {@code "poll"}, or {@code "event"}
+     * @apiNote
+     * The result is one of {@code "text"}, {@code "media"},
+     * {@code "reaction"}, {@code "poll"}, or {@code "event"} and is stamped
+     * onto the outer {@code <message type="...">} attribute by every chat
+     * fanout stanza builder. The classification mirrors WA Web's
+     * {@code typeAttributeFromProtobuf} so receivers parse the wire shape
+     * identically.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return the {@code type} attribute value; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoUtils", exports = "typeAttributeFromProtobuf",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -310,11 +382,17 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the stanza {@code edit} attribute from the message content,
-     * defaulting to a non-admin revoke classification.
+     * Returns the wire {@code edit} attribute value for {@code container},
+     * defaulting to the non-admin revoke classification.
      *
-     * @param container the message container
-     * @return the edit attribute value, or {@code null} for normal messages
+     * @apiNote
+     * Shortcut for {@link #resolveEditAttribute(MessageContainer, boolean)}
+     * called with {@code isAdminRevoke=false}; used by every send path other
+     * than the group admin-revoke branch.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return the {@code edit} value, or {@code null} when no attribute
+     *         should be written
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "editAttribute",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -323,13 +401,21 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the stanza {@code edit} attribute from the message content,
-     * distinguishing admin revokes from sender revokes.
+     * Returns the wire {@code edit} attribute value for {@code container},
+     * distinguishing the admin-revoke variant.
      *
-     * @param container     the message container
-     * @param isAdminRevoke {@code true} when a group admin is revoking another
+     * @apiNote
+     * Mirrors WA Web's {@code editAttribute} routing: {@code "7"} for sender
+     * revoke (and undo-keep-for-all and reaction-clear), {@code "8"} for
+     * admin revoke, {@code "1"} for protobuf and secret message-edit, and
+     * {@code "2"} for pin-in-chat. Anything else returns {@code null} and the
+     * caller drops the attribute.
+     *
+     * @param container     the outbound {@link MessageContainer}
+     * @param isAdminRevoke {@code true} when a group admin is revoking a
      *                      participant's message
-     * @return the edit attribute value, or {@code null} for normal messages
+     * @return the {@code edit} value, or {@code null} when no attribute
+     *         should be written
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "editAttribute",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -356,11 +442,20 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the {@code decrypt-fail} attribute from the message content.
+     * Returns the wire {@code decrypt-fail} attribute value for
+     * {@code container}.
      *
-     * @param container the message container
-     * @return {@code "hide"} for messages whose decryption failures should be
-     *         silenced, otherwise {@code null}
+     * @apiNote
+     * {@code "hide"} silences the receiver-side fallback that surfaces a
+     * decryption failure as a placeholder bubble; used for reactions,
+     * encrypted reactions, poll updates, keep/pin-in-chat addons, encrypted
+     * event responses, secret message edits, and the silent protocol
+     * subtypes (revoke, message edit, ephemeral sync response, welcome
+     * request). Anything else returns {@code null} so the caller drops the
+     * attribute.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return {@code "hide"} or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebE2EProtoUtils", exports = "decryptFailAttributeFromProtobuf",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -384,11 +479,17 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the {@code mediatype} attribute written onto the {@code <enc>}
-     * node for the given message container.
+     * Returns the wire {@code mediatype} attribute value written onto the
+     * inner {@code <enc>} child for the given {@link MessageContainer}.
      *
-     * @param container the message container
-     * @return the media-type string, or {@code null} for non-media messages
+     * @apiNote
+     * Used by every chat-fanout and group-skmsg stanza builder. The result
+     * mirrors WA Web's {@code mediaTypeFromProtobuf} / {@code encodeMaybeMediaType}
+     * pair; {@code null} means the attribute is dropped (non-media payload).
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return the {@code mediatype} value, or {@code null} for non-media
+     *         payloads
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon",
             exports = {"mediaTypeFromProtobuf", "encodeMaybeMediaType"},
@@ -415,11 +516,17 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Resolves the {@code native_flow_name} attribute written onto the
-     * {@code <enc>} node for interactive-response messages.
+     * Returns the wire {@code native_flow_name} attribute value written onto
+     * the inner {@code <enc>} child for interactive-response payloads.
      *
-     * @param container the message container
-     * @return the native flow name, or {@code null} when not applicable
+     * @apiNote
+     * The native flow name routes the response on the bot backend; only
+     * {@link InteractiveResponseMessage} payloads with an inner
+     * {@link InteractiveResponseMessage.NativeFlowResponseMessage} carry it.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return the native flow name, or {@code null} when the payload is not
+     *         a native-flow response
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "nativeFlowNameTypeFromProtobuf",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -439,10 +546,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Builds the {@code <device-identity>} node carrying the stored ADV signed
-     * device identity, or {@code null} when no identity is available.
+     * Builds the {@code <device-identity>} child carrying this device's
+     * stored ADV-signed identity, or {@code null} when no identity is
+     * available.
      *
-     * @return the identity node, or {@code null} when unavailable
+     * @apiNote
+     * Recipients need the ADV-signed identity to verify a PKMSG envelope on
+     * first contact; subclasses emit the child only when at least one
+     * per-device payload is PKMSG.
+     *
+     * @return the {@code <device-identity>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebAdvSignatureApi", exports = "getADVEncodedIdentity",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -457,10 +570,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
 
     /**
      * Returns whether the given {@link KeepInChatMessage} represents an
-     * "undo keep for all" operation, which uses the sender-revoke edit value.
+     * undo-keep-for-all by the original sender.
      *
-     * @param keep the keep-in-chat message
-     * @return {@code true} when the keep represents an undo by the original sender
+     * @apiNote
+     * Drives the {@link #resolveEditAttribute(MessageContainer, boolean)}
+     * branch that maps undo-keep-for-all to the sender-revoke value
+     * ({@code "7"}); the operation is allowed only on messages the caller
+     * originally sent.
+     *
+     * @param keep the keep-in-chat payload
+     * @return {@code true} when {@code keep} is a fromMe undo-keep-for-all
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCommonApi", exports = "editAttribute",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -471,20 +590,30 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Commits the {@code E2eMessageSendEvent} (id 476) for a per-device Signal
-     * encryption attempt. Cobalt collapses the WA Web success and failure
-     * helpers into a single emission point invoked from the per-device loop
-     * in {@link #encryptForDevices}.
+     * Commits the {@code E2eMessageSendEvent} (event id 476) for a single
+     * per-device Signal encryption result.
      *
-     * @param device         the recipient device JID
-     * @param container      the message container being encrypted, or
-     *                       {@code null} when the encryption carries no
+     * @apiNote
+     * Called from inside the per-device loop in
+     * {@link #encryptForDevices(MessageEncryption, Collection, MessageContainer, Jid, IcdcResult, IcdcResult)}
+     * and from {@link PeerMessageSender#send(Jid, com.github.auties00.cobalt.model.chat.ChatMessageInfo)}.
+     *
+     * @implNote
+     * This implementation collapses WA Web's
+     * {@code postSuccessDirectE2eMessageSendMetric} /
+     * {@code postFailureDirectE2eMessageSendMetric} helpers into one
+     * emission point parameterised by {@code success}, with the per-branch
+     * field population (hosted COEX flag, agent-engagement flag) handled
+     * inline.
+     *
+     * @param device         the recipient device {@link Jid}
+     * @param container      the encrypted {@link MessageContainer}, or
+     *                       {@code null} when the encryption carried no
      *                       user-visible payload
-     * @param success        {@code true} for a successful encryption,
-     *                       {@code false} for a failure
+     * @param success        {@code true} for a successful encryption
      * @param ciphertextType the resolved Signal ciphertext type on success,
      *                       or {@code null} on failure
-     * @param retryCount     the retry count passed through from the sender job;
+     * @param retryCount     the retry count passed through from the sender;
      *                       {@code 0} for a fresh send
      */
     @WhatsAppWebExport(moduleName = "WAWebPostE2eMessageSendMetric",
@@ -519,17 +648,22 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Commits the {@code E2eMessageSendEvent} (id 476) for a sender-key
-     * (SKMSG) encryption attempt covering a group or status broadcast.
+     * Commits the {@code E2eMessageSendEvent} (event id 476) for a sender-key
+     * (SKMSG) encryption result covering an entire group or status fanout.
      *
-     * @param groupOrStatusJid    the SKMSG target JID
-     * @param container           the message container being encrypted
+     * @apiNote
+     * Called once per group send and once per status broadcast; the
+     * destination ({@link E2eDestination#GROUP} or
+     * {@link E2eDestination#STATUS}) and the addressing mode are reflected
+     * on the emitted event.
+     *
+     * @param groupOrStatusJid    the SKMSG target {@link Jid}
+     * @param container           the {@link MessageContainer} being encrypted
      * @param destination         the semantic destination
-     *                            ({@link E2eDestination#GROUP} for groups,
-     *                            {@link E2eDestination#STATUS} for status)
-     * @param isLidAddressingMode whether the SKMSG fanout uses LID addressing
-     * @param success             {@code true} for a successful encryption,
-     *                            {@code false} for a failure
+     *                            ({@link E2eDestination#GROUP} or
+     *                            {@link E2eDestination#STATUS})
+     * @param isLidAddressingMode whether the fanout uses LID addressing
+     * @param success             {@code true} for a successful encryption
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptMsgProtobuf", exports = "encryptMsgSenderKey",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -558,8 +692,12 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
      * Maps a {@link MessageEncryptionType} to the matching WAM
      * {@link E2eCiphertextType}.
      *
+     * @apiNote
+     * Used by {@link #emitE2eMessageSendEvent} to populate the
+     * {@code e2eCiphertextType} slot on per-device events.
+     *
      * @param type the Signal ciphertext type
-     * @return the matching WAM enum constant
+     * @return the matching {@link E2eCiphertextType}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricE2eCiphertextType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -573,12 +711,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Maps the content of the given container to the matching WAM
-     * {@link MediaType} classification.
+     * Maps the content of the given {@link MessageContainer} to the matching
+     * WAM {@link MediaType}.
      *
-     * @param container the outbound message container
-     * @return the WAM media type, or {@code null} when the message carries no
-     *         classifiable media payload
+     * @apiNote
+     * Used to populate the {@code messageMediaType} slot on the WAM
+     * {@code E2eMessageSendEvent}; non-classifiable payloads return
+     * {@code null} so the field is omitted.
+     *
+     * @param container the outbound {@link MessageContainer}
+     * @return the matching {@link MediaType}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebWamMsgUtils", exports = "getWamMediaType",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -610,13 +752,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Encodes the protobuf decrypt-fail flag into the stanza
-     * {@code decrypt-fail} attribute value. Returns {@code "hide"} when the
-     * inner message wants the failure suppressed; otherwise returns
-     * {@code null} so the caller drops the attribute.
+     * Encodes the protobuf decrypt-fail flag into the wire
+     * {@code decrypt-fail} attribute value.
      *
-     * @param hide the protobuf decrypt-fail flag, or {@code null} when absent
-     * @return {@code "hide"} when the failure should be hidden, otherwise {@code null}
+     * @apiNote
+     * Returns {@code "hide"} when the message wants the failure suppressed
+     * on the receiver and {@code null} otherwise (the caller drops the
+     * attribute). A {@code null} input is treated as the no-attribute case.
+     *
+     * @param hide the protobuf decrypt-fail flag, or {@code null}
+     * @return {@code "hide"} or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "encodeMaybeDecryptFail",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -628,12 +773,16 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the optional native-flow-name string suitable for the stanza
-     * {@code native_flow_name} attribute. Returns {@code null} when no value
-     * is present so the caller can drop the attribute.
+     * Echoes the supplied native-flow-name string for the wire
+     * {@code native_flow_name} attribute.
+     *
+     * @apiNote
+     * A pass-through helper preserved for parity with WA Web's
+     * {@code encodeMaybeNativeFlowName}; the caller drops the attribute when
+     * the value is {@code null}.
      *
      * @param nativeFlowName the resolved native flow name, or {@code null}
-     * @return the same string when present, otherwise {@code null}
+     * @return the same value
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "encodeMaybeNativeFlowName",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -642,15 +791,18 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Maps an {@code edit} stanza-attribute string to the WAM
-     * {@link EditType} enum constant. {@code "7"} maps to
-     * {@link EditType#SENDER_REVOKE}, {@code "8"} to
-     * {@link EditType#ADMIN_REVOKE}, {@code "1"} to {@link EditType#EDITED},
-     * and every other value (including {@code null}) falls through to
+     * Maps the wire {@code edit} attribute value to the WAM {@link EditType}
+     * classification.
+     *
+     * @apiNote
+     * The mapping mirrors WA Web's {@code getMetricEditType}: {@code "7"} is
+     * {@link EditType#SENDER_REVOKE}, {@code "8"} is
+     * {@link EditType#ADMIN_REVOKE}, {@code "1"} is {@link EditType#EDITED},
+     * everything else (including {@code null}) is
      * {@link EditType#NOT_EDITED}.
      *
-     * @param editAttr the {@code edit} stanza attribute value, or {@code null}
-     * @return the matching {@link EditType} constant
+     * @param editAttr the {@code edit} attribute value, or {@code null}
+     * @return the matching {@link EditType}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricEditType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -667,19 +819,24 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the {@link PlaceholderReasonType} the receiver should record for
-     * the given inbound-decryption failure, or {@code null} when no placeholder
-     * should be inserted.
+     * Returns the placeholder reason the receiver should record for the
+     * given decryption error.
      *
-     * <p>{@code UnknownDevice} maps to
-     * {@link PlaceholderReasonType#UNKNOWN_COMPANION_NO_PREKEY}; the
-     * {@code Receive}-family Signal exceptions map to the matching
-     * {@code SIGNAL_*} reason; anything outside the Signal-decryption family
-     * returns {@code null}, matching WA Web's implicit {@code undefined}
-     * fall-through which suppresses the placeholder.
+     * @apiNote
+     * Called by the inbound pipeline when an opaque ciphertext fails to
+     * decrypt; the returned {@link PlaceholderReasonType} drives the
+     * downstream retry-or-give-up classification. A {@code null} return
+     * preserves WA Web's implicit {@code undefined} fall-through which
+     * skips placeholder insertion entirely.
      *
-     * @param error the exception raised by the inbound decryption pipeline
-     * @return the matching reason, or {@code null} when no placeholder applies
+     * @implNote
+     * This implementation extends the WA Web table with a dedicated branch
+     * for {@code UnknownDevice}; everything inside the Signal
+     * {@code Receive}-family hierarchy maps to the matching {@code SIGNAL_*}
+     * constant, and unrelated errors fall through to {@code null}.
+     *
+     * @param error the exception raised by inbound decryption
+     * @return the matching {@link PlaceholderReasonType}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getPlaceholderAddReason",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -709,13 +866,18 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Returns the priority string assigned to non-critical inbound
-     * notifications. WA Web uses {@code OFFLINE} while replaying queued
-     * traffic and {@code LOW} during normal online operation.
+     * Returns the {@code push_priority} value assigned to non-critical
+     * inbound notifications.
+     *
+     * @apiNote
+     * WA Web's {@code getNonCriticalNotificationPriority} returns
+     * {@code "OFFLINE"} while the runtime is replaying queued traffic on
+     * reconnect and {@code "LOW"} during normal online operation; the same
+     * mapping is needed for retransmission scheduling.
      *
      * @param isOffline {@code true} when the runtime is draining the offline
      *                  backlog
-     * @return {@code "OFFLINE"} when offline, otherwise {@code "LOW"}
+     * @return {@code "OFFLINE"} or {@code "LOW"}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getNonCriticalNotificationPriority",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -724,12 +886,17 @@ abstract sealed class MessageSender<T extends MessageInfo> permits UserMessageSe
     }
 
     /**
-     * Maps the content of the given container to the WAM {@link EditType}
+     * Maps the given {@link MessageContainer} to the WAM {@link EditType}
      * classification used on outbound metric events.
      *
-     * @param container the outbound message container, possibly {@code null}
-     * @return the matching {@link EditType} ({@link EditType#NOT_EDITED} when
-     *         the message is not an edit or revoke)
+     * @apiNote
+     * Used by {@link #emitE2eMessageSendSenderKeyEvent}; populates the
+     * {@code editType} slot on SKMSG events without requiring callers to
+     * round-trip through the wire {@code edit} string.
+     *
+     * @param container the outbound {@link MessageContainer}, possibly
+     *                  {@code null}
+     * @return the matching {@link EditType}; never {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBackendJobsCommon", exports = "getMetricEditTypeFromMsg",
             adaptation = WhatsAppAdaptation.DIRECT)

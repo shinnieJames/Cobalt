@@ -14,15 +14,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqSetMerchantComplianceRequest}.
+ * Sealed family of inbound reply variants the relay produces in response
+ * to an {@link IqSetMerchantComplianceRequest}.
+ *
+ * @apiNote
+ * Pattern-match the returned variant to drive the merchant-compliance
+ * edit surface: {@link Success} echoes the post-mutation compliance
+ * entries (same shape as
+ * {@link IqGetMerchantComplianceResponse.Success}), {@link ClientError}
+ * surfaces a rejected mutation and {@link ServerError} surfaces a
+ * transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebMerchantComplianceJob")
 public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Response
         permits IqSetMerchantComplianceResponse.Success, IqSetMerchantComplianceResponse.ClientError, IqSetMerchantComplianceResponse.ServerError {
 
     /**
-     * Tries each {@link IqSetMerchantComplianceResponse} variant in priority order.
+     * Tries each variant in priority order until one matches.
+     *
+     * @apiNote
+     * Use this entry point on every IQ stanza ack-ing a compliance
+     * mutation; the order is {@link Success}, then {@link ClientError},
+     * then {@link ServerError}.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -44,18 +57,26 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant — projects the post-mutation
-     * compliance entries (the relay echoes the same shape as
-     * {@link IqGetMerchantComplianceResponse.Success}).
+     * The {@code Success} variant carrying the post-mutation
+     * compliance entries.
+     *
+     * @apiNote
+     * Use {@link #entries()} to refresh the merchant-compliance
+     * collection; the relay echoes the same shape as
+     * {@link IqGetMerchantComplianceResponse.Success} so the caller
+     * can swap the cached projection in place without re-fetching.
      */
     final class Success implements IqSetMerchantComplianceResponse {
         /**
-         * The post-mutation compliance entries.
+         * The post-mutation entries echoed by the relay.
          */
         private final List<IqGetMerchantComplianceResponse.Success.MerchantInfo> entries;
 
         /**
          * Constructs a successful reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}.
          *
          * @param entries the entries; never {@code null}
          * @throws NullPointerException if {@code entries} is
@@ -69,6 +90,11 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Returns the post-mutation entries.
          *
+         * @apiNote
+         * Use this getter to refresh the merchant-compliance
+         * projection; an empty list is legal when the relay echoes a
+         * bare success.
+         *
          * @return an unmodifiable list; never {@code null}
          */
         public List<IqGetMerchantComplianceResponse.Success.MerchantInfo> entries() {
@@ -77,6 +103,19 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
 
         /**
          * Tries to parse a {@link Success} variant.
+         *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method validates
+         * the {@code <iq type="result">} envelope and decodes every
+         * echoed {@code <merchant_info/>} child.
+         *
+         * @implNote
+         * This implementation shares the projection shape with
+         * {@link IqGetMerchantComplianceResponse.Success}; both
+         * routines decode {@code <customer_care_details/>} and
+         * {@code <grievance_officer_details/>} grandchildren into
+         * empty-string defaults when a sub-element is absent, matching
+         * the WAP-IQ behaviour of WA Web's reference parser.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -136,6 +175,9 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return Optional.of(new Success(entries));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -148,11 +190,17 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return Objects.equals(this.entries, that.entries);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(entries);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqSetMerchantComplianceResponse.Success[entries=" + entries + ']';
@@ -160,21 +208,34 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The {@code ClientError} variant emitted when the relay rejects
+     * the mutation as malformed or carrying disallowed fields.
+     *
+     * @apiNote
+     * Use this variant to surface a user-facing 4xx-class error to the
+     * merchant-compliance edit surface; the relay returns this shape
+     * when the entity type is unrecognised or a required field is
+     * missing for the merchant's market.
      */
     final class ClientError implements IqSetMerchantComplianceResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a client-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -188,6 +249,11 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to dispatch on the relay-side error code
+         * when surfacing a localised message to the merchant-compliance
+         * edit surface.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -196,6 +262,10 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
 
         /**
          * Returns the human-readable error text, when supplied.
+         *
+         * @apiNote
+         * Use this getter for logging; the text is server-localised
+         * and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -206,11 +276,16 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Tries to parse a {@link ClientError} variant.
          *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * to extract the (code, text) envelope.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         *         empty when the stanza does not match the client-error
+         *         schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -220,6 +295,9 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -232,11 +310,17 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqSetMerchantComplianceResponse.ClientError[errorCode=" + errorCode
@@ -245,21 +329,33 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The {@code ServerError} variant emitted when the relay returns a
+     * transient internal-failure status while processing the mutation.
+     *
+     * @apiNote
+     * Use this variant to drive a backoff-and-retry path in the
+     * merchant-compliance edit surface; the relay returns this shape
+     * when the compliance backend is temporarily unavailable.
      */
     final class ServerError implements IqSetMerchantComplianceResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a server-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -273,6 +369,10 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to log the relay-side error code; a 5xx-class
+         * value is the canonical retry trigger.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -281,6 +381,10 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
 
         /**
          * Returns the human-readable error text, when supplied.
+         *
+         * @apiNote
+         * Use this getter for logging only; the text is server-localised
+         * and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -291,11 +395,16 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
         /**
          * Tries to parse a {@link ServerError} variant.
          *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
+         * to extract the (code, text) envelope.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         *         empty when the stanza does not match the server-error
+         *         schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -305,6 +414,9 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -317,11 +429,17 @@ public sealed interface IqSetMerchantComplianceResponse extends IqOperation.Resp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqSetMerchantComplianceResponse.ServerError[errorCode=" + errorCode

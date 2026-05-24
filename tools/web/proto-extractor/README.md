@@ -1,8 +1,26 @@
-# Proto Extract
+# Proto Extractor
 
-Derived initially from `whatseow`'s proto extract, this version generates a predictable diff friendly protobuf. It also does not rely on a hardcoded set of modules to look for but finds all proto modules on its own and extracts the proto from there.
+Extracts every protobuf message and enum definition from WhatsApp Web and
+emits a single `.proto` file.
+
+The implementation mirrors `tools/web/ab-props-codegen`:
+- TypeScript with ES modules
+- Playwright launches a headed Chromium, loads `web.whatsapp.com`, and
+  captures every `.js` resource served during page load
+- Acorn parses each chunk; modules that declare an `internalSpec` are kept
+- The parser resolves cross-module references, enum bodies, `oneof` groups,
+  and nested types, then the generator writes proto2 source
 
 ## Usage
-1. Install dependencies with `yarn` (or `npm install`)
-2. `yarn start`
-3. The script will update `../WAProto/WAProto.proto` (except if something is broken)
+
+```
+npm install
+npm start
+```
+
+By default the output is written to `./whatsapp.proto` with package
+`com.github.auties00.whatsapp.model.unsupported`. Override either via flags:
+
+```
+npm start -- --output ../../modules/model/src/main/proto/whatsapp.proto --package com.example
+```

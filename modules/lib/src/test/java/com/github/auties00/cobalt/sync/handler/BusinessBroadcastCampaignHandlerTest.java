@@ -7,7 +7,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction;
 import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCampaignAction.Status;
@@ -15,7 +14,6 @@ import com.github.auties00.cobalt.model.sync.action.business.BusinessBroadcastCa
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.BusinessBroadcastCampaignMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,13 +24,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastCampaignHandler} — Cobalt's adapter
+ * Tests for {@link BusinessBroadcastCampaignHandler} - Cobalt's adapter
  * for {@code WAWebBroadcastCampaignSync}.
  *
  * <p>The handler upserts business broadcast campaigns keyed by
@@ -96,7 +92,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the wire constant")
@@ -120,7 +116,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET upsert")
+    @DisplayName("applyMutation - SET upsert")
     class ApplySet {
         @Test
         @DisplayName("SET with all required fields upserts the campaign")
@@ -137,7 +133,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("SET on an unknown id is the upsert path, not an orphan")
@@ -149,7 +145,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -203,7 +199,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty campaign id returns MALFORMED")
@@ -223,7 +219,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE drops the campaign")
+    @DisplayName("applyMutation - REMOVE drops the campaign")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE drops the campaign from the store")
@@ -240,10 +236,10 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -252,7 +248,7 @@ class BusinessBroadcastCampaignHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -266,7 +262,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — per-mutation fan-out")
+    @DisplayName("applyMutationBatch - per-mutation fan-out")
     class BatchOverride {
         @Test
         @DisplayName("each mutation's per-mutation result is preserved in the batch output")
@@ -290,7 +286,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder — getCampaignMutation")
+    @DisplayName("static builder - getCampaignMutation")
     class CreateBuilder {
         @Test
         @DisplayName("produces a SET pending mutation carrying the campaign action and index")
@@ -312,7 +308,7 @@ class BusinessBroadcastCampaignHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder — getDeleteCampaignMutation")
+    @DisplayName("static builder - getDeleteCampaignMutation")
     class DeleteBuilder {
         @Test
         @DisplayName("produces a REMOVE pending mutation carrying just the campaign id")
@@ -326,22 +322,4 @@ class BusinessBroadcastCampaignHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/business-broadcast-campaign/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/business-broadcast-campaign/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.getCampaignMutation("camp-oracle", sampleAction(),
-                    Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

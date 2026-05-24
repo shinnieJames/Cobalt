@@ -14,31 +14,34 @@ import java.security.GeneralSecurityException;
 import java.util.*;
 
 /**
- * Generates per-recipient content-binding tokens (RCAT) for URL messages.
+ * Generates per-recipient content-binding tags (RCAT) for outgoing URL
+ * messages.
  *
- * <p>Content binding associates an outgoing URL message with a cryptographic tag that
- * lets the server verify the content without learning the plaintext URL. Each recipient
- * receives a unique 8-byte tag derived in two steps. First a 32-byte nonce is produced
- * by HKDF-SHA-256 extract-and-expand over the message secret, with a zero salt for the
- * extract phase and {@code msgId || senderJid || recipientJid || "Rcat"} as the info
- * parameter. Then an HMAC-SHA-256 of the URL content ID is computed using that nonce as
- * the key, and the first 8 bytes of the HMAC are kept as the tag.
+ * @apiNote
+ * Used by the URL-message send path (matching WA Web's
+ * {@code WAWebMsgRcatUtils.genContentBindingForMsg}) so the server can verify
+ * that a URL preview's underlying link matches what the sender claims without
+ * learning the plaintext URL. Each recipient gets a unique 8-byte tag
+ * threaded into the {@code content_binding} attribute of the recipient's
+ * {@code <enc>} child. The Cobalt fanout writer threads this tag into the
+ * outgoing stanza when {@link #generate} returns a value for that recipient.
  */
 @WhatsAppWebModule(moduleName = "WAWebMsgRcatUtils")
 @WhatsAppWebModule(moduleName = "WAWebUtilsYoutubeUrlParser")
 public final class ContentBindingToken {
     /**
-     * Info-suffix appended when deriving the per-recipient nonce.
+     * The info suffix appended to the HKDF-Expand info parameter when
+     * deriving the per-recipient nonce.
      */
     private static final String NONCE_INFO_SUFFIX = "Rcat";
 
     /**
-     * Output length for the HKDF-derived nonce.
+     * The output length, in bytes, of the HKDF-derived nonce.
      */
     private static final int NONCE_LENGTH = 32;
 
     /**
-     * Number of leading HMAC bytes kept as the content-binding tag.
+     * The number of leading HMAC bytes kept as the content-binding tag.
      */
     private static final int TAG_LENGTH = 8;
 
@@ -53,31 +56,35 @@ public final class ContentBindingToken {
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     /**
-     * Length of a YouTube video ID.
+     * The fixed length of a YouTube video id.
      */
     private static final int YT_VIDEO_ID_LENGTH = 11;
 
     /**
      * Prevents instantiation of this utility class.
+     *
+     * @throws UnsupportedOperationException always
      */
     private ContentBindingToken() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     /**
-     * Resolves the content ID string from a matched URL text.
+     * Resolves the content-id string from a matched URL text.
      *
-     * <p>If the URL is a YouTube link, extracts the 11-character video ID. Otherwise
-     * returns the full matched text. Direct string inspection is used in place of regex
-     * because YouTube video IDs are always exactly 11 characters at a fixed position
-     * relative to the host or path prefix.
+     * @apiNote
+     * Mirrors WA Web's {@code getContentIdString}: when the URL is a
+     * recognised YouTube link the 11-character video id is returned; otherwise
+     * the full matched text is returned unless {@code youtubeOnly} forces a
+     * {@code null}. The {@code youtubeOnly} flag matches the
+     * {@code genContentBindingForMsg} branch that emits a tag only for
+     * YouTube URLs.
      *
-     * @param matchedText the matched URL text from the message
-     * @param youtubeOnly if {@code true}, returns the YouTube video ID only (possibly
-     *                    {@code null} when the URL is not YouTube); if {@code false},
-     *                    falls back to the full matched text when no YouTube ID is found
-     * @return the content ID string, or {@code null} when {@code youtubeOnly} is
-     *         {@code true} and the URL is not a recognised YouTube link
+     * @param matchedText the matched URL text from the URL-message body
+     * @param youtubeOnly when {@code true}, restricts the result to YouTube
+     *                    video ids (returns {@code null} otherwise)
+     * @return the content-id string, or {@code null} when {@code youtubeOnly}
+     *         is {@code true} and the URL is not a recognised YouTube link
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "getContentIdString",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -90,13 +97,16 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Resolves the content ID from a matched URL text as UTF-8 bytes.
+     * Resolves the content-id from a matched URL text as UTF-8 bytes.
      *
-     * <p>Calls {@link #getContentIdString(String, boolean)} with
-     * {@code youtubeOnly = false}, then encodes the result as UTF-8.
+     * @apiNote
+     * Convenience wrapper over {@link #getContentIdString(String, boolean)}
+     * with {@code youtubeOnly = false}; the returned bytes are the
+     * second-argument input to {@link #generate}.
      *
-     * @param matchedText the matched URL text from the message
-     * @return the content ID bytes, or {@code null} when no content ID could be derived
+     * @param matchedText the matched URL text from the URL-message body
+     * @return the content-id bytes, or {@code null} when no content-id could
+     *         be derived
      * @throws NullPointerException if {@code matchedText} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "getContentIdString",
@@ -111,18 +121,26 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Extracts the YouTube video ID from a URL, or returns {@code null} when the URL is
-     * not a recognised YouTube format.
+     * Extracts the YouTube video id from a URL, or returns {@code null} when
+     * the URL is not a recognised YouTube format.
      *
-     * <p>Recognised formats (with optional {@code www.} and {@code m.} subdomains):
-     * <pre>
-     *   http(s)://youtu.be/XXXXXXXXXXX
-     *   http(s)://youtube.com/watch?v=XXXXXXXXXXX
-     *   http(s)://youtube.com/shorts/XXXXXXXXXXX
-     * </pre>
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebUtilsYoutubeUrlParser.parseYoutubeVideoId}.
+     * Recognised input shapes (with optional {@code www.} and, for
+     * {@code youtube.com}, {@code m.} subdomains):
+     * {@snippet :
+     *     http(s)://youtu.be/XXXXXXXXXXX
+     *     http(s)://youtube.com/watch?v=XXXXXXXXXXX
+     *     http(s)://youtube.com/shorts/XXXXXXXXXXX
+     * }
+     * @implNote
+     * This implementation walks the string directly instead of running the
+     * regex set WA Web ships in {@code WAWebPipConst.URL_PATTERNS.ONLINE_VIDEO_URL.YOUTUBE},
+     * because the YouTube id length and the path-prefix offsets are fixed;
+     * the string-scan version is faster and allocation-free.
      *
      * @param url the URL to parse
-     * @return the 11-character video ID, or {@code null}
+     * @return the 11-character video id, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUtilsYoutubeUrlParser", exports = "parseYoutubeVideoId",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -146,7 +164,6 @@ public final class ContentBindingToken {
             return extractVideoId(stripped, hostStart + 9);
         }
 
-        // Optional "m." subdomain prefix on youtube.com only
         if (stripped.startsWith("m.", hostStart)) {
             hostStart += 2;
         }
@@ -169,11 +186,15 @@ public final class ContentBindingToken {
 
     /**
      * Extracts exactly {@value #YT_VIDEO_ID_LENGTH} characters starting at
-     * {@code offset}, or returns {@code null} when insufficient characters remain.
+     * {@code offset}.
+     *
+     * @apiNote
+     * Helper for {@link #parseYoutubeVideoId}; returns {@code null} when the
+     * URL is too short to carry a complete YouTube id.
      *
      * @param url    the full URL string
-     * @param offset the character offset where the video ID starts
-     * @return the video ID substring, or {@code null}
+     * @param offset the character offset where the video id starts
+     * @return the video id substring, or {@code null}
      */
     private static String extractVideoId(String url, int offset) {
         if (offset + YT_VIDEO_ID_LENGTH > url.length()) {
@@ -183,21 +204,32 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Generates content-binding tags for each recipient of a URL message.
+     * Generates the per-recipient content-binding tags for an outgoing URL
+     * message.
      *
-     * <p>For each recipient, derives a 32-byte nonce via HKDF-SHA-256
-     * extract-and-expand, then computes an 8-byte HMAC tag over the content ID using
-     * that nonce as key.
+     * @apiNote
+     * Mirrors WA Web's {@code genContentBindingForMsg}: the URL-message
+     * fanout writer calls this once per outgoing message to mint a fresh map
+     * keyed by recipient {@link Jid}. Each tag is folded into the recipient's
+     * {@code <enc content_binding="..."/>} attribute. The result is empty when
+     * no recipient was supplied and is otherwise unmodifiable.
+     * @implNote
+     * This implementation derives the per-recipient nonce via
+     * {@link #deriveNonce} and then HMAC-SHA-256s the content id, keeping the
+     * first {@value #TAG_LENGTH} bytes; both steps follow WA Web's
+     * {@code deriveNonce} / {@code hmacSha256} chain bit-for-bit.
      *
-     * @param messageId     the outgoing message's stanza ID
+     * @param messageId     the outgoing message's stanza id (the
+     *                      {@code id} attribute on {@code <message>})
      * @param messageSecret the 32-byte message secret
-     * @param senderJid     the sender's user JID
-     * @param recipientJids the recipients' user JIDs
-     * @param contentId     the URL content identifier (matched URL text or YouTube
-     *                      video ID), encoded as UTF-8
-     * @return an unmodifiable map from recipient JID to its 8-byte tag
+     * @param senderJid     the sender's user {@link Jid}
+     * @param recipientJids the recipient user {@link Jid}s
+     * @param contentId     the URL content-id (matched URL text or YouTube
+     *                      video id) encoded as UTF-8
+     * @return an unmodifiable map from recipient {@link Jid} to its 8-byte tag
      * @throws NullPointerException     if any argument is {@code null}
-     * @throws GeneralSecurityException if a cryptographic operation fails
+     * @throws GeneralSecurityException if a cryptographic primitive is
+     *                                  unavailable
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "genContentBindingForMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -224,18 +256,23 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Derives the per-recipient 32-byte nonce via HKDF-SHA-256 extract-and-expand.
+     * Derives the per-recipient 32-byte nonce via HKDF-SHA-256
+     * extract-and-expand.
      *
-     * <p>The extract phase uses a zero-filled 32-byte salt to derive a pseudorandom key
-     * from the message secret. The expand phase uses the UTF-8 encoding of
-     * {@code msgId + senderJid + recipientJid + "Rcat"} as the info parameter.
+     * @apiNote
+     * Mirrors WA Web's {@code deriveNonce}: the {@code messageSecret} is the
+     * IKM, the extract salt is implicit-zero, and the expand info parameter
+     * is the UTF-8 encoding of
+     * {@code messageId || senderJid || recipientJid || "Rcat"}. The nonce is
+     * the HMAC key in {@link #generate} and the seed for the URL-safe Base64
+     * variant returned by {@link #deriveNonceString}.
      *
-     * @param messageId     the message stanza ID
-     * @param messageSecret the 32-byte message secret (input keying material)
-     * @param senderJid     the sender's user JID
-     * @param recipientJid  the recipient's user JID
+     * @param messageId     the message stanza id
+     * @param messageSecret the 32-byte message secret used as IKM
+     * @param senderJid     the sender's user {@link Jid}
+     * @param recipientJid  the recipient's user {@link Jid}
      * @return a 32-byte nonce
-     * @throws GeneralSecurityException if HKDF is unavailable
+     * @throws GeneralSecurityException if HKDF-SHA-256 is unavailable
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "deriveNonce",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -256,15 +293,20 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Derives the per-recipient nonce and returns it as a URL-safe Base64-encoded
+     * Derives the per-recipient nonce and returns it as a URL-safe Base64
      * string with padding.
      *
-     * @param messageId     the message stanza ID
-     * @param messageSecret the 32-byte message secret (input keying material)
-     * @param senderJid     the sender's user JID
-     * @param recipientJid  the recipient's user JID
+     * @apiNote
+     * Mirrors WA Web's {@code deriveNonceString}: used when the nonce needs to
+     * cross a string-only boundary (logging, debug surfaces) rather than be
+     * consumed as raw bytes by an HMAC.
+     *
+     * @param messageId     the message stanza id
+     * @param messageSecret the 32-byte message secret used as IKM
+     * @param senderJid     the sender's user {@link Jid}
+     * @param recipientJid  the recipient's user {@link Jid}
      * @return the nonce as a URL-safe Base64 string with padding
-     * @throws GeneralSecurityException if HKDF is unavailable
+     * @throws GeneralSecurityException if HKDF-SHA-256 is unavailable
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgRcatUtils", exports = "deriveNonceString",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -279,11 +321,16 @@ public final class ContentBindingToken {
     }
 
     /**
-     * Computes HMAC-SHA-256 of {@code data} keyed by {@code key}, truncated to the
-     * first {@value #TAG_LENGTH} bytes.
+     * Computes HMAC-SHA-256 of {@code data} keyed by {@code key}, truncated
+     * to the first {@value #TAG_LENGTH} bytes.
+     *
+     * @apiNote
+     * Internal helper used by {@link #generate}; matches the
+     * {@code hmacSha256(t, e).slice(0, 8)} pattern in WA Web's
+     * {@code genContentBindingForMsg}.
      *
      * @param key  the HMAC key (the derived nonce)
-     * @param data the data to authenticate (the content ID)
+     * @param data the data to authenticate (the content id)
      * @return the first {@value #TAG_LENGTH} bytes of the HMAC
      * @throws GeneralSecurityException if the HMAC algorithm is unavailable
      */

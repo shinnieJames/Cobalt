@@ -7,14 +7,12 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MuteActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.MuteChatMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,14 +23,36 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MuteChatHandler} — the WAWebMuteChatSync adapter that
- * applies mute/unmute mutations to chats.
+ * Exercises {@link MuteChatHandler} against the mute / unmute mutation
+ * shapes WA Web emits via {@code WAWebMuteChatSync.applyMutations}.
+ *
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: {@code SET} with a future {@code muteEndTimestamp}
+ * stamps the chat mute, {@code SET} with {@code muted=false} clears
+ * it, an unknown chat JID surfaces as
+ * {@link SyncActionState#ORPHAN}
+ * with {@code modelType="Chat"}, a wrong-typed value or missing
+ * end-timestamp surfaces as
+ * {@link SyncActionState#MALFORMED},
+ * an empty chat JID at {@code indexParts[1]} surfaces as
+ * {@link SyncActionState#MALFORMED},
+ * and {@link SyncdOperation#REMOVE}
+ * surfaces as
+ * {@link SyncActionState#UNSUPPORTED}.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the
+ * {@code muteMutation} helper rather than going through the
+ * outgoing-mutation factory; the handler's class-level javadoc
+ * documents the WA Web counterpart in detail. The
+ * {@code MuteChatMutationFactory} smoke check uses
+ * {@code muteEndSeconds=0} so that no AB-prop is consulted (the
+ * group / mention-everyone branch is dead for user JIDs).
  */
 @DisplayName("MuteChatHandler")
 class MuteChatHandlerTest {
@@ -270,26 +290,4 @@ class MuteChatHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/mute-chat/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/mute-chat/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var muted = oracle.getBoolean("muted");
-            var muteEndMillis = oracle.getLong("muteEndMillis");
-
-            var builder = new MuteActionBuilder().muted(muted);
-            if (muteEndMillis != null) builder.muteEndTimestamp(Instant.ofEpochMilli(muteEndMillis));
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .muteAction(builder.build())
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

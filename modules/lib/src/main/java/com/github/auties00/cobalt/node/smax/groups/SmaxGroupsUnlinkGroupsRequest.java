@@ -15,36 +15,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the
- * {@code <unlink unlink_type="sub_group">...</unlink>} payload in the
- * canonical {@code <iq xmlns="w:g2" type="set" to="<parent>">}
- * envelope.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that unlinks one or more sub-groups from a community
+ * parent group.
+ *
+ * @apiNote Drives the community-admin "Remove from community" affordance applied to sub-groups. The relay
+ * accepts up to 1000 entries per request and returns a per-sub-group result row in the matching
+ * {@link SmaxGroupsUnlinkGroupsResponse.Success#unlinkedGroups()}. When the optional
+ * {@link RequestedGroup#removeOrphanedMembers()} flag is set on an entry, the relay also evicts community
+ * members who, after the unlink, are no longer affiliated with any remaining sub-group.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsUnlinkGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Request {
     /**
-     * The parent (community) group JID. Routed verbatim into the IQ's
-     * {@code to} attribute.
+     * The parent (community) group {@link Jid} that anchors the sub-group set.
      */
     private final Jid parentGroupJid;
 
     /**
-     * The list of sub-groups to unlink. Must be non-empty (1..1000
-     * entries server-side).
+     * The list of sub-groups to unlink.
      */
     private final List<RequestedGroup> groups;
 
     /**
-     * Constructs a request.
+     * Constructs an unlink-groups request.
      *
-     * @param parentGroupJid the parent community JID; never
-     *                       {@code null}
-     * @param groups         the list of sub-groups to unlink; never
-     *                       {@code null} and must be non-empty
-     * @throws NullPointerException     if either argument is
-     *                                  {@code null}
+     * @apiNote The relay enforces a 1..1000 cardinality on the {@code <group>} children; callers should
+     * pre-batch larger lists. The {@code groups} list is defensively copied so post-construction mutation of the
+     * caller's list has no effect on the request.
+     *
+     * @param parentGroupJid the parent community {@link Jid}
+     * @param groups         the sub-groups to unlink
+     * @throws NullPointerException     if either argument is {@code null}
      * @throws IllegalArgumentException when {@code groups} is empty
      */
     public SmaxGroupsUnlinkGroupsRequest(Jid parentGroupJid, List<RequestedGroup> groups) {
@@ -58,9 +61,11 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns the parent group JID.
+     * Returns the parent (community) group {@link Jid}.
      *
-     * @return the parent group JID; never {@code null}
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the parent group {@link Jid}; never {@code null}
      */
     public Jid parentGroupJid() {
         return parentGroupJid;
@@ -69,17 +74,28 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     /**
      * Returns the list of sub-groups to unlink.
      *
-     * @return an unmodifiable list; never {@code null} or empty
+     * @return an unmodifiable list of {@link RequestedGroup} entries; never {@code null} or empty
      */
     public List<RequestedGroup> groups() {
         return groups;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <unlink/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<parentGroupJid>" type="set">
+     *         <unlink unlink_type="sub_group">
+     *             <group jid="<subGroup0>" remove_orphaned_members="true"/>
+     *             <group jid="<subGroup1>"/>
+     *             ...
+     *         </unlink>
+     *     </iq>
+     * }
+     * the {@code remove_orphaned_members} attribute is emitted only on entries where the flag is set.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <unlink>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsUnlinkGroupsRequest",
@@ -108,6 +124,12 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
                 .content(unlinkNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across both fields.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsUnlinkGroupsRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -121,11 +143,21 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
                 && Objects.equals(this.groups, that.groups);
     }
 
+    /**
+     * Returns a hash composed of both fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(parentGroupJid, groups);
     }
 
+    /**
+     * Returns a debug string carrying both fields.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsUnlinkGroupsRequest[parentGroupJid=" + parentGroupJid
@@ -133,29 +165,29 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Single sub-group entry inside the outbound {@code <unlink/>}
-     * payload.
+     * Single sub-group entry inside the outbound {@code <unlink/>} payload.
+     *
+     * @apiNote Pairs a sub-group {@link Jid} with the optional
+     * {@link #removeOrphanedMembers() remove_orphaned_members} flag controlling whether the relay should also
+     * evict community members no longer affiliated with any remaining sub-group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutGroupsUnlinkGroupsRequest")
     public static final class RequestedGroup {
         /**
-         * The sub-group JID to unlink.
+         * The sub-group {@link Jid} to unlink.
          */
         private final Jid jid;
 
         /**
-         * Whether to ask the relay to evict community members no
-         * longer affiliated with any sub-group.
+         * Whether to ask the relay to evict community members no longer affiliated with any sub-group.
          */
         private final boolean removeOrphanedMembers;
 
         /**
-         * Constructs a requested-group entry.
+         * Constructs a {@link RequestedGroup} entry.
          *
-         * @param jid                   the sub-group JID; never
-         *                              {@code null}
-         * @param removeOrphanedMembers whether to evict orphaned
-         *                              community members
+         * @param jid                   the sub-group {@link Jid}
+         * @param removeOrphanedMembers whether to evict community members orphaned by this unlink
          * @throws NullPointerException if {@code jid} is {@code null}
          */
         public RequestedGroup(Jid jid, boolean removeOrphanedMembers) {
@@ -164,9 +196,9 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
         }
 
         /**
-         * Returns the sub-group JID.
+         * Returns the sub-group {@link Jid}.
          *
-         * @return the sub-group JID; never {@code null}
+         * @return the sub-group {@link Jid}; never {@code null}
          */
         public Jid jid() {
             return jid;
@@ -175,14 +207,18 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
         /**
          * Returns whether the eviction flag is set.
          *
-         * @return {@code true} when the
-         *         {@code remove_orphaned_members="true"} attribute
-         *         is emitted
+         * @return {@code true} when the {@code remove_orphaned_members="true"} attribute is emitted
          */
         public boolean removeOrphanedMembers() {
             return removeOrphanedMembers;
         }
 
+        /**
+         * Compares this entry to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link RequestedGroup} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -196,11 +232,21 @@ public final class SmaxGroupsUnlinkGroupsRequest implements SmaxOperation.Reques
                     && Objects.equals(this.jid, that.jid);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(jid, removeOrphanedMembers);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsUnlinkGroupsRequest.RequestedGroup[jid=" + jid

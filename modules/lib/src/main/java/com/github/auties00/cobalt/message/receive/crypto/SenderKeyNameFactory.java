@@ -8,19 +8,30 @@ import com.github.auties00.libsignal.SignalProtocolAddress;
 import com.github.auties00.libsignal.groups.SignalSenderKeyName;
 
 /**
- * Builds {@link SignalSenderKeyName} identifiers from a group JID and a sender JID for
- * use with the Signal group cipher.
+ * Factory that builds the {@link SignalSenderKeyName} composite key used by the Signal
+ * group cipher to address a per-sender symmetric key inside a group, broadcast, or
+ * community chat.
  *
- * <p>Each group member has its own per-sender symmetric key keyed by the combination of
- * the group JID and the sender's device address. Both the send path (sender key
- * distribution and group encryption) and the receive path (group decryption and
- * processing distribution messages) build the identifier the same way.
+ * @apiNote
+ * Call {@link #create(Jid, Jid)} on every send and receive of an SKMSG payload and
+ * every {@code SenderKeyDistributionMessage} import so the libsignal store sees the
+ * same composite key regardless of which side built it.
+ *
+ * @implNote
+ * This implementation mirrors WhatsApp Web's
+ * {@code WAWebSignalCommonUtils.createSignalLikeSenderKeyName}, which combines the
+ * group JID string with a Signal-style {@code user.device} address and feeds the pair
+ * to the libsignal sender-key store.
  */
 @WhatsAppWebModule(moduleName = "WAWebSignalCommonUtils")
 public final class SenderKeyNameFactory {
 
     /**
      * Prevents instantiation of this utility class.
+     *
+     * @apiNote
+     * The class exposes only the static {@link #create(Jid, Jid)} factory; the
+     * constructor throws so reflective instantiation also fails.
      *
      * @throws UnsupportedOperationException always
      */
@@ -29,15 +40,26 @@ public final class SenderKeyNameFactory {
     }
 
     /**
-     * Returns a {@link SignalSenderKeyName} that identifies the given sender's key within
-     * the given group.
+     * Returns the {@link SignalSenderKeyName} that identifies the given sender's
+     * sender-key inside the given group.
      *
-     * <p>Combines the group JID with a Signal protocol address derived from the sender's
-     * {@code user} and {@code device} components.
+     * @apiNote
+     * Used by both the send path (sender-key distribution and group encryption) and
+     * the receive path (group decryption and sender-key import) so the libsignal store
+     * sees the same composite key from either direction. Looked up by
+     * {@code WAWebCryptoLibraryDbCallbacksApi} when loading and storing sender-key
+     * sessions.
      *
-     * @param groupJid  the group or broadcast JID hosting the sender key
+     * @implNote
+     * This implementation hardcodes the device id portion of the WhatsApp Web suffix
+     * (the literal {@code "0"} appended by {@code createSignalLikeAddress}) inside the
+     * libsignal address by passing {@link Jid#device()} directly; callers that pass a
+     * companion JID retain the actual device id rather than the WA Web zero-suffix.
+     *
+     * @param groupJid  the group, broadcast, or community JID hosting the sender key
      * @param senderJid the sender's device-level JID
-     * @return the sender key name for the Signal group cipher
+     * @return the sender-key name keyed by the group JID string and the sender's
+     *         Signal protocol address
      */
     @WhatsAppWebExport(moduleName = "WAWebSignalCommonUtils", exports = "createSignalLikeSenderKeyName",
             adaptation = WhatsAppAdaptation.ADAPTED)

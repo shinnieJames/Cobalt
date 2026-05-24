@@ -24,23 +24,15 @@ import static java.nio.file.Files.createTempFile;
 
 /**
  * A pluggable strategy for completing the authentication ceremony that
- * links or registers a WhatsApp client.
+ * links or registers a {@link WhatsAppClient}.
  *
- * <p>The two sub-hierarchies address the two supported flavours of
- * authentication:
- * <ul>
- *   <li>{@link Web} handles the companion-device linking ceremony used by
- *       {@link WhatsAppClientType#WEB} clients, which can complete either
- *       by scanning a QR code on the primary device or by entering a
- *       pairing code;</li>
- *   <li>{@link Mobile} handles the registration ceremony used by
- *       {@link WhatsAppClientType#MOBILE} clients, which starts with an
- *       SMS, voice, or in-app WhatsApp verification code request.</li>
- * </ul>
- *
- * <p>Handlers are wired into a {@link WhatsAppClient} via the builder
- * ({@link WhatsAppClientBuilder.Options.Web#unregistered(WhatsAppClientVerificationHandler.Web.QrCode)}
- * and the Mobile {@code register} variants).
+ * @apiNote
+ * Two sub-hierarchies cover the supported flavours: {@link Web} drives
+ * the companion linking ceremony for {@link WhatsAppClientType#WEB}
+ * clients (QR scan or pairing-code entry), and {@link Mobile} drives
+ * the registration ceremony for {@link WhatsAppClientType#MOBILE}
+ * clients (SMS, voice, or in-app verification code). Implementations
+ * are wired in via {@link WhatsAppClientBuilder}.
  *
  * @see WhatsAppClientBuilder
  */
@@ -48,41 +40,46 @@ public sealed interface WhatsAppClientVerificationHandler {
     /**
      * A verification handler for WhatsApp Web companion-device linking.
      *
-     * <p>Implementations receive the value that the primary device must
-     * authorise: either the payload encoded in a QR code that the user
-     * scans on their phone, or a short pairing code that the user types
-     * into the Linked Devices screen.
+     * @apiNote
+     * Implementations surface the value the user must authorise on the
+     * primary device: either a QR code payload (for {@link QrCode}) or
+     * a short pairing code (for {@link PairingCode}).
      */
     sealed interface Web extends WhatsAppClientVerificationHandler {
         /**
-         * Receives the verification value produced by the Cobalt client
-         * and surfaces it to the user.
+         * Surfaces the verification value produced by the client to the
+         * user.
          *
-         * <p>The value is either a QR code payload (for
-         * {@link QrCode} handlers) or a short pairing code (for
-         * {@link PairingCode} handlers).
+         * @apiNote
+         * The value is either a QR code payload (for {@link QrCode}
+         * handlers) or a short pairing code (for {@link PairingCode}
+         * handlers).
          *
          * @param value the verification value produced by the client
          */
         void handle(String value);
 
         /**
-         * A verification handler that renders the QR code produced by
-         * Cobalt during the companion-linking flow.
+         * A verification handler that renders the QR code produced
+         * during the companion-linking flow.
          *
-         * <p>The handler receives the raw QR payload as a string; the
+         * @apiNote
+         * The handler receives the raw QR payload as a string. The
          * static factory methods provide common renderers (terminal,
-         * temporary file, desktop viewer) so callers can pick a behaviour
-         * without writing boilerplate.
+         * temporary file, desktop viewer); custom rendering is
+         * supported via a target-typed lambda.
          */
         @FunctionalInterface
         non-sealed interface QrCode extends Web {
             /**
-             * Returns a handler that renders the QR code as ASCII art on
-             * standard output.
+             * Returns a handler that renders the QR code as ASCII art
+             * on standard output.
              *
-             * @apiNote Terminals that do not support UTF block-drawing
-             *          characters render the output as garbled symbols.
+             * @apiNote
+             * Useful in headless or CI environments. Terminals that do
+             * not support UTF block-drawing characters render the
+             * output as garbled symbols.
+             *
              * @return the terminal-rendering handler
              */
             static QrCode toTerminal() {
@@ -93,18 +90,28 @@ public sealed interface WhatsAppClientVerificationHandler {
             }
 
             /**
-             * Encodes a QR payload into a {@link BitMatrix} suitable for
-             * rendering.
+             * Encodes a QR payload into a {@link BitMatrix} suitable
+             * for rendering.
+             *
+             * @apiNote
+             * Used internally by the static factory methods; exposed so
+             * applications can render the matrix via a custom writer.
+             *
+             * @implNote
+             * This implementation pins the error-correction level to
+             * {@link ErrorCorrectionLevel#L} to maximise the data
+             * capacity of the rendered code; WhatsApp's QR payloads are
+             * comfortably within the level-{@code L} budget.
              *
              * @param qr     the payload to encode
              * @param size   the side length, in pixels, of the rendered
              *               square
-             * @param margin the white margin around the rendered code, in
-             *               modules
+             * @param margin the white margin around the rendered code,
+             *               in modules
              * @return the encoded bit matrix
-             * @throws UnsupportedOperationException if the payload cannot
-             *                                       be encoded as a QR
-             *                                       code
+             * @throws UnsupportedOperationException if the payload
+             *                                       cannot be encoded
+             *                                       as a QR code
              */
             static BitMatrix createMatrix(String qr, int size, int margin) {
                 try {
@@ -120,8 +127,13 @@ public sealed interface WhatsAppClientVerificationHandler {
              * JPEG file and forwards the file path to the supplied
              * consumer.
              *
-             * @param fileConsumer the consumer that receives the path of
-             *                     the rendered file
+             * @apiNote
+             * Useful when the host process can render an image but not
+             * ASCII art. The temporary file is created up front so the
+             * write happens off the verification path.
+             *
+             * @param fileConsumer the consumer that receives the path
+             *                     of the rendered file
              * @return the file-rendering handler
              * @throws UncheckedIOException if the temporary file cannot
              *                              be created
@@ -139,10 +151,16 @@ public sealed interface WhatsAppClientVerificationHandler {
              * Returns a handler that writes the QR code to the supplied
              * path and forwards it to the supplied consumer.
              *
-             * @param path         the destination path where the QR code
-             *                     image is saved
-             * @param fileConsumer the consumer that receives the path of
-             *                     the rendered file
+             * @apiNote
+             * Use when the rendering target is a fixed path (e.g. a
+             * shared volume or a web-served asset). The QR matrix is
+             * generated at 500 pixels with a 5-module margin for
+             * scan-friendliness.
+             *
+             * @param path         the destination path where the QR
+             *                     code image is saved
+             * @param fileConsumer the consumer that receives the path
+             *                     of the rendered file
              * @return the file-rendering handler
              */
             static QrCode toFile(Path path, QrCode.ToFile fileConsumer) {
@@ -158,20 +176,24 @@ public sealed interface WhatsAppClientVerificationHandler {
             }
 
             /**
-             * A consumer that reacts to a file path where a QR code has
-             * been rendered.
+             * A consumer that reacts to the file path where a QR code
+             * has been rendered.
              *
-             * <p>Callers combine a rendering path supplier (typically a
-             * {@link Path} returned by
-             * {@link java.nio.file.Files#createTempFile(String, String, java.nio.file.attribute.FileAttribute[])})
-             * with a {@code ToFile} consumer to decide what to do with the
-             * resulting image: ignore it, log its location, or open it in
-             * a desktop viewer.
+             * @apiNote
+             * Combine with a rendering target such as
+             * {@link java.nio.file.Files#createTempFile(String, String, java.nio.file.attribute.FileAttribute[])}
+             * to decide what to do with the resulting image: ignore it,
+             * log its location, or open it in a desktop viewer.
              */
             interface ToFile extends Consumer<Path> {
                 /**
-                 * Returns a consumer that ignores the rendered file path
-                 * and takes no action.
+                 * Returns a consumer that ignores the rendered file
+                 * path and takes no action.
+                 *
+                 * @apiNote
+                 * Useful when the application owns the file lifecycle
+                 * elsewhere (for example a separate thread that polls
+                 * the path).
                  *
                  * @return the no-op consumer
                  */
@@ -181,7 +203,7 @@ public sealed interface WhatsAppClientVerificationHandler {
 
                 /**
                  * Returns a consumer that logs the rendered file path
-                 * through the system logger.
+                 * through the system logger at {@link System.Logger.Level#INFO}.
                  *
                  * @return the logging consumer
                  */
@@ -193,6 +215,11 @@ public sealed interface WhatsAppClientVerificationHandler {
                 /**
                  * Returns a consumer that opens the rendered file with
                  * the default desktop image viewer.
+                 *
+                 * @apiNote
+                 * Silently no-ops on hosts where {@link Desktop} is not
+                 * supported (typical headless servers). Throws if the
+                 * viewer fails to launch on a supported host.
                  *
                  * @return the desktop-opening consumer
                  * @throws RuntimeException if the file cannot be opened
@@ -215,18 +242,19 @@ public sealed interface WhatsAppClientVerificationHandler {
 
         /**
          * A verification handler that surfaces the short pairing code
-         * produced by Cobalt during the companion-linking flow.
+         * produced during the companion-linking flow.
          *
-         * <p>Pairing codes are typed into the Linked Devices screen on the
-         * primary device instead of scanning a QR. The handler receives
-         * the code as a plain string and is responsible for presenting it
-         * to the user.
+         * @apiNote
+         * Pairing codes are typed into the Linked Devices screen on
+         * the primary device instead of scanning a QR code. The handler
+         * receives the code as a plain string and is responsible for
+         * presenting it.
          */
         @FunctionalInterface
         non-sealed interface PairingCode extends Web {
             /**
-             * Returns a handler that prints the pairing code on standard
-             * output.
+             * Returns a handler that prints the pairing code on
+             * standard output.
              *
              * @return the terminal-printing handler
              */
@@ -237,20 +265,25 @@ public sealed interface WhatsAppClientVerificationHandler {
     }
 
     /**
-     * A verification handler for the WhatsApp mobile registration flow.
+     * A verification handler for the WhatsApp mobile registration
+     * flow.
      *
-     * <p>Mobile registration requires the user to receive a one-time code
-     * on the phone number being registered and to feed it back into the
-     * client. Implementations expose two decisions: which delivery channel
-     * to request (SMS, voice call, in-app WhatsApp, or server-chosen) and
-     * how to obtain the code once it has been delivered.
+     * @apiNote
+     * Mobile registration requires the user to receive a one-time code
+     * on the phone number being registered and to feed it back into
+     * the client. Implementations expose two decisions: which delivery
+     * channel to request (SMS, voice call, in-app WhatsApp, or
+     * server-chosen) and how to obtain the code once it has been
+     * delivered. Optional callbacks handle CAPTCHA challenges and
+     * two-factor PIN prompts.
      */
     non-sealed interface Mobile extends WhatsAppClientVerificationHandler {
         /**
          * Returns the preferred delivery channel for the verification
          * code.
          *
-         * <p>Supported values mirror the WhatsApp server-side method
+         * @apiNote
+         * Supported values mirror the WhatsApp server-side method
          * identifiers: {@code sms}, {@code voice}, and {@code wa_old}.
          * Returning {@link Optional#empty()} lets the server pick a
          * default channel.
@@ -263,30 +296,40 @@ public sealed interface WhatsAppClientVerificationHandler {
         /**
          * Returns the verification code supplied by the user.
          *
-         * <p>Implementations typically block on user input (e.g., reading
-         * a console line) and return the code once it has been entered.
+         * @apiNote
+         * Implementations typically block on user input (for example
+         * reading a console line) and return the code once it has been
+         * entered.
          *
          * @return the verification code
          */
         String verificationCode();
 
         /**
-         * Solves a server-issued challenge (image or audio CAPTCHA) and
-         * returns the user's answer.
+         * Solves a server-issued CAPTCHA challenge and returns the
+         * user's answer.
          *
-         * <p>Called by the registration code when {@code /v2/code} or
+         * @apiNote
+         * Called by the registration code when {@code /v2/code} or
          * {@code /v2/exist} returns an {@code image_blob} or
-         * {@code audio_blob} payload, which happens whenever the server
-         * decides the client is in the low-trust lane (typically because
-         * no Play Integrity / App Attest token was submitted). The
-         * default implementation returns {@link Optional#empty()}, which
-         * the registration treats as "caller cannot solve challenges" and
-         * raises a registration failure.
+         * {@code audio_blob} payload, which happens whenever the
+         * server places the request in the low-trust lane (typically
+         * because no Play Integrity or App Attest token was submitted).
+         * Returning {@link Optional#empty()} aborts registration with a
+         * failure.
          *
-         * @param imagePng the PNG image challenge bytes, or {@code null}
-         *                 if the server did not include one
+         * @implSpec
+         * The default implementation returns {@link Optional#empty()},
+         * which the registration code treats as "caller cannot solve
+         * challenges". Implementations that can prompt the user should
+         * override this method.
+         *
+         * @param imagePng the PNG image challenge bytes, or
+         *                 {@code null} if the server did not include
+         *                 one
          * @param audioOgg the Ogg-encoded audio challenge bytes, or
-         *                 {@code null} if the server did not include one
+         *                 {@code null} if the server did not include
+         *                 one
          * @return the user-supplied answer, or empty to abort
          */
         default Optional<String> solveCaptcha(byte[] imagePng, byte[] audioOgg) {
@@ -294,14 +337,19 @@ public sealed interface WhatsAppClientVerificationHandler {
         }
 
         /**
-         * Returns the two-factor authentication PIN the user has
-         * configured on the account being registered.
+         * Returns the two-factor authentication PIN configured on the
+         * account being registered.
          *
-         * <p>Called by the registration code when {@code /v2/register}
-         * returns a {@code 2fa_required} reason. The default
-         * implementation returns {@link Optional#empty()}, which the
-         * registration treats as "caller cannot supply a PIN" and raises
-         * a registration failure.
+         * @apiNote
+         * Called by the registration code when {@code /v2/register}
+         * returns a {@code 2fa_required} reason. Returning
+         * {@link Optional#empty()} aborts registration with a failure.
+         *
+         * @implSpec
+         * The default implementation returns {@link Optional#empty()},
+         * which the registration code treats as "caller cannot supply
+         * a PIN". Implementations that can prompt the user should
+         * override this method.
          *
          * @return the PIN, or empty to abort
          */
@@ -313,6 +361,10 @@ public sealed interface WhatsAppClientVerificationHandler {
          * Returns a verification handler that defers the choice of
          * delivery channel to the WhatsApp server and reads the
          * verification code from the supplied supplier.
+         *
+         * @apiNote
+         * Use when the calling application has no preference; the
+         * server picks the channel based on its own heuristics.
          *
          * @param supplier the supplier that produces the verification
          *                 code once the user has received it
@@ -340,8 +392,8 @@ public sealed interface WhatsAppClientVerificationHandler {
         }
 
         /**
-         * Returns a verification handler that requests SMS delivery and
-         * reads the verification code from the supplied supplier.
+         * Returns a verification handler that requests SMS delivery
+         * and reads the verification code from the supplied supplier.
          *
          * @param supplier the supplier that produces the verification
          *                 code once the user has received it
@@ -402,6 +454,10 @@ public sealed interface WhatsAppClientVerificationHandler {
          * Returns a verification handler that requests in-app WhatsApp
          * delivery and reads the verification code from the supplied
          * supplier.
+         *
+         * @apiNote
+         * Maps to the server-side {@code wa_old} method, which delivers
+         * the code via an existing WhatsApp install on the same number.
          *
          * @param supplier the supplier that produces the verification
          *                 code once the user has received it

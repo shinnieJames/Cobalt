@@ -17,50 +17,78 @@ import java.time.Instant;
 import java.util.Arrays;
 
 /**
- * Represents the result of decrypting a sync mutation.
+ * A single mutation that has come off the wire and been (partially or fully)
+ * authenticated and decrypted.
  *
- * <p>Two variants exist: {@link Untrusted} (freshly decrypted with full MAC verification
- * metadata) and {@link Trusted} (validated and ready for application).
+ * <p>The two variants capture the two stages of WA Web's incoming-patch
+ * pipeline:
+ * <ul>
+ *   <li>{@link Untrusted} is the freshly decrypted form produced by
+ *       {@link Untrusted#of}; it still carries the raw {@code indexMac},
+ *       {@code valueMac}, and {@code keyId} that the LT-Hash bookkeeping and
+ *       the snapshot-MAC chaining consume downstream.</li>
+ *   <li>{@link Trusted} is the post-validation form attached to the local
+ *       store: the MAC metadata has been consumed and only the
+ *       application-level fields remain.</li>
+ * </ul>
  *
- * <p>{@link Untrusted#of(byte[], byte[], MutationKeys, SyncdOperation, byte[])} adapts
- * {@code WAWebSyncdDecryptMutations.syncdDecryptMutation} and is invoked from the per-mutation
- * loop that adapts {@code WAWebSyncdDecryptMutationsWrapper.tryDecryptSnapshot} and
- * {@code WAWebSyncdDecryptMutationsWrapper.tryDecryptPatch}. The batch wrapper exports
- * live in {@code WebAppStateService.decryptMutations}.
+ * @apiNote
+ * Embedders never construct these directly. The receive pipeline produces
+ * {@link Untrusted} from {@link SyncActionValue}-bearing wire records,
+ * verifies the patch and snapshot MACs against the resulting value MACs,
+ * and only then promotes the survivors to {@link Trusted}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutations")
 @WhatsAppWebModule(moduleName = "WAWebSyncdDecryptMutationsWrapper")
 public sealed interface DecryptedMutation {
     /**
-     * Returns the index string identifying this mutation's target.
+     * Returns the UTF-8 decoded mutation index string.
+     *
+     * @apiNote
+     * The index is the JSON-array key under which the sync handlers locate
+     * the mutation target (e.g. {@code ["archive","1234@s.whatsapp.net"]}).
+     *
      * @return the index string
      */
     String index();
 
     /**
-     * Returns the sync operation type (SET or REMOVE).
-     * @return the operation type
+     * Returns whether this mutation sets or removes its index.
+     *
+     * @return the sync operation
      */
     SyncdOperation operation();
 
     /**
-     * Returns the timestamp of the action.
+     * Returns the timestamp the originating device stamped on the action.
+     *
+     * @apiNote
+     * Used by handlers that order conflicting actions by recency (chat
+     * archive, mute, pin); not a server-supplied wall clock.
+     *
      * @return the action timestamp
      */
     Instant timestamp();
 
     /**
-     * Represents a freshly decrypted mutation that has passed MAC verification
-     * but retains all cryptographic metadata.
+     * A decrypted mutation that still carries the MAC and key-id metadata
+     * needed to chain LT-Hash and snapshot-MAC verification.
      *
-     * @param index         the decoded index string from the action data
-     * @param indexMac      the verified index MAC bytes
-     * @param valueMac      the verified value MAC bytes (last 32 bytes of encrypted value)
-     * @param value         the decoded sync action value
-     * @param operation     the sync operation type
+     * @apiNote
+     * Produced exclusively by {@link Untrusted#of}. Downstream code consumes
+     * {@link #indexMac()} and {@link #valueMac()} when feeding the
+     * {@link MutationIntegrityVerifier} patch path, and {@link #keyId()} when
+     * recording the {@code SyncActionEntry} that LT-Hash recomputation reads
+     * back during consistency checks.
+     *
+     * @param index         the decoded index string
+     * @param indexMac      the wire index MAC (also recomputed from the index)
+     * @param valueMac      the trailing 32 bytes of the wire encrypted value
+     * @param value         the decoded {@link SyncActionValue} payload
+     * @param operation     the sync operation
      * @param timestamp     the action timestamp
-     * @param keyId         the sync key ID used for decryption
-     * @param actionVersion the action version from the decoded action data
+     * @param keyId         the sync key id used for decryption
+     * @param actionVersion the action protobuf version from the payload
      */
     record Untrusted(
             String index,
@@ -73,32 +101,48 @@ public sealed interface DecryptedMutation {
             int actionVersion
     ) implements DecryptedMutation {
         /**
-         * Decrypts and verifies an encrypted mutation value.
+         * Decrypts and authenticates a single wire mutation.
          *
-         * <p>Performs the following steps matching WA Web's {@code syncdDecryptMutation},
-         * delegating each cryptographic primitive to {@link MutationKeys}:
-         * <ol>
-         *   <li>Extracts value MAC from last 32 bytes via
-         *       {@link MutationKeys#valueMacFromIndexAndValueCipherText(byte[])}</li>
-         *   <li>Splits encrypted value into IV, ciphertext, and MAC</li>
-         *   <li>Verifies value MAC via {@link MutationKeys#generateMac(byte[], byte[])}
-         *       (HMAC-SHA512 truncated to 32 bytes)</li>
-         *   <li>Decrypts ciphertext via {@link MutationKeys#decryptCipherText(byte[], byte[])}
-         *       (AES-256-CBC)</li>
-         *   <li>Decodes and validates the {@code SyncActionData} protobuf</li>
-         *   <li>Verifies index MAC via {@link MutationKeys#generateIndexMac(byte[])}
-         *       (HMAC-SHA256)</li>
-         * </ol>
+         * @apiNote
+         * Called from the snapshot and patch decryption fan-outs that the
+         * incoming sync pipeline runs against {@code SyncdRecord} arrays.
+         * The expected wire format is
+         * {@snippet :
+         *     // encryptedValue = IV (16 bytes)
+         *     //                || AES-CBC(SyncActionData protobuf)
+         *     //                || HMAC-SHA512(...)[0..32]   // trailing valueMac
+         *     // indexMac        = HMAC-SHA256(indexKey, SyncActionData.index)
+         * }
+         * Verification proceeds in the order the WA Web routine uses: value
+         * MAC first (so a tampered ciphertext fails before the AES-CBC step),
+         * then the protobuf decode, then the index MAC. The thrown exception
+         * subtype names the failed step.
          *
-         * @param encryptedValue the wire encrypted value bytes (IV || ciphertext || MAC)
-         * @param indexMac       the wire index MAC bytes to verify against
-         * @param keys           the derived mutation keys
-         * @param operation      the sync operation type
-         * @param keyId          the sync key ID bytes
-         * @return a new {@code Untrusted} instance with the decrypted data
-         * @throws GeneralSecurityException if any cryptographic operation fails
-         * @throws WhatsAppWebAppStateSyncException.ValueMacMismatch if value MAC verification fails
-         * @throws WhatsAppWebAppStateSyncException.IndexMacMismatch if index MAC verification fails
+         * @implNote
+         * This implementation extracts the {@link SyncActionValue} and
+         * {@code timestamp} eagerly for both SET and REMOVE. WA Web treats
+         * the value as nullable and validates only SET in
+         * {@code WAWebSyncdValidateMutations.validateAndTypeSetMutations};
+         * Cobalt's downstream handlers require a non-null value on every
+         * mutation, so the eager check moves a later
+         * {@link NullPointerException} into an explicit
+         * {@link WhatsAppWebAppStateSyncException.UnexpectedError} here.
+         * The matching divergence on timestamps is identical and motivated
+         * by the same downstream constraint on the {@link Trusted} record.
+         *
+         * @param encryptedValue the wire {@code IV || ciphertext || valueMac} blob
+         * @param indexMac       the wire index MAC to verify against
+         * @param keys           the derived sync keys for the relevant key id
+         * @param operation      the operation the wire frame declares
+         * @param keyId          the sync key id, mixed into the AAD
+         * @return a freshly decoded {@link Untrusted} instance
+         * @throws IllegalArgumentException                          if {@code encryptedValue} is shorter than {@code IV_LENGTH + MAC_LENGTH}
+         * @throws GeneralSecurityException                          if the JCE primitives fail
+         * @throws WhatsAppWebAppStateSyncException.ValueMacMismatch if the value MAC does not validate
+         * @throws WhatsAppWebAppStateSyncException.IndexMacMismatch if the index MAC does not validate
+         * @throws WhatsAppWebAppStateSyncException.DecryptionFailed if the AES-CBC output is not a valid {@link SyncActionData} protobuf
+         * @throws WhatsAppWebAppStateSyncException.UnexpectedError  if the decoded protobuf is missing the index, version, value, or timestamp fields
+         * @throws WhatsAppWebAppStateSyncException.MissingActionTimestamp if the action value carries no timestamp
          */
         @WhatsAppWebExport(moduleName = "WAWebSyncdDecryptMutations", exports = "syncdDecryptMutation", adaptation = WhatsAppAdaptation.DIRECT)
         @WhatsAppWebExport(moduleName = "WAWebSyncdDecryptMutationsWrapper", exports = {"tryDecryptSnapshot", "tryDecryptPatch"}, adaptation = WhatsAppAdaptation.ADAPTED)
@@ -113,64 +157,56 @@ public sealed interface DecryptedMutation {
                 throw new IllegalArgumentException("Encrypted value too short");
             }
 
-            // Extract value MAC (last 32 bytes) — WAWebSyncdCrypto.valueMacFromIndexAndValueCipherText
             var valueMac = MutationKeys.valueMacFromIndexAndValueCipherText(encryptedValue);
 
-            // Build associated data: [opByte] || keyIdBytes — WAWebSyncdMutationsCryptoUtils.generateAssociatedData
             var associatedData = MutationKeys.generateAssociatedData(operation, keyId);
 
-            // Split encrypted value into IV || ciphertext (excluding trailing MAC) — WAWebSyncdCryptoUtils.split
             var ivAndCipherText = Arrays.copyOfRange(
                     encryptedValue,
                     0,
                     encryptedValue.length - MutationKeys.MAC_LENGTH
             );
 
-            // Verify value MAC using HMAC-SHA-512 truncated to 32 bytes — WAWebSyncdMutationsCryptoUtils.generateMac
             var expectedMac = keys.generateMac(associatedData, ivAndCipherText);
-            if (!MessageDigest.isEqual(valueMac, expectedMac)) { // WACryptoUtils.arrayBuffersEqual
-                throw new WhatsAppWebAppStateSyncException.ValueMacMismatch(); // WAWebSyncdError.SyncdFatalError("decryption failure: valueMAC mismatch")
+            if (!MessageDigest.isEqual(valueMac, expectedMac)) {
+                throw new WhatsAppWebAppStateSyncException.ValueMacMismatch();
             }
 
-            // Decrypt payload with AES-256-CBC — WAWebSyncdMutationsCryptoUtils.decryptCipherText
-            var iv = Arrays.copyOfRange(encryptedValue, 0, MutationKeys.IV_LENGTH); // WAWebSyncdCryptoUtils.split — iv part
-            var cipherText = Arrays.copyOfRange( // WAWebSyncdCryptoUtils.split — ciphertext part
+            var iv = Arrays.copyOfRange(encryptedValue, 0, MutationKeys.IV_LENGTH);
+            var cipherText = Arrays.copyOfRange(
                     encryptedValue,
                     MutationKeys.IV_LENGTH,
                     encryptedValue.length - MutationKeys.MAC_LENGTH
             );
             var plaintext = keys.decryptCipherText(iv, cipherText);
 
-            // Decode protobuf — WAWebSyncdDecode.decodeSyncActionData
             SyncActionData actionData;
             try {
-                actionData = SyncActionDataSpec.decode(ProtobufInputStream.fromBytes(plaintext)); // WAWebSyncdDecode.decodeSyncActionData
+                actionData = SyncActionDataSpec.decode(ProtobufInputStream.fromBytes(plaintext));
             } catch (Exception e) {
-                throw new WhatsAppWebAppStateSyncException.DecryptionFailed( // WAWebSyncdDecode.decodeSyncActionData — SyncdFatalError("syncd: data protobuf deserialization failed: ...")
+                throw new WhatsAppWebAppStateSyncException.DecryptionFailed(
                         "syncd: data protobuf deserialization failed: " + e.getMessage(), e);
             }
 
-            // Validate SyncActionData fields — WAWebSyncdValidateSyncActionProtobuf.validateSyncActionDataProtobuf
-            var actionIndex = actionData.index() // WAWebSyncdValidateSyncActionProtobuf.validateSyncActionDataProtobuf — index check (!e)
+            var actionIndex = actionData.index()
                     .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("missing action index", null));
-            var actionVersion = actionData.version() // WAWebSyncdValidateSyncActionProtobuf.validateSyncActionDataProtobuf — version check (i == null)
+            var actionVersion = actionData.version()
                     .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError(
                             "missing action version", null));
-            var actionValue = actionData.value() // ADAPTED: WAWebSyncdDecryptMutations returns value as nullable (null for REMOVE); WAWebSyncdValidateMutations.validateAndTypeSetMutations checks only for SET; Cobalt checks eagerly for all mutations because downstream handlers require non-null value
+            var actionValue = actionData.value()
                     .orElseThrow(() -> new WhatsAppWebAppStateSyncException.UnexpectedError("Missing value from action data", null));
-            var actionTimestamp = actionValue.timestamp() // ADAPTED: WAWebSyncdDecryptMutations does not extract timestamp; WAWebSyncdValidateMutations.validateAndTypeSetMutations extracts for SET only; Cobalt extracts eagerly because Untrusted/Trusted records require non-null timestamp
+            var actionTimestamp = actionValue.timestamp()
                     .orElseThrow(WhatsAppWebAppStateSyncException.MissingActionTimestamp::new);
 
-            // Verify index MAC — WAWebSyncdCrypto.generateIndexMac
             var expectedIndexMac = keys.generateIndexMac(actionIndex);
-            if (!MessageDigest.isEqual(indexMac, expectedIndexMac)) { // WACryptoUtils.arrayBuffersEqual
-                throw new WhatsAppWebAppStateSyncException.IndexMacMismatch(); // WAWebSyncdError.SyncdFatalError("decryption failure: indexMAC mismatch")
+            if (!MessageDigest.isEqual(indexMac, expectedIndexMac)) {
+                throw new WhatsAppWebAppStateSyncException.IndexMacMismatch();
             }
             return new Untrusted(
-                    new String(actionIndex, StandardCharsets.UTF_8), // WAArrayBufferUtils equivalent
-                    indexMac,  // WAWebSyncdDecryptMutations: indexMac: c
-                    valueMac,  // WAWebSyncdDecryptMutations: valueMac: m
-                    actionValue, // ADAPTED: stored as object, WA Web re-encodes to binary
+                    new String(actionIndex, StandardCharsets.UTF_8),
+                    indexMac,
+                    valueMac,
+                    actionValue,
                     operation,
                     actionTimestamp,
                     keyId,
@@ -180,13 +216,20 @@ public sealed interface DecryptedMutation {
     }
 
     /**
-     * Represents a validated mutation ready for application to the local store.
+     * A validated mutation that the sync handlers can apply to the local
+     * store without further crypto checks.
+     *
+     * @apiNote
+     * Produced either by promoting an {@link Untrusted} after MAC chaining
+     * succeeds, or by the outgoing path that originates mutations locally
+     * (no decryption involved). Carries no MAC metadata; the sync handlers
+     * see only the application-level fields.
      *
      * @param index         the index string identifying the mutation target
-     * @param value         the sync action value to apply
-     * @param operation     the sync operation type (SET or REMOVE)
+     * @param value         the action payload
+     * @param operation     the sync operation
      * @param timestamp     the action timestamp
-     * @param actionVersion the action version number
+     * @param actionVersion the action protobuf version
      */
     record Trusted(
             String index,

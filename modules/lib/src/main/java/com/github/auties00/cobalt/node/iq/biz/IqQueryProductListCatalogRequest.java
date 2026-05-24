@@ -16,36 +16,63 @@ import java.util.Optional;
 /**
  * The outbound {@code <iq xmlns="w:biz:catalog" type="get">} stanza that
  * fetches a list of products from a merchant catalog by id.
+ *
+ * @apiNote
+ * Use this request to populate the catalog grid or to refresh a product
+ * carousel from a list of opaque product ids surfaced by an earlier
+ * product-message or by the merchant directory; the response carries
+ * the typed product entries together with their images and videos at
+ * the requested resolution.
+ *
+ * @implNote
+ * This implementation models the legacy WAP-IQ path only; WA Web routes
+ * the same call through the Relay GraphQL endpoint when the catalog
+ * belongs to the calling user and the
+ * {@code graphQLForGetProductListEnabled} gating flag is on, falling
+ * back to the WAP-IQ payload on failure, but Cobalt keeps the WAP-IQ
+ * payload as the single transport.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductListCatalogJob")
 public final class IqQueryProductListCatalogRequest implements IqOperation.Request {
     /**
-     * The merchant catalog JID being queried.
+     * The merchant catalog JID stamped into the {@code jid} attribute
+     * of the {@code <product_list/>} child.
      */
     private final Jid catalogJid;
 
     /**
-     * The list of product ids to fetch — non-empty.
+     * The list of opaque product ids to fetch; each id becomes one
+     * {@code <product><id>...</id></product>} grandchild.
      */
     private final List<String> productIds;
 
     /**
-     * The requested image width (in pixels).
+     * The requested image width in pixels stamped into the
+     * {@code <width/>} grandchild.
      */
     private final int width;
 
     /**
-     * The requested image height (in pixels).
+     * The requested image height in pixels stamped into the
+     * {@code <height/>} grandchild.
      */
     private final int height;
 
     /**
-     * The optional direct-connection encrypted info blob.
+     * The optional opaque direct-connection encrypted-info blob,
+     * stamped into the {@code <direct_connection_encrypted_info/>}
+     * grandchild when present.
      */
     private final String directConnectionEncryptedInfo;
 
     /**
      * Constructs a request.
+     *
+     * @apiNote
+     * Pass the merchant catalog JID, the non-empty list of product ids
+     * and the requested image resolution; the
+     * direct-connection-encrypted-info blob is only required when the
+     * cart UI is operating under the direct-connection flow.
      *
      * @param catalogJid                    the catalog JID; never
      *                                      {@code null}
@@ -54,7 +81,7 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
      *                                      non-empty
      * @param width                         the requested image width
      * @param height                        the requested image height
-     * @param directConnectionEncryptedInfo the optional direct-connection
+     * @param directConnectionEncryptedInfo the optional encrypted-info
      *                                      blob; may be {@code null}
      * @throws NullPointerException     if {@code catalogJid} or
      *                                  {@code productIds} is
@@ -78,9 +105,14 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the catalog JID.
+     * Returns the merchant catalog JID.
      *
-     * @return the JID; never {@code null}
+     * @apiNote
+     * Use this getter to read back the catalog JID the stanza will
+     * name; the value is routed verbatim into the {@code jid}
+     * attribute of the resulting {@code <product_list/>} child.
+     *
+     * @return the catalog JID; never {@code null}
      */
     public Jid catalogJid() {
         return catalogJid;
@@ -88,6 +120,10 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
 
     /**
      * Returns the requested product ids.
+     *
+     * @apiNote
+     * Use this getter to read back the product ids the fan-out will
+     * fetch; the order is the caller-supplied wire order.
      *
      * @return an unmodifiable list; never {@code null}
      */
@@ -98,6 +134,10 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     /**
      * Returns the requested image width.
      *
+     * @apiNote
+     * Use this getter to read back the width the relay will use to
+     * size the rendered image URLs.
+     *
      * @return the width
      */
     public int width() {
@@ -107,6 +147,10 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     /**
      * Returns the requested image height.
      *
+     * @apiNote
+     * Use this getter to read back the height the relay will use to
+     * size the rendered image URLs.
+     *
      * @return the height
      */
     public int height() {
@@ -114,7 +158,12 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Returns the direct-connection encrypted info blob.
+     * Returns the direct-connection encrypted-info blob.
+     *
+     * @apiNote
+     * Use this getter to read back the optional encrypted-info blob
+     * the stanza will attach; an empty optional means the request is
+     * not operating under the direct-connection flow.
      *
      * @return an {@link Optional} carrying the blob
      */
@@ -123,9 +172,16 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by
+     * the {@code WAWebQueryProductListCatalogJob} export: one
+     * {@code <product><id/></product>} grandchild per id, plus the
+     * {@code <width/>}, {@code <height/>} and (optionally)
+     * {@code <direct_connection_encrypted_info/>} grandchildren of the
+     * {@code <product_list jid/>} child, wrapped in the
+     * {@code w:biz:catalog get} IQ frame routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryProductListCatalogJob",
@@ -169,6 +225,9 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
                 .content(productListNode);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -185,11 +244,17 @@ public final class IqQueryProductListCatalogRequest implements IqOperation.Reque
                 && Objects.equals(this.directConnectionEncryptedInfo, that.directConnectionEncryptedInfo);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(catalogJid, productIds, width, height, directConnectionEncryptedInfo);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqQueryProductListCatalogRequest[catalogJid=" + catalogJid

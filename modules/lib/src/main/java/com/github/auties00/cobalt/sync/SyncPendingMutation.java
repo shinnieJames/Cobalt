@@ -7,46 +7,71 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Represents a pending mutation that hasn't been synced to the server yet.
+ * One row of the local pending-mutation queue: a decrypted sync action that
+ * has been produced by Cobalt and is waiting to be uploaded on the next
+ * syncd round-trip.
  *
- * <p>Pending mutations are queued locally and sent to the server during the
- * next sync cycle. Each mutation has a unique {@code mutationId} that persists
- * through the sync cycle for correlating upload requests with server
- * acknowledgements.
+ * @apiNote Mirrors the shape carried by WhatsApp Web's
+ * {@code WAWebPendingMutationStore} IndexedDB rows
+ * ({@code WAWebSchemaPendingMutations.convertToPendingMutationFromRow})
+ * with one Cobalt-specific addition: an {@code attemptCount} field that
+ * lets the syncd retry loop count attempts per row without consulting the
+ * collection-level {@code WAWebSyncdCollectionsStateMachine}. End users
+ * never construct these directly; they are produced by the per-handler
+ * {@code <Name>MutationFactory} classes and persisted by
+ * {@link WebAppStateService}.
+ *
+ * @implNote This implementation has no IndexedDB-backed primary-key column;
+ * instead the {@code mutationId} field is a {@link UUID#randomUUID()}
+ * string created at construction time, which serves the same role for
+ * correlating an upload IQ stanza with the server-side acknowledgement
+ * that follows.
  */
 @WhatsAppWebModule(moduleName = "WAWebPendingMutationStore")
 public final class SyncPendingMutation {
     /**
-     * Stable identifier for tracking this mutation through the sync cycle.
+     * The opaque identifier used to correlate this row with its server
+     * acknowledgement.
      */
     private final String mutationId;
 
     /**
-     * The decrypted mutation queued for upload.
+     * The decrypted, trusted sync action waiting to be uploaded.
      */
     private final DecryptedMutation.Trusted mutation;
 
     /**
-     * Number of sync attempts already made for this mutation.
+     * The number of upload attempts already made for this row.
      */
     private final int attemptCount;
 
     /**
-     * Creates a new pending mutation with an auto-generated unique ID.
+     * Builds a fresh pending-mutation row with a generated identifier and
+     * the given attempt count.
      *
-     * @param mutation     the mutation to be synced
-     * @param attemptCount the number of sync attempts made for this mutation
+     * @apiNote Called from the {@code *MutationFactory} classes when a new
+     * outgoing mutation is enqueued for the next sync round-trip; the
+     * generated id is what {@link WebAppStateService} later uses to
+     * correlate the server acknowledgement.
+     *
+     * @param mutation     the trusted decrypted mutation to enqueue
+     * @param attemptCount the initial attempt count, typically {@code 0}
+     *                     for a freshly enqueued row
      */
     public SyncPendingMutation(DecryptedMutation.Trusted mutation, int attemptCount) {
         this(UUID.randomUUID().toString(), mutation, attemptCount);
     }
 
     /**
-     * Creates a new pending mutation with the specified ID.
+     * Builds a pending-mutation row with an explicit identifier.
      *
-     * @param mutationId   the unique identifier for tracking through the sync cycle
-     * @param mutation     the mutation to be synced
-     * @param attemptCount the number of sync attempts made for this mutation
+     * @apiNote Used by {@link #incrementAttempt()} to preserve the original
+     * identifier across retry attempts and by tests that need a
+     * deterministic id.
+     *
+     * @param mutationId   the identifier to bind to the new row
+     * @param mutation     the trusted decrypted mutation to enqueue
+     * @param attemptCount the initial attempt count for the new row
      */
     public SyncPendingMutation(String mutationId, DecryptedMutation.Trusted mutation, int attemptCount) {
         this.mutationId = mutationId;
@@ -55,49 +80,72 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * Creates a copy of this mutation with incremented attempt count.
+     * Returns a new row that carries the same identifier and mutation as
+     * this one but with {@code attemptCount + 1}.
      *
-     * @return a new pending mutation with attempt count + 1
+     * @apiNote Called by the syncd retry path after a failed upload, before
+     * re-enqueuing the row for the next attempt. The original instance is
+     * left untouched, matching the immutable-record style of the rest of
+     * the sync package.
+     *
+     * @return a new {@link SyncPendingMutation} instance with the bumped
+     *         {@link #attemptCount()}
      */
     public SyncPendingMutation incrementAttempt() {
         return new SyncPendingMutation(mutationId, mutation, attemptCount + 1);
     }
 
     /**
-     * Returns the unique identifier for this pending mutation.
+     * Returns the opaque identifier bound to this row at construction
+     * time.
      *
-     * <p>Per WhatsApp Web: mutation IDs are used to correlate uploaded mutations
-     * with server acknowledgements during the sync cycle.
+     * @apiNote The id is the only stable handle through which the upload
+     * IQ can be correlated with the server acknowledgement that closes
+     * the round-trip; downstream consumers like
+     * {@code WAWebSyncdRequestBuilderBuild._generateMutationsToUpload}
+     * key their per-mutation bookkeeping on this value.
      *
-     * @return the mutation ID
+     * @return the identifier supplied at construction
      */
     public String mutationId() {
         return mutationId;
     }
 
     /**
-     * Returns the mutation to be synced.
+     * Returns the trusted decrypted mutation wrapped by this row.
      *
-     * @return the trusted decrypted mutation
+     * @apiNote Used by the upload path to read the underlying
+     * {@link DecryptedMutation.Trusted} payload that will be re-encrypted
+     * and serialised into the syncd patch IQ.
+     *
+     * @return the wrapped {@link DecryptedMutation.Trusted}
      */
     public DecryptedMutation.Trusted mutation() {
         return mutation;
     }
 
     /**
-     * Returns the number of sync attempts made for this mutation.
+     * Returns the number of upload attempts that have already been made
+     * for this row.
      *
-     * @return the attempt count
+     * @apiNote Read by the syncd retry loop to gate per-row backoff
+     * decisions independently of the collection-level state machine.
+     *
+     * @return the current attempt count, monotonically increased by
+     *         {@link #incrementAttempt()}
      */
     public int attemptCount() {
         return attemptCount;
     }
 
     /**
-     * Compares this pending mutation to the given object for equality on every field.
+     * {@inheritDoc}
      *
-     * @param o the object to compare against
-     * @return {@code true} when both instances carry the same id, mutation and attempt count
+     * @implNote This implementation compares every field
+     * ({@link #mutationId()}, {@link #mutation()},
+     * {@link #attemptCount()}) so that two rows with the same payload but
+     * different identifiers, or the same identifier but different attempt
+     * counts, are considered distinct.
      */
     @Override
     public boolean equals(Object o) {
@@ -108,9 +156,10 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * Computes a hash consistent with {@link #equals(Object)}.
+     * {@inheritDoc}
      *
-     * @return the combined hash of the id, mutation and attempt count
+     * @implNote This implementation hashes the same triple of fields as
+     * {@link #equals(Object)} to keep the contract consistent.
      */
     @Override
     public int hashCode() {
@@ -118,9 +167,11 @@ public final class SyncPendingMutation {
     }
 
     /**
-     * Returns a debug-only representation listing every field.
+     * {@inheritDoc}
      *
-     * @return a single-line bracketed string for diagnostic logging
+     * @implNote This implementation emits a single-line, comma-separated
+     * record-style rendering with every field labeled, intended for log
+     * lines rather than user-facing display.
      */
     @Override
     public String toString() {

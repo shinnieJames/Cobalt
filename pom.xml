@@ -14,7 +14,6 @@
         <module>modules/source-meta</module>
         <module>modules/model</module>
         <module>modules/lib</module>
-        <module>modules/call-toolkit</module>
     </modules>
 
     <developers>
@@ -85,9 +84,97 @@
         <jmh.version>1.37</jmh.version>
         <selenium.version>4.27.0</selenium.version>
         <bouncycastle.version>1.80</bouncycastle.version>
+        <pdfbox.version>3.0.5</pdfbox.version>
     </properties>
 
     <profiles>
+        <!--
+            Javadoc reference linter. Opt-in, never bound to a normal build.
+            Runs the standard doclet with the doclint "reference" group only,
+            so it fails the build when a {@link}, {@linkplain}, {@value},
+            @see, @param, @throws, or @exception in any doc comment points at
+            a program element that does not resolve (wrong class, renamed
+            method, bad signature, stale parameter name). It does NOT enforce
+            presence of comments (the "missing" group, deliberately left off).
+
+            Uses source level 25 plus enable-preview (NOT the release flag,
+            which is incompatible with enable-preview) and pulls in the
+            incubator vector module so preview/incubator sources parse.
+            show=private so references inside private-member javadoc are
+            checked too. See the additionalOptions below for the exact flags.
+
+            The target module MUST compile for the result to be accurate.
+            javadoc resolves intra-module references through the live source
+            roots, which only include the generated Builder sources after the
+            annotation processor has run during compile. Running
+            javadoc-no-fork without a successful compile reports false
+            "reference not found" for classes that genuinely exist, so always
+            run compile in the same invocation and fix any compile break first.
+
+            Usage:
+                whole project
+                    mvn -Pjavadoc-check -fae compile javadoc:javadoc-no-fork -DskipTests
+                    (-fae reports every module; a module that depends on a
+                     failed module is skipped, so fix upstream modules first.)
+
+                one module in isolation (not blocked by other modules' refs)
+                    mvn -DskipTests -pl modules/lib -am install
+                    mvn -Pjavadoc-check -pl modules/lib compile javadoc:javadoc-no-fork -DskipTests
+
+                narrow to a package   add -Dsubpackages=com.github.auties00.cobalt.node
+                exclude packages      add -DexcludePackageNames=com.github.auties00.cobalt.call.*
+        -->
+        <profile>
+            <id>javadoc-check</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <configuration>
+                            <source>${java.version}</source>
+                            <show>private</show>
+                            <doclint>reference</doclint>
+                            <failOnError>true</failOnError>
+                            <failOnWarnings>false</failOnWarnings>
+                            <quiet>true</quiet>
+                            <detectLinks>false</detectLinks>
+                            <detectJavaApiLink>false</detectJavaApiLink>
+                            <detectOfflineLinks>false</detectOfflineLinks>
+                            <additionalOptions>
+                                <additionalOption>--enable-preview</additionalOption>
+                                <additionalOption>--add-modules jdk.incubator.vector</additionalOption>
+                            </additionalOptions>
+                            <!--
+                                Register the three JDK-standard custom tags so the
+                                doclet does not emit "unknown tag" warnings; the
+                                reference group does not need them, but it keeps the
+                                log free of noise unrelated to broken references.
+                            -->
+                            <tags>
+                                <tag>
+                                    <name>apiNote</name>
+                                    <placement>a</placement>
+                                    <head>API Note:</head>
+                                </tag>
+                                <tag>
+                                    <name>implSpec</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Requirements:</head>
+                                </tag>
+                                <tag>
+                                    <name>implNote</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Note:</head>
+                                </tag>
+                            </tags>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <profile>
             <id>sign</id>
             <activation>

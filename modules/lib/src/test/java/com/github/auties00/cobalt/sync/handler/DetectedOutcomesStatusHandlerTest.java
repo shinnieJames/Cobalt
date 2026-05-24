@@ -26,8 +26,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DetectedOutcomesStatusHandler} â€” Cobalt's adapter for
+ * Exercises the {@link DetectedOutcomesStatusHandler} adapter for
  * {@code WAWebDetectedOutcomesStatusSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the
+ * {@code detectedOutcomeStatus} app-state sync action across
+ * metadata, the SET happy path, the malformed-value branch, the
+ * REMOVE rejection and the inherited timestamp-based conflict
+ * resolution.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so each test starts from a clean single-device state and the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#detectedOutcomesEnabled()}
+ * read-back can be asserted directly.
  */
 @DisplayName("DetectedOutcomesStatusHandler")
 class DetectedOutcomesStatusHandlerTest {
@@ -120,7 +134,7 @@ class DetectedOutcomesStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index â€” n/a (singleton index)")
+    @DisplayName("applyMutation: malformed index - n/a (singleton index)")
     class MalformedIndexNa {
         @Test
         @DisplayName("the handler does not inspect indexParts[1]")
@@ -146,7 +160,7 @@ class DetectedOutcomesStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -161,7 +175,7 @@ class DetectedOutcomesStatusHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” n/a, default implementation")
+    @DisplayName("applyMutationBatch - n/a, default implementation")
     class BatchNa {
         @Test
         @DisplayName("default applyMutationBatch delegates per mutation")

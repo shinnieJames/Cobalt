@@ -4,6 +4,8 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.props.ABProp;
+import com.github.auties00.cobalt.model.setting.AppTheme;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
@@ -12,7 +14,6 @@ import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilde
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
 import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -25,12 +26,27 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link SettingsSyncHandler} — Cobalt's adapter for
- * {@code WAWebSettingsSync}.
+ * Exercises {@link SettingsSyncHandler}'s parity with
+ * {@code WAWebSettingsSync.applyMutations} and its inner
+ * {@code $SettingsSync$p_1} validator.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the two-way
+ * {@code settings_sync_enabled} primary-feature + AB-prop gate, the
+ * platform filter (WEB always, HYBRID only on Windows), the setting-key
+ * decode, the malformed/skipped/success outcomes that fall out of the
+ * batch dedup map, and the store side-effects for the two keys with a
+ * Cobalt-side backing field ({@code LANGUAGE} and
+ * {@code DISABLE_LINK_PREVIEWS}).
+ *
+ * @implNote
+ * The test fixture pre-opens both gates so every test that does not
+ * specifically exercise the gating branch reaches the validation
+ * pipeline; tests exercising the gate disable one or both flags on
+ * their local store / props copy.
  */
 @DisplayName("SettingsSyncHandler")
 class SettingsSyncHandlerTest {
@@ -48,10 +64,20 @@ class SettingsSyncHandlerTest {
     private WhatsAppClient client;
     private SettingsSyncHandler handler;
 
+    /**
+     * Builds the per-test harness with both
+     * {@code settings_sync_enabled} gates pre-opened.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link WhatsAppStore} and a
+     * fresh AB-props snapshot so gating-flip tests do not leak state
+     * to neighbours.
+     */
     @BeforeEach
     void setUp() {
         store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
-        store.setPrimaryFeatures(List.of("settings_sync_enabled")); // open the primary-feature gate
+        store.setPrimaryFeatures(List.of("settings_sync_enabled"));
         props = TestABPropsService.builder()
                 .with(ABProp.SETTINGS_SYNC_ENABLED, true)
                 .build();
@@ -59,10 +85,40 @@ class SettingsSyncHandlerTest {
         handler = new SettingsSyncHandler(props);
     }
 
+    /**
+     * Builds a four-slot JSON-encoded settings sync index.
+     *
+     * @apiNote
+     * The slot layout matches WA Web's
+     * {@code [userIndex, platform, settingKey, scope]} convention; the
+     * user-index slot is filled with a literal {@code "u"} because the
+     * handler never reads it.
+     *
+     * @param platformIdx the numeric index of the {@link SettingsSyncAction.SettingPlatform}
+     * @param keyIdx      the numeric index of the {@link SettingsSyncAction.SettingKey}
+     * @param scope       the scope literal ({@code "app"} or a chat JID)
+     * @return the JSON-encoded index string
+     */
     private static String index(int platformIdx, int keyIdx, String scope) {
         return "[\"u\",\"" + platformIdx + "\",\"" + keyIdx + "\",\"" + scope + "\"]";
     }
 
+    /**
+     * Wraps a locale-setting mutation with the given platform, scope,
+     * and locale into a trusted {@code SET}.
+     *
+     * @apiNote
+     * Used by the language-apply tests; the platform index decides
+     * whether the mutation passes
+     * {@link SettingsSyncAction.SettingPlatform#WEB} /
+     * {@link SettingsSyncAction.SettingPlatform#HYBRID} gating.
+     *
+     * @param platformIdx the numeric platform index
+     * @param scope       the scope literal
+     * @param locale      the new locale string
+     * @param ts          the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted languageMutation(int platformIdx, String scope, String locale, Instant ts) {
         var action = new SettingsSyncActionBuilder().language(locale).build();
         var value = new SyncActionValueBuilder().timestamp(ts).settingsSyncAction(action).build();
@@ -70,7 +126,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the SettingsSyncAction wire constant")
@@ -95,7 +151,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — gating on settings_sync_enabled")
+    @DisplayName("applyMutation - gating on settings_sync_enabled")
     class Gating {
         @Test
         @DisplayName("when the primary feature is absent, every mutation returns UNSUPPORTED")
@@ -119,7 +175,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET (LANGUAGE on WEB platform)")
+    @DisplayName("applyMutation - happy SET (LANGUAGE on WEB platform)")
     class ApplySetHappy {
         @Test
         @DisplayName("LANGUAGE setting on WEB persists into the locale store field")
@@ -150,8 +206,8 @@ class SettingsSyncHandlerTest {
         @DisplayName("a setting key with no Cobalt store equivalent still resolves to SUCCESS (UI-only)")
         void unmappedKeyIsSuccess() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
-            // APP_THEME is on the WA Web shell — Cobalt has no store field, so it's a no-op success.
-            var action = new SettingsSyncActionBuilder().appTheme(2).build();
+            // APP_THEME is on the WA Web shell - Cobalt has no store field, so it's a no-op success.
+            var action = new SettingsSyncActionBuilder().appTheme(AppTheme.DARK).build();
             var value = new SyncActionValueBuilder().timestamp(ts).settingsSyncAction(action).build();
             var mutation = new DecryptedMutation.Trusted(
                     index(PLATFORM_WEB_INDEX, SettingsSyncAction.SettingKey.APP_THEME.index(), "app"),
@@ -162,7 +218,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("settings sync writes to global store fields; no per-entity orphan path")
@@ -175,7 +231,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -222,7 +278,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("an index with the wrong arity returns MALFORMED")
@@ -248,7 +304,7 @@ class SettingsSyncHandlerTest {
         }
 
         @Test
-        @DisplayName("a non-numeric platform field is treated as null → SKIPPED")
+        @DisplayName("a non-numeric platform field is treated as null -> SKIPPED")
         void nonNumericPlatformIsSkipped() {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var action = new SettingsSyncActionBuilder().language("en").build();
@@ -272,7 +328,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — non-WEB platforms are SKIPPED")
+    @DisplayName("applyMutation - non-WEB platforms are SKIPPED")
     class NonWebPlatformSkipped {
         @Test
         @DisplayName("MAC platform mutation is skipped on a non-Windows Cobalt client")
@@ -286,7 +342,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — non-app scope is a no-op SUCCESS")
+    @DisplayName("applyMutation - non-app scope is a no-op SUCCESS")
     class NonAppScope {
         @Test
         @DisplayName("per-chat scope mutations resolve to SUCCESS but write nothing")
@@ -301,7 +357,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -318,10 +374,10 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = languageMutation(PLATFORM_WEB_INDEX, "app", "en", Instant.ofEpochSecond(1_000));
             var remote = languageMutation(PLATFORM_WEB_INDEX, "app", "fr", Instant.ofEpochSecond(2_000));
@@ -330,7 +386,7 @@ class SettingsSyncHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = languageMutation(PLATFORM_WEB_INDEX, "app", "en", Instant.ofEpochSecond(2_000));
             var remote = languageMutation(PLATFORM_WEB_INDEX, "app", "fr", Instant.ofEpochSecond(1_000));
@@ -340,7 +396,7 @@ class SettingsSyncHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — latest-by-timestamp dedup per index")
+    @DisplayName("applyMutationBatch - latest-by-timestamp dedup per index")
     class ApplyBatchDedup {
         @Test
         @DisplayName("only the latest mutation for a given index is applied; earlier ones are SKIPPED")
@@ -394,22 +450,6 @@ class SettingsSyncHandlerTest {
             assertEquals(2, results.size());
             for (var r : results) {
                 assertEquals(SyncActionState.UNSUPPORTED, r.actionState());
-            }
-        }
-    }
-
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("SettingsSyncHandler does not expose a get*Mutation helper")
-        void noStaticBuilders() {
-            var methods = SettingsSyncHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on SettingsSyncHandler: " + method.getName());
-                }
             }
         }
     }

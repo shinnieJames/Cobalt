@@ -14,7 +14,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The sealed family of inbound replies to a {@link SmaxGetOptOutListRequest}.
+ *
+ * @apiNote
+ * Drives the marketing-messages opt-out list refresh; matches the four response shapes that WA Web's
+ * {@code WASmaxBlocklistsGetOptOutListRPC.sendGetOptOutListRPC} dispatches over: cache-match short-circuit,
+ * full-list mismatch, malformed request, and transient server error.
+ *
+ * @implNote
+ * This implementation preserves WA Web's parser priority order in {@link #of(Node, Node)}: mismatch first so a
+ * full-body reply cannot be mistaken for a cache-match short-circuit.
  */
 public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         permits SmaxGetOptOutListResponse.SuccessWithMatch,
@@ -23,12 +32,14 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         SmaxGetOptOutListResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGetOptOutListResponse} variant in priority order.
+     * Dispatches the inbound stanza onto the matching variant.
      *
-     * @param node    the inbound stanza; never {@code null}
-     * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty on no-match
+     * @apiNote
+     * Called by the SMAX dispatcher in response to a previously-issued {@link SmaxGetOptOutListRequest}.
+     *
+     * @param node    the inbound {@code <iq>} stanza; never {@code null}
+     * @param request the original {@link SmaxGetOptOutListRequest} stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBlocklistsGetOptOutListRPC",
@@ -52,61 +63,59 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * Descriptor for one entry in the relay-returned opt-out list.
+     * One {@code <item>} entry in a mismatch reply's opt-out list.
      *
-     * <p>Mirrors the {@code WAResultOrError} payload of
-     * {@code WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin},
-     * which exposes optional {@code action} / {@code category} /
-     * {@code expiry_at} attributes plus the
-     * {@link BizOptOutId} disjunction.
+     * @apiNote
+     * Surfaced through {@link SuccessWithMismatch#listItem()}; consumed by
+     * {@code WAWebGetOptOutList.getOptOutList} to either render a direct {@link BizOptOutId.UserJid} pill or
+     * expand a {@link BizOptOutId.BrandId} into the full business-numbers set via
+     * {@code WAWebGetNumbersForBrandIdsJob}.
      *
-     * @param action       the optional {@code action} attribute (e.g.
-     *                     {@code "block"}); may be {@code null}
-     * @param category     the optional {@code category} attribute; may
-     *                     be {@code null}
-     * @param expiryAt     the optional {@code expiry_at} attribute,
-     *                     interpreted as a non-negative integer; may
-     *                     be {@code null}
-     * @param bizOptOutIds the {@link BizOptOutId} disjunction; never
-     *                     {@code null}
+     * @param action       the optional action marker (e.g. {@code "block"}); may be {@code null}
+     * @param category     the optional marketing category; may be {@code null}
+     * @param expiryAt     the optional non-negative expiry timestamp in seconds; may be {@code null}
+     * @param bizOptOutIds the brand-id-versus-jid discriminator; never {@code null}
      */
     record Item(String action, String category, Long expiryAt, BizOptOutId bizOptOutIds) {
         /**
-         * Compact constructor that null-checks the disjunction.
+         * Validates the {@link Item} payload.
+         *
+         * @apiNote
+         * The compact constructor enforces the discriminator's non-null contract; the other fields are
+         * optional and arrive pre-validated by {@link SmaxGetOptOutListResponse#parseItem(Node)}.
          *
          * @param action       the optional action; may be {@code null}
          * @param category     the optional category; may be {@code null}
          * @param expiryAt     the optional expiry; may be {@code null}
-         * @param bizOptOutIds the disjunction; never {@code null}
-         * @throws NullPointerException if {@code bizOptOutIds} is
-         *                              {@code null}
+         * @param bizOptOutIds the discriminator; never {@code null}
+         * @throws NullPointerException if {@code bizOptOutIds} is {@code null}
          */
         public Item {
             Objects.requireNonNull(bizOptOutIds, "bizOptOutIds cannot be null");
         }
 
         /**
-         * Returns the action as an {@link Optional}.
+         * Returns the action marker when present.
          *
-         * @return the action, or empty when omitted
+         * @return an {@link Optional} carrying the action, or empty when the relay omitted it
          */
         public Optional<String> actionAsOptional() {
             return Optional.ofNullable(action);
         }
 
         /**
-         * Returns the category as an {@link Optional}.
+         * Returns the marketing category when present.
          *
-         * @return the category, or empty when omitted
+         * @return an {@link Optional} carrying the category, or empty when the relay omitted it
          */
         public Optional<String> categoryAsOptional() {
             return Optional.ofNullable(category);
         }
 
         /**
-         * Returns the expiry-at timestamp as an {@link Optional}.
+         * Returns the expiry timestamp when present.
          *
-         * @return the timestamp, or empty when omitted
+         * @return an {@link Optional} carrying the timestamp in seconds, or empty when the relay omitted it
          */
         public Optional<Long> expiryAtAsOptional() {
             return Optional.ofNullable(expiryAt);
@@ -114,14 +123,20 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * Parses a single {@code <item>} entry, mirroring
-     * {@code WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin}.
+     * Parses one {@code <item>} entry from an opt-out reply.
+     *
+     * @apiNote
+     * Shared by {@link SuccessWithMismatch#of(Node, Node)} and {@link SmaxUpdateOptOutListResponse} for the
+     * single-item update reply.
+     *
+     * @implNote
+     * This implementation rejects a present-but-negative {@code expiry_at} so the priority chain can route
+     * malformed entries to the error variants instead of accepting a nonsensical timestamp; the brand-id
+     * disjunction is delegated to {@link BizOptOutId#parse(Node)}.
      *
      * @param itemNode the {@code <item>} node; never {@code null}
-     * @return an {@link Optional} carrying the populated
-     *         {@link Item}, or empty when the
-     *         {@code biz_opt_out_ids} disjunction does not match or
-     *         {@code expiry_at} is present but negative
+     * @return an {@link Optional} carrying the populated {@link Item}, or empty when the discriminator does
+     *         not match or {@code expiry_at} is negative
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsBizOptOutResponseMixin",
             exports = "parseBizOptOutResponseMixin", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -129,14 +144,8 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
             exports = "parseGetOptOutListResponseSuccessWithMismatchListItem",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static Optional<Item> parseItem(Node itemNode) {
-        // WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin:
-        // optional(attrString, item, "action")
         var action = itemNode.getAttributeAsString("action").orElse(null);
-        // WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin:
-        // optional(attrString, item, "category")
         var category = itemNode.getAttributeAsString("category").orElse(null);
-        // WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin:
-        // optional(attrIntRange, item, "expiry_at", 0, void 0)
         Long expiryAt = null;
         if (itemNode.hasAttribute("expiry_at")) {
             var parsed = itemNode.getAttributeAsLong("expiry_at");
@@ -145,8 +154,6 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
             }
             expiryAt = parsed.getAsLong();
         }
-        // WASmaxInBlocklistsBizOptOutResponseMixin.parseBizOptOutResponseMixin:
-        // WASmaxInBlocklistsBizOptOutIds.parseBizOptOutIds(item)
         var ids = BizOptOutId.parse(itemNode).orElse(null);
         if (ids == null) {
             return Optional.empty();
@@ -155,23 +162,31 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code SuccessWithMatch} reply variant. The client's
-     * cache is up to date.
+     * The cache-match short-circuit reply.
+     *
+     * @apiNote
+     * {@code WAWebGetOptOutList.getOptOutList} treats this variant as a no-op: the local cache is up to date
+     * and the chat-list pills are kept as-is.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsGetOptOutListResponseSuccessWithMatch")
     final class SuccessWithMatch implements SmaxGetOptOutListResponse {
         /**
-         * Whether the inbound reply carried a {@code category}
-         * attribute. Mirrors {@code hasCategory: s.value != null} from
-         * {@code WASmaxInBlocklistsGetOptOutListResponseSuccessWithMatch.parseGetOptOutListResponseSuccessWithMatch}.
+         * Whether the relay echoed the request's category attribute.
+         *
+         * @apiNote
+         * Distinguishes a relay-echoed category match (the relay confirmed the request was scoped) from a
+         * relay-omitted echo (the relay treated the request as unscoped). The WA Web caller does not branch on
+         * this, but it is preserved for symmetry with WA Web's {@code hasCategory} payload field.
          */
         private final boolean hasCategory;
 
         /**
-         * Constructs a successful match reply.
+         * Constructs a cache-match reply.
          *
-         * @param hasCategory whether the reply echoed a category
-         *                    attribute
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only.
+         *
+         * @param hasCategory whether the reply echoed a category attribute
          */
         public SuccessWithMatch(boolean hasCategory) {
             this.hasCategory = hasCategory;
@@ -180,36 +195,35 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         /**
          * Returns whether the reply echoed a category attribute.
          *
-         * @return {@code true} when the reply carried a category
+         * @return {@code true} when the relay echoed the request's category
          */
         public boolean hasCategory() {
             return hasCategory;
         }
 
         /**
-         * Tries to parse a {@link SuccessWithMatch} variant.
+         * Parses a cache-match variant.
+         *
+         * @apiNote
+         * Returns empty when the envelope is wrong or when the request specified a category and the reply
+         * echoes a different one (a mismatch on the category narrows the reply out of this variant so the
+         * priority chain can fall through).
+         *
+         * @implNote
+         * This implementation mirrors WA Web's {@code optionalLiteral} contract on the category attribute:
+         * the reply is allowed to omit the attribute entirely, but a present attribute must echo the request.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the envelope shape does not match
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsGetOptOutListResponseSuccessWithMatch",
                 exports = "parseGetOptOutListResponseSuccessWithMatch",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<SuccessWithMatch> of(Node node, Node request) {
-            // WASmaxInBlocklistsGetOptOutListResponseSuccessWithMatch.parseGetOptOutListResponseSuccessWithMatch:
-            // assertTag(e,"iq") + attrStringFromReference(t,["to"]) + literal(attrString,e,"from",...)
-            // + literal(attrString,e,"type","result") + literal(attrString,e,"id",...).
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // WASmaxInBlocklistsGetOptOutListResponseSuccessWithMatch.parseGetOptOutListResponseSuccessWithMatch:
-            // l = optionalAttrStringFromReference(t,["category"]); s = optionalLiteral(attrString,e,"category",l.value).
-            // optionalLiteral semantics: when expected (request) value is null -> trivially succeed (no
-            // reply check). When expected value is non-null -> reply must echo it OR be absent. When reply
-            // is present but mismatches -> variant rejected. The reported hasCategory is s.value != null,
-            // i.e. whether the REPLY actually carried the category attribute.
             var requestCategory = request.getAttributeAsString("category").orElse(null);
             var replyCategory = node.getAttributeAsString("category").orElse(null);
             if (requestCategory != null && replyCategory != null && !replyCategory.equals(requestCategory)) {
@@ -242,27 +256,37 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code SuccessWithMismatch} reply variant. The relay
-     * returned the full opt-out list because the client's cached
-     * digest does not match.
+     * The full-list mismatch reply.
+     *
+     * @apiNote
+     * {@code WAWebGetOptOutList.getOptOutList} consumes this variant to refresh the marketing-messages
+     * opt-out pills: each {@link Item#bizOptOutIds()} either resolves directly to a {@code wid} via
+     * {@code WAWebJidToWid.userJidToUserWid} (for the {@link BizOptOutId.UserJid} arm) or is batched into a
+     * brand-id-to-business-numbers lookup via {@code WAWebGetNumbersForBrandIdsJob} (for the
+     * {@link BizOptOutId.BrandId} arm).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsGetOptOutListResponseSuccessWithMismatch")
     final class SuccessWithMismatch implements SmaxGetOptOutListResponse {
         /**
-         * The optional new server-side digest.
+         * The new server-side digest when present.
          */
         private final String listDhash;
 
         /**
-         * The parsed list of opt-out entries.
+         * The parsed opt-out list entries.
          */
         private final List<Item> listItem;
 
         /**
          * Constructs a mismatch reply.
          *
-         * @param listDhash the new digest; may be {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only; the {@code listItem} list is defensively copied for
+         * immutability.
+         *
+         * @param listDhash the new server digest; may be {@code null}
          * @param listItem  the parsed list; never {@code null}
+         * @throws NullPointerException if {@code listItem} is {@code null}
          */
         public SuccessWithMismatch(String listDhash, List<Item> listItem) {
             this.listDhash = listDhash;
@@ -270,10 +294,12 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the optional new digest.
+         * Returns the new server digest when present.
          *
-         * @return an {@link Optional} carrying the digest, or empty
-         *         when omitted
+         * @apiNote
+         * Persisted alongside the resulting list so the next request can use the cache-match short-circuit.
+         *
+         * @return an {@link Optional} carrying the digest, or empty when the relay omitted it
          */
         public Optional<String> listDhash() {
             return Optional.ofNullable(listDhash);
@@ -289,12 +315,16 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse a {@link SuccessWithMismatch} variant.
+         * Parses a mismatch variant.
+         *
+         * @apiNote
+         * Returns empty when the envelope is wrong, when the {@code <list/>} child is absent, or when any
+         * {@code <item>} fails the per-item parser (because the brand-id-versus-jid disjunction did not match
+         * or {@code expiry_at} was negative).
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the envelope shape does not match
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsGetOptOutListResponseSuccessWithMismatch",
                 exports = "parseGetOptOutListResponseSuccessWithMismatch",
@@ -345,8 +375,11 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request as malformed.
+     * The malformed-request reply variant.
+     *
+     * @apiNote
+     * {@code WAWebGetOptOutList.getOptOutList} folds this into the {@code (errorCode, errorText)} pair returned
+     * to the caller.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsGetOptOutListResponseInvalidRequest")
     final class ClientError implements SmaxGetOptOutListResponse {
@@ -361,11 +394,14 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply.
          *
-         * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only after the shared
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} envelope check succeeds.
+         *
+         * @param errorCode the numeric error code echoed by the relay
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -382,22 +418,23 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the human-readable error text when present.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Parses a malformed-request variant.
+         *
+         * @apiNote
+         * Delegates the envelope check to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsGetOptOutListResponseInvalidRequest",
                 exports = "parseGetOptOutListResponseInvalidRequest",
@@ -435,8 +472,11 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant. Transient internal
-     * failure.
+     * The transient server-error reply variant.
+     *
+     * @apiNote
+     * {@code WAWebGetOptOutList.getOptOutList} folds this into the {@code (errorCode, errorText)} pair; the
+     * caller decides the retry policy.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBlocklistsGetOptOutListResponseInternalServerError")
     final class ServerError implements SmaxGetOptOutListResponse {
@@ -451,11 +491,14 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error reply.
          *
-         * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only after the shared
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} envelope check succeeds.
+         *
+         * @param errorCode the numeric error code echoed by the relay
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -472,22 +515,23 @@ public sealed interface SmaxGetOptOutListResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the human-readable error text when present.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Parses a server-error variant.
+         *
+         * @apiNote
+         * Delegates the envelope check to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBlocklistsGetOptOutListResponseInternalServerError",
                 exports = "parseGetOptOutListResponseInternalServerError",

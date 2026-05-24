@@ -12,13 +12,16 @@ import java.nio.file.attribute.FileTime;
 import java.util.Optional;
 
 /**
- * Filesystem helpers that resolve the on-disk layout of Cobalt's
- * persistent stores.
+ * Static filesystem helpers that resolve the on-disk layout of
+ * Cobalt's persistent stores.
  *
- * <p>Each {@link WhatsAppClientType} has its own home directory under a
- * caller-supplied base path, and each session is stored inside a
- * UUID-named subdirectory. These helpers handle directory creation,
- * lookup of the most recently modified session, and recursive deletion.
+ * @apiNote
+ * Use these helpers when reading or writing the Cobalt session tree:
+ * each {@link WhatsAppClientType} owns its own home directory under a
+ * caller-supplied base path, and every session lives in a
+ * UUID-named subdirectory below that. The helpers handle directory
+ * creation on the read paths, identify the most recently modified
+ * session for auto-resume, and recursively delete a session subtree.
  */
 public final class StorePathUtils {
     /**
@@ -31,13 +34,21 @@ public final class StorePathUtils {
     }
 
     /**
-     * Resolves the path of a specific file inside a session directory,
-     * creating parent directories if necessary.
+     * Resolves the path of {@code fileName} inside the session
+     * directory identified by {@code uuid}, creating the session
+     * directory if necessary.
      *
-     * @param clientType    the client type
+     * @apiNote
+     * Call this to persist or read a per-session artifact
+     * (Signal-protocol bundle, sync cursor, AB-props snapshot).
+     * The returned path is ready for use with {@link Files#newOutputStream(Path, java.nio.file.OpenOption...)}
+     * or {@link Files#readAllBytes(Path)}.
+     *
+     * @param clientType    the client type that owns the home
+     *                      directory layer of the path
      * @param baseDirectory the base storage directory
      * @param uuid          the session identifier
-     * @param fileName      the file name within the session
+     * @param fileName      the file name inside the session
      * @return the resolved path
      * @throws IOException if the parent directories cannot be created
      */
@@ -48,12 +59,29 @@ public final class StorePathUtils {
 
     /**
      * Returns the session directory with the most recent
-     * {@code lastModifiedTime} under the home directory for the given
-     * client type, or an empty optional if none exist.
+     * {@code lastModifiedTime} under the home directory for
+     * {@code clientType}, or an empty {@link Optional} when the home
+     * directory is empty.
      *
-     * @param clientType    the client type
+     * @apiNote
+     * Call this to implement auto-resume of the last session opened
+     * on this host: feed the returned path's filename back into
+     * {@link #getSessionDirectory(WhatsAppClientType, Path, String)}
+     * to attach to the same store.
+     *
+     * @implNote
+     * This implementation walks the home directory one level deep
+     * via {@link Files#walk(Path, int, java.nio.file.FileVisitOption...)}
+     * with {@code maxDepth=0} plus {@code skip(1)} to omit the root
+     * itself. Entries whose {@code lastModifiedTime} cannot be
+     * probed lose ties to entries whose timestamp is readable; ties
+     * between two unreadable entries resolve to the first scanned.
+     *
+     * @param clientType    the client type that owns the home
+     *                      directory layer of the path
      * @param baseDirectory the base storage directory
-     * @return the most recently modified session directory, if any
+     * @return the most recently modified session directory, or
+     *         empty when none exist
      * @throws IOException if the home directory cannot be walked
      */
     @SuppressWarnings({"ConstantValue"}) // I prefer the readability like this
@@ -79,11 +107,17 @@ public final class StorePathUtils {
     }
 
     /**
-     * Returns the last modified time of the given path, swallowing
-     * {@link IOException} as an empty optional.
+     * Returns the last modified time of {@code first}, swallowing
+     * {@link IOException} as an empty {@link Optional}.
+     *
+     * @apiNote
+     * Used by {@link #getLatestSessionDirectory(WhatsAppClientType, Path)}
+     * to keep the directory walk total even when individual
+     * entries cannot be stat'ed (transient races, missing
+     * permissions).
      *
      * @param first the path to probe
-     * @return the last modified time, if available
+     * @return the last modified time, or empty when stat fails
      */
     private static Optional<FileTime> getLastModifiedTime(Path first) {
         try {
@@ -95,10 +129,18 @@ public final class StorePathUtils {
     }
 
     /**
-     * Resolves the directory for a specific session under the home
-     * directory for the given client type, creating it if necessary.
+     * Resolves the session directory identified by {@code path}
+     * under the home directory for {@code clientType}, creating it
+     * if necessary.
      *
-     * @param clientType    the client type
+     * @apiNote
+     * Use this directly when the session identifier is already
+     * known (typical for resuming or for tests). For
+     * per-file resolution prefer
+     * {@link #getSessionFile(WhatsAppClientType, Path, String, String)}.
+     *
+     * @param clientType    the client type that owns the home
+     *                      directory layer of the path
      * @param baseDirectory the base storage directory
      * @param path          the session identifier
      * @return the resolved session directory, guaranteed to exist
@@ -112,8 +154,22 @@ public final class StorePathUtils {
     }
 
     /**
-     * Resolves the home directory for the given client type under the
-     * provided base directory, creating it if necessary.
+     * Resolves the home directory for {@code type} under
+     * {@code baseDirectory}, creating it if necessary.
+     *
+     * @apiNote
+     * Use this to enumerate sessions for a given client type, or
+     * as the parent location for session-creation calls. The two
+     * client types are mapped to fixed segment names
+     * ({@code "web"} and {@code "mobile"}) so that the same base
+     * directory may host both worlds side by side without
+     * collisions.
+     *
+     * @implNote
+     * This implementation hard-codes the segment names rather than
+     * deriving them from
+     * {@link WhatsAppClientType#name()} so that the layout stays
+     * stable across enum renames.
      *
      * @param type          the client type
      * @param baseDirectory the base storage directory
@@ -131,7 +187,20 @@ public final class StorePathUtils {
     }
 
     /**
-     * Recursively deletes the given path and all of its children.
+     * Recursively deletes {@code path} and every file and directory
+     * underneath it.
+     *
+     * @apiNote
+     * Call this to wipe a session after a logout or to free
+     * disk space for a corrupted store. Returns silently when
+     * {@code path} does not exist so callers do not have to
+     * pre-check.
+     *
+     * @implNote
+     * This implementation uses {@link Files#walkFileTree(Path, java.nio.file.FileVisitor)}
+     * with a {@link SimpleFileVisitor} so each child is deleted in
+     * post-order, allowing the parent {@link Files#delete(Path)}
+     * call to succeed once the directory is empty.
      *
      * @param path the path to delete
      * @throws IOException if any filesystem operation fails

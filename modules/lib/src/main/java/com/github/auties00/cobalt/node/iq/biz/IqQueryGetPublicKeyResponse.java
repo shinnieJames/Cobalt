@@ -11,20 +11,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqQueryGetPublicKeyRequest}.
+ * Sealed family of inbound reply variants the relay produces in response
+ * to an {@link IqQueryGetPublicKeyRequest}.
+ *
+ * @apiNote
+ * Pattern-match the returned variant to drive the buyer-side
+ * direct-connection flow: {@link Success#certificate()} carries the
+ * merchant's PEM-encoded ECC certificate when one is registered,
+ * {@link ClientError} surfaces a rejected request and {@link ServerError}
+ * surfaces a transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryGetPublicKeyJob")
 public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         permits IqQueryGetPublicKeyResponse.Success, IqQueryGetPublicKeyResponse.ClientError, IqQueryGetPublicKeyResponse.ServerError {
 
     /**
-     * Tries each {@link IqQueryGetPublicKeyResponse} variant in priority order.
+     * Tries each variant in priority order until one matches.
+     *
+     * @apiNote
+     * Use this entry point on every IQ stanza tagged with the
+     * {@code <public_key/>} payload; the order is {@link Success}, then
+     * {@link ClientError}, then {@link ServerError}, mirroring the
+     * priority that the WA Web parser applies before throwing a
+     * server-status error.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no documented variant matched
+     * @return an {@link Optional} carrying the parsed variant, or empty
+     *         when no documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     static Optional<? extends IqQueryGetPublicKeyResponse> of(Node node, Node request) {
@@ -42,18 +56,28 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — projects the single
-     * PEM-encoded certificate, when present.
+     * The {@code Success} variant carrying the merchant's PEM-encoded
+     * catalog certificate when one is registered.
+     *
+     * @apiNote
+     * Use {@link #certificate()} to feed the certificate into the
+     * direct-connection encryption pipeline; an empty optional means
+     * the merchant has not yet registered a key and the cart UI must
+     * surface a server-side onboarding error to the buyer.
      */
     final class Success implements IqQueryGetPublicKeyResponse {
         /**
-         * The PEM-encoded certificate string, when the merchant has
-         * registered a key.
+         * The PEM-encoded ECC certificate string echoed by the relay,
+         * or {@code null} when the merchant has not registered a key.
          */
         private final String certificate;
 
         /**
          * Constructs a successful reply.
+         *
+         * @apiNote
+         * Pass the parsed PEM string or {@code null} when the
+         * {@code <pem/>} grandchild is absent.
          *
          * @param certificate the PEM string; may be {@code null}
          */
@@ -64,6 +88,11 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         /**
          * Returns the PEM-encoded certificate, when present.
          *
+         * @apiNote
+         * Use this getter to feed the certificate into the buyer-side
+         * direct-connection encryption flow; an empty optional means
+         * the merchant has not yet registered a key.
+         *
          * @return an {@link Optional} carrying the certificate
          */
         public Optional<String> certificate() {
@@ -72,6 +101,19 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
 
         /**
          * Tries to parse a {@link Success} variant.
+         *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method validates
+         * the {@code <iq type="result">} envelope and reads the optional
+         * {@code <public_key><pem/></public_key>} grandchild, returning
+         * an empty optional when the schema does not match.
+         *
+         * @implNote
+         * This implementation reads the {@code <pem/>} body verbatim;
+         * WA Web's reference parser additionally calls
+         * {@code WAWebDirectConnectionUtils.stringToCertificateString}
+         * to normalise the PEM line endings, which Cobalt defers to the
+         * caller.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -92,6 +134,9 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return Optional.of(new Success(certificate));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -104,11 +149,17 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return Objects.equals(this.certificate, that.certificate);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(certificate);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryGetPublicKeyResponse.Success[certificate=" + certificate + ']';
@@ -116,21 +167,34 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The {@code ClientError} variant emitted when the relay rejects
+     * the request as malformed or unauthorised.
+     *
+     * @apiNote
+     * Use this variant to surface a user-facing 4xx-class error to the
+     * cart UI; the relay returns this shape when the merchant JID is
+     * not a registered business or the caller lacks visibility into
+     * the merchant catalog.
      */
     final class ClientError implements IqQueryGetPublicKeyResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a client-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -144,6 +208,10 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to dispatch on the relay-side error code
+         * when surfacing a localised message to the cart UI.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -153,6 +221,11 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter for logging; the text is server-localised
+         * and not stable across snapshots, so the cart UI should
+         * dispatch on {@link #errorCode()} instead.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -161,6 +234,11 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
 
         /**
          * Tries to parse a {@link ClientError} variant.
+         *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * to extract the (code, text) envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -176,6 +254,9 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -188,11 +269,17 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryGetPublicKeyResponse.ClientError[errorCode=" + errorCode
@@ -201,21 +288,33 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The {@code ServerError} variant emitted when the relay returns a
+     * transient internal-failure status while processing the request.
+     *
+     * @apiNote
+     * Use this variant to drive a backoff-and-retry path in the cart
+     * UI; the relay returns this shape when the catalog backend is
+     * temporarily unavailable.
      */
     final class ServerError implements IqQueryGetPublicKeyResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a server-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -229,6 +328,10 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to log the relay-side error code; a 5xx-class
+         * value is the canonical retry trigger.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -238,6 +341,10 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter for logging only; the text is server-localised
+         * and not stable across snapshots.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -246,6 +353,11 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
 
         /**
          * Tries to parse a {@link ServerError} variant.
+         *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
+         * to extract the (code, text) envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -261,6 +373,9 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -273,11 +388,17 @@ public sealed interface IqQueryGetPublicKeyResponse extends IqOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqQueryGetPublicKeyResponse.ServerError[errorCode=" + errorCode

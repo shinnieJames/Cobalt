@@ -12,55 +12,62 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
 /**
- * Handles Android unsupported actions sync mutations.
+ * Tracks the primary device's permission for companions to ship mutations the primary cannot interpret.
  *
- * <p>This handler processes mutations that declare which actions are unsupported
- * on Android devices. On SET, reads the {@code androidUnsupportedActions} field from the
- * mutation value. If the {@code allowed} flag is {@code true}, updates the primary
- * allows-all-mutations flag in the store (only if not already set). Other operations
- * are acknowledged as unsupported.
+ * @apiNote
+ * Drives the {@code primaryAllowsAllMutations} feature gate. WA's
+ * Android primary device, when running an older release that does not
+ * understand a newer mutation type, can still grant companions
+ * permission to author such mutations rather than have the server
+ * gate them out. This handler reads the {@code allowed} flag from
+ * each {@code android_unsupported_actions} mutation and, on
+ * {@code allowed = true}, latches the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#primaryAllowsAllMutations()}
+ * flag so the rest of Cobalt's sync engine knows it is safe to author
+ * action types the primary may not yet understand.
  *
- * <p>Index format: ["android_unsupported_actions"]
+ * @implNote
+ * This implementation latches the flag once on the first observed
+ * {@code allowed = true}; further mutations that would re-set it are
+ * no-ops, matching WA Web's
+ * {@code getPrimaryAllowsAllMutations()}-gated update.
  */
 @WhatsAppWebModule(moduleName = "WAWebAndroidUnsupportedActionsSync")
 public final class AndroidUnsupportedActionsHandler implements WebAppStateActionHandler {
     /**
-     * Logger for this handler.
+     * The handler-scoped {@link Logger} used to record the one-shot flag transition.
+     *
+     * @apiNote
+     * Records the line equivalent to WA Web's
+     * {@code [syncd] primary allows all mutations flag set: <reason>}
+     * when the latch first transitions from unset to set.
      */
     private static final Logger LOGGER = Logger.getLogger(AndroidUnsupportedActionsHandler.class.getName());
 
     /**
-     * Constructs the singleton handler.
+     * Constructs the singleton android-unsupported-actions handler.
+     *
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public AndroidUnsupportedActionsHandler() {
 
     }
 
-    /**
-     * Returns the action name for this handler.
-     * @return the action name string
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return AndroidUnsupportedActions.ACTION_NAME;
     }
 
-    /**
-     * Returns the sync collection this handler's action belongs to.
-     * @return the sync patch type
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return AndroidUnsupportedActions.COLLECTION_NAME;
     }
 
-    /**
-     * Returns the mutation format version for this handler.
-     * @return the version number
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -68,20 +75,18 @@ public final class AndroidUnsupportedActionsHandler implements WebAppStateAction
     }
 
     /**
-     * Applies a single mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web, the per-mutation logic within {@code applyMutations}:
-     * <ul>
-     *   <li>If operation is not SET: returns {@code {actionState: Unsupported}}</li>
-     *   <li>If operation is SET but {@code androidUnsupportedActions} is falsy: returns
-     *       malformed via {@code WAWebSyncdIndexUtils.malformedActionValue(collectionName)}</li>
-     *   <li>If {@code allowed === true}: calls {@code updatePrimaryAllowsAllMutationsFlag}</li>
-     *   <li>Returns {@code {actionState: Success}}</li>
-     *   <li>On exception: returns {@code {actionState: Failed}}</li>
-     * </ul>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @apiNote
+     * Reads the {@link AndroidUnsupportedActions#allowed()} flag from
+     * the mutation value and, when it is {@code true}, calls
+     * {@link #updatePrimaryAllowsAllMutationsFlag(WhatsAppClient)}.
+     * Non-{@code SET} operations are reported as
+     * {@link MutationApplicationResult#unsupported()}; a missing or
+     * mistyped action payload is reported as malformed via
+     * {@link SyncdIndexUtils#malformedActionValue(String)}; any thrown
+     * exception is reported as
+     * {@link MutationApplicationResult#failed()}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -106,13 +111,20 @@ public final class AndroidUnsupportedActionsHandler implements WebAppStateAction
     }
 
     /**
-     * Updates the primary allows-all-mutations flag in the store if it is not already set.
+     * Latches the {@code primaryAllowsAllMutations} store flag if it is not already set.
      *
-     * <p>Per WhatsApp Web {@code updatePrimaryAllowsAllMutationsFlag}: first checks
-     * {@code getPrimaryAllowsAllMutations()} and only sets the flag (and logs) when it
-     * is currently falsy. This avoids redundant updates and provides a log entry when
-     * the flag transitions from unset to set.
-     * @param client the WhatsApp client instance providing store access
+     * @apiNote
+     * Called once from {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * when the incoming mutation's {@code allowed} flag is {@code true}.
+     *
+     * @implNote
+     * This implementation reads the current value first and only writes
+     * (and emits a log line) when the flag transitions from unset to
+     * set, mirroring WA Web's
+     * {@code getPrimaryAllowsAllMutations() || setPrimaryAllowsAllMutations()}
+     * guard.
+     *
+     * @param client the {@link WhatsAppClient} whose store hosts the flag
      */
     @WhatsAppWebExport(moduleName = "WAWebAndroidUnsupportedActionsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     private void updatePrimaryAllowsAllMutationsFlag(WhatsAppClient client) {

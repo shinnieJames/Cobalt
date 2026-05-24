@@ -16,9 +16,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Parsed response of the {@link IntegrityChallengeResponseMexRequest}
+ * Inbound parsed response of the {@link IntegrityChallengeResponseMexRequest}
  * mutation, exposing the {@code success} and {@code error_message} scalars
- * from the {@code xwa2_submit_integrity_challenge_response} envelope.
+ * carried by the {@code xwa2_submit_integrity_challenge_response} envelope.
+ *
+ * @apiNote Drives WA Web's integrity-passkey-checkpoint flow: on
+ * {@link #success()} truthy the WA Web caller closes the checkpoint modal
+ * and removes the cached challenge from user-prefs IDB; otherwise it
+ * throws and logs {@code "server rejected challenge response"}. Cobalt
+ * embedders may apply the same gating against their own modal/cache.
+ *
+ * @implNote This implementation surfaces both scalars as {@link Optional}
+ * containers; WA Web reads {@code n.success} directly and treats a missing
+ * value as falsy. Cobalt leaves absence observable so callers can
+ * distinguish a relay outage from an explicit rejection.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexIntegrityChallengeResponse")
 public final class IntegrityChallengeResponseMexResponse implements MexOperation.Response.Json {
@@ -27,6 +38,7 @@ public final class IntegrityChallengeResponseMexResponse implements MexOperation
      * submitted challenge.
      */
     private final Boolean success;
+
     /**
      * The {@code error_message} scalar populated when the challenge was
      * rejected.
@@ -34,10 +46,14 @@ public final class IntegrityChallengeResponseMexResponse implements MexOperation
     private final String errorMessage;
 
     /**
-     * Constructs a response wrapping the parsed scalar fields.
+     * Constructs a new response wrapping the parsed scalar fields of the
+     * {@code xwa2_submit_integrity_challenge_response} envelope.
      *
-     * @param success      the {@code success} scalar, or {@code null} if absent
-     * @param errorMessage the {@code error_message} scalar, or {@code null} if absent
+     * @apiNote Private; instances are produced by the {@link #of(Node)}
+     * parser.
+     *
+     * @param success      the {@code success} scalar, may be {@code null}
+     * @param errorMessage the {@code error_message} scalar, may be {@code null}
      */
     private IntegrityChallengeResponseMexResponse(Boolean success, String errorMessage) {
         this.success = success;
@@ -45,11 +61,17 @@ public final class IntegrityChallengeResponseMexResponse implements MexOperation
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the node is missing a result payload
+     * @apiNote Reads the {@code <result>} child's byte content and routes
+     * it through the private byte-level parser. Returns
+     * {@link Optional#empty()} when the stanza carries no result or when
+     * the {@code data.xwa2_submit_integrity_challenge_response} envelope
+     * is absent.
+     *
+     * @param node the inbound IQ stanza carrying the {@code <result>} child
+     * @return an {@link Optional} wrapping the parsed response, or
+     *         {@link Optional#empty()} if the expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexIntegrityChallengeResponse", exports = "mexSubmitPasskeyChallengeResponse",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -62,7 +84,8 @@ public final class IntegrityChallengeResponseMexResponse implements MexOperation
     /**
      * Returns the relay's verdict on the submitted challenge.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @return an {@link Optional} containing the success flag, or
+     *         {@link Optional#empty()} if the relay omitted the scalar
      */
     public Optional<Boolean> success() {
         return Optional.ofNullable(success);
@@ -72,19 +95,28 @@ public final class IntegrityChallengeResponseMexResponse implements MexOperation
      * Returns the error message reported by the relay when the challenge
      * was rejected.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @return an {@link Optional} containing the error message, or
+     *         {@link Optional#empty()} if the relay omitted the scalar
      */
     public Optional<String> errorMessage() {
         return Optional.ofNullable(errorMessage);
     }
 
     /**
-     * Parses a {@link IntegrityChallengeResponseMexResponse} from the raw
-     * JSON bytes of the {@code <result>} child.
+     * Parses the JSON payload carried by the {@code <result>} child into a
+     * {@link IntegrityChallengeResponseMexResponse}.
+     *
+     * @apiNote Private; routed through {@link #of(Node)} after the byte
+     * content of the {@code <result>} child is extracted. Returns
+     * {@link Optional#empty()} when the envelope, the {@code data} branch,
+     * or the {@code xwa2_submit_integrity_challenge_response} child is
+     * absent.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing expected fields
+     * @return an {@link Optional} wrapping the parsed response, or
+     *         {@link Optional#empty()} if the
+     *         {@code data.xwa2_submit_integrity_challenge_response}
+     *         envelope is absent
      */
     private static Optional<IntegrityChallengeResponseMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

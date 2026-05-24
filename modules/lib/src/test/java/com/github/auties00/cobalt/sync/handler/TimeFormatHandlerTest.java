@@ -30,14 +30,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link TimeFormatHandler} â€” Cobalt's adapter for
- * {@code WAWebTimeFormatSync}.
+ * Exercises {@link TimeFormatHandler}'s parity with
+ * {@code WAWebTimeFormatSync.applyMutations}.
  *
- * <p>The handler is a singleton action that persists the user's preferred
- * 12/24h time display into {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)}.
- * The test matrix exercises metadata, every applyMutation branch (SET happy,
- * malformed value, non-SET), the {@code getTimeFormatMutation} builder, and
- * the default timestamp-based conflict resolution.
+ * @apiNote
+ * Covers the wire-constant trio, the happy {@code SET} branch that
+ * writes the boolean preference into
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setTwentyFourHourFormat(boolean)},
+ * the malformed branch for missing or wrong-typed values, the
+ * non-{@code SET} unsupported branch, the
+ * {@link TimeFormatMutationFactory#getTimeFormatMutation(boolean)}
+ * outgoing builder, and the default conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture seeds the store with the local identity only; each test
+ * exercising the apply path resets the {@code twentyFourHourFormat}
+ * field implicitly by recreating the store.
  */
 @DisplayName("TimeFormatHandler")
 class TimeFormatHandlerTest {
@@ -46,12 +54,35 @@ class TimeFormatHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * {@code twentyFourHourFormat} field starts at its default value.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given enabled flag and operation into a trusted
+     * mutation under the canonical {@code ["time_format"]} index.
+     *
+     * @apiNote
+     * The boxed {@link Boolean} {@code enabled} lets tests pass
+     * {@code null} to exercise the nullable-boolean-coalesces-to-false
+     * convention; the index is one-element because the action carries
+     * no per-instance qualifier.
+     *
+     * @param enabled the new 24-hour-enabled flag, or {@code null} to omit
+     * @param op      the mutation operation
+     * @param ts      the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted timeFormatMutation(Boolean enabled, SyncdOperation op, Instant ts) {
         var action = new TimeFormatActionBuilder().isTwentyFourHourFormatEnabled(enabled).build();
         var value = new SyncActionValueBuilder().timestamp(ts).timeFormatAction(action).build();
@@ -132,7 +163,7 @@ class TimeFormatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index â€” n/a")
+    @DisplayName("applyMutation: malformed index - n/a")
     class MalformedIndex {
         @Test
         @DisplayName("WA Web does not validate index parts for time_format (singleton index)")
@@ -177,7 +208,7 @@ class TimeFormatHandlerTest {
     }
 
     @Nested
-    @DisplayName("getTimeFormatMutation â€” builder helper")
+    @DisplayName("getTimeFormatMutation - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the requested flag and timestamp")
@@ -202,7 +233,7 @@ class TimeFormatHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -210,7 +241,7 @@ class TimeFormatHandlerTest {
             var local  = timeFormatMutation(Boolean.FALSE, SyncdOperation.SET, Instant.ofEpochSecond(1700000000L));
             var remote = timeFormatMutation(Boolean.TRUE,  SyncdOperation.SET, Instant.ofEpochSecond(1700000010L));
 
-            ConflictResolution resolution = new TimeFormatHandler().resolveConflicts(local, remote);
+            var resolution = new TimeFormatHandler().resolveConflicts(local, remote);
 
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
@@ -222,14 +253,14 @@ class TimeFormatHandlerTest {
             var local  = timeFormatMutation(Boolean.FALSE, SyncdOperation.SET, ts);
             var remote = timeFormatMutation(Boolean.TRUE,  SyncdOperation.SET, ts);
 
-            ConflictResolution resolution = new TimeFormatHandler().resolveConflicts(local, remote);
+            var resolution = new TimeFormatHandler().resolveConflicts(local, remote);
 
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” n/a, default implementation is per-item")
+    @DisplayName("applyMutationBatch - n/a, default implementation is per-item")
     class BatchNa {
         @Test
         @DisplayName("the default applyMutationBatch dispatches per-mutation to applyMutation")

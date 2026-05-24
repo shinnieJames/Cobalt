@@ -9,22 +9,32 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant. Wraps the new about-text payload
- * in the canonical {@code <iq xmlns="status" type="set"><status>...
- * </status></iq>} envelope.
+ * Outbound {@code <iq xmlns="status" type="set">} stanza setting the calling user's "about"
+ * text (the short bio shown under the contact name in the profile screen).
+ *
+ * @apiNote
+ * Used by the Settings "edit about" surface via WA Web's
+ * {@code WAWebContactStatusBridge}, which wraps the call in a persisted-job envelope so the
+ * change is retried across reconnects; the persisted-job definition lives in
+ * {@code WAWebPersistedJobDefinitions.setAbout} and the runtime resolution in
+ * {@code WAWebPersistedJobInitializers.setAbout}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetAboutJob")
 public final class IqSetAboutRequest implements IqOperation.Request {
     /**
-     * The new about-text value (UTF-8). Empty string clears the
-     * about field.
+     * New about-text value (UTF-8).
+     *
+     * @apiNote
+     * Routed verbatim into the {@code <status>} child content; an empty string clears the
+     * about field, and the relay enforces its own length cap (typically 139 codepoints,
+     * surfacing as a {@code 406} error when exceeded).
      */
     private final String about;
 
     /**
-     * Constructs a new request.
+     * Constructs a new set-about request.
      *
-     * @param about the new about text. Never {@code null}
+     * @param about the new about text
      * @throws NullPointerException if {@code about} is {@code null}
      */
     public IqSetAboutRequest(String about) {
@@ -34,28 +44,31 @@ public final class IqSetAboutRequest implements IqOperation.Request {
     /**
      * Returns the new about text.
      *
-     * @return the about-text string. Never {@code null}
+     * @return the about-text string, never {@code null}
      */
     public String about() {
         return about;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <status>} payload
+     * @apiNote
+     * Produces a {@code <iq xmlns="status" type="set">} envelope addressed to
+     * {@link JidServer#user()} and wrapping a single {@code <status>} child whose content is
+     * the new about text.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope and the
+     *         {@code <status>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetAboutJob",
             exports = "setAbout", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebSetAboutJob: wap("status", null, content)
         var statusNode = new NodeBuilder()
                 .description("status")
                 .content(about)
                 .build();
-        // WAWebSetAboutJob: wap("iq",{to:S_WHATSAPP_NET,type:"set",xmlns:"status",id}, ...)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "status")
@@ -64,6 +77,9 @@ public final class IqSetAboutRequest implements IqOperation.Request {
                 .content(statusNode);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -76,11 +92,17 @@ public final class IqSetAboutRequest implements IqOperation.Request {
         return Objects.equals(this.about, that.about);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(about);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqSetAboutRequest[about=" + about + ']';

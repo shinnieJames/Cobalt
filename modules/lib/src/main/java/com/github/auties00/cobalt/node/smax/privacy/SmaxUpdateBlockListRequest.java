@@ -12,7 +12,20 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="blocklist" type="set">} stanza applying a block or unblock action to a user JID.
+ *
+ * @apiNote
+ * Drives the chat-info Block / Unblock action and the report-and-block flow; the WA Web caller is
+ * {@code WAWebBlockUserJob.blockUnblockUser}, which builds the request from
+ * {@code WAWebUserPrefsMultiDevice.getBlocklistHash} (for the optional digest), the action enum, the target JID,
+ * and an optional report entry-point or marketing-message {@code <biz_opt_out>} payload.
+ *
+ * @implNote
+ * This implementation collapses WA Web's per-action and migrated-versus-non-migrated mixin-group dispatchers
+ * into a single field: {@code action.wire()} is the per-action selector, and the migrated-versus-non-migrated
+ * dispatcher reduces to the non-migrated branch since Cobalt does not yet generate the migrated branch's
+ * {@code blocklist_ids} payload. The {@code id} attribute is generated downstream by the central client
+ * dispatcher.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateBlockListRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup")
@@ -23,47 +36,44 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutBlocklistsUpdateBlockListReportBlockEntryPointMixin")
 public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     /**
-     * The action to perform.
+     * The action to apply to {@link #itemJid}.
      */
     private final SmaxUpdateBlockListAction action;
 
     /**
-     * The target user JID.
+     * The target user JID being blocked or unblocked.
      */
     private final Jid itemJid;
 
     /**
-     * The optional client-side digest of the cached blocklist.
-     * supplied so the relay can return a {@code SuccessWithMatch}
-     * envelope when the cache is up to date.
+     * The cached digest of the local blocklist or {@code null} to skip the cache-match shortcut.
      */
     private final String itemDhash;
 
     /**
-     * The optional report-block entry-point source. Surfaced when
-     * the block originates from a "report and block" action so the
-     * relay can attribute the report.
+     * The optional report-block entry-point source when the action originates from "report and block".
      */
     private final String entryPointSource;
 
     /**
-     * The optional {@code <biz_opt_out>} child. Populated when the
-     * block carries a marketing-message opt-out reason payload.
+     * The optional marketing-message opt-out payload attached to the block action.
      */
     private final BizOptOut bizOptOut;
 
     /**
-     * Constructs a request.
+     * Constructs a block/unblock request with every optional field.
      *
-     * @param action           the action; never {@code null}
-     * @param itemJid          the target JID; never {@code null}
+     * @apiNote
+     * The entry-point and {@code <biz_opt_out>} payload are only meaningful for block actions originating from
+     * the report-and-block or marketing-messages opt-out flows; pass {@code null} for both fields in the
+     * vanilla block/unblock case.
+     *
+     * @param action           the block-or-unblock action; never {@code null}
+     * @param itemJid          the target user JID; never {@code null}
      * @param itemDhash        the cached digest; may be {@code null}
-     * @param entryPointSource the report entry-point source; may be
-     *                         {@code null}
-     * @param bizOptOut        the optional {@code <biz_opt_out>}
-     *                         payload; may be {@code null}
-     * @throws NullPointerException if {@code action} or
-     *                              {@code itemJid} is {@code null}
+     * @param entryPointSource the report entry-point source; may be {@code null}
+     * @param bizOptOut        the optional marketing-messages opt-out payload; may be {@code null}
+     * @throws NullPointerException if {@code action} or {@code itemJid} is {@code null}
      */
     public SmaxUpdateBlockListRequest(SmaxUpdateBlockListAction action, Jid itemJid, String itemDhash, String entryPointSource, BizOptOut bizOptOut) {
         this.action = Objects.requireNonNull(action, "action cannot be null");
@@ -74,25 +84,24 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Constructs a request without a {@code <biz_opt_out>} payload.
+     * Constructs a block/unblock request without a marketing-messages opt-out payload.
      *
-     * <p>Convenience overload for the dominant call-pattern where the
-     * caller never attaches a marketing-message opt-out reason.
+     * @apiNote
+     * Convenience overload for the dominant call-pattern where no {@code <biz_opt_out>} child is attached; the
+     * underlying field defaults to {@code null}.
      *
-     * @param action           the action; never {@code null}
-     * @param itemJid          the target JID; never {@code null}
+     * @param action           the block-or-unblock action; never {@code null}
+     * @param itemJid          the target user JID; never {@code null}
      * @param itemDhash        the cached digest; may be {@code null}
-     * @param entryPointSource the report entry-point source; may be
-     *                         {@code null}
-     * @throws NullPointerException if {@code action} or
-     *                              {@code itemJid} is {@code null}
+     * @param entryPointSource the report entry-point source; may be {@code null}
+     * @throws NullPointerException if {@code action} or {@code itemJid} is {@code null}
      */
     public SmaxUpdateBlockListRequest(SmaxUpdateBlockListAction action, Jid itemJid, String itemDhash, String entryPointSource) {
         this(action, itemJid, itemDhash, entryPointSource, null);
     }
 
     /**
-     * Returns the action.
+     * Returns the block-or-unblock action.
      *
      * @return the action; never {@code null}
      */
@@ -110,37 +119,50 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional cached digest.
+     * Returns the cached digest when set.
      *
-     * @return an {@link Optional} carrying the digest, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the digest, or empty when no cached digest was supplied
      */
     public Optional<String> itemDhash() {
         return Optional.ofNullable(itemDhash);
     }
 
     /**
-     * Returns the optional report entry-point source.
+     * Returns the report entry-point source when set.
      *
-     * @return an {@link Optional} carrying the entry-point source,
-     *         or empty when omitted
+     * @return an {@link Optional} carrying the entry-point source, or empty when the action did not originate
+     *         from report-and-block
      */
     public Optional<String> entryPointSource() {
         return Optional.ofNullable(entryPointSource);
     }
 
     /**
-     * Returns the optional {@code <biz_opt_out>} payload.
+     * Returns the marketing-messages opt-out payload when set.
      *
-     * @return an {@link Optional} carrying the payload, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the payload, or empty when no payload was attached
      */
     public Optional<BizOptOut> bizOptOut() {
         return Optional.ofNullable(bizOptOut);
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Builds the outbound {@code <iq>} stanza ready for dispatch.
+     *
+     * @apiNote
+     * The returned {@link NodeBuilder} addresses {@code s.whatsapp.net} with {@code xmlns="blocklist"} and
+     * {@code type="set"}; the {@code id} attribute is filled in downstream by the central client dispatcher.
+     * The {@code <item>} child always carries the action and target JID; the {@code dhash} attribute,
+     * {@code <biz_opt_out>} child, and {@code <entry_point>} child are added only when their respective
+     * fields are set.
+     *
+     * @implNote
+     * This implementation collapses WA Web's {@code mergeUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup}
+     * dispatcher (block versus unblock) and
+     * {@code mergeUpdateBlockListOrUpdateBlockListNonMigratedBlockItemMixinGroup} dispatcher (migrated versus
+     * non-migrated) into a single emission path; the {@code SmaxMixinGroupExhaustiveError} throw becomes
+     * unreachable because the enum closes the variant set, and the migrated branch's {@code blocklist_ids}
+     * payload is not generated because no Cobalt consumer needs it yet.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope
      */
@@ -164,33 +186,11 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     public NodeBuilder toNode() {
         var itemBuilder = new NodeBuilder()
                 .description("item")
-                // WASmaxOutBlocklistsUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup.mergeUpdateBlockListBlockOrUpdateBlockListUnblockItemMixinGroup:
-                // dispatcher between t.updateBlockListBlockItem (-> BlockItemMixin) and
-                // t.updateBlockListUnblockItem (-> UnblockItemMixin); throws SmaxMixinGroupExhaustiveError otherwise.
-                // Cobalt closes the variant set with the SmaxUpdateBlockListAction enum, so the dispatch is
-                // a single action.wire() lookup and the exhaustiveness throw is unreachable.
-                // WASmaxOutBlocklistsUpdateBlockListBlockItemMixin.mergeUpdateBlockListBlockItemMixin:
-                // smax("item", { action: "block" }) merged with the non-migrated/migrated dispatch group.
-                // WASmaxOutBlocklistsUpdateBlockListUnblockItemMixin.mergeUpdateBlockListUnblockItemMixin:
-                // same shape with action: "unblock". Cobalt collapses both into action.wire().
                 .attribute("action", action.wire())
-                // WASmaxOutBlocklistsUpdateBlockListOrUpdateBlockListNonMigratedBlockItemMixinGroup.mergeUpdateBlockListOrUpdateBlockListNonMigratedBlockItemMixinGroup:
-                // dispatcher between t.updateBlockListMigratedBlockItem (LID-addressed, drops to MigratedBlockItemMixin)
-                // and t.updateBlockListNonMigratedBlockItem (PN-addressed, drops to NonMigratedBlockItemMixin).
-                // Cobalt only ever ships the non-migrated branch, so the dispatch degenerates to the line below.
-                // WASmaxOutBlocklistsUpdateBlockListNonMigratedBlockItemMixin.mergeUpdateBlockListNonMigratedBlockItemMixin:
-                // smax("item", { jid: WAWap.USER_JID(itemJid) }) — USER_JID is a thin wrapper over WAWap.JID,
-                // and Cobalt's NodeBuilder.attribute(String, JidProvider) emits the wap-encoded JID directly.
                 .attribute("jid", itemJid);
         if (itemDhash != null) {
             itemBuilder.attribute("dhash", itemDhash);
         }
-        // WASmaxChildren.OPTIONAL_CHILD(makeUpdateBlockListRequestItemBizOptOut, bizOptOutArgs):
-        // when bizOptOutArgs is non-null, the makeUpdateBlockListRequestItemBizOptOut
-        // factory builds a <biz_opt_out> child of <item> with the seven optional
-        // attributes (reason, reason_description, entry_point, first_message,
-        // business_discovery_entry_point, business_discovery_timestamp,
-        // business_discovery_id). Cobalt mirrors the factory inline below.
         if (bizOptOut != null) {
             itemBuilder.content(bizOptOut.toNode());
         }
@@ -200,10 +200,6 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
                 .attribute("to", JidServer.user())
                 .attribute("type", "set")
                 .content(itemBuilder.build());
-        // WASmaxOutBlocklistsUpdateBlockListReportBlockEntryPointMixin.mergeUpdateBlockListReportBlockEntryPointMixin:
-        // smax("iq", null, smax("entry_point", { source: WAWap.CUSTOM_STRING(entryPointSource) })) merged into the
-        // outbound IQ via WASmaxMixins.optionalMerge — applied only when entryPointSource is non-null, in which
-        // case the merged child reduces to appending an <entry_point source="..."/> node to the IQ.
         if (entryPointSource != null) {
             var entryPointNode = new NodeBuilder()
                     .description("entry_point")
@@ -245,35 +241,21 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
     }
 
     /**
-     * The {@code <biz_opt_out>} child carried by an {@code <item>}
-     * node when the block records a marketing-message opt-out reason.
+     * The {@code <biz_opt_out>} child attached to a block request when the action records a marketing-message
+     * opt-out reason.
      *
-     * <p>WA Web's
-     * {@code WASmaxOutBlocklistsUpdateBlockListRequest.makeUpdateBlockListRequestItemBizOptOut}
-     * factory builds a single {@code <biz_opt_out>} stanza whose seven
-     * attributes are all optional and therefore guarded by
-     * {@code WASmaxAttrs.OPTIONAL}. Cobalt models the payload as an
-     * immutable record with seven nullable fields and renders the
-     * stanza via {@link #toNode()}; missing fields are simply not
-     * emitted as attributes.
+     * @apiNote
+     * Produced by {@code WAWebBlockUserJob.blockUnblockUser} from the {@code bizOptOutArgs} payload when the
+     * block originates from a marketing-message complaint flow; the seven attributes are independently optional
+     * and serialise as bare attributes on the {@code <biz_opt_out/>} child of {@code <item>}.
      *
-     * @param reason                       the optional reason marker;
-     *                                     may be {@code null}
-     * @param reasonDescription            the optional free-form
-     *                                     reason description; may be
-     *                                     {@code null}
-     * @param entryPoint                   the optional entry-point
-     *                                     marker; may be {@code null}
-     * @param firstMessage                 the optional first-message
-     *                                     hint; may be {@code null}
-     * @param businessDiscoveryEntryPoint  the optional discovery
-     *                                     entry-point marker; may be
-     *                                     {@code null}
-     * @param businessDiscoveryTimestamp   the optional discovery
-     *                                     timestamp in seconds; may
-     *                                     be {@code null}
-     * @param businessDiscoveryId          the optional discovery id;
-     *                                     may be {@code null}
+     * @param reason                      the optional reason marker; may be {@code null}
+     * @param reasonDescription           the optional free-form reason description; may be {@code null}
+     * @param entryPoint                  the optional entry-point marker; may be {@code null}
+     * @param firstMessage                the optional first-message hint; may be {@code null}
+     * @param businessDiscoveryEntryPoint the optional discovery entry-point marker; may be {@code null}
+     * @param businessDiscoveryTimestamp  the optional discovery timestamp in seconds; may be {@code null}
+     * @param businessDiscoveryId         the optional discovery id; may be {@code null}
      */
     public record BizOptOut(String reason, String reasonDescription, String entryPoint,
                             String firstMessage, String businessDiscoveryEntryPoint,
@@ -281,18 +263,20 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
         /**
          * Builds the {@code <biz_opt_out>} stanza for this payload.
          *
+         * @apiNote
+         * Invoked from {@link SmaxUpdateBlockListRequest#toNode()} when the parent request carries a payload;
+         * the resulting node is attached as a child of the {@code <item>} element.
+         *
+         * @implNote
+         * This implementation mirrors WA Web's {@code WASmaxAttrs.OPTIONAL} contract: each attribute is emitted
+         * only when its field is non-null, since {@code null} attributes would collapse to {@code DROP_ATTR}
+         * on the wire anyway.
+         *
          * @return the built {@link Node}; never {@code null}
          */
         @WhatsAppWebExport(moduleName = "WASmaxOutBlocklistsUpdateBlockListRequest",
                 exports = "makeUpdateBlockListRequestItemBizOptOut", adaptation = WhatsAppAdaptation.DIRECT)
         public Node toNode() {
-            // WASmaxOutBlocklistsUpdateBlockListRequest.makeUpdateBlockListRequestItemBizOptOut:
-            // smax("biz_opt_out", { reason, reason_description, entry_point, first_message,
-            //                       business_discovery_entry_point, business_discovery_timestamp,
-            //                       business_discovery_id })
-            // every attribute is wrapped in WASmaxAttrs.OPTIONAL — null arguments collapse to
-            // WAWap.DROP_ATTR and the attribute is omitted from the wire entirely. Cobalt
-            // mirrors that by guarding each NodeBuilder.attribute(...) call with a null check.
             var builder = new NodeBuilder()
                     .description("biz_opt_out");
             if (reason != null) {
@@ -311,8 +295,6 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
                 builder.attribute("business_discovery_entry_point", businessDiscoveryEntryPoint);
             }
             if (businessDiscoveryTimestamp != null) {
-                // WAWap.INT serialises the integer as a numeric attribute; NodeBuilder.attribute(String, Number)
-                // forwards through the same Number coercion path.
                 builder.attribute("business_discovery_timestamp", businessDiscoveryTimestamp);
             }
             if (businessDiscoveryId != null) {
@@ -322,71 +304,63 @@ public final class SmaxUpdateBlockListRequest implements SmaxOperation.Request {
         }
 
         /**
-         * Returns the optional reason marker.
+         * Returns the reason marker when present.
          *
-         * @return an {@link Optional} carrying the reason, or empty
-         *         when omitted
+         * @return an {@link Optional} carrying the reason, or empty when the field is unset
          */
         public Optional<String> reasonAsOptional() {
             return Optional.ofNullable(reason);
         }
 
         /**
-         * Returns the optional reason description.
+         * Returns the reason description when present.
          *
-         * @return an {@link Optional} carrying the description, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the description, or empty when the field is unset
          */
         public Optional<String> reasonDescriptionAsOptional() {
             return Optional.ofNullable(reasonDescription);
         }
 
         /**
-         * Returns the optional entry-point marker.
+         * Returns the entry-point marker when present.
          *
-         * @return an {@link Optional} carrying the entry-point, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the entry-point, or empty when the field is unset
          */
         public Optional<String> entryPointAsOptional() {
             return Optional.ofNullable(entryPoint);
         }
 
         /**
-         * Returns the optional first-message hint.
+         * Returns the first-message hint when present.
          *
-         * @return an {@link Optional} carrying the first-message
-         *         hint, or empty when omitted
+         * @return an {@link Optional} carrying the hint, or empty when the field is unset
          */
         public Optional<String> firstMessageAsOptional() {
             return Optional.ofNullable(firstMessage);
         }
 
         /**
-         * Returns the optional business-discovery entry-point.
+         * Returns the business-discovery entry-point when present.
          *
-         * @return an {@link Optional} carrying the entry-point, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the entry-point, or empty when the field is unset
          */
         public Optional<String> businessDiscoveryEntryPointAsOptional() {
             return Optional.ofNullable(businessDiscoveryEntryPoint);
         }
 
         /**
-         * Returns the optional business-discovery timestamp in
-         * seconds.
+         * Returns the business-discovery timestamp when present.
          *
-         * @return an {@link Optional} carrying the timestamp, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the timestamp in seconds, or empty when the field is unset
          */
         public Optional<Long> businessDiscoveryTimestampAsOptional() {
             return Optional.ofNullable(businessDiscoveryTimestamp);
         }
 
         /**
-         * Returns the optional business-discovery id.
+         * Returns the business-discovery id when present.
          *
-         * @return an {@link Optional} carrying the id, or empty when
-         *         omitted
+         * @return an {@link Optional} carrying the id, or empty when the field is unset
          */
         public Optional<String> businessDiscoveryIdAsOptional() {
             return Optional.ofNullable(businessDiscoveryId);

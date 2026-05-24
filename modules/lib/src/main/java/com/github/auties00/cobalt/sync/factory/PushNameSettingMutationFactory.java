@@ -16,39 +16,63 @@ import java.util.List;
 /**
  * Builds outgoing push-name-setting sync mutations.
  *
- * <p>The factory is the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.PushNameSettingHandler}.
+ * @apiNote
+ * Drives the profile-name editor on the Settings profile surface; one
+ * call produces a single {@link SyncPendingMutation} that propagates the
+ * new pushname to every linked device and is consumed on receiving
+ * devices by
+ * {@link com.github.auties00.cobalt.sync.handler.PushNameSettingHandler}
+ * which fires {@code WAWebSetPushnameLocallyAction.setPushnameLocally}
+ * and a {@code WASendPresenceStatusProtocol} presence broadcast.
+ *
+ * @implNote
+ * This implementation mirrors {@code WAWebPushNameSync.getPushnameMutation}
+ * and routes the mutation through the {@code CriticalBlock} collection
+ * with version {@code 1}, matching the WA Web handler's behaviour where
+ * the pushname is part of the critical bootstrap data sync stage.
  */
 public final class PushNameSettingMutationFactory {
     /**
      * Constructs a push-name-setting mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public pushname setter. The factory keeps no
+     * state, so a single instance is sufficient per client.
      */
     public PushNameSettingMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation that broadcasts a new pushname to other linked
-     * devices.
+     * Builds a pending mutation that broadcasts a new pushname to other
+     * linked devices.
      *
-     * <p>Per WhatsApp Web {@code WAWebPushNameSync.getPushnameMutation}: wraps
-     * the supplied name into a {@code SyncActionValue.pushNameSetting} payload
-     * and forwards it to {@code WAWebSyncdActionUtils.buildPendingMutation}
-     * with empty {@code indexArgs}, the handler's collection
-     * ({@code CriticalBlock}), version ({@code 1}), action
-     * ({@code "setting_pushName"}) and {@code SyncdMutation$SyncdOperation.SET}.
+     * @apiNote
+     * Invoked from the public pushname setter on
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient}; receiving
+     * devices treat an empty pushname as the bootstrap-stage invalid
+     * marker and log
+     * {@code BOOTSTRAP_APP_STATE_DATA_STAGE_CODE.PUSHNAME_INVALID} while
+     * still applying the change locally. The single
+     * {@code WAWebPushNameBridge} caller in WA Web wraps this with a
+     * {@code lockForSync} transaction.
      *
-     * <p>The resulting mutation is queued via
-     * {@code WAWebSyncdDb.appendPendingMutationsRows} by the WA Web caller and
-     * picked up on the next sync cycle. In Cobalt the returned
-     * {@link SyncPendingMutation} is appended to the per-collection pending
-     * queue by the same upper-layer call sites that handle the other
-     * {@code get*Mutation} builders.
+     * @implNote
+     * This implementation maps directly onto
+     * {@code WAWebPushNameSync.getPushnameMutation}; the index carries
+     * only {@link PushNameSetting#ACTION_NAME} because the action is a
+     * singleton per account and {@code indexArgs} is always empty.
      *
-     * @param timestamp the mutation timestamp ({@code SyncActionValue.timestamp})
-     * @param name      the new pushname to broadcast; may be {@code null} or
-     *                  empty to clear the pushname
-     * @return a pending mutation carrying the {@code setting_pushName} action
+     * @param timestamp the mutation timestamp recorded on both the outer
+     *                  mutation and the inner
+     *                  {@link com.github.auties00.cobalt.model.sync.SyncActionValue}
+     * @param name      the new pushname to broadcast; may be
+     *                  {@code null} or empty to clear the pushname (the
+     *                  receiver substitutes the empty string and logs
+     *                  the bootstrap invalid stage in that case)
+     * @return a pending mutation carrying the {@code setting_pushName}
+     *         action
      */
     @WhatsAppWebExport(moduleName = "WAWebPushNameSync", exports = "getPushnameMutation", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPendingMutation getPushnameMutation(Instant timestamp, String name) {

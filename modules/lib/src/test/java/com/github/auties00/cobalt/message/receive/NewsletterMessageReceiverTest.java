@@ -6,12 +6,12 @@ import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.MessageStatus;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
-import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,15 +22,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link NewsletterMessageReceiver}, mirroring
+ * Parity tests for {@link NewsletterMessageReceiver} against WhatsApp Web's
  * {@code WAWebHandleNewsletterMsg.default}.
  *
- * <p>Pure-function-ish parser: extracts {@code id}, {@code t},
- * {@code server_id}, {@code is_sender} from the wire, reads the protobuf
- * bytes from the {@code <plaintext>} child, decodes into a
- * {@link MessageContainer}, and assembles a
- * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo}
- * with status {@code DELIVERED}.
+ * @apiNote
+ * Verifies that the Channels (newsletter) inbound path extracts the {@code id},
+ * {@code t}, {@code server_id}, and {@code is_sender} attributes, decodes the
+ * protobuf carried by the {@code <plaintext>} child, and stamps the resulting
+ * {@link com.github.auties00.cobalt.model.newsletter.NewsletterMessageInfo} with
+ * {@link MessageStatus#DELIVERED}.
+ *
+ * @implNote
+ * Drives synthetic inbound {@code <message>} nodes through
+ * {@link NewsletterMessageReceiver#receive(com.github.auties00.cobalt.node.Node, Jid)}
+ * directly; the receiver is pure-function over a {@link com.github.auties00.cobalt.store.WhatsAppStore}
+ * that needs only the local JID, so no signal-session installation is required.
  */
 @DisplayName("NewsletterMessageReceiver")
 class NewsletterMessageReceiverTest {
@@ -38,6 +44,10 @@ class NewsletterMessageReceiverTest {
     private static final Jid SELF = Jid.of("12025550100@s.whatsapp.net");
     private static final Jid NEWSLETTER = Jid.of("120363402045452944@newsletter");
 
+    /**
+     * Verifies that a fully-populated newsletter stanza maps every attribute onto
+     * the resulting info record.
+     */
     @Test
     @DisplayName("receive: extracts id, t, server_id, status=DELIVERED and decodes the <plaintext> payload")
     void receivePlaintext() {
@@ -72,11 +82,14 @@ class NewsletterMessageReceiverTest {
                 "the conversation field decodes to an ExtendedTextMessage on receive");
         assertEquals("newsletter body", text.text().orElseThrow());
 
-        // fromMe defaults to false when is_sender attr is absent.
         assertFalse(info.key().fromMe(),
-                "absent is_sender attribute → fromMe=false");
+                "absent is_sender attribute then fromMe=false");
     }
 
+    /**
+     * Verifies that the {@code is_sender="true"} attribute propagates to
+     * {@code key.fromMe = true}.
+     */
     @Test
     @DisplayName("receive: is_sender=\"true\" sets the resulting key.fromMe=true")
     void isSenderTrue() {
@@ -102,6 +115,10 @@ class NewsletterMessageReceiverTest {
                 "is_sender=\"true\" must propagate to key.fromMe=true");
     }
 
+    /**
+     * Verifies that a stanza without a {@code <plaintext>} child resolves to a
+     * silent {@code null} drop.
+     */
     @Test
     @DisplayName("receive: missing <plaintext> child returns null (no-op)")
     void missingPlaintextReturnsNull() {
@@ -116,9 +133,13 @@ class NewsletterMessageReceiverTest {
                 .build();
 
         assertNull(receiver.receive(inbound, NEWSLETTER),
-                "no <plaintext> child → null (the orchestrator treats this as an unavailable message)");
+                "no <plaintext> child then null (the orchestrator treats this as an unavailable message)");
     }
 
+    /**
+     * Verifies that an empty {@code <plaintext>} payload resolves to a silent
+     * {@code null} drop.
+     */
     @Test
     @DisplayName("receive: empty <plaintext> payload returns null")
     void emptyPlaintextReturnsNull() {
@@ -139,6 +160,10 @@ class NewsletterMessageReceiverTest {
         assertNull(receiver.receive(inbound, NEWSLETTER));
     }
 
+    /**
+     * Verifies that a missing required {@code server_id} raises a
+     * {@link NoSuchElementException}.
+     */
     @Test
     @DisplayName("receive: missing required server_id throws NoSuchElementException")
     void missingServerIdThrows() {
@@ -155,11 +180,14 @@ class NewsletterMessageReceiverTest {
                         .build())
                 .build();
 
-        // server_id is required for newsletter publish receipts.
-        assertThrows(java.util.NoSuchElementException.class,
+        assertThrows(NoSuchElementException.class,
                 () -> receiver.receive(inbound, NEWSLETTER));
     }
 
+    /**
+     * Verifies that a missing required {@code id} raises a
+     * {@link NoSuchElementException}.
+     */
     @Test
     @DisplayName("receive: missing required id throws NoSuchElementException")
     void missingIdThrows() {
@@ -175,7 +203,7 @@ class NewsletterMessageReceiverTest {
                         .content(MessageContainerSpec.encode(MessageContainer.of("hi")))
                         .build())
                 .build();
-        assertThrows(java.util.NoSuchElementException.class,
+        assertThrows(NoSuchElementException.class,
                 () -> receiver.receive(inbound, NEWSLETTER));
     }
 }

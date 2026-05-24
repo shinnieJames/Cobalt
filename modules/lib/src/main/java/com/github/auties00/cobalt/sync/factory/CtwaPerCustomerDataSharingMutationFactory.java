@@ -15,32 +15,49 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing CTWA-per-customer-data-sharing sync mutations.
+ * Builds outgoing app-state mutations that record a Click-To-WhatsApp per-customer data-sharing preference.
  *
- * <p>The factory is the outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the SMB "share my data with the advertiser" toggle that the WA Web
+ * CTWA system-message surface ({@code maybeGeneratePerCustomerDataSharingSystemMessage})
+ * exposes per customer LID. The mutation populates the
+ * {@code data-sharing-3pd-lid-v2} table on the primary device and on every
+ * linked device. The factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.CtwaPerCustomerDataSharingHandler}.
  */
 public final class CtwaPerCustomerDataSharingMutationFactory {
     /**
-     * Constructs a CTWA-per-customer-data-sharing mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public CtwaPerCustomerDataSharingMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for setting or clearing the CTWA per-customer
-     * data sharing preference for an account.
+     * Returns a SET mutation that records the per-customer data-sharing preference for the given account LID.
      *
-     * <p>Per WhatsApp Web {@code WAWebCtwaPerCustomerDataSharingSync.getCtwaPerCustomerDataSharingMutation}:
-     * constructs a {@code SyncActionValue} with a {@code ctwaPerCustomerDataSharingAction}
-     * containing the enabled flag, then delegates to
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} with the handler's collection,
-     * index args, version, and a SET operation.
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["adsCtwaPerCustomerDataSharing", accountLid.toString()]
+     * }
+     * and the {@link CtwaPerCustomerDataSharingAction} sub-message carries
+     * {@code isCtwaPerCustomerDataSharingEnabled}. The receive-side handler
+     * upserts the row and emits a CTWA system message tagged with
+     * {@code SYNCD_MUTATION} as the entry point.
      *
-     * @param accountLid the account LID identifying the customer
-     * @param isEnabled  whether per-customer data sharing is enabled
-     * @return the pending mutation ready to be queued for sync
+     * @implNote
+     * This implementation captures the timestamp via {@link Instant#now()};
+     * WA Web's {@code WAWebCtwaPerCustomerDataSharingSync.getCtwaPerCustomerDataSharingMutation}
+     * uses {@code WATimeUtils.unixTimeMs()} for the same purpose.
+     *
+     * @param accountLid the customer's LID-form {@link Jid}
+     * @param isEnabled  {@code true} to opt the customer into per-customer data sharing, {@code false} to opt them out
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebCtwaPerCustomerDataSharingSync", exports = "getCtwaPerCustomerDataSharingMutation", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPendingMutation getCtwaPerCustomerDataSharingMutation(Jid accountLid, boolean isEnabled) {

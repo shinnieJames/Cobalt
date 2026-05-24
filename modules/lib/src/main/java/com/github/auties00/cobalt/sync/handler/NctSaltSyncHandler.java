@@ -12,26 +12,58 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
 /**
- * Handles NCT (Notification Content Tokenizer) salt sync actions.
+ * Applies the {@code nct_salt_sync} app-state action that distributes the
+ * Notification Content Tokenizer (NCT) salt across linked devices.
  *
- * <p>Per WhatsApp Web {@code WAWebNctSaltSync}, the salt is used for
- * privacy-preserving notification content processing. On {@code set},
- * the salt bytes are persisted locally; on {@code remove}, the stored
- * salt is cleared. Any other operation is reported as {@code unsupported}.
- * A mutation whose {@code set} value is missing the {@code salt} field
- * is treated as a malformed action index.
+ * @apiNote
+ * Drives the privacy-preserving notification content pipeline: the salt
+ * is consumed by NCT to tokenize the previewable content of incoming
+ * notifications without leaking message text to the OS notification
+ * surface. {@link SyncdOperation#REMOVE} clears the locally stored salt
+ * via {@code WhatsAppStore.setNotificationContentTokenSalt(null)};
+ * {@link SyncdOperation#SET} writes the new salt; any other operation
+ * is reported as {@link MutationApplicationResult#unsupported()}. The
+ * mutation index is the singleton {@snippet :
+ *     ["nct_salt_sync"]
+ * }
  *
- * <p>Index format: {@code ["nct_salt_sync"]}.
+ * @implNote
+ * This implementation persists the raw salt {@code byte[]} directly on
+ * the typed Cobalt store, rather than the base64-encoded string WA Web
+ * stores in {@code userPrefsIdb} under the {@code BACKEND_ONLY_KEYS.NCT_SALT}
+ * key; the base64 round-trip is a JSON-only-storage requirement of
+ * IndexedDB and has no equivalent in a typed in-memory store. The
+ * {@code WALogger.LOG/WARN} batch counters from
+ * {@code WAWebNctSaltSync.applyMutations} are dropped; per-mutation
+ * outcomes are surfaced through {@link MutationApplicationResult}.
  */
 @WhatsAppWebModule(moduleName = "WAWebNctSaltSync")
 public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     /**
-     * Logger for this handler.
+     * Logger used for diagnostic traces emitted by
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}.
+     *
+     * @apiNote
+     * Internal logger; not exposed outside this class.
+     *
+     * @implNote
+     * This implementation logs at {@code FINE} for the success/clear
+     * paths and {@code WARNING} for the unsupported/missing-salt paths,
+     * mirroring the WA Web {@code WALogger.LOG}/{@code WALogger.WARN}
+     * granularity even though the per-batch counters are dropped.
      */
     private static final Logger LOGGER = Logger.getLogger(NctSaltSyncHandler.class.getName());
 
     /**
      * Constructs the singleton NCT salt sync handler.
+     *
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; no AB-prop or store dependency
+     * is held.
      */
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public NctSaltSyncHandler() {
@@ -39,8 +71,7 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action type name this handler processes.
-     * @return the action type name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -49,8 +80,7 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection this handler's action belongs to.
-     * @return the sync patch type / collection name
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -59,8 +89,7 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for this handler.
-     * @return the handler's supported mutation version
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -69,38 +98,32 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies an NCT salt sync mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebNctSaltSync.$NctSaltSync$p_1} the logic is:
-     * <ol>
-     *   <li>If {@code operation === "remove"}: log, clear the stored NCT salt,
-     *       and return {@code {actionState: Success}}.</li>
-     *   <li>If {@code operation !== "set"}: log a warning and return
-     *       {@code {actionState: Unsupported}}.</li>
-     *   <li>Read {@code n = value?.nctSaltSyncAction?.salt}. If {@code n == null},
-     *       log a warning and return {@code this.malformedActionIndex()}.</li>
-     *   <li>Otherwise, base64-encode the salt, store it under
-     *       {@code BACKEND_ONLY_KEYS.NCT_SALT}, log, and return
-     *       {@code {actionState: Success}}.</li>
-     * </ol>
-     *
-     * <p>In WA Web the salt is stored as a base64-encoded string in the
-     * {@code userPrefsIdb} IndexedDB table because that storage layer only
-     * holds JSON-compatible values. Cobalt's {@link com.github.auties00.cobalt.store.WhatsAppStore}
-     * holds the raw {@code byte[]} directly, so the base64 round-trip is
-     * elided as an architectural adaptation.
-     * @param client   the {@link WhatsAppClient} instance linked to the mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation mirrors the per-mutation arm of
+     * {@code WAWebNctSaltSync.$NctSaltSync$p_1}:
+     * <ul>
+     *   <li>{@link SyncdOperation#REMOVE} clears the stored salt and
+     *       returns {@link MutationApplicationResult#success()};</li>
+     *   <li>any operation other than {@link SyncdOperation#SET} returns
+     *       {@link MutationApplicationResult#unsupported()};</li>
+     *   <li>a missing
+     *       {@link NctSaltSyncAction#salt()} returns
+     *       {@link MutationApplicationResult#malformed()} via
+     *       {@link SyncdIndexUtils#malformedActionIndex(String, String)};</li>
+     *   <li>the resolved {@code byte[]} salt is written via
+     *       {@code WhatsAppStore.setNotificationContentTokenSalt}.</li>
+     * </ul>
+     * The base64 encode/decode WA Web performs to round-trip the salt
+     * through {@code userPrefsIdb} is elided; the typed Cobalt store
+     * holds the raw bytes directly.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebNctSaltSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         if (mutation.operation() == SyncdOperation.REMOVE) {
             LOGGER.fine("[nct-salt-sync] Removing stored NCT salt");
-            //   yield WAWebUserPrefsIndexedDBStorage.userPrefsIdb.remove(BACKEND_ONLY_KEYS.NCT_SALT)
-            // ADAPTED: Cobalt's WhatsAppStore holds the raw byte[]; clearing the field
-            // is equivalent to removing the userPrefsIdb entry.
             client.store().setNotificationContentTokenSalt(null);
             return MutationApplicationResult.success();
         }
@@ -110,10 +133,6 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        //   var n = (t = e.value) == null || (t = t.nctSaltSyncAction) == null ? void 0 : t.salt
-        // In Cobalt, a missing nctSaltSyncAction oneof variant is equivalent to
-        // value?.nctSaltSyncAction being null, so the resulting salt is null and
-        // the malformedActionIndex() branch is taken below.
         var salt = mutation.value().action()
                 .filter(NctSaltSyncAction.class::isInstance)
                 .map(NctSaltSyncAction.class::cast)
@@ -124,10 +143,6 @@ public final class NctSaltSyncHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
 
-        //   yield userPrefsIdb.set(BACKEND_ONLY_KEYS.NCT_SALT, r)
-        // ADAPTED: Cobalt's WhatsAppStore persists the raw byte[]; the base64
-        // round-trip is a WA Web userPrefsIdb serialization requirement and has
-        // no equivalent in a typed in-memory store.
         client.store().setNotificationContentTokenSalt(salt);
         LOGGER.fine("[nct-salt-sync] Stored NCT salt");
         return MutationApplicationResult.success();

@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.wam.model.WamEventSpec;
 import com.github.auties00.cobalt.wam.annotation.WamProperty;
 import com.github.auties00.cobalt.wam.model.WamType;
 import com.github.auties00.cobalt.wam.type.GroupJoinRequestActionType;
+import com.github.auties00.cobalt.wam.type.GroupJoinRequestEntrypointType;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -20,6 +21,9 @@ public interface WaFsGroupJoinRequestActionEvent extends WamEventSpec {
 
     @WamProperty(index = 2, type = WamType.ENUM)
     Optional<GroupJoinRequestActionType> groupJoinRequestAction();
+
+    @WamProperty(index = 6, type = WamType.ENUM)
+    Optional<GroupJoinRequestEntrypointType> groupJoinRequestEntrypoint();
 
     @WamProperty(index = 5, type = WamType.INTEGER)
     OptionalInt groupJoinRequestGroupsInCommon();

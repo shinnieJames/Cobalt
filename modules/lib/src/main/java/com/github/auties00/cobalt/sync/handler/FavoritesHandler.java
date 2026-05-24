@@ -16,34 +16,47 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 /**
- * Handles favorites sync actions.
+ * Applies the {@code favorites} app-state sync action that replaces the
+ * user's pinned-favourites collection across linked devices.
  *
- * <p>Per WhatsApp Web, the favorites handler extends {@code AccountSyncdActionBase}
- * and manages the user's favorite chats collection. It uses collection
- * {@code RegularHigh}, action name {@code "favorites"}, and version {@code 1}.
+ * @apiNote
+ * Drives the chat-list "Favourites" section: the primary device fans out
+ * the entire ordered favourites list through the
+ * {@link SyncPatchType#REGULAR_HIGH} collection. The action is replace,
+ * not merge; only the most recent mutation in a batch is applied so
+ * intermediate edits performed in quick succession on the primary do not
+ * surface partially.
  *
- * <p>The handler applies only the mutation with the latest timestamp from a batch,
- * replacing the entire favorites collection rather than processing each mutation
- * sequentially.
+ * @implNote
+ * This implementation deduplicates the batch by tracking the latest
+ * mutation by timestamp and applies it once, mirroring WA Web's
+ * {@code WAWebFavoritesSync.applyMutations}. JID resolution mirrors the
+ * WA Web order: chat-table lookup first, LID-to-phone fallback when the
+ * raw JID has the LID server, then the raw JID itself; the
+ * {@code resolveChatForMutationIndex} cache used by WA Web is replaced
+ * by direct
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findChatByJid(Jid)}
+ * calls, and the {@code frontendFireAndForget("setFavoriteCollection")}
+ * RPC is replaced by a direct store write.
  */
 @WhatsAppWebModule(moduleName = "WAWebFavoritesSync")
 public final class FavoritesHandler implements WebAppStateActionHandler {
 
     /**
-     * Logger for diagnostic messages.
+     * The {@link Logger} that records the malformed and unsupported
+     * mutation tallies after {@link #applyMutationBatch} completes.
      */
     private static final Logger LOGGER = Logger.getLogger(FavoritesHandler.class.getName());
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs a new singleton {@link FavoritesHandler}.
      */
     public FavoritesHandler() {
 
     }
 
     /**
-     * Returns the action name for favorites sync.
-     * @return the action name {@code "favorites"}
+     * {@inheritDoc}
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     @Override
@@ -52,8 +65,7 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection for favorites.
-     * @return {@link SyncPatchType#REGULAR_HIGH}
+     * {@inheritDoc}
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     @Override
@@ -62,8 +74,7 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for favorites.
-     * @return the version number {@code 1}
+     * {@inheritDoc}
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     @Override
@@ -72,20 +83,19 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a batch of favorites mutations, keeping only the latest by timestamp.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebFavoritesSync.applyMutations}: iterates all mutations,
-     * returning {@code malformedActionValue} for non-SET operations and mutations
-     * whose {@code favoritesAction.favorites} is {@code null}. Tracks the mutation
-     * with the latest timestamp and applies only that one to the store. All valid
-     * mutations receive a {@code Success} result.
-     *
-     * <p>After identifying the latest mutation, resolves each favorite's JID via
-     * the chat store, with LID-to-phone fallback, and replaces the entire
-     * favorites collection in the store.
-     * @param client    the WhatsApp client instance
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation walks the batch, classifying each entry,
+     * tracking the {@link DecryptedMutation.Trusted} with the highest
+     * timestamp and applying only that one through
+     * {@link #applyLatestMutation(WhatsAppClient, DecryptedMutation.Trusted)};
+     * every other valid entry receives
+     * {@link MutationApplicationResult#success()}, mirroring WA Web's
+     * "all valid mutations succeed but only the latest mutates state"
+     * shape. Unsupported and malformed counts are logged through
+     * {@link #LOGGER} after the loop, matching WA Web's
+     * {@code WALogger.WARN} emission.
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
@@ -128,15 +138,13 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single favorites mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Validates the operation type and action type, then resolves and
-     * stores the favorites. This method is the single-mutation entry point
-     * that performs the same validation as the batch path but always applies
-     * the provided mutation.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation runs the same validation as the batch path but
+     * unconditionally applies the supplied mutation, so callers that
+     * dispatch a single {@link FavoritesAction} outside a batch still
+     * see the favourites collection mutated.
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     @Override
@@ -154,21 +162,31 @@ public final class FavoritesHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies the favorites from the latest (or only) mutation to the store.
+     * Replaces the favourites collection with the entries carried by the
+     * supplied mutation.
      *
-     * <p>Per WhatsApp Web {@code WAWebFavoritesSync.applyMutations}: after identifying
-     * the latest mutation, extracts the favorites list, filters out entries with
-     * {@code null} IDs, resolves each via the chat store (with LID-to-phone
-     * fallback), and replaces the entire favorites collection.
+     * @apiNote
+     * Invoked by both {@link #applyMutationBatch(WhatsAppClient, List)}
+     * and {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * once the latest valid mutation has been identified.
      *
-     * <p>Resolution order per WA Web:
-     * <ol>
-     *   <li>{@code resolveChatForMutationIndex(createWid(id))} — chat table lookup</li>
-     *   <li>If failed and {@code isLidMigrated() && wid.isLid()}: {@code getPhoneNumber(wid)}</li>
-     *   <li>Otherwise: use raw ID as-is</li>
-     * </ol>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation containing the favorites to apply
+     * @implNote
+     * This implementation skips entries whose raw id is absent rather
+     * than failing the entire batch; for each surviving entry the chat
+     * table is consulted first, then a LID-to-phone fallback is attempted
+     * via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#findPhoneByLid(Jid)}
+     * when the raw {@link Jid} carries the LID server, and the raw JID is
+     * preserved as a final fallback. WA Web's
+     * {@code resolveChatForMutationIndex} cache is replaced by direct
+     * store calls because Cobalt's batch sizes are smaller and the cache
+     * would be overhead.
+     *
+     * @param client   the {@link WhatsAppClient} whose store will be
+     *                 mutated
+     * @param mutation the source mutation; its
+     *                 {@link FavoritesAction#favorites()} list is
+     *                 resolved and persisted in iteration order
      */
     @WhatsAppWebExport(moduleName = "WAWebFavoritesSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     private void applyLatestMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

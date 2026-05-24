@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.DynamicTest.dynamicTest;
  * — is a hard failure.
  *
  * <p>Vectors live in {@code fixtures/wam/wam-event-definitions.json};
- * see {@code tools/web/wam-fixtures/README.md} for the re-capture
+ * see {@code src/test/resources/fixtures/wam/README.md} for the re-capture
  * procedure.
  */
 @DisplayName("WamEventRegistry audit against live WhatsApp Web bundle")

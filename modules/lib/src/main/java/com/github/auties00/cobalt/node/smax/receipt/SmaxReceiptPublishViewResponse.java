@@ -13,21 +13,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants. Only the {@code Success}
- * shape is documented for this RPC.
+ * The closed family of inbound reply variants to a
+ * {@link SmaxReceiptPublishViewRequest}.
+ *
+ * @apiNote
+ * Permits only the {@link Success} shape; WA Web's
+ * {@code WASmaxReceiptPublishViewRPC.sendPublishViewRPC} throws a
+ * {@code SmaxParsingFailure} on any other shape, so embedders that
+ * receive a non-success reply should treat it as a relay-protocol
+ * violation and disconnect.
  */
 public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Response
         permits SmaxReceiptPublishViewResponse.Success {
 
     /**
-     * Tries the single {@link Success} variant.
+     * Parses the inbound stanza into the sealed family's single
+     * permit.
      *
-     * @param node    the inbound ack stanza. Never {@code null}
-     * @param request the original outbound stanza. Used to validate
-     *                echoed identifiers. Never {@code null}
+     * @apiNote
+     * Delegates to {@link Success#of(Node, Node)}; returns
+     * {@link Optional#empty()} when the stanza does not match the
+     * documented {@code <ack class="receipt">} shape.
+     *
+     * @param node the inbound ack stanza; never {@code null}
+     * @param request the original outbound stanza used to validate
+     *                echoed identifiers; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when the stanza does not match the documented
-     *         shape
+     *         empty when the stanza does not match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxReceiptPublishViewRPC",
@@ -39,40 +51,48 @@ public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Res
     }
 
     /**
-     * The {@code Success} reply variant. The relay produced an
-     * {@code <ack class="receipt" type=ECHO from=ECHO id=ECHO/>}
-     * envelope, optionally carrying the timestamp and read-receipts
-     * echo plus a deprecated edit marker.
+     * The {@code Success} reply variant; the relay produced an
+     * {@code <ack class="receipt">} envelope.
+     *
+     * @apiNote
+     * Carries the optional timestamp echo, the optional
+     * {@code readreceipts} echo ({@code "all"} or {@code "none"}),
+     * and the optional deprecated {@code edit} marker
+     * ({@code "0"}, {@code "1"}, or {@code "7"}).
      */
     @WhatsAppWebModule(moduleName = "WASmaxInReceiptPublishViewResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInReceiptPublishSuccessMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInReceiptDeprecatedEditMixin")
     final class Success implements SmaxReceiptPublishViewResponse {
         /**
-         * The optional Unix-epoch timestamp echo (the relay's
-         * processing time).
+         * The optional Unix-epoch timestamp echo carrying the relay's
+         * processing time.
          */
         private final Long timestamp;
 
         /**
-         * The optional {@code readreceipts} echo. One of
-         * {@code "all"} / {@code "none"}.
+         * The optional {@code readreceipts} echo; one of {@code "all"}
+         * or {@code "none"}.
          */
         private final String readReceipts;
 
         /**
-         * The optional deprecated {@code edit} marker. One of
-         * {@code "0"} / {@code "1"} / {@code "7"}.
+         * The optional deprecated {@code edit} marker; one of
+         * {@code "0"}, {@code "1"}, or {@code "7"}.
          */
         private final String deprecatedEdit;
 
         /**
          * Constructs a new success reply.
          *
-         * @param timestamp      the optional timestamp. May be
-         *                       {@code null}
-         * @param readReceipts   the optional read-receipts echo. May
-         *                       be {@code null}
+         * @apiNote
+         * Used by {@link #of(Node, Node)} after the envelope shape
+         * has been validated; embedders typically do not instantiate
+         * this directly.
+         *
+         * @param timestamp the optional timestamp; may be {@code null}
+         * @param readReceipts the optional read-receipts echo; may be
+         *                     {@code null}
          * @param deprecatedEdit the optional deprecated edit marker;
          *                       may be {@code null}
          */
@@ -85,16 +105,18 @@ public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Res
         /**
          * Returns the optional timestamp echo.
          *
-         * @return an {@link Optional} carrying the timestamp
+         * @return an {@link Optional} carrying the timestamp, or
+         *         empty when the relay omitted it
          */
         public Optional<Long> timestamp() {
             return Optional.ofNullable(timestamp);
         }
 
         /**
-         * Returns the optional read-receipts echo.
+         * Returns the optional {@code readreceipts} echo.
          *
-         * @return an {@link Optional} carrying the value
+         * @return an {@link Optional} carrying the value, or empty
+         *         when the relay omitted it
          */
         public Optional<String> readReceipts() {
             return Optional.ofNullable(readReceipts);
@@ -103,16 +125,36 @@ public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Res
         /**
          * Returns the optional deprecated {@code edit} marker.
          *
-         * @return an {@link Optional} carrying the marker
+         * @return an {@link Optional} carrying the marker, or empty
+         *         when the relay omitted it
          */
         public Optional<String> deprecatedEdit() {
             return Optional.ofNullable(deprecatedEdit);
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Parses a {@link Success} variant from the given inbound
+         * stanza.
          *
-         * @param node    the inbound ack stanza
+         * @apiNote
+         * Returns {@link Optional#empty()} when the stanza is not an
+         * {@code <ack class="receipt">} that echoes the original
+         * request's {@code id}/{@code to}/{@code type} triple, or
+         * when any of the optional attributes is present with a value
+         * outside its documented enum.
+         *
+         * @implNote
+         * This implementation inlines the
+         * {@code parsePublishSuccessMixin} predicates from WA Web's
+         * {@code WASmaxInReceiptPublishSuccessMixin} (envelope-echo
+         * validation, optional {@code t}, optional
+         * {@code readreceipts} enum, optional deprecated {@code edit}
+         * enum) rather than splitting them across helper classes; the
+         * three optional enums are validated by exact-match equality
+         * because Cobalt has no equivalent of WA Web's reusable
+         * {@code attrStringEnum} helper here.
+         *
+         * @param node the inbound ack stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant
          */
@@ -161,6 +203,13 @@ public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Res
             return Optional.of(new Success(timestampValue, readReceipts, deprecatedEdit));
         }
 
+        /**
+         * Returns whether the given object is a {@link Success} with
+         * equal timestamp, read-receipts, and edit marker.
+         *
+         * @param obj the candidate; may be {@code null}
+         * @return {@code true} when every field matches
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -175,11 +224,22 @@ public sealed interface SmaxReceiptPublishViewResponse extends SmaxOperation.Res
                     && Objects.equals(this.deprecatedEdit, that.deprecatedEdit);
         }
 
+        /**
+         * Returns a hash code derived from every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(timestamp, readReceipts, deprecatedEdit);
         }
 
+        /**
+         * Returns a debug-friendly textual representation of this
+         * variant.
+         *
+         * @return the textual representation
+         */
         @Override
         public String toString() {
             return "SmaxReceiptPublishViewResponse.Success[timestamp=" + timestamp

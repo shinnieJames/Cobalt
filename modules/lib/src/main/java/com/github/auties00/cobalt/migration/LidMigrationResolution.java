@@ -4,24 +4,30 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 /**
- * Represents the decision taken for a single chat thread during the LID
- * migration sweep.
+ * Sealed discriminated union describing the decision the 1:1 LID migration
+ * takes for a single chat thread.
  *
- * <p>Every chat in the local store is classified into exactly one of three
- * mutually exclusive outcomes. {@link Migrate} rewrites the chat to use LID
- * addressing, {@link Keep} leaves it untouched (because it is already on
- * LID, because its type does not participate in 1:1 migration, or because a
- * duplicate LID thread will absorb it), and {@link Delete} removes it
- * (because no LID can be resolved and the chat passes the deletability
- * heuristics).
+ * @apiNote
+ * Produced by the per-chat resolution step inside {@link LidMigrationService}
+ * and consumed by the executor that applies the decision to the local
+ * store. The three permitted variants are mutually exclusive: {@link Migrate}
+ * re-keys the chat to LID, {@link Keep} leaves it untouched (either because
+ * it already uses LID, because its type does not participate in 1:1
+ * migration, or because a duplicate LID thread will absorb it), and
+ * {@link Delete} removes it (when no LID can be resolved and the chat passes
+ * the deletability heuristics). Pattern-match exhaustively against the
+ * permitted subclasses to consume an instance.
  *
- * <p>This type mirrors the discriminated return shape of WhatsApp Web's
- * {@code getResolvedThreadAccountLid} helper. The {@code {threadLid}}
- * variant becomes {@link Migrate}, the already-LID and ignore variants
- * become {@link Keep}, the {@code {deleteChat: true}} variant becomes
- * {@link Delete}, and the {@code {logoutReason}} variant is converted into
- * a {@code WhatsAppLidMigrationException} thrown by
- * {@link LidMigrationService}.
+ * @implNote
+ * This implementation collapses WA Web's untyped
+ * {@code getResolvedThreadAccountLid} return shape into a sealed Java
+ * type. The {@code {threadLid}} shape becomes {@link Migrate}, the
+ * already-LID and not-eligible cases become {@link Keep}, the
+ * {@code {deleteChat: true}} shape becomes {@link Delete}, and the
+ * {@code {logoutReason}} shape is rethrown by the caller as a
+ * {@code WhatsAppLidMigrationException} rather than being modelled here,
+ * because logout decisions live in the configurable error handler instead
+ * of the per-chat resolution result.
  */
 @WhatsAppWebModule(moduleName = "WAWebLid1X1ThreadAccountMigrations")
 public sealed interface LidMigrationResolution
@@ -29,8 +35,12 @@ public sealed interface LidMigrationResolution
                 LidMigrationResolution.Keep,
                 LidMigrationResolution.Delete{
     /**
-     * Returns the JID the chat had before any migration rewrite was
-     * applied.
+     * Returns the JID the chat had before any migration rewrite was applied.
+     *
+     * @apiNote
+     * Available on every variant so the executor can correlate the
+     * resolution with the originating store row regardless of which branch
+     * fires.
      *
      * @return the original JID of the chat
      */
@@ -39,9 +49,12 @@ public sealed interface LidMigrationResolution
     /**
      * Resolution that re-keys a chat to LID addressing.
      *
-     * <p>When executed by the migration service the chat is moved to
-     * {@code targetLid} and its original phone-number JID is preserved as
-     * metadata so historical references continue to resolve.
+     * @apiNote
+     * Emitted by the resolver when a LID mapping is available for the
+     * chat's original phone-number JID. When executed by the migration
+     * service the chat row's primary key is rewritten to {@link #targetLid}
+     * and the previous JID is preserved as metadata so historical
+     * references continue to resolve.
      *
      * @param originalJid the phone-number JID the chat previously used
      * @param targetLid   the LID the chat is rewritten to
@@ -53,10 +66,13 @@ public sealed interface LidMigrationResolution
     /**
      * Resolution that leaves a chat untouched.
      *
-     * <p>Emitted when the chat already uses LID addressing, when the chat
-     * type is not part of 1:1 migration (group, community, newsletter,
-     * broadcast, bot), or when a duplicate LID thread will absorb the
-     * chat during the sweep.
+     * @apiNote
+     * Emitted when the chat already uses LID, when the chat type is not
+     * part of 1:1 migration (group, community, newsletter, broadcast,
+     * status broadcast, bot), or when a duplicate LID thread will absorb
+     * the chat during the sweep. The {@link #reason} discriminator records
+     * which of the seven cases applied so the executor can keep migration
+     * counters in sync with WA Web's WAM events.
      *
      * @param originalJid the JID currently held by the chat
      * @param reason      the reason the chat is being kept as is
@@ -68,10 +84,12 @@ public sealed interface LidMigrationResolution
     /**
      * Resolution that removes a chat from the store.
      *
-     * <p>Emitted only when no LID mapping can be resolved for a 1:1 chat
-     * and the chat passes the deletability heuristics that classify it as
-     * safe to drop (no ephemeral or locked or archived or muted state, and
-     * only safe stub messages or call-log entries).
+     * @apiNote
+     * Emitted only when no LID mapping can be resolved for a 1:1 chat and
+     * the chat passes the deletability heuristics (no ephemeral state, not
+     * locked, not archived, not muted, and only safe stub messages or
+     * call-log entries). The {@link #reason} discriminator records why the
+     * mapping could not be resolved.
      *
      * @param originalJid the phone-number JID of the chat being removed
      * @param reason      the reason the chat is being deleted
@@ -81,8 +99,12 @@ public sealed interface LidMigrationResolution
     }
 
     /**
-     * Enumerates the reasons a chat is left untouched during LID
-     * migration.
+     * Discriminator for the cases handled by {@link Keep}.
+     *
+     * @apiNote
+     * Mirrors the implicit branch labels inside WA Web's
+     * {@code getResolvedThreadAccountLid}, but lifts them into named enum
+     * constants so the executor's pattern match is exhaustive.
      */
     enum KeepReason {
         /**
@@ -127,7 +149,13 @@ public sealed interface LidMigrationResolution
     }
 
     /**
-     * Enumerates the reasons a chat is removed during LID migration.
+     * Discriminator for the cases handled by {@link Delete}.
+     *
+     * @apiNote
+     * Used to label the WAM-style "no lid available" telemetry buckets
+     * WA Web emits in {@code Y(e, t, n, r, a)}; Cobalt does not send the
+     * telemetry but keeps the labels so the executor can log which path
+     * triggered the deletion.
      */
     enum DeleteReason {
         /**

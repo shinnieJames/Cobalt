@@ -15,41 +15,56 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Byte-identical agreement tests against vectors captured from the live
- * WhatsApp Web JavaScript bundle.
+ * Pins {@link Ed25519HashToPoint}, {@link WamPrivateStatsTokenBlinder#blind},
+ * and {@link WamPrivateStatsTokenBlinder#unblind} against vectors
+ * captured from the live WhatsApp Web JavaScript bundle.
  *
- * <p>Each vector pins the output of {@code WACryptoEd25519.hashToPoint},
- * {@code WAWamPrivateStatsToken.blindToken}, and
- * {@code WAWamPrivateStatsToken.unblindToken} on a deterministic input
- * tuple. Agreement on these vectors is the strongest validation possible:
- * if any constant or formula in the Java port diverges from the JavaScript
- * reference, at least one of the three outputs will mismatch.
+ * @apiNote
+ * Byte-identical agreement on these vectors is the strongest
+ * validation possible: if any constant or formula in the Java port
+ * diverges from the JS reference, at least one of the three outputs
+ * mismatches.
  *
- * <p>Vectors live in {@code fixtures/wam/ed25519-live-bundle-vectors.json}
- * and were captured against snapshot revision {@code 1038176432}
+ * @implNote
+ * This implementation reads the vectors from
+ * {@code fixtures/wam/ed25519-live-bundle-vectors.json}; the file
+ * was captured against snapshot revision {@code 1038176432}
  * (live-runtime revision {@code 1038189736}) on 2026-04-27 via the
- * {@code mcp__whatsapp__web_live_debug_eval} tool. Re-capture if the WA Web
- * implementation changes.
+ * {@code mcp__whatsapp__web_live_debug_eval} tool. Re-capture if the
+ * WhatsApp Web implementation changes.
  */
 class Ed25519LiveBundleKatTest {
     /**
-     * Classpath path of the captured-vectors fixture.
+     * The classpath path of the captured-vectors fixture.
      */
     private static final String FIXTURE = "fixtures/wam/ed25519-live-bundle-vectors.json";
 
     /**
-     * Documented byte length of every vector field.
+     * The expected byte length of every vector field.
      */
     private static final int VECTOR_BYTE_LENGTH = 32;
 
     /**
-     * The vectors loaded from the fixture file.
+     * The vectors loaded from {@link #FIXTURE}.
      */
     private static final List<Vector> VECTORS = loadVectors();
 
     /**
-     * One captured vector. Inputs are seeded deterministically; outputs are
-     * the bytes returned by the live JS bundle.
+     * One captured KAT vector.
+     *
+     * @apiNote
+     * Inputs are seeded deterministically by the capture harness;
+     * outputs are the bytes returned by the live JS bundle.
+     *
+     * @param index       the vector ordinal in the fixture
+     * @param msg         the hash-to-point input message
+     * @param scalar      the blinding scalar
+     * @param sk          the simulated server secret scalar
+     * @param hashToPoint the captured {@code H(msg)} output
+     * @param blinded     the captured {@code blind(msg, scalar)} output
+     * @param pk          the simulated server public key
+     * @param signed      the simulated server's {@code sk * blinded}
+     * @param unblinded   the captured {@code unblind(signed, scalar, pk)}
      */
     private record Vector(int index, byte[] msg, byte[] scalar, byte[] sk,
                           byte[] hashToPoint, byte[] blinded, byte[] pk,
@@ -57,9 +72,9 @@ class Ed25519LiveBundleKatTest {
     }
 
     /**
-     * Asserts {@link Ed25519HashToPoint#compute} produces the byte-identical
-     * output of the live JS {@code WACryptoEd25519.hashToPoint} for every
-     * vector.
+     * Asserts {@link Ed25519HashToPoint#compute} produces the
+     * byte-identical output of the live JS
+     * {@code WACryptoEd25519.hashToPoint} for every vector.
      */
     @Test
     void hashToPointMatchesLiveBundle() {
@@ -73,8 +88,8 @@ class Ed25519LiveBundleKatTest {
     }
 
     /**
-     * Asserts {@link WamPrivateStatsTokenBlinder#blind} produces the
-     * byte-identical output of the live JS
+     * Asserts {@link WamPrivateStatsTokenBlinder#blind} produces
+     * the byte-identical output of the live JS
      * {@code WAWamPrivateStatsToken.blindToken} for every vector.
      */
     @Test
@@ -87,8 +102,8 @@ class Ed25519LiveBundleKatTest {
     }
 
     /**
-     * Asserts {@link WamPrivateStatsTokenBlinder#unblind} produces the
-     * byte-identical output of the live JS
+     * Asserts {@link WamPrivateStatsTokenBlinder#unblind} produces
+     * the byte-identical output of the live JS
      * {@code WAWamPrivateStatsToken.unblindToken} for every vector.
      */
     @Test
@@ -101,8 +116,8 @@ class Ed25519LiveBundleKatTest {
     }
 
     /**
-     * Sanity assertion that all vectors have the documented 32-byte length
-     * (catches transcription typos in the fixture).
+     * Asserts every vector field has the expected 32-byte length so
+     * transcription typos in the fixture surface immediately.
      */
     @Test
     void vectorByteLengthsAreCorrect() {
@@ -121,8 +136,13 @@ class Ed25519LiveBundleKatTest {
     /**
      * Loads and parses the fixture file from the test classpath.
      *
+     * @apiNote
+     * Run eagerly so the static {@link #VECTORS} list is populated
+     * once for every test.
+     *
      * @return the vectors in the order they appear in the fixture
-     * @throws UncheckedIOException if the fixture is missing or unreadable
+     * @throws UncheckedIOException if the fixture is missing or
+     *                              unreadable
      */
     private static List<Vector> loadVectors() {
         try (var in = Ed25519LiveBundleKatTest.class.getResourceAsStream("/" + FIXTURE)) {
@@ -164,7 +184,7 @@ class Ed25519LiveBundleKatTest {
      * Parses a lowercase hexadecimal string into the byte array it
      * encodes.
      *
-     * @param hex the hex string (length must be even)
+     * @param hex the hex string; length must be even
      * @return the decoded bytes
      */
     private static byte[] fromHex(String hex) {

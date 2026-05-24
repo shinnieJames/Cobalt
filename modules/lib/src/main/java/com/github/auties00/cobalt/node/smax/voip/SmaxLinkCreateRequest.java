@@ -13,68 +13,90 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <link_create/>}
- * payload in the canonical {@code <call to="call">} envelope.
+ * The outbound {@code <call><link_create/></call>} request that mints a fresh
+ * shareable call-link token on the VoIP relay.
+ *
+ * @apiNote
+ * Backs the "Create call link" UI surface and the scheduled-event call-link
+ * generator. {@link SmaxLinkCreateResponse.Success#linkCreateToken()}
+ * is suffixed onto {@code https://call.whatsapp.com/voice/} or
+ * {@code https://call.whatsapp.com/video/} to produce the link the user shares.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutVoipLinkCreateRequest")
 public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     /**
-     * The optional media type of the call to be created. Either
-     * {@code "audio"} or {@code "video"} on the wire; modelled as a
-     * raw string here for forward-compat.
+     * The optional media type carried by the {@code media} attribute.
+     *
+     * @apiNote
+     * Either {@code "audio"} or {@code "video"} on the wire; kept as a raw
+     * {@link String} so future relay-side enum extensions do not require a
+     * Cobalt rebuild.
      */
     private final String linkCreateMedia;
 
     /**
-     * The optional call-creator device JID. Supplied when the caller
-     * already knows which of its own devices will host the call.
+     * The optional creator-device JID carried by the {@code call-creator}
+     * attribute.
+     *
+     * @apiNote
+     * Supplied when the link should be associated with a specific device of
+     * the caller rather than the user's primary device.
      */
     private final Jid linkCreateCallCreator;
 
     /**
-     * The optional pre-allocated call identifier. Used by clients
-     * that issue {@code link_create} as a follow-up to an in-flight
-     * call rather than a fresh call.
+     * The optional call identifier carried by the {@code call-id} attribute.
+     *
+     * @apiNote
+     * Populated when the call link is generated from an already in-flight
+     * call rather than minted standalone.
      */
     private final String linkCreateCallId;
 
     /**
-     * The optional username the call link should display as the
-     * creator. Surfaced in the join-prompt UI.
+     * The optional creator-username displayed by the join-prompt surface.
+     *
+     * @apiNote
+     * Resolved by {@code WAWebVoipCreateCallLink.createCallLink} when
+     * username-based calling is gated on for the local account.
      */
     private final String linkCreateLinkCreatorUsername;
 
     /**
-     * Whether the new link should have its waiting-room gate enabled
-     * from the start. {@code true} maps to {@code waiting_room_enabled="1"}
-     * on the wire; {@code false} omits the attribute entirely.
+     * Whether the {@code waiting_room_enabled="1"} marker is emitted.
+     *
+     * @apiNote
+     * Maps to the "Require approval to join" toggle on the call-link create
+     * sheet. When {@code false} the attribute is omitted, which the relay
+     * treats as disabled.
      */
     private final boolean linkCreateWaitingRoomEnabled;
 
     /**
-     * The optional event-start timestamp. Supplied when the link is
-     * created for a scheduled call rather than an immediate call.
+     * The optional scheduled-event start instant.
+     *
+     * @apiNote
+     * Supplied by the scheduled-call surface; rendered as an
+     * {@code <event start_time="..."/>} child whose value is seconds since
+     * the epoch.
      */
     private final Instant eventStartTime;
 
     /**
-     * Constructs a request with every wire-level attribute spelled
-     * out.
+     * Constructs a request with every wire-level attribute spelled out.
      *
-     * @param linkCreateMedia              the optional media type;
-     *                                     may be {@code null}
-     * @param linkCreateCallCreator        the optional call-creator
-     *                                     device JID; may be
-     *                                     {@code null}
-     * @param linkCreateCallId             the optional pre-allocated
-     *                                     call id; may be {@code null}
-     * @param linkCreateLinkCreatorUsername the optional creator
-     *                                     username; may be
-     *                                     {@code null}
-     * @param linkCreateWaitingRoomEnabled whether the link should
-     *                                     enable the waiting-room gate
-     * @param eventStartTime               the optional event start
-     *                                     instant; may be {@code null}
+     * @apiNote
+     * Most embedders should leave the optional fields {@code null} and let
+     * the relay supply defaults; the only field most call-link UIs set
+     * is {@code linkCreateMedia} ({@code "audio"} or {@code "video"}) and,
+     * for scheduled calls, {@code eventStartTime}.
+     *
+     * @param linkCreateMedia               the optional media type; may be {@code null}
+     * @param linkCreateCallCreator         the optional creator-device JID; may be {@code null}
+     * @param linkCreateCallId              the optional pre-allocated call id; may be {@code null}
+     * @param linkCreateLinkCreatorUsername the optional creator username; may be {@code null}
+     * @param linkCreateWaitingRoomEnabled  whether the waiting-room gate is enabled at creation time
+     * @param eventStartTime                the optional event start instant; may be {@code null}
      */
     public SmaxLinkCreateRequest(String linkCreateMedia,
                    Jid linkCreateCallCreator,
@@ -91,70 +113,71 @@ public final class SmaxLinkCreateRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the optional media type.
+     * Returns the optional media type to be carried by the {@code media} attribute.
      *
-     * @return an {@link Optional} carrying the media type, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the media type, or empty when omitted
      */
     public Optional<String> linkCreateMedia() {
         return Optional.ofNullable(linkCreateMedia);
     }
 
     /**
-     * Returns the optional call-creator device JID.
+     * Returns the optional creator-device JID to be carried by the {@code call-creator} attribute.
      *
-     * @return an {@link Optional} carrying the device JID, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the device JID, or empty when omitted
      */
     public Optional<Jid> linkCreateCallCreator() {
         return Optional.ofNullable(linkCreateCallCreator);
     }
 
     /**
-     * Returns the optional pre-allocated call identifier.
+     * Returns the optional pre-allocated call identifier to be carried by the {@code call-id} attribute.
      *
-     * @return an {@link Optional} carrying the call id, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the call id, or empty when omitted
      */
     public Optional<String> linkCreateCallId() {
         return Optional.ofNullable(linkCreateCallId);
     }
 
     /**
-     * Returns the optional creator username.
+     * Returns the optional creator-username to be carried by the {@code link_creator_username} attribute.
      *
-     * @return an {@link Optional} carrying the username, or empty when
-     *         omitted
+     * @return an {@link Optional} carrying the username, or empty when omitted
      */
     public Optional<String> linkCreateLinkCreatorUsername() {
         return Optional.ofNullable(linkCreateLinkCreatorUsername);
     }
 
     /**
-     * Returns whether the waiting-room gate should be enabled.
+     * Returns whether the {@code waiting_room_enabled="1"} marker will be emitted.
      *
-     * @return {@code true} when the gate should be enabled,
-     *         {@code false} otherwise
+     * @return {@code true} when the gate is requested, {@code false} otherwise
      */
     public boolean linkCreateWaitingRoomEnabled() {
         return linkCreateWaitingRoomEnabled;
     }
 
     /**
-     * Returns the optional event-start instant.
+     * Returns the optional scheduled-event start instant.
      *
-     * @return an {@link Optional} carrying the event start, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the event start, or empty when omitted
      */
     public Optional<Instant> eventStartTime() {
         return Optional.ofNullable(eventStartTime);
     }
 
     /**
-     * Builds the outbound stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the {@code <call>}
-     *         envelope around a {@code <link_create/>} payload
+     * @implNote
+     * This implementation emits a {@code <call to="call">} envelope around a
+     * {@code <link_create/>} child, mirroring
+     * {@code WASmaxOutVoipLinkCreateRequest.makeLinkCreateRequest}. The
+     * scheduled-event payload, when present, is rendered as the inner
+     * {@code <event start_time="..."/>} child with seconds-since-epoch.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <call><link_create/></call>}
+     *         stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutVoipLinkCreateRequest",

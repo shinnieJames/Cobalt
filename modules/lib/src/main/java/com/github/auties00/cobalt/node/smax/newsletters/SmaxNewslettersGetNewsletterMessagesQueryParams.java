@@ -15,33 +15,57 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the newsletter addressing modes. Either a
- * JID-keyed query or an invite-key query.
+ * Sealed disjunction over the newsletter-addressing parameters of a
+ * {@link SmaxNewslettersGetNewsletterMessagesRequest} or
+ * {@link SmaxNewslettersGetNewsletterStatusesRequest}.
+ *
+ * @apiNote
+ * Pick {@link ByJid} when the caller already knows the newsletter's
+ * JID, or {@link ByInvite} when only the public invite-link token is
+ * available (used by the Channels invite-preview flow in
+ * {@code WAWebNewsletterGetMessagesQueryJob.queryNewsletterMessagesByInviteCode}).
+ * The optional view-role string is forwarded to the relay's ACL
+ * projection so the slice respects the caller's role on the
+ * newsletter.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersQueryNewsletterParams")
 public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid, SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite {
 
     /**
-     * Addressing the newsletter by its JID, optionally with a
-     * {@code view_role} string the relay uses for ACL projection.
+     * The variant that addresses a newsletter directly by its
+     * {@link Jid}.
+     *
+     * @apiNote
+     * Used when the caller already has the newsletter JID in hand,
+     * which is the dominant case once the newsletter is in the local
+     * subscribed-list. The optional {@code view_role} string narrows
+     * the slice to the projection the caller has on the newsletter
+     * (subscriber, admin, owner).
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersQueryNewsletterJIDParamsMixin")
     final class ByJid implements SmaxNewslettersGetNewsletterMessagesQueryParams {
         /**
-         * The newsletter JID being queried.
+         * The {@link Jid} of the newsletter being addressed.
          */
         private final Jid newsletterJid;
 
         /**
-         * The optional view-role projection string.
+         * The optional view-role string the relay uses to project the
+         * caller's ACL onto the slice.
          */
         private final String viewRole;
 
         /**
-         * Constructs a JID-addressed query.
+         * Constructs a new JID-addressed query.
          *
-         * @param newsletterJid the newsletter JID; never {@code null}
-         * @param viewRole      the optional view-role; may be
+         * @apiNote
+         * Pass {@code null} for {@code viewRole} when no role
+         * projection is required; the relay falls back to the caller's
+         * default role on the newsletter.
+         *
+         * @param newsletterJid the newsletter {@link Jid}; never
+         *                      {@code null}
+         * @param viewRole      the optional view-role string; may be
          *                      {@code null}
          * @throws NullPointerException if {@code newsletterJid} is
          *                              {@code null}
@@ -52,24 +76,32 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits 
         }
 
         /**
-         * Returns the newsletter JID.
+         * Returns the addressed newsletter {@link Jid}.
          *
-         * @return the JID; never {@code null}
+         * @return the newsletter {@link Jid}; never {@code null}
          */
         public Jid newsletterJid() {
             return newsletterJid;
         }
 
         /**
-         * Returns the optional view-role.
+         * Returns the optional view-role projection string.
          *
          * @return an {@link Optional} carrying the view-role, or empty
-         *         when omitted
+         *         when no projection is requested
          */
         public Optional<String> viewRole() {
             return Optional.ofNullable(viewRole);
         }
 
+        /**
+         * Compares two variants for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ByJid}
+         *         carrying equal {@link #newsletterJid()} and
+         *         {@link #viewRole()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -83,11 +115,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits 
                     && Objects.equals(this.viewRole, that.viewRole);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #newsletterJid()} and
+         *         {@link #viewRole()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(newsletterJid, viewRole);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this variant
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesQueryParams.ByJid[newsletterJid=" + newsletterJid + ", viewRole=" + viewRole + ']';
@@ -95,26 +138,37 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits 
     }
 
     /**
-     * Addressing the newsletter by its invite key (the public link
-     * token), optionally with a {@code view_role} string.
+     * The variant that addresses a newsletter by its public invite key.
+     *
+     * @apiNote
+     * Used by Channels invite-link preview surfaces where the user has
+     * only the public link token and has not yet joined the newsletter.
+     * The optional {@code view_role} string is rarely set on this
+     * variant because non-subscribers do not have a custom role.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersQueryNewsletterInviteParamsMixin")
     final class ByInvite implements SmaxNewslettersGetNewsletterMessagesQueryParams {
         /**
-         * The newsletter invite key.
+         * The opaque public invite token for the newsletter.
          */
         private final String inviteKey;
 
         /**
-         * The optional view-role projection string.
+         * The optional view-role string the relay uses to project the
+         * caller's ACL onto the slice.
          */
         private final String viewRole;
 
         /**
-         * Constructs an invite-addressed query.
+         * Constructs a new invite-addressed query.
          *
-         * @param inviteKey the invite key; never {@code null}
-         * @param viewRole  the optional view-role; may be {@code null}
+         * @apiNote
+         * Pass {@code null} for {@code viewRole} when no role
+         * projection is required.
+         *
+         * @param inviteKey the public invite token; never {@code null}
+         * @param viewRole  the optional view-role string; may be
+         *                  {@code null}
          * @throws NullPointerException if {@code inviteKey} is
          *                              {@code null}
          */
@@ -126,22 +180,30 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits 
         /**
          * Returns the invite key.
          *
-         * @return the key; never {@code null}
+         * @return the invite key; never {@code null}
          */
         public String inviteKey() {
             return inviteKey;
         }
 
         /**
-         * Returns the optional view-role.
+         * Returns the optional view-role projection string.
          *
          * @return an {@link Optional} carrying the view-role, or empty
-         *         when omitted
+         *         when no projection is requested
          */
         public Optional<String> viewRole() {
             return Optional.ofNullable(viewRole);
         }
 
+        /**
+         * Compares two variants for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ByInvite}
+         *         carrying equal {@link #inviteKey()} and
+         *         {@link #viewRole()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -155,11 +217,22 @@ public sealed interface SmaxNewslettersGetNewsletterMessagesQueryParams permits 
                     && Objects.equals(this.viewRole, that.viewRole);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #inviteKey()} and
+         *         {@link #viewRole()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(inviteKey, viewRole);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this variant
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterMessagesQueryParams.ByInvite[inviteKey=" + inviteKey + ", viewRole=" + viewRole + ']';

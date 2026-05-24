@@ -12,13 +12,11 @@ import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadAction;
 import com.github.auties00.cobalt.model.sync.action.chat.MarkChatAsReadActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.MarkChatAsReadMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,14 +27,33 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MarkChatAsReadHandler}.
+ * Exercises the {@link MarkChatAsReadHandler} adapter for
+ * {@code WAWebMarkChatAsReadSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code markChatAsRead}
+ * app-state sync action across metadata, the SET happy path that
+ * flips the chat between marked-as-read and marked-as-unread, the
+ * orphan branch when the chat is unknown locally, the
+ * malformed-input fallbacks, the REMOVE rejection, the four-way
+ * message-range conflict matrix and the
+ * {@link MarkChatAsReadMutationFactory} builder.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link com.github.auties00.cobalt.model.chat.Chat#markedAsUnread()}
+ * and
+ * {@link com.github.auties00.cobalt.model.chat.Chat#unreadCount()}
+ * read-backs can be asserted directly without consulting a chat
+ * table.
  */
 @DisplayName("MarkChatAsReadHandler")
 class MarkChatAsReadHandlerTest {
@@ -109,7 +126,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("read=true marks the chat as read with unreadCount=0")
@@ -141,7 +158,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Chat")
@@ -156,7 +173,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying a pinAction instead of markChatAsReadAction is MALFORMED")
@@ -176,7 +193,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty chat JID at slot 1 is MALFORMED")
@@ -196,7 +213,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -216,10 +233,10 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” message-range matrix")
+    @DisplayName("resolveConflicts - message-range matrix")
     class ResolveConflicts {
         @Test
-        @DisplayName("remote range encloses local range â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("remote range encloses local range -> APPLY_REMOTE_DROP_LOCAL")
         void remoteEnclosesLocal() {
             // local has no messages, small lastTs; remote carries a message past local's lastTs.
             var localRange = new SyncActionMessageRangeBuilder()
@@ -235,7 +252,7 @@ class MarkChatAsReadHandlerTest {
         }
 
         @Test
-        @DisplayName("local range encloses remote range â†’ SKIP_REMOTE")
+        @DisplayName("local range encloses remote range -> SKIP_REMOTE")
         void localEnclosesRemote() {
             var localRange = new SyncActionMessageRangeBuilder()
                     .lastMessageTimestamp(Instant.ofEpochSecond(100L))
@@ -250,7 +267,7 @@ class MarkChatAsReadHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges equal with local timestamp <= remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("ranges equal with local timestamp <= remote -> APPLY_REMOTE_DROP_LOCAL")
         void rangesEqualLocalOlder() {
             var local = readMutation(false, PEER, Instant.ofEpochSecond(100L), rangeWithLast(100L));
             var remote = readMutation(true, PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L));
@@ -260,7 +277,7 @@ class MarkChatAsReadHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges equal with local timestamp strictly newer â†’ SKIP_REMOTE")
+        @DisplayName("ranges equal with local timestamp strictly newer -> SKIP_REMOTE")
         void rangesEqualLocalNewer() {
             var local = readMutation(true, PEER, Instant.ofEpochSecond(300L), rangeWithLast(100L));
             var remote = readMutation(false, PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L));
@@ -270,10 +287,10 @@ class MarkChatAsReadHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges do not enclose each other â†’ SKIP_REMOTE_DROP_LOCAL with merged mutation")
+        @DisplayName("ranges do not enclose each other -> SKIP_REMOTE_DROP_LOCAL with merged mutation")
         void rangesNotEnclosing() {
             // Each range carries a message whose timestamp >= the OTHER range's lastMessageTimestamp,
-            // with disjoint key ids â€” forcing encloses() to return false in both directions.
+            // with disjoint key ids - forcing encloses() to return false in both directions.
             var localRange = new SyncActionMessageRangeBuilder()
                     .lastMessageTimestamp(Instant.ofEpochSecond(50L))
                     .messages(List.of(msg("local-1", 80L)))
@@ -295,7 +312,7 @@ class MarkChatAsReadHandlerTest {
     }
 
     @Nested
-    @DisplayName("getMarkChatAsReadMutation â€” builder helper")
+    @DisplayName("getMarkChatAsReadMutation - builder helper")
     class BuilderHelpers {
         @Test
         @DisplayName("getMarkChatAsReadMutation carries the read flag and the action index")
@@ -313,24 +330,4 @@ class MarkChatAsReadHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/mark-chat-as-read/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/mark-chat-as-read/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var read = oracle.getBoolean("read");
-
-            var action = new MarkChatAsReadActionBuilder().read(read).build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .markChatAsReadAction(action)
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

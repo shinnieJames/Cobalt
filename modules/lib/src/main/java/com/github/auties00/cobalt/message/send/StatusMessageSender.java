@@ -3,8 +3,8 @@ package com.github.auties00.cobalt.message.send;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.exception.WhatsAppMessageException;
-import com.github.auties00.cobalt.message.send.ack.AckParser;
-import com.github.auties00.cobalt.message.send.ack.AckResult;
+import com.github.auties00.cobalt.ack.AckParser;
+import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.MessageEncryptionType;
@@ -34,59 +34,75 @@ import com.github.auties00.cobalt.wam.type.WamSizeBuckets;
 import java.util.*;
 
 /**
- * Sends status updates to the {@code status@broadcast} broadcast JID. Status
- * messages use sender-key encryption (like groups) but the audience is
- * derived from the user's status privacy preferences. The wire stanza
- * includes a {@code <meta status_setting="...">} attribute that mirrors the
- * configured privacy mode.
+ * Publishes a status update to the {@code status@broadcast} JID.
+ *
+ * <p>Status broadcasts share the sender-key (SKMSG) pipeline used for group
+ * sends but resolve the audience from the user's status privacy preferences
+ * rather than from a group's participant list. The outgoing stanza carries a
+ * {@code <meta status_setting="...">} child that mirrors the configured
+ * privacy mode (suppressed for revokes). Revokes whose original audience
+ * is no longer covered by the current privacy preference take a dedicated
+ * per-device direct path so the revoke reaches the original recipients even
+ * if they would not normally see new status updates.
  */
 @WhatsAppWebModule(moduleName = "WAWebEncryptAndSendStatusMsg")
 final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     /**
-     * Holds the logger used for status-message diagnostics.
+     * The {@link System.Logger} used for status-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(StatusMessageSender.class.getName());
 
     /**
-     * Holds the encryption service used for sender-key and per-device
-     * encryption paths.
+     * The {@link MessageEncryption} service used for both the SKMSG group
+     * encryption and the per-device path taken by direct revokes.
      */
     private final MessageEncryption encryption;
 
     /**
-     * Holds the device service used for audience fanout and session management.
+     * The {@link DeviceService} used to resolve the audience fanout and
+     * manage Signal sessions to audience devices.
      */
     private final DeviceService deviceService;
 
     /**
-     * Holds the sender-key distribution service used to push the sender key to
-     * audience devices that do not yet hold it.
+     * The {@link SenderKeyDistribution} service used to encrypt the
+     * per-device sender-key distribution payloads.
      */
     private final SenderKeyDistribution senderKeyDistribution;
 
     /**
-     * Holds the meta stanza builder responsible for the {@code status_setting}
-     * and other meta attributes.
+     * The {@link MetaStanza} builder responsible for the
+     * {@code status_setting} and other meta attributes on the stanza.
      */
     private final MetaStanza metaStanza;
 
     /**
-     * Holds the reporting stanza builder responsible for generating the
-     * {@code reporting} node payload.
+     * The {@link ReportingStanza} builder responsible for generating the
+     * {@code <reporting>} child payload.
      */
     private final ReportingStanza reportingStanza;
 
     /**
-     * Constructs a status sender bound to the given dependencies.
+     * Constructs a {@link StatusMessageSender} bound to the supplied
+     * dependencies.
      *
-     * @param client                the WhatsApp client used to dispatch stanzas
-     * @param encryption            the message encryption service
-     * @param deviceService         the device service used for audience fanout
-     * @param abPropsService        the AB-props service consulted by the base sender
-     * @param senderKeyDistribution the sender-key distribution service
-     * @param metaStanza            the meta stanza builder
-     * @param reportingStanza       the reporting stanza builder
-     * @param wamService            the WAM telemetry service shared with the base sender
+     * @apiNote
+     * Constructed once by {@link MessageSendingService}; embedders should
+     * not instantiate directly.
+     *
+     * @param client                the {@link WhatsAppClient} used to
+     *                              dispatch stanzas
+     * @param encryption            the {@link MessageEncryption} service
+     * @param deviceService         the {@link DeviceService} used for
+     *                              audience fanout
+     * @param abPropsService        the {@link ABPropsService} consulted by
+     *                              the base sender
+     * @param senderKeyDistribution the {@link SenderKeyDistribution} service
+     * @param metaStanza            the {@link MetaStanza} builder
+     * @param reportingStanza       the {@link ReportingStanza} builder
+     * @param wamService            the {@link WamService} shared with the
+     *                              base sender
+     * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -109,15 +125,14 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Sends a status update to every device in the resolved audience. The
-     * payload is encrypted with the sender key (SKMSG), the sender key is
-     * distributed to devices that do not yet hold it, and the wire stanza
-     * carries a {@code <meta>} child whose {@code status_setting} attribute
-     * mirrors the privacy preference (omitted for revokes).
+     * {@inheritDoc}
      *
-     * @param statusJid   the status broadcast JID
-     * @param messageInfo the outgoing status message
-     * @return the server ack result
+     * @apiNote
+     * Encrypts the payload with the status sender key, distributes the
+     * sender key to audience devices that do not yet hold it, and dispatches
+     * the SKMSG stanza. Revokes that cover an audience subset which is no
+     * longer reachable by SKMSG fall back to the per-device direct path via
+     * {@link #sendDirectRevoke(Jid, ChatMessageInfo, Collection)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -248,13 +263,21 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Resolves the {@code status_setting} meta attribute from the user's
-     * status privacy preference. Cobalt returns {@code null} for unknown
-     * privacy values rather than throwing, departing from WA Web on this
-     * one branch.
+     * Returns the {@code status_setting} meta attribute value derived from
+     * the user's status privacy preference.
      *
-     * @return {@code "contacts"}, {@code "allowlist"}, {@code "denylist"},
-     *         or {@code null} when the preference is unavailable or unknown
+     * @apiNote
+     * The mapping mirrors WA Web's enum-to-string table: {@code Contact} to
+     * {@code "contacts"}, {@code AllowList} to {@code "allowlist"},
+     * {@code DenyList} to {@code "denylist"}.
+     *
+     * @implNote
+     * This implementation returns {@code null} (rather than throwing) on
+     * unknown preference values, departing from WA Web on the
+     * exhaustive-match branch; the caller treats a {@code null} the same as
+     * an absent preference and drops the attribute.
+     *
+     * @return the {@code status_setting} value, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -273,15 +296,20 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Resolves the target device list for the given outgoing container in a
-     * single pass. Returns the full audience for non-revokes; for revokes
-     * either narrows the audience to the original recipients (when they all
-     * remain inside the audience) or marks the result for the per-device
-     * direct path (when at least one original recipient is outside).
+     * Resolves the target device list and dispatch path for the given
+     * outgoing container.
      *
-     * @param container       the outgoing message container
-     * @param currentAudience the resolved status audience
-     * @return the resolution describing the device list and dispatch path
+     * @apiNote
+     * Non-revokes return the current audience unchanged on the SKMSG path.
+     * Revokes attempt to narrow the audience to the original recipients
+     * recorded against the revoked message; if at least one original
+     * recipient is no longer part of the current audience, the union is
+     * returned with the direct-path flag set so the caller dispatches via
+     * {@link #sendDirectRevoke(Jid, ChatMessageInfo, Collection)}.
+     *
+     * @param container       the outbound {@link MessageContainer}
+     * @param currentAudience the resolved status audience fanout
+     * @return the {@link RevokeResolution} describing the dispatch decision
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -339,7 +367,12 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Carries the result of resolving the device list for a status revoke.
+     * Carries the outcome of resolving the device list for a status revoke.
+     *
+     * @apiNote
+     * Internal carrier for {@link #resolveRevokeDevices}; the boolean
+     * {@code useDirect} flag selects the GROUP_DIRECT dispatch path on the
+     * caller side.
      *
      * @param useDirect {@code true} when the revoke must use the per-device
      *                  direct path
@@ -350,15 +383,22 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Sends a status revoke via per-device fanout encryption (the GROUP_DIRECT
-     * branch). This path is used when at least one original recipient is no
-     * longer part of the current status audience.
+     * Dispatches a status revoke via the per-device fanout (GROUP_DIRECT)
+     * branch.
      *
-     * @param statusJid   the status broadcast JID
-     * @param messageInfo the outgoing revoke message
-     * @param allDevices  the union of original recipients and current audience
-     * @return the server ack result
-     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for every device
+     * @apiNote
+     * Taken when {@link #resolveRevokeDevices} detects that at least one
+     * original recipient is no longer covered by the current status
+     * audience; the stanza is built via {@link ChatFanoutStanza#build} with
+     * a per-device payload list rather than a sender-key payload.
+     *
+     * @param statusJid   the status broadcast {@link Jid}
+     * @param messageInfo the outgoing revoke {@link ChatMessageInfo}
+     * @param allDevices  the union of original recipients and current
+     *                    audience
+     * @return the parsed server {@link AckResult}
+     * @throws WhatsAppMessageException.Send.Unknown if encryption fails for
+     *                                               every device
      */
     @WhatsAppWebExport(moduleName = "WAWebEncryptAndSendStatusMsg", exports = "encryptAndSendStatusDirectMsg",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -418,11 +458,15 @@ final class StatusMessageSender extends MessageSender<ChatMessageInfo> {
     /**
      * Commits one {@link com.github.auties00.cobalt.wam.event.PrekeysDepletionEvent}
      * per depleted one-time pre-key reported by the last
-     * {@code ensureSessions} call. No-op when {@code depletedPrekeyCount} is
-     * not positive.
+     * {@code ensureSessions} call.
+     *
+     * @apiNote
+     * No-op when {@code depletedPrekeyCount} is not positive. Mirrors WA
+     * Web's {@code maybePostPrekeysDepletionMetric}; the audience size
+     * drives the {@code deviceSizeBucket} slot.
      *
      * @param depletedPrekeyCount the number of depleted one-time pre-keys
-     * @param messageType         the WAM message type for this send
+     * @param messageType         the WAM {@link MessageType} for this send
      * @param deviceCount         the device count used for the
      *                            {@code deviceSizeBucket} classification, or
      *                            {@code null} to omit the bucket

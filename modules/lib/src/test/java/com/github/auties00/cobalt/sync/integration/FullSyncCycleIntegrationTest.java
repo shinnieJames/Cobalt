@@ -5,6 +5,7 @@ import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.media.TestMediaConnectionService;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.SnapshotRecoveryService;
@@ -66,7 +67,7 @@ class FullSyncCycleIntegrationTest {
         var wam = new DefaultWamService(client, props);
         var lidMigration = new LidMigrationService(client, props, wam);
         var snapshotRecovery = new SnapshotRecoveryService(client, props, wam);
-        service = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wam);
+        service = new WebAppStateService(client, props, lidMigration, snapshotRecovery, wam, TestMediaConnectionService.create());
     }
 
     @Nested

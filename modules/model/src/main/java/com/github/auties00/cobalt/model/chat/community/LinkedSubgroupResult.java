@@ -25,7 +25,7 @@ import java.util.Objects;
  * {@link Map} entry from the participant JID to the relay-reported error
  * code (always {@code "403"} in current schemas).
  *
- * @see com.github.auties00.cobalt.model.chat.community.CommunityMetadata
+ * @see CommunityMetadata
  */
 @ProtobufMessage(name = "LinkedSubgroupResult")
 public final class LinkedSubgroupResult {

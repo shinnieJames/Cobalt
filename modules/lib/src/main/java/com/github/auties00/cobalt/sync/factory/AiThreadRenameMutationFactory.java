@@ -15,33 +15,61 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing AI-thread-rename sync mutations.
+ * Builds outgoing app-state mutations that rename an AI thread on a Meta-AI bot chat.
  *
- * <p>The factory is the outgoing-mutation counterpart of
- * {@link com.github.auties00.cobalt.sync.handler.AiThreadRenameHandler}.
+ * @apiNote
+ * Drives the Meta-AI bot UI's "rename thread" affordance: when the user
+ * changes a thread title, the returned mutation is pushed through
+ * {@link com.github.auties00.cobalt.sync.WebAppStateService} so every linked
+ * device updates the same thread's metadata. The factory is the
+ * outgoing-mutation counterpart of
+ * {@link com.github.auties00.cobalt.sync.handler.AiThreadRenameHandler}; the
+ * handler resolves the inbound mutation by calling
+ * {@code WAWebThreadMetadataBulkJob.bulkCreateOrUpdateThreadsMetadata}.
+ *
+ * @implNote
+ * This implementation skips the WA Web pre-emit
+ * {@code isStringNotNullAndNotWhitespaceOnly(newTitle)} guard and forwards
+ * whatever title the caller supplies; the receive-side handler still validates
+ * the title via {@link AiThreadRenameAction#newTitle()}.
  */
 public final class AiThreadRenameMutationFactory {
     /**
-     * Constructs an AI-thread-rename mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; instantiation is cheap and a single instance
+     * may be shared across the lifetime of the client.
      */
     public AiThreadRenameMutationFactory() {
 
     }
 
     /**
-     * Builds a pending outgoing mutation that renames an AI thread across
-     * linked devices.
+     * Returns a {@link SyncPendingMutation} that renames the given AI thread.
      *
-     * <p>Per WhatsApp Web {@code WAWebAiThreadRenameSync}: emits a SET
-     * mutation at {@code ["ai_thread_rename", botJid, threadId]} in the
-     * REGULAR_LOW collection with {@code version = 7} and an
-     * {@code aiThreadRenameAction} sub-message carrying the new title.
+     * @apiNote
+     * Call this when the user edits an AI thread title; the returned mutation
+     * must be enqueued via
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
+     * to fan it out to linked devices. The mutation index follows
+     * {@snippet :
+     *     ["ai_thread_rename", chatJid.toString(), threadId]
+     * }
+     * and the {@link AiThreadRenameAction} sub-message carries the new title.
      *
-     * @param chatJid  the bot JID owning the thread
-     * @param threadId the AI thread identifier
-     * @param newTitle the new thread title
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
+     * @implNote
+     * This implementation emits the {@link DecryptedMutation.Trusted} variant
+     * with {@link SyncdOperation#SET}; WA Web's
+     * {@code WAWebAiThreadRenameSync.buildMutation} produces the same shape
+     * with {@code action = AiThreadRename}, version 7, and collection
+     * RegularLow, which {@link AiThreadRenameAction#ACTION_VERSION} pins.
+     *
+     * @param chatJid  the bot {@link Jid} owning the thread
+     * @param threadId the thread identifier as exposed by the bot
+     * @param newTitle the new title for the thread; the receive-side handler
+     *                 rejects blank values
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebAiThreadRenameSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getAiThreadRenameMutation(Jid chatJid, String threadId, String newTitle) {
@@ -53,7 +81,7 @@ public final class AiThreadRenameMutationFactory {
                 .timestamp(timestamp)
                 .aiThreadRenameAction(action)
                 .build();
-        var index = JSON.toJSONString(List.of(AiThreadRenameAction.ACTION_NAME, chatJid.toString(), threadId)); // ["ai_thread_rename", chatJid, threadId]
+        var index = JSON.toJSONString(List.of(AiThreadRenameAction.ACTION_NAME, chatJid.toString(), threadId));
         var mutation = new DecryptedMutation.Trusted(
                 index,
                 value,

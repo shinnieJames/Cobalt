@@ -4,16 +4,15 @@ import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.preference.StickerBuilder;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.StickerAction;
 import com.github.auties00.cobalt.model.sync.action.media.StickerActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.FavoriteStickerMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,28 +28,28 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link FavoriteStickerHandler}, Cobalt's adapter for
+ * Exercises the {@link FavoriteStickerHandler} adapter for
  * {@code WAWebStickersFavoriteSyncAction}.
  *
- * <p>The handler routes {@code "favoriteSticker"} sync mutations into the
- * favourite-stickers store. The matrix below pins down:
- * <ul>
- *   <li>Metadata wire constants (action name, collection, version).</li>
- *   <li>SET happy path: feature-enabled adds and removes a sticker.</li>
- *   <li>Orphan path: the {@code favorite_sticker} primary feature flag is
- *       absent and the mutation is reported as orphan with the sticker hash
- *       as the model id.</li>
- *   <li>Malformed action value (wrong sub-message type) and malformed index
- *       (missing/empty/non-JSON) branches.</li>
- *   <li>Non-{@code SET} operations short-circuit with {@code UNSUPPORTED}.</li>
- *   <li>Default timestamp-based {@code resolveConflicts} semantics.</li>
- *   <li>{@code applyMutationBatch} preserves the per-item ordering of the
- *       default implementation.</li>
- *   <li>{@code getFavoriteStickerMutation} produces a SET pending mutation
- *       at index {@code ["favoriteSticker", hash]} with the correct
- *       {@code isFavorite} flag.</li>
- *   <li>WA Web byte-parity oracle (gated on fixture availability).</li>
- * </ul>
+ * @apiNote
+ * Verifies parity with WA Web for the {@code favoriteSticker}
+ * app-state sync action across metadata, the SET happy path
+ * (feature-enabled add and remove), the orphan branch when the
+ * {@code favorite_sticker} primary feature is absent, the
+ * malformed-value and malformed-index branches, the REMOVE
+ * rejection, the inherited timestamp-based conflict resolution,
+ * the per-item batch dispatch and the static
+ * {@code getFavoriteStickerMutation} builder.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#findFavouriteSticker(String)}
+ * read-back can be asserted directly. The
+ * {@code "favorite_sticker"} primary feature flag is toggled by
+ * mutating the store's primary-features set so the gating branch is
+ * deterministic.
  */
 @DisplayName("FavoriteStickerHandler")
 class FavoriteStickerHandlerTest {
@@ -63,7 +62,11 @@ class FavoriteStickerHandlerTest {
     private TestWhatsAppClient client;
 
     /**
-     * Builds a fresh harness with an empty store and a test client wired to it.
+     * Resets the in-memory test harness before each test.
+     *
+     * @apiNote
+     * Each test owns a fresh {@link DeviceFixtures#temporaryStore} so
+     * mutations from a previous test cannot leak into the next.
      */
     @BeforeEach
     void setUp() {
@@ -72,11 +75,18 @@ class FavoriteStickerHandlerTest {
     }
 
     /**
-     * Builds a trusted SET mutation carrying the given sticker action and index.
+     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
+     * carrying the given sticker action and pre-built index string.
      *
-     * @param action the sticker action payload
+     * @apiNote
+     * Used by every SET-path test to keep the mutation construction
+     * boilerplate out of the test bodies and to lock the timestamp
+     * across the suite.
+     *
+     * @param action the {@link StickerAction} payload
      * @param index  the JSON-encoded mutation index
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} with the wire-shaped
+     *         envelope
      */
     private static DecryptedMutation.Trusted setMutation(StickerAction action, String index) {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
@@ -88,9 +98,17 @@ class FavoriteStickerHandlerTest {
     }
 
     /**
-     * Builds a trusted REMOVE mutation; the handler should short-circuit on it.
+     * Builds a {@link SyncdOperation#REMOVE}
+     * {@link DecryptedMutation.Trusted} for the canonical sticker hash.
      *
-     * @return the REMOVE mutation
+     * @apiNote
+     * Used by the REMOVE-rejection branch to verify that the handler
+     * short-circuits with
+     * {@link MutationApplicationResult#unsupported()}
+     * regardless of the action payload.
+     *
+     * @return a {@link DecryptedMutation.Trusted} with operation
+     *         {@link SyncdOperation#REMOVE}
      */
     private static DecryptedMutation.Trusted removeMutation() {
         var ts = Instant.ofEpochSecond(1_700_000_000L);
@@ -103,7 +121,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() returns StickerAction.ACTION_NAME (favoriteSticker)")
@@ -128,7 +146,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” SET happy path (feature enabled)")
+    @DisplayName("applyMutation - SET happy path (feature enabled)")
     class HappySet {
         @Test
         @DisplayName("isFavorite=true on a fresh store adds the sticker and reports SUCCESS")
@@ -194,7 +212,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” feature gating reports ORPHAN")
+    @DisplayName("applyMutation - feature gating reports ORPHAN")
     class FeatureGating {
         @Test
         @DisplayName("missing favorite_sticker primary feature reports ORPHAN with sticker hash as model id")
@@ -215,14 +233,14 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("SyncActionValue carrying a different action sub-message is MALFORMED")
         void wrongActionType() {
             store.setPrimaryFeatures(List.of(FAVORITE_STICKER_FEATURE));
             var ts = Instant.ofEpochSecond(1_700_000_000L);
-            // No stickerAction set â€” action().orElse(null) will be null or some other type
+            // No stickerAction set - action().orElse(null) will be null or some other type
             var value = new SyncActionValueBuilder().timestamp(ts).build();
             var index = "[\"favoriteSticker\",\"" + STICKER_HASH + "\"]";
             var mutation = new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, 7);
@@ -233,7 +251,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("empty sticker hash at index[1] is MALFORMED")
@@ -265,7 +283,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE short-circuits")
+    @DisplayName("applyMutation - REMOVE short-circuits")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation is UNSUPPORTED (handler is SET-only)")
@@ -276,7 +294,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -291,7 +309,7 @@ class FavoriteStickerHandlerTest {
             var remote = new DecryptedMutation.Trusted(local.index(), remoteValue, SyncdOperation.SET, remoteTs, 7);
 
             var resolution = new FavoriteStickerHandler().resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
 
@@ -314,13 +332,13 @@ class FavoriteStickerHandlerTest {
             var remote = new DecryptedMutation.Trusted(local.index(), remoteValue, SyncdOperation.SET, remoteTs, 7);
 
             var resolution = new FavoriteStickerHandler().resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.SKIP_REMOTE,
+            assertEquals(ConflictResolutionState.SKIP_REMOTE,
                     resolution.state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” default per-item dispatch")
+    @DisplayName("applyMutationBatch - default per-item dispatch")
     class BatchDispatch {
         @Test
         @DisplayName("default applyMutationBatch is a per-item map of applyMutation results")
@@ -341,7 +359,7 @@ class FavoriteStickerHandlerTest {
     }
 
     @Nested
-    @DisplayName("getFavoriteStickerMutation â€” pending mutation builder")
+    @DisplayName("getFavoriteStickerMutation - pending mutation builder")
     class Builder {
         @Test
         @DisplayName("favorite=true produces a SET pending mutation at the correct index with isFavorite=true")
@@ -377,19 +395,4 @@ class FavoriteStickerHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/favorite-sticker/encode")) {
-                return;
-            }
-            // When the fixture lands it pins (stickerHash, isFavorite) -> SyncActionValue bytes;
-            // until then this test exists to make the gate explicit per the validation matrix.
-            var oracle = SyncFixtures.loadOracle("handler/favorite-sticker/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

@@ -16,57 +16,65 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Handles chat lock settings sync actions.
+ * Maintains the global chat-lock settings (hide-locked-chats flag and PBKDF2 secret-code material) from {@code setting_chatLock} sync mutations.
  *
- * <p>This handler processes mutations related to the global chat lock settings
- * (e.g., whether locked chats are hidden, the secret code configuration).
- * It validates each mutation's {@link ChatLockSettings} value, including
- * thorough validation of the secret code's transformer, encoding, data,
- * and arguments (iterations and salt).
+ * @apiNote
+ * Drives the Chat Lock surface that hides locked chats from the
+ * primary chat list and gates them behind a user secret code. When
+ * the user toggles either field on another device, the server replays
+ * the resulting {@link ChatLockSettings} here. Cobalt embedders read
+ * the result through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#chatLockSettings()}.
  *
- * <p>Index format: {@code ["setting_chatLock"]}
+ * @implNote
+ * This implementation validates the secret-code payload exactly the
+ * way WA Web does: the {@link UserPassword#transformer()} must be
+ * {@link UserPassword.Transformer#PBKDF2_HMAC_SHA512} and the
+ * {@code transformerArg} list must contain both an
+ * {@code iterations} entry (as unsigned integer) and a {@code salt}
+ * entry (as blob). The {@code hideLockedChats} null-vs-false
+ * distinction WA Web flags as malformed is collapsed to {@code false}
+ * because Cobalt's nullable-Boolean accessors coalesce {@code null} on
+ * read. The eight WA Web counter-logged warning lines are dropped in
+ * favour of the per-mutation result; the only retained log is the
+ * "mutations parse failed" warning when no batch produced a writable
+ * record.
  */
 @WhatsAppWebModule(moduleName = "WAWebChatLockSettingsSync")
 public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     /**
-     * Logger for chat lock settings sync handler.
+     * The handler-scoped {@link Logger} used to emit the "mutations parse failed" warning.
+     *
+     * @apiNote
+     * Records the same line WA Web emits when a batch of
+     * {@code setting_chatLock} mutations finishes without producing a
+     * writable settings record.
      */
     private static final Logger LOGGER = Logger.getLogger(ChatLockSettingsHandler.class.getName());
 
     /**
-     * Constructs a new {@code ChatLockSettingsHandler}.
+     * Constructs the singleton chat-lock-settings handler.
      *
-     * <p>Per WhatsApp Web, the constructor of class {@code f} extends
-     * {@code AccountSyncdActionBase} and sets
-     * {@code this.collectionName = WASyncdConst.CollectionName.RegularLow}. The
-     * {@code collectionName} assignment is surfaced in Cobalt via
-     * {@link #collectionName()} rather than as an instance field.
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public ChatLockSettingsHandler() {
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return ChatLockSettings.ACTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return ChatLockSettings.COLLECTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -74,27 +82,22 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single chat lock settings mutation and returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebChatLockSettingsSync.applyMutations} per-mutation
-     * map callback: validates that the operation is SET, that the sync action value
-     * contains a non-null {@code chatLockSettings}, and that any present
-     * {@code secretCode} has valid transformer, encoding, transformed data, and
-     * transformer arguments (iterations and salt). On any malformed secretCode,
-     * WA Web still updates the pending save target {@code r} with
-     * {@code {hideLockedChats: s, secretCode: null}} before returning malformed,
-     * so a later successful save commits the sanitized value. The single-mutation
-     * entry point here matches that semantic by persisting the sanitized settings
-     * only on full success.
+     * @apiNote
+     * Validates the {@link ChatLockSettings} value (including the
+     * full secret-code payload) and persists it. Returns
+     * {@link MutationApplicationResult#unsupported()} for non-{@code SET}
+     * operations and {@link SyncdIndexUtils#malformedActionValue(String)}
+     * when the value is missing or the secret code fails validation.
      *
-     * <p>The WA Web null check on {@code hideLockedChats} is classified as ADAPTED:
-     * Cobalt's {@link ChatLockSettings#hideLockedChats()} accessor coalesces
-     * {@code null} to {@code false} per project convention for nullable Boolean
-     * fields, making the null case indistinguishable from an explicit {@code false}
-     * value through the public API.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed mutation application result
+     * @implNote
+     * This implementation persists only on full success: a
+     * malformed-secret-code mutation is rejected without writing the
+     * sanitized hide-locked-chats flag, where WA Web instead writes a
+     * partial record carrying the flag and a {@code null} secret code.
+     * Use {@link #applyMutationBatch(WhatsAppClient, List)} to obtain
+     * the WA Web partial-write semantic across a batch.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -107,9 +110,6 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        // ADAPTED: WAWebChatLockSettingsSync.applyMutations: var s = t.hideLockedChats; if (s == null) return malformed
-        // Cobalt's hideLockedChats() coalesces null to false per nullable Boolean convention;
-        // the null-vs-false distinction is not observable through the public accessor.
         if (!isSecretCodeValid(settings)) {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
@@ -119,24 +119,24 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a batch of chat lock settings mutations.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebChatLockSettingsSync.applyMutations}: iterates
-     * all mutations, and for each SET mutation with a non-null {@code chatLockSettings}
-     * and a non-null {@code hideLockedChats}, the pending save target {@code r}
-     * is unconditionally reassigned to
-     * {@code {hideLockedChats: s, secretCode: null}}. Only if the secretCode (when
-     * present) validates successfully does {@code r.secretCode} get set to the
-     * parsed value. A malformed secretCode therefore leaves {@code r} with the
-     * hideLockedChats value but a null secretCode and still returns malformed for
-     * that mutation. After iteration, if any {@code r} was produced, it is
-     * persisted once via {@code getChatLockSettings().updateAndSave(r)}.
+     * @apiNote
+     * Iterates the batch, building up a single pending
+     * {@link ChatLockSettings} record across all SET mutations, and
+     * persists it once via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setChatLockSettings(ChatLockSettings)}.
+     * If no SET mutation ever populated the pending record, emits the
+     * "mutations parse failed" warning matching WA Web.
      *
-     * <p>If no valid mutation is found, logs a warning matching WA Web's
-     * {@code "ChatLockSettingsSync: mutations parse failed"} message.
-     * @param client    the WhatsApp client instance
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation mirrors WA Web's partial-write behaviour:
+     * each SET mutation unconditionally re-initialises the pending
+     * record with the new {@code hideLockedChats} flag and a
+     * {@code null} secret code, and only sets the secret code when
+     * its payload validates. A malformed secret code therefore still
+     * leaves the new hide-locked-chats flag in the pending record but
+     * with the secret code cleared.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebChatLockSettingsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)
@@ -154,11 +154,6 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
                 continue;
             }
 
-            // ADAPTED: WAWebChatLockSettingsSync.applyMutations: var s = t.hideLockedChats; if (s == null) return malformed
-            // Cobalt's hideLockedChats() coalesces null to false per nullable Boolean convention;
-            // the null-vs-false distinction is not observable through the public accessor.
-            // This assignment happens BEFORE the secretCode check in WA (JS comma expression),
-            // so even malformed-secretCode mutations leave r populated with a sanitized value.
             pending = new ChatLockSettingsBuilder()
                     .hideLockedChats(settings.hideLockedChats())
                     .secretCode(null)
@@ -183,26 +178,31 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Validates the secret code within a {@link ChatLockSettings} instance.
+     * Returns whether the {@link ChatLockSettings#secretCode()} payload (when present) is well-formed.
      *
-     * <p>Per WhatsApp Web {@code WAWebChatLockSettingsSync.applyMutations}: when
-     * {@code secretCode} is non-null, the following must all hold:
-     * <ul>
-     *   <li>{@code encoding}, {@code transformedData}, {@code transformer}, and
-     *       {@code transformerArg} must all be non-null/non-empty</li>
-     *   <li>{@code transformer} must equal
-     *       {@link UserPassword.Transformer#PBKDF2_HMAC_SHA512}</li>
-     *   <li>The {@code transformerArg} list must contain entries with keys
-     *       {@code "iterations"} and {@code "salt"}, each with a non-null value
-     *       of the appropriate type ({@code asUnsignedInteger} for iterations,
-     *       {@code asBlob} for salt)</li>
-     * </ul>
+     * @apiNote
+     * Called by both {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * and {@link #applyMutationBatch(WhatsAppClient, List)} as the
+     * gate that admits a secret-code update. An absent secret code
+     * is always valid (the user toggled chat-lock off).
      *
-     * <p>If {@code secretCode} is absent, no validation is needed and the method
-     * returns {@code true}.
-     * @param settings the chat lock settings to validate
-     * @return {@code true} if the secret code is absent or well-formed,
-     *         {@code false} if malformed
+     * @implNote
+     * This implementation requires
+     * {@link UserPassword.Transformer#PBKDF2_HMAC_SHA512} as the
+     * transformer; rejects any payload missing
+     * {@link UserPassword#encoding()},
+     * {@link UserPassword#transformedData()},
+     * {@link UserPassword#transformer()}, or
+     * {@link UserPassword#transformerArg()}; and walks the
+     * transformer-arg list to require both an {@code iterations}
+     * entry decoded as
+     * {@link UserPassword.TransformerArg.ValueSpec.AsUnsignedInteger}
+     * and a {@code salt} entry decoded as
+     * {@link UserPassword.TransformerArg.ValueSpec.AsBlob}, mirroring
+     * WA Web's {@code reduce} loop.
+     *
+     * @param settings the {@link ChatLockSettings} whose secret-code payload is validated
+     * @return {@code true} when the secret code is absent or fully well-formed; {@code false} otherwise
      */
     private boolean isSecretCodeValid(ChatLockSettings settings) {
         var secretCode = settings.secretCode();
@@ -225,9 +225,6 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
             return false;
         }
 
-        //   return t.value == null || (t.key === "iterations" ? e.iterations = t.value.asUnsignedInteger
-        //                              : t.key === "salt" && (e.salt = t.value.asBlob)), e
-        // }, {})
         var hasIterations = false;
         var hasSalt = false;
         for (var arg : transformerArgs) {
@@ -237,8 +234,6 @@ public final class ChatLockSettingsHandler implements WebAppStateActionHandler {
             }
             var key = arg.key().orElse(null);
             if ("iterations".equals(key)) {
-                // WA Web reads Value.asUnsignedInteger directly; Cobalt uses the oneof accessor
-                // and checks the variant type to match the same semantics
                 if (value.value().orElse(null) instanceof UserPassword.TransformerArg.ValueSpec.AsUnsignedInteger ui
                         && ui.asUnsignedInteger() != null) {
                     hasIterations = true;

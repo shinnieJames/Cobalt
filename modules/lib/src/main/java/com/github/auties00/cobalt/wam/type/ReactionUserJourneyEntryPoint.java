@@ -18,5 +18,6 @@ public enum ReactionUserJourneyEntryPoint {
     @WamEnumConstant(8) VOICE_CHAT_REACTION_BUTTON,
     @WamEnumConstant(9) VOICE_CHAT_MINI_PLAYER_HOLD,
     @WamEnumConstant(10) MESSAGE_REACTION_BUTTON,
-    @WamEnumConstant(11) MESSAGE_MENU_ITEM_REACTION
+    @WamEnumConstant(11) MESSAGE_MENU_ITEM_REACTION,
+    @WamEnumConstant(12) MULTI_MESSAGE_HOLD
 }

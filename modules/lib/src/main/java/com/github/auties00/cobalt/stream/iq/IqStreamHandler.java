@@ -40,13 +40,33 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Handles incoming IQ (Info/Query) stanzas from the WhatsApp server.
+ * Handles {@code <iq>} (info/query) stanzas pushed by the server,
+ * specifically the pairing-flow IQs ({@code md} xmlns) and the
+ * keep-alive pings ({@code urn:xmpp:ping} xmlns).
  *
- * <p>Routes IQ stanzas based on their {@code xmlns} attribute:
- * <ul>
- *   <li>{@code urn:xmpp:ping}, responds with an IQ result</li>
- *   <li>{@code md}, dispatches to pair-device or pair-success handlers</li>
- * </ul>
+ * @apiNote
+ * This handler is registered under the {@code "iq"} tag inside
+ * {@link SocketStream} and routes server-initiated {@code <iq>} stanzas
+ * based on their {@code xmlns} attribute. The two supported namespaces
+ * are {@code urn:xmpp:ping} (responded to with an empty
+ * {@code <iq type="result">}) and {@code md} (the multi-device
+ * companion-pairing exchange that lands the QR ref rotation and the
+ * follow-up pair-success exchange). Response IQs for outbound requests
+ * are not routed here; they flow through the per-call request/response
+ * correlator on {@link WhatsAppClient}.
+ *
+ * @implNote
+ * This implementation collapses WA Web's
+ * {@link WhatsAppWebModule WAWebHandlePairDevice} and
+ * {@link WhatsAppWebModule WAWebHandlePairSuccess} entry points into a
+ * single handler keyed on the {@code <iq>} child tag, and schedules the
+ * QR ref rotation on a dedicated daemon
+ * {@link ScheduledExecutorService} rather than WA Web's
+ * {@code WAShiftTimer}. The {@code mdSessionId} computation,
+ * {@code MdLinkDeviceCompanion} WAM stage emissions and
+ * {@code Lid11MigrationLifecycle} WAM commit on pair-success mirror the
+ * upstream reporter logic exactly so the device-link funnel landed in
+ * the WhatsApp dashboards matches the official client.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleStanzaCommon")
 @WhatsAppWebModule(moduleName = "WAWebHandlePairDevice")
@@ -54,87 +74,133 @@ import java.util.concurrent.TimeUnit;
 public final class IqStreamHandler implements SocketStream.Handler {
 
     /**
-     * Logger for this handler.
+     * The system logger used for diagnostic output during
+     * pairing-flow IQ processing.
      */
     private static final System.Logger LOGGER = System.getLogger(IqStreamHandler.class.getName());
 
     /**
-     * Rotation interval in milliseconds when 6 QR refs are present.
+     * The display duration in milliseconds for the first QR ref of a
+     * fresh pairing exchange.
+     *
+     * @apiNote
+     * Matches WA Web's {@code u = 6e4} constant: the initial ref is
+     * displayed for 60 seconds before the rotation falls back to
+     * {@link #REFRESH_ROTATION_MS}.
      */
     private static final long QR_ROTATION_MS = 60_000L;
 
     /**
-     * Rotation interval in milliseconds when fewer than 6 refs are present
-     * (used for refresh rotations).
+     * The display duration in milliseconds for every refresh QR ref
+     * after the first.
+     *
+     * @apiNote
+     * Matches WA Web's {@code c = 20*1e3} constant: refresh refs cycle
+     * every 20 seconds until the user scans one or the server stops
+     * pushing new refs.
      */
     private static final long REFRESH_ROTATION_MS = 20_000L;
 
     /**
-     * The WhatsApp client instance for sending nodes and accessing the store.
+     * The {@link WhatsAppClient} used for store access and outbound
+     * stanza dispatch.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The web verification handler for QR code or pairing code delivery.
+     * The {@link WhatsAppClientVerificationHandler.Web} that receives
+     * QR-payload strings during the QR pairing branch.
      */
     private final WhatsAppClientVerificationHandler.Web webVerificationHandler;
 
     /**
-     * The device service for ADV validation during pair-success.
+     * The {@link DeviceService} consulted for ADV identity validation
+     * and local-identity persistence during pair-success.
      */
     private final DeviceService deviceService;
 
     /**
-     * The snapshot recovery service for updating primary device syncd recovery support.
+     * The {@link SnapshotRecoveryService} updated with the primary
+     * device's syncd-snapshot-recovery support flag when pair-success
+     * resolves.
      */
     private final SnapshotRecoveryService snapshotRecoveryService;
 
     /**
-     * The LID migration service consulted when committing the
-     * {@code Lid11MigrationLifecycle} event after a successful pairing.
+     * The {@link LidMigrationService} consulted when committing the
+     * {@code Lid11MigrationLifecycle} WAM event after a successful
+     * pairing.
      */
     private final LidMigrationService lidMigrationService;
 
     /**
-     * Executor for scheduling QR ref rotation tasks.
+     * The dedicated single-thread daemon executor that drives the QR
+     * ref rotation ticks.
      */
     private final ScheduledExecutorService rotationExecutor;
 
     /**
-     * Shared service that owns the alt-device-linking (phone-number
-     * pairing-code) handshake state and IQs. When
-     * {@link CompanionPairingService#isEnabled()} returns {@code true}
-     * the {@code pair-device} stanza is acknowledged without scheduling
-     * QR ref rotation and the {@code companion_hello} flow is started
-     * instead.
+     * The {@link CompanionPairingService} that owns the
+     * alt-device-linking (phone-number pairing-code) handshake state.
+     *
+     * @apiNote
+     * When {@link CompanionPairingService#isEnabled()} returns
+     * {@code true} the QR ref rotation is skipped and the
+     * {@code companion_hello} pairing-code flow is started instead.
      */
     private final CompanionPairingService deviceLinkingService;
 
     /**
-     * Lock protecting rotation state ({@link #rotationTask}).
+     * The lock protecting {@link #rotationTask} so the rotation can be
+     * cancelled atomically from both the executor thread and the
+     * handler thread.
      */
     private final Object rotationLock;
 
     /**
-     * The currently scheduled rotation task, or {@code null} if no rotation is active.
+     * The currently scheduled rotation tick, or {@code null} when no
+     * rotation is active.
      */
     private ScheduledFuture<?> rotationTask;
 
     /**
-     * The WAM telemetry service used to commit IQ-level events.
+     * The {@link WamService} used to commit the
+     * {@code MdLinkDeviceCompanion} stage transitions and the
+     * {@code Lid11MigrationLifecycle} event.
      */
     private final WamService wamService;
 
     /**
-     * Creates a new IQ stream handler.
+     * Constructs a new IQ stream handler bound to the given services.
      *
-     * @param whatsapp                the WhatsApp client, must not be {@code null}
-     * @param webVerificationHandler  the web verification handler for delivering QR/pairing codes, must not be {@code null}
-     * @param deviceService           the device service for ADV validation, must not be {@code null}
-     * @param snapshotRecoveryService the snapshot recovery service, must not be {@code null}
-     * @param lidMigrationService     the LID migration service consulted on pair-success, must not be {@code null}
-     * @param deviceLinkingService    the alt-device-linking service used to gate {@code pair-device} notifications, must not be {@code null}
-     * @param wamService              the WAM telemetry service used to commit IQ-level events
+     * @apiNote
+     * Cobalt embedders never call this constructor directly; the
+     * dispatcher in {@link SocketStream} instantiates the handler once
+     * per client.
+     *
+     * @param whatsapp                the {@link WhatsAppClient}; must
+     *                                not be {@code null}
+     * @param webVerificationHandler  the
+     *                                {@link WhatsAppClientVerificationHandler.Web}
+     *                                that receives QR/pairing payloads;
+     *                                must not be {@code null}
+     * @param deviceService           the {@link DeviceService} used for
+     *                                ADV validation; must not be
+     *                                {@code null}
+     * @param snapshotRecoveryService the {@link SnapshotRecoveryService}
+     *                                updated on pair-success; must not
+     *                                be {@code null}
+     * @param lidMigrationService     the {@link LidMigrationService}
+     *                                consulted on pair-success; must
+     *                                not be {@code null}
+     * @param deviceLinkingService    the
+     *                                {@link CompanionPairingService}
+     *                                used to gate {@code pair-device}
+     *                                handling; must not be {@code null}
+     * @param wamService              the {@link WamService} used for
+     *                                pairing-funnel telemetry; must
+     *                                not be {@code null}
+     * @throws NullPointerException if any service is {@code null}
      */
     public IqStreamHandler(
             WhatsAppClient whatsapp,
@@ -162,13 +228,15 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an incoming IQ stanza by routing it based on the {@code xmlns} attribute.
+     * {@inheritDoc}
      *
-     * <p>For {@code urn:xmpp:ping}, responds with an IQ result containing
-     * {@code type=result} and {@code to=from}. For {@code md}, dispatches to
-     * the pair-device or pair-success handler based on the first child's tag.
-     *
-     * @param node the incoming IQ stanza
+     * @apiNote
+     * Routes the incoming {@code <iq>} by its {@code xmlns} attribute:
+     * {@code urn:xmpp:ping} replies with an empty
+     * {@code <iq type="result">}, {@code md} dispatches to the
+     * {@code pair-device} or {@code pair-success} branch based on the
+     * first child tag, anything else is logged at {@code DEBUG} and
+     * dropped.
      */
     @Override
     public void handle(Node node) {
@@ -197,14 +265,22 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an {@code urn:xmpp:ping} IQ by responding with an IQ result.
+     * Responds to a server-initiated {@code <iq xmlns="urn:xmpp:ping">}
+     * keep-alive with an empty result IQ correlated by the inbound
+     * {@code id}.
      *
-     * @param node the incoming ping IQ stanza
+     * @apiNote
+     * The WhatsApp server occasionally pings the client to assert
+     * liveness; failing to reply within the configured deadline causes
+     * the server to drop the socket. The reply is fire-and-forget; the
+     * server does not echo an ack.
+     *
+     * @param node the inbound ping {@code <iq>} stanza
      */
     private void handlePing(Node node) {
         var from = node.getAttributeAsJid("from").orElse(null);
         if (from == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring ping iq without from attribute"); // NO_WA_BASIS: defensive null check
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring ping iq without from attribute");
             return;
         }
 
@@ -212,22 +288,43 @@ public final class IqStreamHandler implements SocketStream.Handler {
                 .description("iq")
                 .attribute("type", "result")
                 .attribute("to", from)
-                .attribute("id", node.getAttributeAsString("id", null)) // ADAPTED: XMPP convention carries id for correlation
+                .attribute("id", node.getAttributeAsString("id", null))
                 .build();
-        whatsapp.sendNodeWithNoResponse(response); // ADAPTED: WA Web returns node which flows through WAComms.castStanza
+        whatsapp.sendNodeWithNoResponse(response);
     }
 
     /**
-     * Handles a pair-device IQ stanza by generating an ADV secret key,
-     * extracting QR code refs, scheduling their rotation, and sending back
-     * an IQ result acknowledgment.
+     * Handles the {@code <iq><pair-device/></iq>} stanza that opens the
+     * QR or pairing-code flow by generating a fresh ADV secret key,
+     * acking the IQ and either starting the alt-device-linking handler
+     * or extracting and rotating the server refs.
      *
-     * @param iqNode the full IQ stanza containing the pair-device child
+     * @apiNote
+     * Mirrors WA Web's
+     * {@link WhatsAppWebModule WAWebHandlePairDevice}.default async
+     * function: the inbound stanza carries up to six {@code <ref/>}
+     * elements (the server is the source of truth for the QR ref
+     * values) and the response is a typed
+     * {@code makeSetToCompanionResponseClientResponse}. The Cobalt
+     * branch instead constructs the ack inline through
+     * {@link NodeBuilder} because the SMAX RPC indirection is not
+     * needed for this exchange.
+     *
+     * @implNote
+     * This implementation acks the IQ before either starting the
+     * alt-device-linking flow or scheduling QR ref rotation so the
+     * server stops retransmitting; if the alt-device-linking service
+     * is enabled the QR ref rotation is skipped because pairing-code
+     * pairing derives its own client-side code rather than displaying
+     * a server ref.
+     *
+     * @param iqNode the full {@code <iq>} stanza containing the
+     *               {@code <pair-device/>} child
      */
     private void handlePairDevice(Node iqNode) {
         var pairDevice = iqNode.getChild("pair-device").orElse(null);
         if (pairDevice == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-device child"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-device child");
             return;
         }
 
@@ -245,7 +342,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
 
         var refs = extractPairRefs(pairDevice);
         if (refs.isEmpty()) {
-            LOGGER.log(System.Logger.Level.WARNING, "Received pair-device iq without any usable refs"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.WARNING, "Received pair-device iq without any usable refs");
             return;
         }
 
@@ -253,19 +350,24 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Sends an IQ result acknowledgment for the pair-device IQ.
+     * Sends the {@code <iq type="result">} ack for the inbound
+     * {@code <pair-device/>} IQ correlated by the inbound {@code id}.
      *
-     * <p>Per WA Web, the response is an IQ result with the original stanza
-     * {@code id} and {@code to} set to the domain JID from the original
-     * {@code from} attribute.
+     * @apiNote
+     * Mirrors the {@code makeSetToCompanionResponseClientResponse}
+     * envelope WA Web's
+     * {@code WASmaxMdSetToCompanionRPC.receiveSetToCompanionRPC}
+     * returns: an empty {@code <iq type="result">} routed to
+     * {@link Jid#userServer()} (the {@code s.whatsapp.net} domain JID),
+     * carrying the inbound stanza id for correlation.
      *
-     * @param iqNode the original pair-device IQ stanza
+     * @param iqNode the original {@code <pair-device/>} IQ stanza
      */
     private void sendPairDeviceAck(Node iqNode) {
         var id = iqNode.getAttributeAsString("id", null);
         var from = iqNode.getAttributeAsJid("from").orElse(null);
         if (id == null || from == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-device ack: missing id or from"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-device ack: missing id or from");
             return;
         }
 
@@ -275,52 +377,56 @@ public final class IqStreamHandler implements SocketStream.Handler {
                 .attribute("to", Jid.userServer())
                 .attribute("type", "result")
                 .build();
-        whatsapp.sendNodeWithNoResponse(response); // ADAPTED: WA Web returns node through WAComms.castStanza
+        whatsapp.sendNodeWithNoResponse(response);
     }
 
     /**
-     * Extracts QR code ref strings from the pair-device node.
+     * Extracts the ordered set of QR ref strings from a
+     * {@code <pair-device/>} node by reading every {@code <ref/>}
+     * child's binary content as UTF-8.
      *
-     * <p>Iterates over child {@code ref} elements and decodes their binary
-     * content as UTF-8 strings, matching WA Web's SMAX parsing which expects
-     * exactly 6 ref elements.
+     * @apiNote
+     * WA Web's SMAX parser expects exactly six refs encoded as
+     * Binary readString payloads. Cobalt is defensive: ref values may
+     * also surface in the {@code ref}, {@code value} or {@code code}
+     * attributes of either the parent or its children, so the parser
+     * folds all four sources into an ordered set and rejects blanks.
      *
-     * @param pairDevice the pair-device child node
-     * @return an ordered set of non-blank ref strings
+     * @implNote
+     * This implementation uses {@link LinkedHashSet} rather than WA
+     * Web's array because the defensive multi-source extraction would
+     * otherwise emit duplicates when the same ref appears in both an
+     * attribute and a content blob.
+     *
+     * @param pairDevice the {@code <pair-device/>} child node
+     * @return the ordered set of non-blank ref strings; never
+     *         {@code null}
      */
     private LinkedHashSet<String> extractPairRefs(Node pairDevice) {
-        var refs = new LinkedHashSet<String>(); // ADAPTED: WA Web uses array from SMAX parse
-        decodeContentAsString(pairDevice).ifPresent(refs::add); // NO_WA_BASIS: defensive extraction from node itself
+        var refs = new LinkedHashSet<String>();
+        decodeContentAsString(pairDevice).ifPresent(refs::add);
 
         for (var child : pairDevice.children()) {
             decodeContentAsString(child).ifPresent(refs::add);
 
-            findStringAttribute(child, "ref", "value", "code") // NO_WA_BASIS: defensive attribute extraction
+            findStringAttribute(child, "ref", "value", "code")
                     .ifPresent(refs::add);
         }
 
-        findStringAttribute(pairDevice, "ref", "value", "code") // NO_WA_BASIS: defensive attribute extraction
+        findStringAttribute(pairDevice, "ref", "value", "code")
                 .ifPresent(refs::add);
-        refs.removeIf(String::isBlank); // NO_WA_BASIS: defensive cleanup
+        refs.removeIf(String::isBlank);
         return refs;
     }
 
     /**
-     * Schedules the rotation of QR code verification values.
+     * Cancels any in-flight rotation and starts a fresh rotation cycle
+     * over the given ref queue.
      *
-     * <p>Mirrors WA Web's {@code ShiftTimer} loop where each tick recomputes
-     * the rotation delay from the current queue size before popping the next
-     * ref: the tick where {@code d.length === 6} uses {@link #QR_ROTATION_MS}
-     * (the initial 60 second display for the first ref), every subsequent
-     * tick uses {@link #REFRESH_ROTATION_MS}. The first tick is fired
-     * synchronously via {@code forceRunNow}; later ticks are scheduled one
-     * at a time via {@code onOrAfter(e)} so the delay can change between
-     * ticks.
-     *
-     * <p>Rotation also stops early if the device is already registered
-     * (WA Web guards the tick body with
-     * {@code WAWebUserPrefsMultiDevice.isRegistered}) or if the queue has
-     * been drained.
+     * @apiNote
+     * Cobalt's entry point into the QR ref rotation; mirrors WA Web's
+     * call to {@code m = new ShiftTimer(...); m.forceRunNow()} which
+     * fires the first tick synchronously.
      *
      * @param refs the ordered set of ref strings to rotate through
      */
@@ -334,14 +440,23 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Runs a single rotation tick matching WA Web's {@code ShiftTimer}
-     * callback body.
+     * Runs a single rotation tick, mirroring the body of WA Web's
+     * {@code ShiftTimer} callback.
      *
-     * <p>The tick order is identical to WA Web: check the early-exit
-     * conditions (registered or empty refs) first, then compute the
-     * next TTL from the current queue size, pop the next ref, publish
-     * it, and reschedule the next tick after the computed delay unless
-     * the queue is now empty.
+     * @apiNote
+     * Each tick first checks the WA Web early-exit conditions (device
+     * already registered or queue empty), then computes the next TTL
+     * from the queue size (60 seconds while the queue holds all six
+     * initial refs, 20 seconds for every refresh ref), pops the next
+     * ref, publishes it to the
+     * {@link WhatsAppClientVerificationHandler.Web} and reschedules
+     * the next tick after the computed delay.
+     *
+     * @implNote
+     * This implementation reschedules by cancelling the previous
+     * {@link ScheduledFuture} and submitting a new one rather than
+     * using WA Web's {@code WAShiftTimer.onOrAfter} primitive, because
+     * the JDK has no native sliding-deadline scheduler.
      *
      * @param queue the mutable ref queue shared across ticks
      */
@@ -349,14 +464,14 @@ public final class IqStreamHandler implements SocketStream.Handler {
         String next;
         long rotationDelay;
         synchronized (rotationLock) {
-            cancelRotationLocked(); // ADAPTED: WAShiftTimer reschedules via onOrAfter; we reschedule by cancelling + scheduling a new task
+            cancelRotationLocked();
 
             if (whatsapp.store().registered()) {
                 return;
             }
 
             if (queue.isEmpty()) {
-                return; // ADAPTED: UNPAIRED_IDLE event is a WA Web backend event bus signal with no Cobalt analogue
+                return;
             }
 
             rotationDelay = queue.size() == 6 ? QR_ROTATION_MS : REFRESH_ROTATION_MS;
@@ -378,39 +493,58 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Publishes a single QR ref to the web verification handler by
-     * combining the ref with the noise/identity/ADV keys into the
+     * Publishes a single QR ref to the
+     * {@link WhatsAppClientVerificationHandler.Web} by combining the
+     * ref with the noise, identity and ADV keys into the
      * comma-separated payload WA Web stamps into the QR PNG.
      *
-     * <p>Only invoked for the QR branch; the pairing-code branch runs
-     * through {@link CompanionPairingService} which feeds the handler a
-     * client-generated eight-character Crockford base32 code derived
+     * @apiNote
+     * Only invoked on the QR branch; the pairing-code branch runs
+     * through {@link CompanionPairingService}, which feeds the handler
+     * a client-generated eight-character Crockford base32 code derived
      * from its own random bytes rather than any server ref.
      *
-     * @param ref the ref string to publish, or {@code null} to skip
+     * @implNote
+     * WA Web stores the raw ref on {@code Conn.ref} and lets the React
+     * component assemble the QR string; Cobalt builds the payload here
+     * because the embedder receives the assembled string directly.
+     *
+     * @param ref the ref string to publish; ignored when {@code null}
+     *            or blank
      */
     private void publishVerificationValue(String ref) {
-        if (ref == null || ref.isBlank()) { // NO_WA_BASIS: defensive null/blank check
+        if (ref == null || ref.isBlank()) {
             return;
         }
 
         if (!(webVerificationHandler instanceof WhatsAppClientVerificationHandler.Web.QrCode)) {
             return;
         }
-        webVerificationHandler.handle(buildQrPayload(ref)); // ADAPTED: WA Web stores raw ref in Conn.ref; QR assembly done in UI layer
+        webVerificationHandler.handle(buildQrPayload(ref));
     }
 
     /**
-     * Builds a QR code payload string by combining the ref with the noise
-     * public key, identity public key, ADV secret key, and client type.
+     * Builds the comma-separated QR payload string from the given ref,
+     * the noise and identity public keys, the ADV secret key and the
+     * client type tag.
+     *
+     * @apiNote
+     * The resulting payload is the exact string the official WhatsApp
+     * mobile app reads off the QR code: {@code <ref>,<noise>,<identity>,<adv>,<clientType>}.
+     *
+     * @implNote
+     * This implementation regenerates an ADV secret key if the store
+     * has not been seeded yet; the regenerated key is persisted before
+     * the payload is assembled so a subsequent pair-success exchange
+     * uses the same key.
      *
      * @param ref the QR ref from the server
-     * @return the comma-separated QR payload string
+     * @return the assembled QR payload string
      */
     private String buildQrPayload(String ref) {
         var store = whatsapp.store();
         var advSecret = store.advSecretKey().orElseGet(() -> {
-            var generated = DataUtils.randomByteArray(32); // NO_WA_BASIS: fallback generation
+            var generated = DataUtils.randomByteArray(32);
             store.setAdvSecretKey(generated);
             return generated;
         });
@@ -428,22 +562,38 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles a pair-success IQ stanza by validating the device identity,
-     * storing the paired JID and LID, processing client pairing props,
-     * and sending back an IQ result with the signed device identity.
+     * Handles the {@code <iq><pair-success/></iq>} stanza that lands
+     * the validated identity exchange and finalises companion
+     * registration.
      *
-     * <p>The early return mirrors WA Web's
-     * {@code !(g || WAWebUserPrefsMultiDevice.isRegistered())} guard: the
-     * {@code g} module-level flag prevents concurrent re-entry for the
-     * same IQ, and {@code isRegistered()} swallows duplicate pair-success
-     * deliveries that arrive after the store has already completed
-     * registration. Cobalt folds both checks into the single
-     * {@code store.registered()} call because {@link #handlePairSuccess}
-     * is invoked on a virtual thread per stanza and
-     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRegistered(boolean)}
-     * is flipped at the very end of a successful run.
+     * @apiNote
+     * Mirrors WA Web's {@link WhatsAppWebModule WAWebHandlePairSuccess}.default
+     * async function. The handler validates the ADV signed-device
+     * identity, persists the resulting JID and LID, decodes the
+     * companion pairing props, applies any embedded sub-state
+     * (syncd-snapshot-recovery, 1-on-1 LID migration) and finally
+     * responds with an {@code <iq><pair-device-sign/></iq>} containing
+     * the device signature so the primary device can finish linking.
      *
-     * @param iqNode the full IQ stanza containing the pair-success child
+     * @implNote
+     * This implementation folds WA Web's module-level {@code g}
+     * re-entry flag and the {@code WAWebUserPrefsMultiDevice.isRegistered()}
+     * guard into a single {@code store.registered()} call because the
+     * dispatcher already runs each stanza on its own virtual thread and
+     * the registered flag is flipped at the end of a successful pair.
+     * The funnel telemetry emissions
+     * ({@link MdLinkDeviceCompanionStage#PAIR_SUCCESS_RECEIVED} after
+     * validation, {@link MdLinkDeviceCompanionStage#PAIR_DEVICE_SIGN_SENT}
+     * after the IQ response, error-code commit on validation failure
+     * and rollback) mirror the upstream
+     * {@code WAWebWamDeviceLinkReporter} sequence exactly so the
+     * device-link funnel matches the official client. A
+     * {@link RuntimeException} thrown by the response-sending path
+     * emits the failure commit and is rethrown so the configured error
+     * handler still runs.
+     *
+     * @param iqNode the full {@code <iq>} stanza containing the
+     *               {@code <pair-success/>} child
      */
     private void handlePairSuccess(Node iqNode) {
         if (whatsapp.store().registered()) {
@@ -455,14 +605,11 @@ public final class IqStreamHandler implements SocketStream.Handler {
             cancelRotationLocked();
         }
 
-        // at entry and threaded into initDeviceLinkEvent / commitDeviceLinkEvent as the
-        // `regStartTime` baseline. Cobalt captures it here so the mdDurationS/mdTimestampS
-        // deltas on the MdLinkDeviceCompanionEvent commits below are consistent across stages.
         var regStartSeconds = Instant.now().getEpochSecond();
 
         var pairSuccess = iqNode.getChild("pair-success").orElse(null);
         if (pairSuccess == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-success child"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.WARNING, "Received md iq without pair-success child");
             return;
         }
 
@@ -470,7 +617,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
 
         resolvePairedJid(pairSuccess, false).ifPresent(jid -> {
             store.setJid(jid);
-            if (store.phoneNumber().isEmpty()) { // ADAPTED: WA Web does not set phone number from JID
+            if (store.phoneNumber().isEmpty()) {
                 try {
                     store.setPhoneNumber(Long.parseLong(jid.user()));
                 } catch (NumberFormatException _) {
@@ -483,20 +630,10 @@ public final class IqStreamHandler implements SocketStream.Handler {
                 .orElse(null);
 
         if (validatedIdentity == null) {
-            // event; if verifyDeviceIdentityAccountSignature fails, commitDeviceLinkEvent(401)
-            // fires. Cobalt's DeviceService.extractAndValidateLocalSignedDeviceIdentity
-            // collapses both failures into an empty Optional (the underlying
-            // WhatsAppAdvValidationException is handed to the client error handler).
-            // Emit a generic commit with errorCode=-1 so the telemetry pipeline still records
-            // a failed pairing attempt; 401-vs-HMAC distinction is not preserved here because
-            // the validator does not surface the specific sub-type to this handler.
             emitMdLinkDeviceCompanionStage(null, -1, null, regStartSeconds);
             return;
         }
 
-        // P is the accountSignatureKey from the decoded SignedDeviceIdentity (available once
-        // validation passes); M.identityKeyPair.pubKey is the local companion identity key.
-        // The reporter hashes both into mdSessionId and emits the PAIR_SUCCESS_RECEIVED stage.
         var mdSessionId = computeMdLinkSessionId(
                 validatedIdentity.accountSignatureKey().orElse(null),
                 store.identityKeyPair().publicKey().toEncodedPoint()
@@ -504,29 +641,16 @@ public final class IqStreamHandler implements SocketStream.Handler {
         emitMdLinkDeviceCompanionStage(MdLinkDeviceCompanionStage.PAIR_SUCCESS_RECEIVED, null, mdSessionId, regStartSeconds);
 
         try {
-            // Persist the accountSignatureKey as the local user's signal identity (device 0) so
-            // subsequent ADV validations resolve the primary identity from the local store.
             store.jid().ifPresent(localJid -> deviceService.persistLocalDeviceIdentityFromPairSuccess(
                     localJid, validatedIdentity.accountSignatureKey().orElse(null)));
             store.setSignedDeviceIdentity(validatedIdentity);
             sendPairSuccessResponse(iqNode, validatedIdentity);
 
-            // Emitted after the signed identity response has been sent back to the server;
-            // WA Web performs the commit immediately after assembling q and before the next
-            // yield, so we mirror that ordering by committing right after sendPairSuccessResponse.
             emitMdLinkDeviceCompanionStage(MdLinkDeviceCompanionStage.PAIR_DEVICE_SIGN_SENT, null, mdSessionId, regStartSeconds);
 
             extractPairingProps(pairSuccess)
                     .ifPresent(props -> {
                         snapshotRecoveryService.updatePrimaryDeviceSupportsSyncdRecovery(props.isSyncdSnapshotRecoveryEnabled());
-                        //   new Lid11MigrationLifecycleWamEvent({
-                        //     migrationStage: COMPANION_MIGRATED_ON_NEW_PAIRING,
-                        //     webClientDidPairingStanzaIndicated1x1MigrationThisSession: true,
-                        //     isLocally1x1MigratedFromDb: Lid1X1MigrationUtils.isLidMigrated()
-                        //   }).commit()
-                        // )
-                        // Cobalt routes the isChatDbLidMigrated flag through the migration service and
-                        // mirrors WA Web's unconditional WAM commit with the post-setIsLidMigrated read.
                         if (props.isChatDbLidMigrated()) {
                             wamService.commit(new Lid11MigrationLifecycleEventBuilder()
                                     .migrationStage(MigrationStageEnum.COMPANION_MIGRATED_ON_NEW_PAIRING)
@@ -537,32 +661,42 @@ public final class IqStreamHandler implements SocketStream.Handler {
                     });
             store.setPairingTimestamp(Instant.ofEpochSecond(regStartSeconds));
             store.setRegistered(true);
-            store.setOnline(true); // ADAPTED: Cobalt sets online flag
-            safeSave("pair-success"); // ADAPTED: Cobalt persists store
+            store.setOnline(true);
+            safeSave("pair-success");
         } catch (RuntimeException exception) {
-            // logging out via socketLogout(LogoutReason.UnknownCompanion). Cobalt does not
-            // swallow the underlying exception — it is rethrown after the WAM emission so
-            // upstream error handling (client.handleFailure / socket teardown) still runs.
             emitMdLinkDeviceCompanionStage(null, -1, mdSessionId, regStartSeconds);
             throw exception;
         }
     }
 
     /**
-     * Computes the {@code mdSessionId} used on the MdLinkDeviceCompanion WAM event.
+     * Computes the {@code mdSessionId} that uniquely identifies a
+     * pairing attempt across the device-link WAM stages.
      *
-     * <p>Mirrors WAWebWamDeviceLinkReporter's {@code v(e, t)} helper which concatenates the
-     * account signature key, a {@code 0x5f} separator, and the local companion identity key
-     * public bytes, SHA-256 hashes the buffer, and base64-encodes the digest. The result
-     * uniquely identifies a pairing attempt across stage emissions.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebWamDeviceLinkReporter} private {@code v(e, t)}
+     * helper: SHA-256 of {@code accountSignatureKey || 0x5f || localIdentityKey}
+     * then base64 encode. The same session id is then threaded through
+     * every {@link MdLinkDeviceCompanionStage} commit so the funnel
+     * lines up across stages.
      *
-     * @param accountSignatureKey the account signature key from the validated
-     *                            {@link ADVSignedDeviceIdentity}, may be {@code null} when
-     *                            the identity did not embed one (in which case the session id
-     *                            cannot be computed and a {@code null} marker is returned)
-     * @param localIdentityKey    the local companion identity key public bytes
-     * @return the base64-encoded SHA-256 session id, or {@code null} when the input cannot
-     *         produce a deterministic hash
+     * @implNote
+     * This implementation falls through to {@code null} when SHA-256
+     * is unavailable on the JRE (an unreachable path on any conforming
+     * platform) so the rest of the funnel can still emit without a
+     * session id; WA Web cannot hit this branch because the browser's
+     * Web Crypto API always provides SHA-256.
+     *
+     * @param accountSignatureKey the account signature key from the
+     *                            validated
+     *                            {@link ADVSignedDeviceIdentity}; may
+     *                            be {@code null} when the identity did
+     *                            not embed one
+     * @param localIdentityKey    the local companion identity key
+     *                            public bytes
+     * @return the base64-encoded SHA-256 session id, or {@code null}
+     *         when the input cannot produce a deterministic hash
      */
     private String computeMdLinkSessionId(byte[] accountSignatureKey, byte[] localIdentityKey) {
         if (accountSignatureKey == null || localIdentityKey == null) {
@@ -576,41 +710,49 @@ public final class IqStreamHandler implements SocketStream.Handler {
             digest.update(localIdentityKey);
             return Base64.getEncoder().encodeToString(digest.digest());
         } catch (NoSuchAlgorithmException exception) {
-            // SHA-256 is required by the JRE spec; this path is unreachable on any
-            // conforming platform. Log and fall through to a null session id so the
-            // telemetry emission can still run without the sessionId field populated.
             LOGGER.log(System.Logger.Level.WARNING, "SHA-256 is not available: {0}", exception.getMessage());
             return null;
         }
     }
 
     /**
-     * Commits a {@link com.github.auties00.cobalt.wam.event.MdLinkDeviceCompanionEvent} with
-     * the given stage and optional error code.
+     * Commits one
+     * {@link com.github.auties00.cobalt.wam.event.MdLinkDeviceCompanionEvent}
+     * stage commit so the device-link funnel records the current
+     * pairing checkpoint.
      *
-     * <p>Every stage commit rebuilds the event from the pinned
-     * {@code regStartSeconds}/{@code mdSessionId} context so each emission carries the
-     * cumulative duration and timestamp. A {@code null} stage with a non-null error code
-     * corresponds to the WA Web {@code commitDeviceLinkEvent(errorCode)} path taken when the
-     * pairing flow aborts before the stage machine has advanced further.
+     * @apiNote
+     * Mirrors the per-stage emissions inside
+     * {@code WAWebWamDeviceLinkReporter}. A {@code null} stage with a
+     * non-{@code null} error code corresponds to the
+     * {@code commitDeviceLinkEvent(errorCode)} branch taken when the
+     * pairing flow aborts before the stage machine advances.
      *
-     * <p>Only the subset of properties that Cobalt can populate deterministically is set:
-     * {@code mdSessionId}, {@code mdTimestampS}, {@code mdDurationS},
-     * {@code mdLinkDeviceCompanionStage}, and {@code mdLinkDeviceCompanionErrorCode}.
-     * The remaining fields ({@code mdLinkDeviceExperienceId}, {@code userLocale},
-     * {@code applicationState}, {@code appContext}, etc.) are left unset because their
-     * source modules ({@code WAWebLinkDeviceExperience}, {@code WAWebAppTracker}) have no
-     * Cobalt counterpart — WA Web attaches them via {@code attachWAMAppContext} right before
-     * {@code commitAndWaitForFlush}, a frontend-only helper that Cobalt does not model.
+     * @implNote
+     * This implementation only populates the subset of properties
+     * Cobalt can derive deterministically ({@code mdSessionId},
+     * {@code mdTimestampS}, {@code mdDurationS},
+     * {@code mdLinkDeviceCompanionStage},
+     * {@code mdLinkDeviceCompanionErrorCode}); the WA-Web-only fields
+     * ({@code mdLinkDeviceExperienceId}, {@code userLocale},
+     * {@code applicationState}, {@code appContext}) are left unset
+     * because their source modules ({@code WAWebLinkDeviceExperience},
+     * {@code WAWebAppTracker}) have no Cobalt counterpart. Telemetry
+     * emission is wrapped in a {@link RuntimeException} catch so a WAM
+     * commit failure cannot disrupt the pairing flow.
      *
-     * @param stage            the stage to record, or {@code null} for a raw error-code
-     *                         commit
-     * @param errorCode        the error code to attach, or {@code null} for a normal stage
-     *                         transition
-     * @param mdSessionId      the deterministic session id computed by
-     *                         {@link #computeMdLinkSessionId}, may be {@code null} when the
-     *                         session id could not be derived
-     * @param regStartSeconds  the Unix-seconds timestamp captured at pair-success entry
+     * @param stage           the stage to record, or {@code null} for
+     *                        a raw error-code commit
+     * @param errorCode       the error code to attach, or {@code null}
+     *                        for a normal stage transition
+     * @param mdSessionId     the deterministic session id produced by
+     *                        {@link #computeMdLinkSessionId(byte[], byte[])};
+     *                        may be {@code null} when the session id
+     *                        could not be derived
+     * @param regStartSeconds the Unix-seconds timestamp captured at
+     *                        pair-success entry, used as the baseline
+     *                        for {@code mdDurationS} and
+     *                        {@code mdTimestampS}
      */
     private void emitMdLinkDeviceCompanionStage(MdLinkDeviceCompanionStage stage, Integer errorCode, String mdSessionId, long regStartSeconds) {
         try {
@@ -625,32 +767,42 @@ public final class IqStreamHandler implements SocketStream.Handler {
             }
             wamService.commit(builder.build());
         } catch (RuntimeException wamException) {
-            // Telemetry emission must never disrupt the pairing flow: log and swallow.
             LOGGER.log(System.Logger.Level.WARNING, "Cannot commit MdLinkDeviceCompanion event: {0}", wamException.getMessage());
         }
     }
 
     /**
-     * Sends the pair-success IQ result response containing the signed
-     * device identity with the device signature and key index.
+     * Sends the {@code <iq><pair-device-sign><device-identity/></pair-device-sign></iq>}
+     * response containing the device-signed identity, the
+     * {@code keyIndex} attribute extracted from the inner
+     * {@link ADVDeviceIdentitySpec}, and the
+     * server-correlation {@code id}.
      *
-     * <p>Per WA Web, the response clears the {@code accountSignatureKey}
-     * from the signed identity before encoding, then wraps it in a
-     * {@code pair-device-sign > device-identity} node structure.
+     * @apiNote
+     * The {@code accountSignatureKey} is intentionally cleared on the
+     * outgoing identity ({@code $.accountSignatureKey = void 0} in WA
+     * Web): the server only needs the device signature, not the
+     * account signature key.
      *
-     * @param iqNode            the original pair-success IQ stanza
-     * @param validatedIdentity the validated and signed device identity
+     * @implNote
+     * This implementation logs and returns rather than throwing when
+     * the IQ is missing required attributes; defensive null checks are
+     * unavoidable because the inbound stanza shape is server-driven.
+     *
+     * @param iqNode            the original {@code <pair-success/>}
+     *                          {@code <iq>} stanza
+     * @param validatedIdentity the validated {@link ADVSignedDeviceIdentity}
      */
     private void sendPairSuccessResponse(Node iqNode, ADVSignedDeviceIdentity validatedIdentity) {
         var id = iqNode.getAttributeAsString("id", null);
         if (id == null) {
-            LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-success response: missing id"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.DEBUG, "Cannot send pair-success response: missing id");
             return;
         }
 
         var details = validatedIdentity.details().orElse(null);
         if (details == null) {
-            LOGGER.log(System.Logger.Level.WARNING, "Cannot send pair-success response: missing details in validated identity"); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.WARNING, "Cannot send pair-success response: missing details in validated identity");
             return;
         }
 
@@ -660,7 +812,7 @@ public final class IqStreamHandler implements SocketStream.Handler {
             keyIndex = innerIdentity.keyIndex().orElseThrow(() ->
                     new NullPointerException("keyIndex cannot be null"));
         } catch (Exception exception) {
-            LOGGER.log(System.Logger.Level.WARNING, "Cannot send pair-success response: failed to decode inner device identity: {0}", exception.getMessage()); // NO_WA_BASIS: defensive check
+            LOGGER.log(System.Logger.Level.WARNING, "Cannot send pair-success response: failed to decode inner device identity: {0}", exception.getMessage());
             return;
         }
 
@@ -668,7 +820,6 @@ public final class IqStreamHandler implements SocketStream.Handler {
                 .details(details)
                 .accountSignature(validatedIdentity.accountSignature().orElse(null))
                 .deviceSignature(validatedIdentity.deviceSignature().orElse(null))
-                // accountSignatureKey intentionally omitted, WAWebHandlePairSuccess: $.accountSignatureKey = void 0
                 .build();
 
         var encodedIdentity = ADVSignedDeviceIdentitySpec.encode(identityForResponse);
@@ -692,18 +843,25 @@ public final class IqStreamHandler implements SocketStream.Handler {
                 .content(pairDeviceSignNode)
                 .build();
 
-        whatsapp.sendNodeWithNoResponse(response); // ADAPTED: WA Web returns node through WAComms.castStanza
+        whatsapp.sendNodeWithNoResponse(response);
     }
 
     /**
-     * Resolves the paired device JID or LID from a pair-success node.
+     * Resolves the paired device JID or LID from a
+     * {@code <pair-success/>} node by inspecting the
+     * {@code <device/>} child's {@code jid} or {@code lid} attribute.
      *
-     * <p>Searches for the JID in node attributes first, then falls back to
-     * child node attributes and content parsing.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebJidToWid.deviceJidToDeviceWid(pairSuccessDeviceJid)}
+     * / {@code (...DeviceLid)} extraction, which reads the same two
+     * attributes off the parsed {@code device} child.
      *
-     * @param node the pair-success node to search
-     * @param lid  {@code true} to resolve the LID, {@code false} for the device JID
-     * @return an {@code Optional} containing the resolved JID, or empty if not found
+     * @param node the {@code <pair-success/>} node
+     * @param lid  {@code true} to resolve the LID, {@code false} for
+     *             the device JID
+     * @return the resolved {@link Jid}, or an empty
+     *         {@link Optional} when the attribute is absent
      */
     private Optional<Jid> resolvePairedJid(Node node, boolean lid) {
         return node.getChild("device")
@@ -711,20 +869,30 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Extracts and decodes the client pairing props protobuf from a
-     * pair-success node.
+     * Extracts and decodes the {@link ClientPairingProps} protobuf
+     * embedded in a {@code <pair-success/>} stanza.
      *
-     * <p>Searches the pair-success node itself and any {@code props} child
-     * nodes for a valid {@link ClientPairingProps} protobuf.
+     * @apiNote
+     * WA Web's SMAX parser exposes the protobuf bytes through the
+     * {@code pairSuccessClientProps} field of the parsed request; the
+     * Cobalt branch is defensive and inspects both the
+     * {@code pair-success} content blob and every {@code <props/>}
+     * child, returning the first decode that succeeds.
      *
-     * @param pairSuccess the pair-success node
-     * @return an {@code Optional} containing the decoded pairing props, or empty if not found
+     * @implNote
+     * This implementation swallows individual decode failures so a
+     * malformed {@code <props/>} child does not block the next
+     * candidate from being tried.
+     *
+     * @param pairSuccess the {@code <pair-success/>} node
+     * @return the decoded {@link ClientPairingProps}, or an empty
+     *         {@link Optional} when no candidate decodes cleanly
      */
     private Optional<ClientPairingProps> extractPairingProps(Node pairSuccess) {
         var candidates = new ArrayList<Node>();
         candidates.add(pairSuccess);
         for (var child : pairSuccess.children()) {
-            if ("props".equals(child.description())) { // ADAPTED: WA Web SMAX parsing uses pairSuccessClientProps field
+            if ("props".equals(child.description())) {
                 candidates.add(child);
             }
         }
@@ -745,9 +913,12 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Cancels the current rotation task if one is active.
+     * Cancels the currently scheduled rotation tick.
      *
-     * <p>Must be called while holding {@link #rotationLock}.
+     * @implSpec
+     * Callers must hold {@link #rotationLock} for the duration of
+     * this method so the cancel is atomic against a concurrent
+     * {@link #runRotationTick(ArrayDeque)} reschedule.
      */
     private void cancelRotationLocked() {
         var task = rotationTask;
@@ -758,7 +929,13 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resets handler state by cancelling any active rotation.
+     * {@inheritDoc}
+     *
+     * @apiNote
+     * Cancels any in-flight QR ref rotation so the next connection
+     * starts from a clean slate. The
+     * {@link CompanionPairingService}, {@link DeviceService} and other
+     * dependencies are stateless against this handler.
      */
     @Override
     public void reset() {
@@ -768,12 +945,19 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Searches a node's attributes for the first non-blank string value
-     * matching one of the given keys.
+     * Returns the first non-blank string attribute on the given node
+     * matching one of the supplied attribute keys.
+     *
+     * @apiNote
+     * Used by the defensive ref extraction in
+     * {@link #extractPairRefs(Node)} to cover ref values placed on a
+     * {@code ref}, {@code value} or {@code code} attribute rather than
+     * a content blob.
      *
      * @param node the node to search
-     * @param keys the attribute keys to try, in order
-     * @return an {@code Optional} containing the first non-blank value found, or empty
+     * @param keys the attribute keys to try, in priority order
+     * @return the first non-blank attribute value, or an empty
+     *         {@link Optional} when none of the keys produce one
      */
     private Optional<String> findStringAttribute(Node node, String... keys) {
         for (var key : keys) {
@@ -786,12 +970,17 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Searches a node's attributes for the first JID value matching one of
-     * the given keys.
+     * Returns the first {@link Jid}-typed attribute on the given node
+     * matching one of the supplied attribute keys.
+     *
+     * @apiNote
+     * Helper for stanza shapes that carry the same logical JID under
+     * multiple attribute names.
      *
      * @param node the node to search
-     * @param keys the attribute keys to try, in order
-     * @return an {@code Optional} containing the first JID found, or empty
+     * @param keys the attribute keys to try, in priority order
+     * @return the first {@link Jid} attribute value, or an empty
+     *         {@link Optional} when none of the keys produce one
      */
     private Optional<Jid> findJidAttribute(Node node, String... keys) {
         for (var key : keys) {
@@ -804,13 +993,18 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Attempts to decode a node's content as a UTF-8 string.
+     * Decodes the content of the given node as a UTF-8 string,
+     * preferring the typed string accessor and falling back to a UTF-8
+     * decode of the raw bytes.
      *
-     * <p>First tries the string content accessor, then falls back to
-     * decoding the raw bytes as UTF-8.
+     * @apiNote
+     * Used by {@link #extractPairRefs(Node)} so refs encoded as either
+     * a {@code <ref>...</ref>} text node or a {@code <ref/>} binary
+     * blob land in the same {@link LinkedHashSet}.
      *
      * @param node the node whose content to decode
-     * @return an {@code Optional} containing the non-blank string content, or empty
+     * @return the non-blank decoded string, or an empty
+     *         {@link Optional} when the content is missing or blank
      */
     private Optional<String> decodeContentAsString(Node node) {
         var text = node.toContentString().orElse(null);
@@ -828,9 +1022,16 @@ public final class IqStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Persists the store, logging any failure without propagating.
+     * Persists the {@link com.github.auties00.cobalt.store.WhatsAppStore}
+     * to disk and logs any failure at {@code DEBUG}.
      *
-     * @param context a human-readable context string for log messages
+     * @apiNote
+     * Used at the end of the pair-success handler so a successful
+     * pair survives a process restart. Failures are best-effort
+     * because the bootstrap path that runs next will re-persist.
+     *
+     * @param context a human-readable context string used in the
+     *                {@code DEBUG} log entry on failure
      */
     private void safeSave(String context) {
         try {

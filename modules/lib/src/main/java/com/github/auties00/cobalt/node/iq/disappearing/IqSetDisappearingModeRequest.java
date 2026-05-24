@@ -10,27 +10,37 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant — wraps a single
- * {@code <disappearing_mode duration=SECONDS/>} child in the
- * canonical {@code <iq xmlns="disappearing_mode" type="set"/>}
- * envelope.
+ * Outbound {@code <iq xmlns="disappearing_mode" type="set">} stanza that updates the user's
+ * default disappearing-mode duration.
+ *
+ * @apiNote
+ * Use this to back the "default message timer" setting in WA Web's privacy drawer; the
+ * relay applies the duration as the per-chat default for newly-created chats while
+ * leaving per-chat overrides untouched. Pass {@link Duration#ZERO} to disable the
+ * feature. The reply is parsed by {@link IqSetDisappearingModeResponse}.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's {@code WAWebSetDisappearingModeJob.setDisappearingMode}
+ * verbatim, emitting the {@code duration} attribute as the seconds-as-string.
  */
 @WhatsAppWebModule(moduleName = "WAWebSetDisappearingModeJob")
 public final class IqSetDisappearingModeRequest implements IqOperation.Request {
     /**
-     * The new default disappearing-mode duration. {@link Duration#ZERO}
+     * Holds the new default disappearing-mode duration to install; {@link Duration#ZERO}
      * disables the feature.
      */
     private final Duration duration;
 
     /**
-     * Constructs a new request.
+     * Constructs a new set-disappearing-mode request bound to the given duration.
+     *
+     * @apiNote
+     * The duration is rounded down to seconds before being emitted; sub-second
+     * precision is lost. Pass {@link Duration#ZERO} to disable the feature.
      *
      * @param duration the new default duration; never {@code null}
-     * @throws NullPointerException     if {@code duration} is
-     *                                  {@code null}
-     * @throws IllegalArgumentException if {@code duration} is
-     *                                  negative
+     * @throws NullPointerException     if {@code duration} is {@code null}
+     * @throws IllegalArgumentException if {@code duration} is negative
      */
     public IqSetDisappearingModeRequest(Duration duration) {
         Objects.requireNonNull(duration, "duration cannot be null");
@@ -41,7 +51,7 @@ public final class IqSetDisappearingModeRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the new default duration.
+     * Returns the bound default disappearing-mode duration.
      *
      * @return the duration; never {@code null}
      */
@@ -50,22 +60,25 @@ public final class IqSetDisappearingModeRequest implements IqOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza wrapping the
+     * {@code <disappearing_mode duration=SECONDS/>} payload.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <disappearing_mode>} payload
+     * @apiNote
+     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
+     * attribute, which the dispatch layer assigns.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the
+     *         {@code <disappearing_mode>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSetDisappearingModeJob",
             exports = "setDisappearingMode",
             adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebSetDisappearingModeJob: wap("disappearing_mode",{duration:CUSTOM_STRING(String(t))})
         var dmNode = new NodeBuilder()
                 .description("disappearing_mode")
                 .attribute("duration", String.valueOf(duration.toSeconds()))
                 .build();
-        // WAWebSetDisappearingModeJob: wap("iq",{xmlns:"disappearing_mode",to:S_WHATSAPP_NET,type:"set",id}, ...)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "disappearing_mode")

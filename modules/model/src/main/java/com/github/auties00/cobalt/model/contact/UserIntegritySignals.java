@@ -61,20 +61,6 @@ public final class UserIntegritySignals {
     }
 
     /**
-     * Constructs a new {@code UserIntegritySignals} carrying the two
-     * relay-issued flags.
-     *
-     * @param newAccount the {@code is_new_account} scalar, or
-     *                   {@code null} if the relay omitted it
-     * @param suspicious the {@code is_suspicious_start_chat} scalar,
-     *                   or {@code null} if the relay omitted it
-     * @return a new {@code UserIntegritySignals}
-     */
-    public static UserIntegritySignals of(Boolean newAccount, Boolean suspicious) {
-        return new UserIntegritySignals(newAccount, suspicious);
-    }
-
-    /**
      * Returns whether the relay considers the peer a recently-
      * registered account.
      *

@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.message.send.senderkey.SenderKeyDistribution;
 import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.ReportingStanza;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -29,15 +30,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link StatusMessageSender}, mirroring
- * {@code WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg}.
+ * Exercises {@link StatusMessageSender}'s SKMSG send shape against the
+ * {@code WAWebEncryptAndSendStatusMsg.encryptAndSendStatusMsg} contract.
  *
- * <p>Status broadcasts use the sender-key (SKMSG) pipeline like group
- * sends, but address the {@code status@broadcast} JID and carry a
- * {@code <meta status_setting=…>} child that mirrors the user's status
- * privacy preference. Revokes go through a separate direct path
- * ({@code sendDirectRevoke}) and the {@code status_setting} attribute is
- * suppressed.
+ * @apiNote
+ * Status broadcasts share the SKMSG group-send pipeline but address the
+ * {@code status@broadcast} JID and carry a
+ * {@code <meta status_setting=...>} child that mirrors the user's status
+ * privacy preference (suppressed on revokes). Revokes whose audience is
+ * no longer reachable by SKMSG take a dedicated per-device direct path.
+ *
+ * @implNote
+ * This implementation drives the sender through a captured
+ * {@link TestWhatsAppClient} and a
+ * stubbed {@link StubDeviceService};
+ * the cells exercise the steady-state SKMSG branch and the no-privacy
+ * meta-shape branch, both of which can be asserted without seeding a real
+ * status audience pipeline.
  */
 @DisplayName("StatusMessageSender")
 class StatusMessageSenderTest {
@@ -47,6 +56,10 @@ class StatusMessageSenderTest {
     private static final Jid STATUS = Jid.statusBroadcastAccount();
     private static final Jid AUDIENCE_DEVICE = Jid.of("19254863482:0@s.whatsapp.net");
 
+    /**
+     * Asserts the steady-state SKMSG status stanza shape when every
+     * audience device already holds the sender key.
+     */
     @Test
     @DisplayName("steady-state text status: outer to=status@broadcast, <enc type=skmsg>, no PKMSG distribution")
     void steadyStateStatus() {
@@ -59,7 +72,7 @@ class StatusMessageSenderTest {
         var client = clientWithCapture(senderStore, captured);
         var sender = statusMessageSender(client, senderStore,
                 StubDeviceService.create().withGroupFanout(
-                        (g, s) -> new DeviceGroupFanoutResult(Set.of(AUDIENCE_DEVICE), null)));
+                        (g, s) -> new DeviceGroupFanoutResult(Set.of(AUDIENCE_DEVICE), "")));
 
         sender.send(STATUS, statusMessage("3EB0STAT001", MessageContainer.of("status body")));
 
@@ -74,9 +87,8 @@ class StatusMessageSenderTest {
         assertEquals("skmsg", enc.getAttributeAsString("type").orElseThrow());
         assertEquals("2", enc.getAttributeAsString("v").orElseThrow());
 
-        // Steady-state: no PKMSG distribution, but a <participants> echo may exist
-        // for the receipt list with empty <to jid=…> entries. Either way no
-        // PKMSG envelopes inside.
+        // Steady-state: no PKMSG distribution, though a <participants> echo
+        // may still exist for the receipt list with empty <to jid="..."> entries.
         stanza.getChild("participants").ifPresent(participants -> {
             var pkmsgCount = participants.streamChildren("to")
                     .flatMap(to -> to.streamChild("enc"))
@@ -87,6 +99,10 @@ class StatusMessageSenderTest {
         });
     }
 
+    /**
+     * Asserts that the {@code status_setting} attribute is omitted when
+     * no privacy entry is seeded.
+     */
     @Test
     @DisplayName("text status: <meta> child is emitted when present (status_setting omitted when no privacy entry seeded)")
     void metaShapeWhenNoPrivacy() {
@@ -97,27 +113,30 @@ class StatusMessageSenderTest {
         var client = clientWithCapture(senderStore, captured);
         var sender = statusMessageSender(client, senderStore,
                 StubDeviceService.create().withGroupFanout(
-                        (g, s) -> new DeviceGroupFanoutResult(Set.of(AUDIENCE_DEVICE), null)));
+                        (g, s) -> new DeviceGroupFanoutResult(Set.of(AUDIENCE_DEVICE), "")));
 
         sender.send(STATUS, statusMessage("3EB0STAT002", MessageContainer.of("status with no privacy entry")));
 
         var stanza = captured.get();
-        // The privacy entry isn't seeded, so resolveStatusSetting returns null.
-        // The status_setting attribute must NOT appear on any emitted <meta>.
         var meta = stanza.getChild("meta").orElse(null);
         if (meta != null) {
             assertTrue(meta.getAttribute("status_setting").isEmpty(),
-                    "no privacy entry → no status_setting attribute on <meta>");
+                    "no privacy entry means no status_setting attribute on <meta>");
         }
     }
 
     /**
-     * Builds a TestWhatsAppClient that captures the first emitted stanza
-     * and returns a success ack.
+     * Builds a {@link TestWhatsAppClient} that captures the first emitted
+     * stanza into {@code capturedStanza} and returns a success ack.
      *
-     * @param store          the sender store
+     * @apiNote
+     * The synthetic ack carries only the {@code t} attribute so
+     * {@link com.github.auties00.cobalt.ack.AckParser} parses
+     * it as a success result with no error code.
+     *
+     * @param store          the sender {@link WhatsAppStore}
      * @param capturedStanza the slot to capture the emitted stanza into
-     * @return the configured test client
+     * @return the configured {@link TestWhatsAppClient}
      */
     private static TestWhatsAppClient clientWithCapture(WhatsAppStore store, AtomicReference<Node> capturedStanza) {
         return TestWhatsAppClient.create()
@@ -133,12 +152,18 @@ class StatusMessageSenderTest {
     }
 
     /**
-     * Builds a fully-wired StatusMessageSender for the supplied client + store.
+     * Builds a fully-wired {@link StatusMessageSender} for the supplied
+     * dependencies.
      *
-     * @param client        the test client
-     * @param store         the sender store
-     * @param deviceService the stubbed device service
-     * @return the configured sender
+     * @apiNote
+     * Shared factory used by the steady-state and meta-shape cells; wires
+     * every dependency the sender needs so the per-test setup only swaps
+     * the store and the {@link StubDeviceService}.
+     *
+     * @param client        the {@link TestWhatsAppClient}
+     * @param store         the sender {@link WhatsAppStore}
+     * @param deviceService the stubbed {@link StubDeviceService}
+     * @return the configured {@link StatusMessageSender}
      */
     private static StatusMessageSender statusMessageSender(TestWhatsAppClient client, WhatsAppStore store, StubDeviceService deviceService) {
         var ab = client.abPropsService();
@@ -154,14 +179,19 @@ class StatusMessageSenderTest {
     }
 
     /**
-     * Builds a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
+     * Builds a {@link ChatMessageInfo}
      * targeted at the status broadcast JID.
      *
+     * @apiNote
+     * Helper used by every status-send test cell; pairs the status
+     * broadcast JID as the parent JID, a fixed sender JID, and the
+     * {@code broadcast} flag.
+     *
      * @param id        the wire id
-     * @param container the payload
+     * @param container the {@link MessageContainer} payload
      * @return the configured message info
      */
-    private static com.github.auties00.cobalt.model.chat.ChatMessageInfo statusMessage(
+    private static ChatMessageInfo statusMessage(
             String id, MessageContainer container) {
         var key = new MessageKeyBuilder()
                 .id(id)

@@ -14,72 +14,92 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the primary {@code <media/>}
- * child plus 0..10 {@code <media_list/>} children inside the canonical
- * {@code <iq xmlns="fb:thrift_iq" type="set" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that registers one or more uploaded media
+ * identifiers as CTWA native-ad assets on the relay.
+ *
+ * @apiNote
+ * Used by the CTWA native-ad surface in
+ * {@code WAWebLinkAdMediaInFacebook.linkAdMediaInFacebook}, which
+ * links a freshly-uploaded media id to the Facebook ad backend so
+ * it becomes available there for ad composition. Carries an
+ * optional primary {@link SmaxUploadAdMediaMediaEntry} plus 0..10
+ * additional list entries; the {@code linkAdMediaInFacebook} call
+ * passes a single primary entry.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaNativeAdUploadAdMediaRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaNativeAdHackBaseIQSetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizCtwaNativeAdBaseIQSetRequestMixin")
 public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
     /**
-     * The optional {@code from} attribute echoed onto the outbound IQ
-     * via the {@code HackBaseIQSetRequestMixin}. The active user JID is
-     * the only legal value; {@code null} omits the attribute.
+     * The optional user JID echoed onto the outbound IQ's
+     * {@code from} attribute; {@code null} omits the attribute.
      */
     private final Jid iqFrom;
 
     /**
-     * The optional primary {@code <media/>} child; {@code null} omits
-     * it.
+     * The optional primary {@code <media/>} entry; {@code null}
+     * omits the child.
      */
     private final SmaxUploadAdMediaMediaEntry media;
 
     /**
-     * The list of {@code <media_list/>} children (0..10 entries).
+     * The {@code <media_list/>} entries (0..10).
      */
     private final List<SmaxUploadAdMediaMediaEntry> mediaList;
 
     /**
-     * Constructs a request without a {@code from} echo, without a
-     * primary {@code <media/>} child, and with an empty media list.
+     * Constructs a request with no {@code from} echo, no primary
+     * media child, and an empty media list.
+     *
+     * @apiNote
+     * Useful as a starting point in tests; production callers
+     * normally use the two- or three-argument constructor with at
+     * least one entry.
      */
     public SmaxUploadAdMediaRequest() {
         this(null, null, List.of());
     }
 
     /**
-     * Constructs a request without a {@code from} echo.
+     * Constructs a request with no {@code from} echo.
+     *
+     * @apiNote
+     * The form used by {@code linkAdMediaInFacebook}, which passes
+     * a single {@code (mediaId, "image")} primary entry and no
+     * extra list entries.
      *
      * @param media     the optional primary media entry; may be
      *                  {@code null}
-     * @param mediaList the list of media-list entries; never
-     *                  {@code null}; must contain at most 10 entries
+     * @param mediaList the additional list entries; never
+     *                  {@code null}; at most 10 entries
      * @throws NullPointerException     if {@code mediaList} is
      *                                  {@code null}
-     * @throws IllegalArgumentException if {@code mediaList} contains
-     *                                  more than 10 entries
+     * @throws IllegalArgumentException if {@code mediaList}
+     *                                  contains more than 10 entries
      */
     public SmaxUploadAdMediaRequest(SmaxUploadAdMediaMediaEntry media, List<SmaxUploadAdMediaMediaEntry> mediaList) {
         this(null, media, mediaList);
     }
 
     /**
-     * Constructs a request, optionally echoing the supplied user JID
-     * onto the {@code from} attribute via the
-     * {@code HackBaseIQSetRequestMixin}.
+     * Constructs a request, optionally echoing the supplied user
+     * JID onto the {@code from} attribute.
      *
-     * @param iqFrom    the optional user JID echoed onto the
-     *                  {@code from} attribute; may be {@code null}
+     * @apiNote
+     * Reserved for multi-device callers that need the outbound IQ
+     * to look like it originated from a specific linked user JID;
+     * standard {@code linkAdMediaInFacebook} callers pass
+     * {@code null}.
+     *
+     * @param iqFrom    the optional user JID; may be {@code null}
      * @param media     the optional primary media entry; may be
      *                  {@code null}
-     * @param mediaList the list of media-list entries; never
-     *                  {@code null}; must contain at most 10 entries
+     * @param mediaList the additional list entries; never
+     *                  {@code null}; at most 10 entries
      * @throws NullPointerException     if {@code mediaList} is
      *                                  {@code null}
-     * @throws IllegalArgumentException if {@code mediaList} contains
-     *                                  more than 10 entries
+     * @throws IllegalArgumentException if {@code mediaList}
+     *                                  contains more than 10 entries
      */
     public SmaxUploadAdMediaRequest(Jid iqFrom, SmaxUploadAdMediaMediaEntry media, List<SmaxUploadAdMediaMediaEntry> mediaList) {
         Objects.requireNonNull(mediaList, "mediaList cannot be null");
@@ -94,8 +114,11 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
     /**
      * Returns the optional {@code from} echo.
      *
-     * @return an {@link Optional} carrying the user JID, or empty when
-     *         no echo was supplied
+     * @apiNote
+     * Returns {@link Optional#empty()} when the request was built
+     * without a {@code from} echo.
+     *
+     * @return an {@link Optional} carrying the user JID
      */
     public Optional<Jid> iqFrom() {
         return Optional.ofNullable(iqFrom);
@@ -104,8 +127,11 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
     /**
      * Returns the optional primary media entry.
      *
-     * @return an {@link Optional} carrying the entry, or empty when
-     *         the {@code <media/>} child was omitted
+     * @apiNote
+     * Returns {@link Optional#empty()} when the request was built
+     * without a primary {@code <media/>} child.
+     *
+     * @return an {@link Optional} carrying the entry
      */
     public Optional<SmaxUploadAdMediaMediaEntry> media() {
         return Optional.ofNullable(media);
@@ -113,6 +139,9 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
 
     /**
      * Returns the additional media-list entries.
+     *
+     * @apiNote
+     * Returns an empty list when no extra entries were supplied.
      *
      * @return an unmodifiable list of 0..10 entries; never
      *         {@code null}
@@ -122,10 +151,14 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the media payload
+     * @apiNote
+     * Stamps {@code xmlns="fb:thrift_iq"}, {@code type="set"},
+     * {@code to="s.whatsapp.net"} and the optional {@code from}
+     * echo, then emits the optional primary {@code <media/>} child
+     * followed by 0..10 {@code <media_list/>} children. The IQ
+     * {@code id} is assigned by the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizCtwaNativeAdUploadAdMediaRequest",
@@ -141,7 +174,6 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
     public NodeBuilder toNode() {
         var children = new ArrayList<Node>();
         if (media != null) {
-            // WASmaxOutBizCtwaNativeAdUploadAdMediaRequest.makeUploadAdMediaRequestMedia: smax("media", {id: CUSTOM_STRING(t), type: CUSTOM_STRING(n)})
             var mediaNode = new NodeBuilder()
                     .description("media")
                     .attribute("id", media.id())
@@ -150,7 +182,6 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
             children.add(mediaNode);
         }
         for (var entry : mediaList) {
-            // WASmaxOutBizCtwaNativeAdUploadAdMediaRequest.makeUploadAdMediaRequestMediaList: smax("media_list", {id: CUSTOM_STRING(t), type: CUSTOM_STRING(n)})
             var entryNode = new NodeBuilder()
                     .description("media_list")
                     .attribute("id", entry.id())
@@ -160,12 +191,12 @@ public final class SmaxUploadAdMediaRequest implements SmaxOperation.Request {
         }
         var builder = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "fb:thrift_iq") // WASmaxOutBizCtwaNativeAdUploadAdMediaRequest.makeUploadAdMediaRequest: smax("iq", {xmlns: "fb:thrift_iq", smax_id: INT(74)})
-                .attribute("to", JidServer.user()) // WASmaxOutBizCtwaNativeAdHackBaseIQSetRequestMixin.mergeHackBaseIQSetRequestMixin: to: WAWap.S_WHATSAPP_NET ("s.whatsapp.net")
-                .attribute("type", "set") // WASmaxOutBizCtwaNativeAdBaseIQSetRequestMixin.mergeBaseIQSetRequestMixin: stamps type="set" via WASmaxMixins.mergeStanzas; id is added by the central IQ dispatch pipeline (WAWap.generateId())
+                .attribute("xmlns", "fb:thrift_iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "set")
                 .content(children);
         if (iqFrom != null) {
-            builder.attribute("from", iqFrom); // WASmaxOutBizCtwaNativeAdHackBaseIQSetRequestMixin.mergeHackBaseIQSetRequestMixin: from: OPTIONAL(USER_JID, t.iqFrom)
+            builder.attribute("from", iqFrom);
         }
         return builder;
     }

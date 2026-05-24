@@ -6,17 +6,20 @@ import java.util.Optional;
  * Thrown when registering a phone number against the WhatsApp mobile
  * registration API fails.
  *
- * <p>Registration is the flow that asks WhatsApp to issue a verification
+ * @apiNote
+ * Registration is the flow that asks WhatsApp to issue a verification
  * code (by SMS or voice call), submits the code the user typed, and
  * collects the credentials used by the mobile client to authenticate
  * subsequent sessions. Any rejection from the registration servers
  * (invalid number, rate limit, anti-spam block, wrong code, banned
  * account) raises this exception. When the server returned a body, the
  * raw response is available via {@link #erroneousResponse()} so the
- * caller can decode the specific reason and any retry hint.
+ * caller can decode the specific reason and any retry hint, typically a
+ * {@code retry_after} field for rate-limit driven rejections.
  *
- * <p>Registration failures are fatal because authentication never
- * completed.
+ * @implNote
+ * This implementation always reports the failure as fatal because
+ * authentication never completed.
  */
 public final class WhatsAppRegistrationException extends WhatsAppException {
 
@@ -60,7 +63,8 @@ public final class WhatsAppRegistrationException extends WhatsAppException {
     /**
      * Returns the raw response body returned by the registration API, if any.
      *
-     * <p>The response is the JSON the WhatsApp registration servers
+     * @apiNote
+     * The response is the JSON the WhatsApp registration servers
      * produced. It typically carries a status string, a reason code, and
      * a {@code retry_after} hint when the rejection is rate-limit
      * driven.
@@ -72,12 +76,11 @@ public final class WhatsAppRegistrationException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>Registration must complete before a session can exist, so the
-     * failure is always fatal.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: registration must
+     * complete before a session can exist.
      */
     @Override
     public boolean isFatal() {

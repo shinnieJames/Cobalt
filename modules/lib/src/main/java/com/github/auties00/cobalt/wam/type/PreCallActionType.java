@@ -89,5 +89,13 @@ public enum PreCallActionType {
     @WamEnumConstant(79) CLICK_REMINDER_OPTION_NEVER,
     @WamEnumConstant(80) CLICK_PARTICIPANT_ROW,
     @WamEnumConstant(81) CLICK_GROUP_INFO,
-    @WamEnumConstant(82) CLICK_MORE_BUTTON
+    @WamEnumConstant(82) CLICK_MORE_BUTTON,
+    @WamEnumConstant(83) DIALER_INPUT_STARTED,
+    @WamEnumConstant(84) DIALER_INPUT_CUT,
+    @WamEnumConstant(85) DIALER_INPUT_COPIED,
+    @WamEnumConstant(86) DIALER_INPUT_PASTED,
+    @WamEnumConstant(87) DIALER_COUNTRY_CHIP_TAPPED,
+    @WamEnumConstant(88) DIALER_COUNTRY_PICKER_SELECTED,
+    @WamEnumConstant(89) DIALER_NEW_COUNTRY_CODE_DETECTED,
+    @WamEnumConstant(90) DIALER_INPUT_CURSOR_ENGAGED
 }

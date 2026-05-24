@@ -15,25 +15,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the
- * {@code <get_user_disclosures t="…"/>} payload in the canonical
- * {@code <iq xmlns="tos" type="get" to="s.whatsapp.net">} envelope.
+ * The outbound {@code <iq xmlns="tos" type="get">} stanza that asks the
+ * relay for the user-facing legal disclosures the account must
+ * acknowledge.
+ *
+ * @apiNote
+ * Built by Cobalt's TOS-prompt path, the counterpart of WA Web's
+ * {@code WAWebGetUserDisclosuresQueryJob.queryAllUserDisclosures}. The
+ * relay returns one {@code <notice>} per outstanding disclosure
+ * (terms-of-service updates, regional privacy notices, biz-broadcast
+ * opt-in prompts, etc.); embedders surface these to their UI so the user
+ * can read and accept.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeGetDisclosuresRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeBaseIQGetRequestMixin")
 public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.Request {
     /**
-     * The client-side fetch timestamp (seconds since epoch) carried
-     * by the {@code t} attribute of the
-     * {@code <get_user_disclosures/>} child.
+     * The client-side fetch timestamp (seconds since the UNIX epoch) the
+     * relay uses to decide which disclosures to return.
      */
     private final long getUserDisclosuresT;
 
     /**
      * Constructs a request.
      *
-     * @param getUserDisclosuresT the client-side fetch timestamp in
-     *                            seconds
+     * @apiNote
+     * Pass the current wall-clock time in seconds (WA Web uses
+     * {@code WATimeUtils.unixTime()}); the relay uses the timestamp to
+     * decide which disclosures to surface.
+     *
+     * @param getUserDisclosuresT the fetch timestamp in seconds
      */
     public SmaxUserNoticeGetDisclosuresRequest(long getUserDisclosuresT) {
         this.getUserDisclosuresT = getUserDisclosuresT;
@@ -42,6 +53,10 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     /**
      * Returns the client-side fetch timestamp.
      *
+     * @apiNote
+     * Used by {@link #toNode()} to populate the {@code t} attribute on
+     * the {@code <get_user_disclosures>} child.
+     *
      * @return the timestamp in seconds
      */
     public long getUserDisclosuresT() {
@@ -49,10 +64,14 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <get_user_disclosures/>} payload
+     * @implNote
+     * This implementation hard-codes {@code xmlns="tos"},
+     * {@code type="get"}, and {@code to=s.whatsapp.net} per the
+     * {@code WASmaxOutUserNoticeGetDisclosuresRequest.makeGetDisclosuresRequest}
+     * fixture, then nests a single {@code <get_user_disclosures t="..."/>}
+     * child carrying the timestamp.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutUserNoticeGetDisclosuresRequest",
@@ -70,6 +89,12 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
                 .content(getUserDisclosuresNode);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation compares the fetch timestamp.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -82,11 +107,24 @@ public final class SmaxUserNoticeGetDisclosuresRequest implements SmaxOperation.
         return this.getUserDisclosuresT == that.getUserDisclosuresT;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation hashes the fetch timestamp.
+     */
     @Override
     public int hashCode() {
         return Objects.hash(getUserDisclosuresT);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation mirrors the record-like rendering used across
+     * the {@code Smax*} stanza family.
+     */
     @Override
     public String toString() {
         return "SmaxUserNoticeGetDisclosuresRequest[getUserDisclosuresT=" + getUserDisclosuresT + ']';

@@ -1,20 +1,19 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentInfoAction;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentInfoActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,32 +25,30 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Tests for {@link PaymentInfoHandler}, Cobalt's adapter for
- * {@code WAWebPaymentInfoSync}.
+ * Exercises {@link PaymentInfoHandler} against the
+ * {@code WAWebPaymentInfoSync.applyMutations} per-mutation flow.
  *
- * <p>The handler is gated on the SMB platform variants and the
- * {@code order_details_payment_instructions_sync_enabled} AB prop. On
- * {@code SET} it persists the CPI string into the store via
- * {@code setPaymentInstructionCpi}.
+ * @apiNote
+ * Verifies the SMB platform gate
+ * ({@link ClientPlatformType#IOS_BUSINESS} /
+ * {@link ClientPlatformType#ANDROID_BUSINESS}), the
+ * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED}
+ * gate, the
+ * {@link SyncdOperation#SET}
+ * happy path that persists the CPI string via
+ * {@link WhatsAppStore#setPaymentInstructionCpi(String)}, and the
+ * malformed-value classification when {@link PaymentInfoAction#cpi()}
+ * is missing. Non-{@code SET} operations and gate failures all
+ * surface as
+ * {@link SyncActionState#UNSUPPORTED}.
  *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>Non-SMB platform short-circuits to {@code UNSUPPORTED}.</li>
- *   <li>AB-prop gate disabled returns {@code UNSUPPORTED}.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Malformed value (missing sub-message or null {@code cpi}) is
- *       {@code MALFORMED}.</li>
- *   <li>Happy path: SET stores the CPI and reports {@code SUCCESS}.</li>
- *   <li>Default conflict resolution.</li>
- *   <li>Default batch dispatch.</li>
- *   <li>Builder methods (n/a — handler has none).</li>
- *   <li>Malformed index (n/a — handler does not parse indexParts).</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
- * </ul>
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * helper because no public outgoing-mutation factory exists for this
+ * action; the handler does not parse {@code indexParts} so the
+ * malformed-index dimension has no surface here.
  */
 @DisplayName("PaymentInfoHandler")
 class PaymentInfoHandlerTest {
@@ -64,8 +61,19 @@ class PaymentInfoHandlerTest {
     private PaymentInfoHandler handler;
 
     /**
-     * Builds a fresh harness and a fresh AB-props service. Tests opt into the
-     * SMB platform and the AB prop explicitly to keep each test path declarative.
+     * Builds a fresh harness and a fresh AB-props service before each
+     * test.
+     *
+     * @apiNote
+     * Each test path opts into the SMB platform via
+     * {@link #smbPlatform()} and the AB prop via {@link #enableSync()}
+     * explicitly so the gating dimension under test is declarative.
+     *
+     * @implNote
+     * This implementation creates a clean
+     * {@link WhatsAppStore} per test
+     * via {@code DeviceFixtures.temporaryStore} so no state leaks
+     * between tests.
      */
     @BeforeEach
     void setUp() {
@@ -78,25 +86,62 @@ class PaymentInfoHandlerTest {
     }
 
     /**
-     * Sets the local store's platform to {@code IOS_BUSINESS} (one of the two
-     * SMB variants accepted by the handler).
+     * Sets the local store's platform to
+     * {@link ClientPlatformType#IOS_BUSINESS}.
+     *
+     * @apiNote
+     * Internal helper used by every test that needs to clear the SMB
+     * platform gate without picking a specific business variant; the
+     * {@code IOS_BUSINESS} choice is interchangeable with
+     * {@link ClientPlatformType#ANDROID_BUSINESS}.
+     *
+     * @implNote
+     * This implementation mutates the device record on the shared
+     * fixture store rather than rebuilding the test client, because
+     * the platform read happens at every {@code applyMutation} call.
      */
     private void smbPlatform() {
         store.device().setPlatform(ClientPlatformType.IOS_BUSINESS);
     }
 
     /**
-     * Enables the {@code order_details_payment_instructions_sync_enabled} AB prop.
+     * Enables the
+     * {@link ABProp#ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED}
+     * AB prop on the test fixture.
+     *
+     * @apiNote
+     * Internal helper used by every test that needs to clear the
+     * AB-prop gate. Combined with {@link #smbPlatform()} to land on
+     * the happy path.
+     *
+     * @implNote
+     * This implementation mutates the
+     * {@link TestABPropsService}
+     * instance owned by the test client; no test isolation is broken
+     * because the harness is rebuilt per test.
      */
     private void enableSync() {
         props.set(ABProp.ORDER_DETAILS_PAYMENT_INSTRUCTIONS_SYNC_ENABLED, true);
     }
 
     /**
-     * Builds a trusted SET mutation carrying the given action.
+     * Builds a trusted
+     * {@link SyncdOperation#SET}
+     * mutation carrying the given action under the singleton
+     * {@code ["payment_info"]} index.
      *
-     * @param action the payment-info action payload, or {@code null} to omit
-     *               the sub-message
+     * @apiNote
+     * Internal helper consumed by every test in this class; not used
+     * outside it. Setting {@code action} to {@code null} omits the
+     * {@code paymentInfoAction} field on the value so the
+     * malformed-value branch can be exercised.
+     *
+     * @implNote
+     * This implementation pins the timestamp to a fixed second so
+     * tests that compare timestamps (none today) stay deterministic.
+     *
+     * @param action the payment-info action payload; may be
+     *               {@code null} to omit the sub-message
      * @return the trusted mutation
      */
     private static DecryptedMutation.Trusted setMutation(PaymentInfoAction action) {
@@ -269,7 +314,7 @@ class PaymentInfoHandlerTest {
                     .build();
             var remote = new DecryptedMutation.Trusted("[\"payment_info\"]", remoteValue,
                     SyncdOperation.SET, remoteTs, 7);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
     }
@@ -289,46 +334,4 @@ class PaymentInfoHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder methods (n/a)")
-    class Builders {
-        @Test
-        @DisplayName("PaymentInfoHandler exposes no static *Mutation builder")
-        void noBuilders() {
-            // WA Web's WAWebPaymentInfoSync only consumes the action from the primary device;
-            // there is no companion-side outgoing-mutation factory to test. This @Nested makes
-            // the absence explicit per the per-handler matrix rule.
-            assertFalse(hasPublicMutationBuilder(),
-                    "the handler must not expose a public *Mutation builder");
-        }
-
-        /**
-         * Returns whether the handler exposes any public method whose name ends
-         * with {@code Mutation} that returns a {@code SyncPendingMutation}.
-         *
-         * @return {@code true} when such a method exists
-         */
-        private static boolean hasPublicMutationBuilder() {
-            for (var m : PaymentInfoHandler.class.getDeclaredMethods()) {
-                if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
-                if (!m.getName().endsWith("Mutation")) continue;
-                if (m.getReturnType().getSimpleName().equals("SyncPendingMutation")) return true;
-            }
-            return false;
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/payment-info/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/payment-info/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

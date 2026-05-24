@@ -11,22 +11,27 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles VoIP relay-all-calls setting sync actions.
+ * Mirrors the "Always relay calls" privacy setting across linked devices.
  *
- * <p>This handler processes mutations that control whether all VoIP calls
- * are relayed through WhatsApp servers (hiding the user's IP address from
- * the call peer). It maps to the singleton instance exported as
- * {@code default} from the WA Web module, which extends
- * {@code AccountSyncdActionBase} with collection {@code Regular},
- * version {@code 1}, and action {@code "setting_relayAllCalls"}.
- *
- * <p>Index format: {@code ["setting_relayAllCalls"]}
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * routes incoming {@code setting_relayAllCalls} mutations here whenever
+ * the user toggles "Always relay calls" on another linked device (typical
+ * trigger: Privacy Settings -> Advanced -> Protect IP Address in Calls).
+ * The handler writes the boolean preference onto
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)}
+ * so Cobalt's VoIP layer routes subsequent calls through the WA relay
+ * instead of letting the peer learn the local IP address.
  */
 @WhatsAppWebModule(moduleName = "WAWebVoipRelayAllCallsSettingSync")
 public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler {
 
     /**
-     * Creates a new {@code VoipRelayAllCallsHandler}.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebVoipRelayAllCallsSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public VoipRelayAllCallsHandler() {
@@ -61,32 +66,27 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
     }
 
     /**
-     * Applies a single VoIP relay-all-calls mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebVoipRelayAllCallsSettingSync.applyMutations}
-     * (single-mutation path within the {@code Promise.all(r.map(...))} batch):
-     * <ol>
-     *   <li>If the operation is not {@code SET}, increments the unsupported counter
-     *       and returns {@code Unsupported}.</li>
-     *   <li>Extracts {@code privacySettingRelayAllCalls} from the value. If absent,
-     *       increments the malformed counter and returns
-     *       {@code malformedActionValue(collectionName)}.</li>
-     *   <li>Reads {@code isEnabled}. WA Web counts {@code null} values separately
-     *       and skips the backend persist call, but still returns {@code Success}.
-     *       In Cobalt, the existing nullable boolean accessor coalesces {@code null}
-     *       to {@code false} per the project's nullable-boolean-accessor convention.</li>
-     *   <li>Otherwise, persists the value via
-     *       {@code WAWebBackendApi.frontendSendAndReceive("setRelayAllCallsToUserPrefs", {disallowAllP2p: s})}
-     *       and returns {@code Success}.</li>
-     * </ol>
-     *
-     * <p>Per the Cobalt error model, the WA Web {@code try/catch} that converts
-     * any thrown error into {@code {actionState: Failed}} is intentionally not
-     * replicated; thrown {@code WhatsAppException} subtypes propagate to the
-     * pluggable error handler instead.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation mirrors WA Web's per-mutation closure inside
+     * {@code WAWebVoipRelayAllCallsSettingSync.applyMutations}: it
+     * requires a {@link SyncdOperation#SET}, decodes the
+     * {@link PrivacySettingRelayAllCalls} value, and writes the boolean
+     * into
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#setRelayAllCalls(boolean)}
+     * in place of WA Web's
+     * {@code WAWebBackendApi.frontendSendAndReceive("setRelayAllCallsToUserPrefs", {disallowAllP2p: s})}
+     * shell hop. Cobalt's
+     * {@link PrivacySettingRelayAllCalls#isEnabled()} accessor coalesces
+     * a null Boolean to {@code false} per the project nullable-boolean
+     * convention, so the WA Web {@code s == null} short-circuit (which
+     * skips the persist call but still reports {@code Success}) is
+     * relaxed to a direct write of {@code false}. The trailing
+     * {@code WALogger.WARN} counters and the outer {@code try/catch -> Failed}
+     * wrapper are dropped per Cobalt's pluggable error model: thrown
+     * exceptions surface to the configured
+     * {@link com.github.auties00.cobalt.exception.WhatsAppClientErrorHandler}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebVoipRelayAllCallsSettingSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -99,13 +99,7 @@ public final class VoipRelayAllCallsHandler implements WebAppStateActionHandler 
             return MutationApplicationResult.malformed();
         }
 
-        // MISMATCH (NULL-SKIP): WA Web tests {@code s == null} where {@code s = r.isEnabled}: when null, it increments
-        // {@code i++} and SKIPS the {@code setRelayAllCallsToUserPrefs} call entirely (still returning Success).
-        // Cobalt's {@link PrivacySettingRelayAllCalls#isEnabled()} coalesces null -> false, so a mutation with
-        // {@code privacySettingRelayAllCalls: {isEnabled: null}} is silently written as "relay disabled" to the store
-        // instead of being a no-op. Per the project-wide "nullable boolean coalesces to false" convention
-        // (see {@code feedback_nullable_bool_accessors.md}), this divergence is accepted.
-        client.store().setRelayAllCalls(action.isEnabled()); // ADAPTED: WAWebBackendApi.frontendSendAndReceive("setRelayAllCallsToUserPrefs", {disallowAllP2p: s}) -> direct store call
+        client.store().setRelayAllCalls(action.isEnabled());
         return MutationApplicationResult.success();
     }
 

@@ -15,51 +15,85 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the required pagination cursor. Either
- * {@code before} or {@code after} a server-id.
+ * Sealed disjunction over the pagination cursor of a
+ * {@link SmaxNewslettersGetNewsletterStatusUpdatesRequest}.
+ *
+ * @apiNote
+ * Pick this when polling the status-updates delta (view counts and
+ * reactions) for a single newsletter; one of {@link Before} or
+ * {@link After} must be supplied. WA Web's
+ * {@code WAWebNewsletterGetStatusUpdatesJob.fetchNewsletterStatusUpdates}
+ * hard-codes {@link After} at a server-id floor of 99 to pull the
+ * complete known-status history in one poll.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersStatusUpdatesBeforeOrAfterMixinMixinGroup")
 public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesDirection permits SmaxNewslettersGetNewsletterStatusUpdatesDirection.Before, SmaxNewslettersGetNewsletterStatusUpdatesDirection.After {
 
     /**
-     * The {@code before} cursor. Fetch updates with server-ids
-     * strictly less than the given pivot.
+     * The variant that walks backwards from a pivot server-id.
+     *
+     * @apiNote
+     * Selects status updates with server-ids strictly less than
+     * {@link #pivot()}, materialised as the {@code before} attribute on
+     * the wire {@code <status_updates>} element.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersStatusUpdatesBeforeMixinMixin")
     final class Before implements SmaxNewslettersGetNewsletterStatusUpdatesDirection {
         /**
-         * The server-id pivot.
+         * The server-id pivot below which status updates are returned.
          */
         private final long pivot;
 
         /**
-         * Constructs a {@code before} cursor.
+         * Constructs a backward-walking cursor at the given pivot.
          *
-         * @param pivot the server-id pivot
+         * @apiNote
+         * Rarely needed; WA Web prefers the {@link After} variant for
+         * status-updates polling.
+         *
+         * @param pivot the server-id pivot; the relay returns status
+         *              updates strictly less than this value
          */
         public Before(long pivot) {
             this.pivot = pivot;
         }
 
         /**
-         * Returns the pivot.
+         * Returns the server-id pivot for this cursor.
          *
-         * @return the pivot
+         * @return the pivot below which status updates are fetched
          */
         public long pivot() {
             return pivot;
         }
 
+        /**
+         * Compares two cursors for value equality on {@link #pivot()}.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Before}
+         *         carrying the same pivot
+         */
         @Override
         public boolean equals(Object obj) {
             return obj instanceof Before that && this.pivot == that.pivot;
         }
 
+        /**
+         * Returns the hash code derived from {@link #pivot()}.
+         *
+         * @return the {@link Long#hashCode(long)} of {@link #pivot()}
+         */
         @Override
         public int hashCode() {
             return Long.hashCode(pivot);
         }
 
+        /**
+         * Returns a debug representation including the pivot.
+         *
+         * @return a record-like rendering of this cursor
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterStatusUpdatesDirection.Before[pivot=" + pivot + ']';
@@ -67,44 +101,73 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesDirection permi
     }
 
     /**
-     * The {@code after} cursor. Fetch updates with server-ids
-     * strictly greater than the given pivot.
+     * The variant that walks forwards from a pivot server-id.
+     *
+     * @apiNote
+     * Selects status updates with server-ids strictly greater than
+     * {@link #pivot()}, materialised as the {@code after} attribute on
+     * the wire {@code <status_updates>} element. This is the variant
+     * WA Web's deduped per-JID poll loop defaults to.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersStatusUpdatesAfterMixinMixin")
     final class After implements SmaxNewslettersGetNewsletterStatusUpdatesDirection {
         /**
-         * The server-id pivot.
+         * The server-id pivot above which status updates are returned.
          */
         private final long pivot;
 
         /**
-         * Constructs an {@code after} cursor.
+         * Constructs a forward-walking cursor at the given pivot.
          *
-         * @param pivot the server-id pivot
+         * @apiNote
+         * Used when polling for new status updates strictly past the
+         * caller's last-seen server-id; WA Web's job uses {@code 99}
+         * (the lowest-allowed newsletter server-id) to fetch the full
+         * known-status history in one round-trip.
+         *
+         * @param pivot the server-id pivot; the relay returns status
+         *              updates strictly greater than this value
          */
         public After(long pivot) {
             this.pivot = pivot;
         }
 
         /**
-         * Returns the pivot.
+         * Returns the server-id pivot for this cursor.
          *
-         * @return the pivot
+         * @return the pivot above which status updates are fetched
          */
         public long pivot() {
             return pivot;
         }
 
+        /**
+         * Compares two cursors for value equality on {@link #pivot()}.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is an {@link After}
+         *         carrying the same pivot
+         */
         @Override
         public boolean equals(Object obj) {
             return obj instanceof After that && this.pivot == that.pivot;
         }
 
+        /**
+         * Returns the hash code derived from {@link #pivot()}.
+         *
+         * @return the {@link Long#hashCode(long)} of {@link #pivot()}
+         */
         @Override
         public int hashCode() {
             return Long.hashCode(pivot);
         }
 
+        /**
+         * Returns a debug representation including the pivot.
+         *
+         * @return a record-like rendering of this cursor
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterStatusUpdatesDirection.After[pivot=" + pivot + ']';

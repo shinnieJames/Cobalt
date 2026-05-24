@@ -5,20 +5,21 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * Use-case label that WhatsApp mixes into the HKDF info parameter when
- * deriving a message-secret-derived encryption or MAC key.
+ * Use-case label that WhatsApp mixes into the HKDF info parameter when it
+ * derives a message-secret-bound encryption or MAC key.
  *
- * <p>Eight variants drive dual-encrypted addons (poll votes, encrypted
- * reactions, encrypted comments, event responses, event edits, poll edits,
- * poll add-options, message edits). Each binds its HKDF derivation to a
+ * @apiNote Mirrors WA Web's {@code UseCaseSecretModificationType} enum in
+ * {@code WAUseCaseSecret}. Each variant binds an HKDF derivation to a
  * distinct label so keys derived for different use cases never collide even
- * when the parent message, sender, and stanza id are identical. The ninth
- * variant, {@link #REPORT_TOKEN}, is used by the reporting-token flow to
- * derive the HMAC key that authenticates abuse reports rather than for
- * AES-GCM encryption.
+ * when the parent message, sender, and stanza id are otherwise identical.
+ * Eight variants drive dual-encrypted addons (poll votes, encrypted
+ * reactions, encrypted comments, event responses, event edits, poll edits,
+ * poll add-options, message edits); the ninth, {@link #REPORT_TOKEN}, drives
+ * the HMAC franking tag the server verifies on abuse reports.
  *
- * <p>Each value records whether the use case applies additional authenticated
- * data in AES-GCM. Only poll votes and event responses set that flag.
+ * @implNote This implementation also records, on each variant, whether the
+ * use case authenticates additional data through AES-GCM AAD. Only
+ * {@link #POLL_VOTE} and {@link #EVENT_RESPONSE} set the flag.
  */
 @WhatsAppWebModule(moduleName = "WAUseCaseSecret")
 @WhatsAppWebModule(moduleName = "WAWebAddonEncryption")
@@ -26,41 +27,47 @@ public enum MessageAddonType {
     /**
      * Poll vote addon, dual-encrypted under a key derived with this label.
      *
-     * <p>Uses AAD ({@code stanzaId + "\0" + voterJid}) so a malicious server
-     * cannot reattribute a vote to a different user.
+     * @apiNote Drives {@link EncMessageFactory#encryptPollVote}. Sets the
+     * AAD flag so the AES-GCM cipher binds {@code stanzaId + "\0" + voterJid}
+     * into the tag, preventing the server from reattributing a vote to a
+     * different user.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
     POLL_VOTE("Poll Vote", true),
 
     /**
-     * Encrypted reaction addon, used for reactions posted inside CAG
-     * (community / announcement group) threads where the default
-     * non-encrypted reaction wire format would leak emoji content to the
-     * server.
+     * Encrypted reaction addon, used in community / announcement group
+     * threads.
+     *
+     * @apiNote Drives {@link EncMessageFactory#encryptReaction}. The default
+     * non-encrypted reaction wire format leaks the emoji content to the
+     * server, which is unacceptable on CAG threads; this label selects the
+     * dual-encrypted variant.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
     ENC_REACTION("Enc Reaction", false),
 
     /**
-     * Encrypted comment addon, used when a comment is attached to a message
-     * in a CAG thread.
+     * Encrypted comment addon, used in community / announcement group
+     * threads.
      *
-     * <p>The inner {@code MessageSpec} payload is dual-encrypted so the
-     * server can route the comment without reading its body.
+     * @apiNote Drives {@link EncMessageFactory#encryptComment}. The inner
+     * {@code MessageSpec} payload is dual-encrypted so the server can route
+     * the comment without reading its body.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
     ENC_COMMENT("Enc Comment", false),
 
     /**
-     * Reporting token label.
+     * Reporting-token label.
      *
-     * <p>Unlike the other variants, this label does not drive AES-GCM
+     * @apiNote Unlike the other variants, this label does not drive AES-GCM
      * encryption of an addon payload. It is mixed into the HKDF info when
-     * deriving the 32-byte HMAC key used to compute franking tags that the
-     * server verifies on abuse reports.
+     * deriving the 32-byte HMAC key used to compute the franking tag that
+     * the server verifies on abuse reports.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -69,9 +76,10 @@ public enum MessageAddonType {
     /**
      * Event response addon (RSVP).
      *
-     * <p>Uses AAD ({@code stanzaId + "\0" + responderJid}) so a malicious
-     * server cannot lift an encrypted RSVP emitted by one user and replay it
-     * as if it came from a different user.
+     * @apiNote Sets the AAD flag so the AES-GCM cipher binds
+     * {@code stanzaId + "\0" + responderJid} into the tag, preventing the
+     * server from lifting an encrypted RSVP emitted by one user and
+     * replaying it as if it came from a different user.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -80,14 +88,20 @@ public enum MessageAddonType {
     /**
      * Event edit addon, emitted when an event organiser updates the details
      * of a previously scheduled event.
+     *
+     * @apiNote The edited payload is dual-encrypted so the server can route
+     * the edit without reading its body. Maps to WA Web's
+     * {@code EVENT_EDIT_ENCRYPTED} enum entry.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
     EVENT_EDIT("Event Edit", false),
 
     /**
-     * Poll edit addon, emitted when a poll creator updates the poll question,
-     * options, or end-time.
+     * Poll edit addon, emitted when a poll creator updates the poll
+     * question, options, or end-time.
+     *
+     * @apiNote Maps to WA Web's {@code POLL_EDIT_ENCRYPTED} enum entry.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -105,8 +119,8 @@ public enum MessageAddonType {
      * Message edit addon, emitted when a user edits a previously sent
      * message.
      *
-     * <p>The edited payload is dual-encrypted so the server cannot read the
-     * edit even though it still needs to route the stanza.
+     * @apiNote The edited payload is dual-encrypted so the server can route
+     * the stanza without reading the new content.
      */
     @WhatsAppWebExport(moduleName = "WAUseCaseSecret", exports = "UseCaseSecretModificationType",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -120,8 +134,8 @@ public enum MessageAddonType {
     private final String value;
 
     /**
-     * Whether this use case authenticates the stanza id and addon sender JID
-     * as AAD during AES-GCM encryption and decryption.
+     * Whether this use case binds the stanza id and addon sender JID as
+     * AES-GCM AAD.
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryption", exports = {"encryptAddOn", "decryptAddOn"},
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -131,8 +145,8 @@ public enum MessageAddonType {
      * Constructs an addon type bound to the given HKDF label and AAD flag.
      *
      * @param value   the HKDF info string associated with this use case
-     * @param usesAad whether this use case authenticates stanza id and addon
-     *                sender as AES-GCM AAD
+     * @param usesAad whether this use case binds stanza id and addon sender
+     *                as AES-GCM AAD
      */
     MessageAddonType(String value, boolean usesAad) {
         this.value = value;
@@ -140,7 +154,12 @@ public enum MessageAddonType {
     }
 
     /**
-     * Returns the label mixed into the HKDF info parameter for this use case.
+     * Returns the HKDF info label associated with this use case.
+     *
+     * @apiNote Consumed inside
+     * {@link MessageAddonEncryption#encrypt} when assembling the HKDF info
+     * parameter; never exposed to callers of the high-level factory in
+     * {@link EncMessageFactory}.
      *
      * @return the HKDF info string
      */
@@ -151,15 +170,16 @@ public enum MessageAddonType {
     }
 
     /**
-     * Returns whether this use case binds the stanza id and addon sender as
-     * AES-GCM AAD.
+     * Returns whether this use case binds the stanza id and addon sender JID
+     * as AES-GCM AAD.
      *
-     * <p>Only poll votes and event responses set the flag to {@code true}.
-     * These addons require per-sender binding because the server otherwise
-     * sees enough structural metadata to attempt cross-user rebinding of the
-     * ciphertext.
+     * @apiNote Only {@link #POLL_VOTE} and {@link #EVENT_RESPONSE} set the
+     * flag; those addons need per-sender binding because the server
+     * otherwise sees enough structural metadata to attempt cross-user
+     * rebinding of the ciphertext.
      *
-     * @return {@code true} if AAD should be applied during encrypt and decrypt
+     * @return {@code true} when AAD should be applied during encrypt and
+     *         decrypt
      */
     @WhatsAppWebExport(moduleName = "WAWebAddonEncryption", exports = {"encryptAddOn", "decryptAddOn"},
             adaptation = WhatsAppAdaptation.DIRECT)

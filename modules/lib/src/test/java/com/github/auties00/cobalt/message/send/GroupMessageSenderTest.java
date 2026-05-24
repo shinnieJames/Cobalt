@@ -12,6 +12,7 @@ import com.github.auties00.cobalt.message.send.stanza.BotStanza;
 import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.ReportingStanza;
 import com.github.auties00.cobalt.message.send.bot.BotProtobufTransform;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
@@ -35,24 +36,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link GroupMessageSender}, mirroring
- * {@code WAWebSendGroupMsgJob.encryptAndSendGroupMsg} and
- * {@code WAWebSendGroupSkmsgJob.encryptAndSendSenderKeyMsg}.
+ * Exercises {@link GroupMessageSender}'s wire-stanza shape against the
+ * WA Web {@code encryptAndSendGroupMsg} contract.
  *
- * <p>Two regimes are covered:
+ * @apiNote
+ * Covers three send regimes that mirror the WA Web job split. Steady-state
+ * SKMSG (every participant already holds the key) emits a bare
+ * {@code <enc type="skmsg">} sibling with no {@code <participants>}
+ * wrapper. First-time distribution wraps the per-device PKMSG envelopes
+ * under {@code <participants>} alongside the SKMSG payload and emits a
+ * sibling {@code <device-identity>} so the recipients can verify the
+ * sender's identity key. PN-addressed groups stamp
+ * {@code addressing_mode="pn"} on the outer message.
  *
- * <ul>
- *   <li><b>Steady-state SKMSG</b> — every group participant already
- *       holds the sender's key (the store flags them via
- *       {@code markSenderKeyDistributed}). The outgoing stanza carries a
- *       bare {@code <enc type="skmsg">} sibling under {@code <message>}
- *       and no {@code <participants>} wrapper.</li>
- *   <li><b>First-time distribution</b> — at least one participant has
- *       not yet received the sender's key. The outgoing stanza wraps
- *       per-device PKMSG envelopes under {@code <participants>} alongside
- *       the bare SKMSG payload, plus a {@code <device-identity>} sibling
- *       for PKMSG verification.</li>
- * </ul>
+ * @implNote
+ * This implementation drives the sender through a stubbed
+ * {@link StubDeviceService} and a
+ * captured {@link TestWhatsAppClient}
+ * that records the first emitted stanza into an {@link AtomicReference};
+ * the assertions read attribute slots off the captured {@link Node}.
  */
 @DisplayName("GroupMessageSender")
 class GroupMessageSenderTest {
@@ -62,6 +64,10 @@ class GroupMessageSenderTest {
     private static final Jid GROUP = Jid.of("120363023250764418@g.us");
     private static final Jid PARTICIPANT_LID = Jid.of("83116928594056:0@lid");
 
+    /**
+     * Asserts the steady-state SKMSG stanza shape when every audience
+     * device already holds the sender key.
+     */
     @Test
     @DisplayName("steady-state: bare <enc type=\"skmsg\">, no <participants>")
     void steadyStateSkmsg() {
@@ -91,6 +97,10 @@ class GroupMessageSenderTest {
                 "steady-state SKMSG must not carry <participants>");
     }
 
+    /**
+     * Asserts the first-time-distribution stanza shape when at least one
+     * audience device must receive the sender-key distribution payload.
+     */
     @Test
     @DisplayName("first-time distribution: <participants> wraps PKMSG envelopes plus the bare SKMSG sibling")
     void firstTimeDistribution() {
@@ -98,8 +108,8 @@ class GroupMessageSenderTest {
         var participantStore = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         TestSignalSession.establishSession(senderStore, PARTICIPANT_LID, participantStore);
         seedGroupMetadata(senderStore, /*lidAddressing*/ true);
-        // Do NOT mark the participant as already-distributed — forces the
-        // first-time distribution branch.
+        // The participant is intentionally NOT marked as already-distributed
+        // so the first-time distribution branch fires.
 
         var captured = new AtomicReference<Node>();
         var client = clientWithCapture(senderStore, captured);
@@ -133,6 +143,10 @@ class GroupMessageSenderTest {
                 "first-distribution carries <device-identity> since PKMSG is present");
     }
 
+    /**
+     * Asserts that a PN-addressed group emits
+     * {@code addressing_mode="pn"} on the outer {@code <message>}.
+     */
     @Test
     @DisplayName("PN-addressing group: addressing_mode=\"pn\" propagates to outer <message>")
     void pnAddressingMode() {
@@ -155,11 +169,16 @@ class GroupMessageSenderTest {
     }
 
     /**
-     * Seeds the supplied store with a {@link com.github.auties00.cobalt.model.chat.group.GroupMetadata}
-     * for {@link #GROUP} so {@code GroupMessageSender} can resolve the
-     * addressing mode.
+     * Seeds the supplied store with a
+     * {@link com.github.auties00.cobalt.model.chat.group.GroupMetadata} for
+     * {@link #GROUP}.
      *
-     * @param store          the sender store
+     * @apiNote
+     * Required so that {@link GroupMessageSender} can resolve the
+     * addressing mode for the test group without going through the live
+     * group-metadata fetch path.
+     *
+     * @param store          the sender {@link WhatsAppStore}
      * @param lidAddressing  whether the group uses LID addressing
      */
     private static void seedGroupMetadata(WhatsAppStore store, boolean lidAddressing) {
@@ -172,12 +191,17 @@ class GroupMessageSenderTest {
     }
 
     /**
-     * Builds a TestWhatsAppClient that captures the first emitted stanza
-     * and returns a success ack.
+     * Builds a {@link TestWhatsAppClient} that captures the first emitted
+     * stanza into {@code capturedStanza} and returns a success ack.
      *
-     * @param store          the sender store
+     * @apiNote
+     * The synthetic ack carries only the {@code t} attribute so
+     * {@link com.github.auties00.cobalt.ack.AckParser} parses
+     * it as a success result with no error code.
+     *
+     * @param store          the sender {@link WhatsAppStore}
      * @param capturedStanza the slot to capture the emitted stanza into
-     * @return the configured client
+     * @return the configured {@link TestWhatsAppClient}
      */
     private static TestWhatsAppClient clientWithCapture(WhatsAppStore store, AtomicReference<Node> capturedStanza) {
         return TestWhatsAppClient.create()
@@ -193,12 +217,18 @@ class GroupMessageSenderTest {
     }
 
     /**
-     * Builds a fully-wired GroupMessageSender for the supplied client + store.
+     * Builds a fully-wired {@link GroupMessageSender} for the supplied
+     * dependencies.
      *
-     * @param client        the test client
-     * @param store         the sender store
-     * @param deviceService the stubbed device service
-     * @return the configured sender
+     * @apiNote
+     * Wires every dependency the sender needs (encryption, WAM, sender-key
+     * distribution, bot, biz, meta, reporting) so the per-test setup only
+     * has to swap the store and the {@link StubDeviceService}.
+     *
+     * @param client        the {@link TestWhatsAppClient}
+     * @param store         the sender {@link WhatsAppStore}
+     * @param deviceService the stubbed {@link StubDeviceService}
+     * @return the configured {@link GroupMessageSender}
      */
     private static GroupMessageSender groupMessageSender(TestWhatsAppClient client, WhatsAppStore store, StubDeviceService deviceService) {
         var ab = client.abPropsService();
@@ -216,15 +246,20 @@ class GroupMessageSenderTest {
     }
 
     /**
-     * Builds a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
-     * targeted at the supplied group with the supplied container payload.
+     * Builds a {@link ChatMessageInfo}
+     * targeted at the supplied group.
+     *
+     * @apiNote
+     * The message carries a fixed wire id and a zeroed
+     * {@code messageSecret}; tests that need a unique id pass distinct
+     * literal {@code id} values.
      *
      * @param id        the wire id
-     * @param groupJid  the group JID
-     * @param container the message payload
+     * @param groupJid  the group {@link Jid}
+     * @param container the {@link MessageContainer} payload
      * @return the configured message info
      */
-    private static com.github.auties00.cobalt.model.chat.ChatMessageInfo chatMessage(
+    private static ChatMessageInfo chatMessage(
             String id, Jid groupJid, MessageContainer container) {
         var key = new MessageKeyBuilder()
                 .id(id)

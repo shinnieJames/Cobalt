@@ -61,5 +61,8 @@ public enum StatusCreationEntryPoint {
     @WamEnumConstant(52) CHATS_TAB_NEW_CHAT,
     @WamEnumConstant(53) GROUP_STATUS_CHAT_HEADER_PROFILE_RING,
     @WamEnumConstant(54) GROUP_STATUS_CHAT_HEADER_PROFILE_RING_DROPDOWN,
-    @WamEnumConstant(55) CLOSE_SHARING_MIMICRY
+    @WamEnumConstant(55) CLOSE_SHARING_MIMICRY,
+    @WamEnumConstant(56) CHANNEL_THREAD_SCREEN,
+    @WamEnumConstant(57) MEDIA_BROWSER_STATUS_MENU,
+    @WamEnumConstant(58) ARCHIVE_STATUS_VIEWER
 }

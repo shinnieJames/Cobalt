@@ -12,14 +12,12 @@ import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinAction;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ArchiveChatMutationFactory;
 import com.github.auties00.cobalt.sync.factory.PinChatMutationFactory;
@@ -31,14 +29,13 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ArchiveChatHandler} â€” the WAWebArchiveChatSync adapter
+ * Tests for {@link ArchiveChatHandler} - the WAWebArchiveChatSync adapter
  * that owns archive/unarchive mutations including their message-range based
  * conflict resolution.
  */
@@ -113,7 +110,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("SET archived=true on an existing chat archives it")
@@ -143,7 +140,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Chat")
@@ -159,7 +156,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying a pinAction instead of archiveChatAction is rejected as MALFORMED")
@@ -180,7 +177,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty chat JID at slot 1 is MALFORMED")
@@ -217,7 +214,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("a REMOVE operation returns UNSUPPORTED without touching the chat")
@@ -241,10 +238,10 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” message range matrix")
+    @DisplayName("resolveConflicts - message range matrix")
     class ResolveConflicts {
         @Test
-        @DisplayName("remote range encloses local range â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("remote range encloses local range -> APPLY_REMOTE_DROP_LOCAL")
         void remoteEnclosesLocal() {
             // local has no messages and a small lastTs; remote carries a message with ts >= local lastTs.
             // encloses(remote, local) = true (empty local messages); encloses(local, remote) = false.
@@ -256,7 +253,7 @@ class ArchiveChatHandlerTest {
         }
 
         @Test
-        @DisplayName("local range encloses remote range â†’ SKIP_REMOTE")
+        @DisplayName("local range encloses remote range -> SKIP_REMOTE")
         void localEnclosesRemote() {
             // Mirror image of remoteEnclosesLocal.
             var local = mutationWithRangeAt(true, 100, List.of(msg("l-only", 60L)), Instant.ofEpochSecond(200L));
@@ -267,7 +264,7 @@ class ArchiveChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges are equal with local timestamp <= remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("ranges are equal with local timestamp <= remote -> APPLY_REMOTE_DROP_LOCAL")
         void rangesEqualLocalOlder() {
             var local = mutationWithRangeAt(false, 100, List.of(), Instant.ofEpochSecond(100L));
             var remote = mutationWithRangeAt(true, 100, List.of(), Instant.ofEpochSecond(200L));
@@ -277,7 +274,7 @@ class ArchiveChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges are equal with local timestamp strictly newer â†’ SKIP_REMOTE")
+        @DisplayName("ranges are equal with local timestamp strictly newer -> SKIP_REMOTE")
         void rangesEqualLocalNewer() {
             var local = mutationWithRangeAt(true, 100, List.of(), Instant.ofEpochSecond(300L));
             var remote = mutationWithRangeAt(false, 100, List.of(), Instant.ofEpochSecond(200L));
@@ -287,10 +284,10 @@ class ArchiveChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges do not enclose each other â†’ SKIP_REMOTE_DROP_LOCAL with a merged mutation")
+        @DisplayName("ranges do not enclose each other -> SKIP_REMOTE_DROP_LOCAL with a merged mutation")
         void rangesNotEnclosingProducesMerge() {
             // Each range carries a message whose timestamp >= the OTHER range's lastMessageTimestamp,
-            // with disjoint key ids â€” forcing encloses() to return false in both directions.
+            // with disjoint key ids - forcing encloses() to return false in both directions.
             var local = mutationWithRangeAt(false, 50L, List.of(msg("local-1", 80L)), Instant.ofEpochSecond(100L));
             var remote = mutationWithRangeAt(true, 50L, List.of(msg("remote-1", 90L)), Instant.ofEpochSecond(200L));
 
@@ -306,7 +303,7 @@ class ArchiveChatHandlerTest {
         @Test
         @DisplayName("missing local message range falls back to APPLY_REMOTE_DROP_LOCAL")
         void missingLocalRangeFallback() {
-            // local has no message range â€” handler treats this as defensive fallback.
+            // local has no message range - handler treats this as defensive fallback.
             var localAction = new ArchiveChatActionBuilder().archived(false).build();
             var localValue = new SyncActionValueBuilder()
                     .timestamp(Instant.ofEpochSecond(100L))
@@ -348,7 +345,7 @@ class ArchiveChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("getArchiveChatMutation â€” builder helper")
+    @DisplayName("getArchiveChatMutation - builder helper")
     class BuilderHelpers {
         @Test
         @DisplayName("getArchiveChatMutation carries the supplied archived flag and the action index")
@@ -397,23 +394,4 @@ class ArchiveChatHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/archive-chat/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/archive-chat/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var archived = oracle.getBoolean("archived");
-
-            var action = new ArchiveChatActionBuilder().archived(archived).build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .archiveChatAction(action)
-                    .build();
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

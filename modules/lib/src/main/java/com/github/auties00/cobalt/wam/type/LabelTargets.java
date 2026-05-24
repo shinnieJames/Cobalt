@@ -21,5 +21,6 @@ public enum LabelTargets {
     @WamEnumConstant(11) BULK_UNLABEL_DIALOG,
     @WamEnumConstant(12) LABEL_COMBINED_DIALOG,
     @WamEnumConstant(13) GROUP,
-    @WamEnumConstant(14) BROADCAST
+    @WamEnumConstant(14) BROADCAST,
+    @WamEnumConstant(15) NEW_LIST_SCREEN
 }

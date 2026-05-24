@@ -14,23 +14,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsSetPropertyRequest}.
+ * The sealed reply family for a {@link SmaxGroupsSetPropertyRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsSetPropertyRPC}.
+ * {@link Success} echoes back the set of toggles the relay actually applied, decomposed into typed accessors
+ * that mirror the request's flag set; callers compare the echoed flags against the requested flags to detect
+ * partially honoured mutations.
  */
 public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Response
         permits SmaxGroupsSetPropertyResponse.Success, SmaxGroupsSetPropertyResponse.ClientError, SmaxGroupsSetPropertyResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsSetPropertyResponse} variant in priority order and
+     * Dispatches the inbound IQ across each {@link SmaxGroupsSetPropertyResponse} variant in priority order and
      * returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsSetPropertyRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound {@link SmaxGroupsSetPropertyRequest} stanza, used to validate echoed
+     *                identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsSetPropertyRPC",
@@ -50,13 +57,13 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code Success} reply variant — the relay accepted the
-     * mutation and echoed back which toggles were applied.
+     * The reply variant emitted when the relay accepted the property mutation.
      *
-     * <p>Each toggle is exposed as a typed accessor; the
-     * {@code <ephemeral/>} echo is decomposed into its {@code expiration}
-     * and {@code trigger} attributes, and the membership-approval echo
-     * is exposed as the raw join-mode string.
+     * @apiNote Each requested toggle is echoed back as a sibling child under the IQ envelope; the typed
+     * accessors below report which children were echoed. The {@code <ephemeral/>} echo is decomposed into its
+     * {@code expiration} and {@code trigger} attributes, and the {@code <membership_approval_mode/>} echo is
+     * exposed as the raw {@code group_join_mode} string. Callers compare each echoed flag against the requested
+     * flag to detect partially honoured mutations.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseSuccess")
     final class Success implements SmaxGroupsSetPropertyResponse {
@@ -71,21 +78,17 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         private final boolean announcement;
 
         /**
-         * Whether the relay echoed a
-         * {@code <no_frequently_forwarded/>} child.
+         * Whether the relay echoed a {@code <no_frequently_forwarded/>} child.
          */
         private final boolean noFrequentlyForwarded;
 
         /**
-         * The optional ephemeral-message expiration echoed by the
-         * relay. May be {@code null} when the request did not toggle
-         * ephemerality.
+         * The optional ephemeral-message expiration echoed by the relay.
          */
         private final Integer ephemeralExpiration;
 
         /**
          * The optional ephemeral-message trigger echoed by the relay.
-         * May be {@code null}.
          */
         private final Integer ephemeralTrigger;
 
@@ -100,8 +103,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         private final boolean notAnnouncement;
 
         /**
-         * Whether the relay echoed a {@code <frequently_forwarded_ok/>}
-         * child.
+         * Whether the relay echoed a {@code <frequently_forwarded_ok/>} child.
          */
         private final boolean frequentlyForwardedOk;
 
@@ -112,32 +114,26 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
 
         /**
          * The optional membership-approval mode echoed by the relay.
-         * May be {@code null} when the request did not toggle
-         * membership approval.
          */
         private final String membershipApprovalGroupJoinMode;
 
         /**
-         * Whether the relay echoed an {@code <allow_admin_reports/>}
-         * child.
+         * Whether the relay echoed an {@code <allow_admin_reports/>} child.
          */
         private final boolean allowAdminReports;
 
         /**
-         * Whether the relay echoed a {@code <not_allow_admin_reports/>}
-         * child.
+         * Whether the relay echoed a {@code <not_allow_admin_reports/>} child.
          */
         private final boolean notAllowAdminReports;
 
         /**
-         * Whether the relay echoed an
-         * {@code <allow_non_admin_sub_group_creation/>} child.
+         * Whether the relay echoed an {@code <allow_non_admin_sub_group_creation/>} child.
          */
         private final boolean allowNonAdminSubGroupCreation;
 
         /**
-         * Whether the relay echoed a
-         * {@code <not_allow_non_admin_sub_group_creation/>} child.
+         * Whether the relay echoed a {@code <not_allow_non_admin_sub_group_creation/>} child.
          */
         private final boolean notAllowNonAdminSubGroupCreation;
 
@@ -152,44 +148,24 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         private final boolean noGroupHistory;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success} from the per-toggle echo flags and optional attribute echoes.
          *
-         * @param locked                            see
-         *                                          {@link #locked()}
-         * @param announcement                      see
-         *                                          {@link #announcement()}
-         * @param noFrequentlyForwarded             see
-         *                                          {@link #noFrequentlyForwarded()}
-         * @param ephemeralExpiration               optional ephemeral
-         *                                          expiration echo;
-         *                                          may be {@code null}
-         * @param ephemeralTrigger                  optional ephemeral
-         *                                          trigger echo; may
-         *                                          be {@code null}
-         * @param unlocked                          see
-         *                                          {@link #unlocked()}
-         * @param notAnnouncement                   see
-         *                                          {@link #notAnnouncement()}
-         * @param frequentlyForwardedOk             see
-         *                                          {@link #frequentlyForwardedOk()}
-         * @param notEphemeral                      see
-         *                                          {@link #notEphemeral()}
-         * @param membershipApprovalGroupJoinMode   optional
-         *                                          membership-approval
-         *                                          mode echo; may be
-         *                                          {@code null}
-         * @param allowAdminReports                 see
-         *                                          {@link #allowAdminReports()}
-         * @param notAllowAdminReports              see
-         *                                          {@link #notAllowAdminReports()}
-         * @param allowNonAdminSubGroupCreation     see
-         *                                          {@link #allowNonAdminSubGroupCreation()}
-         * @param notAllowNonAdminSubGroupCreation  see
-         *                                          {@link #notAllowNonAdminSubGroupCreation()}
-         * @param groupHistory                      see
-         *                                          {@link #groupHistory()}
-         * @param noGroupHistory                    see
-         *                                          {@link #noGroupHistory()}
+         * @param locked                            see {@link #locked()}
+         * @param announcement                      see {@link #announcement()}
+         * @param noFrequentlyForwarded             see {@link #noFrequentlyForwarded()}
+         * @param ephemeralExpiration               optional ephemeral expiration echo; may be {@code null}
+         * @param ephemeralTrigger                  optional ephemeral trigger echo; may be {@code null}
+         * @param unlocked                          see {@link #unlocked()}
+         * @param notAnnouncement                   see {@link #notAnnouncement()}
+         * @param frequentlyForwardedOk             see {@link #frequentlyForwardedOk()}
+         * @param notEphemeral                      see {@link #notEphemeral()}
+         * @param membershipApprovalGroupJoinMode   optional membership-approval mode echo; may be {@code null}
+         * @param allowAdminReports                 see {@link #allowAdminReports()}
+         * @param notAllowAdminReports              see {@link #notAllowAdminReports()}
+         * @param allowNonAdminSubGroupCreation     see {@link #allowNonAdminSubGroupCreation()}
+         * @param notAllowNonAdminSubGroupCreation  see {@link #notAllowNonAdminSubGroupCreation()}
+         * @param groupHistory                      see {@link #groupHistory()}
+         * @param noGroupHistory                    see {@link #noGroupHistory()}
          */
         public Success(boolean locked,
                        boolean announcement,
@@ -235,8 +211,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed an
-         * {@code <announcement/>} child.
+         * Returns whether the relay echoed an {@code <announcement/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -245,8 +220,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <no_frequently_forwarded/>} child.
+         * Returns whether the relay echoed a {@code <no_frequently_forwarded/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -255,31 +229,26 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the optional ephemeral-message expiration echoed by
-         * the relay.
+         * Returns the optional ephemeral-message expiration echoed by the relay.
          *
-         * @return an {@link Optional} carrying the expiration in
-         *         seconds, or empty when the relay did not echo the
-         *         {@code <ephemeral/>} child
+         * @return an {@link Optional} carrying the expiration in seconds, or empty when the relay did not echo
+         *         the {@code <ephemeral/>} child
          */
         public Optional<Integer> ephemeralExpiration() {
             return Optional.ofNullable(ephemeralExpiration);
         }
 
         /**
-         * Returns the optional ephemeral-message trigger echoed by the
-         * relay.
+         * Returns the optional ephemeral-message trigger echoed by the relay.
          *
-         * @return an {@link Optional} carrying the trigger, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the trigger, or empty when the relay omitted it
          */
         public Optional<Integer> ephemeralTrigger() {
             return Optional.ofNullable(ephemeralTrigger);
         }
 
         /**
-         * Returns whether the relay echoed an {@code <unlocked/>}
-         * child.
+         * Returns whether the relay echoed an {@code <unlocked/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -288,8 +257,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <not_announcement/>} child.
+         * Returns whether the relay echoed a {@code <not_announcement/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -298,8 +266,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <frequently_forwarded_ok/>} child.
+         * Returns whether the relay echoed a {@code <frequently_forwarded_ok/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -308,8 +275,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a {@code <not_ephemeral/>}
-         * child.
+         * Returns whether the relay echoed a {@code <not_ephemeral/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -318,11 +284,9 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the optional membership-approval mode echoed by the
-         * relay.
+         * Returns the optional membership-approval mode echoed by the relay.
          *
-         * @return an {@link Optional} carrying the join-mode value, or
-         *         empty when the relay did not echo the
+         * @return an {@link Optional} carrying the join-mode value, or empty when the relay did not echo the
          *         {@code <membership_approval_mode/>} child
          */
         public Optional<String> membershipApprovalGroupJoinMode() {
@@ -330,8 +294,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed an
-         * {@code <allow_admin_reports/>} child.
+         * Returns whether the relay echoed an {@code <allow_admin_reports/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -340,8 +303,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <not_allow_admin_reports/>} child.
+         * Returns whether the relay echoed a {@code <not_allow_admin_reports/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -350,8 +312,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed an
-         * {@code <allow_non_admin_sub_group_creation/>} child.
+         * Returns whether the relay echoed an {@code <allow_non_admin_sub_group_creation/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -360,8 +321,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <not_allow_non_admin_sub_group_creation/>} child.
+         * Returns whether the relay echoed a {@code <not_allow_non_admin_sub_group_creation/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -370,8 +330,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a {@code <group_history/>}
-         * child.
+         * Returns whether the relay echoed a {@code <group_history/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -380,8 +339,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns whether the relay echoed a
-         * {@code <no_group_history/>} child.
+         * Returns whether the relay echoed a {@code <no_group_history/>} child.
          *
          * @return {@code true} when the toggle was applied
          */
@@ -390,14 +348,16 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseSetPropertyResponseSuccess}: the IQ must be a valid
+         * {@code type="result"} echo of the request; each documented toggle is captured via a presence check on
+         * the corresponding child, and the {@code <ephemeral/>} and {@code <membership_approval_mode/>}
+         * children additionally extract their attributes.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetPropertyResponseSuccess",
                 exports = "parseSetPropertyResponseSuccess",
@@ -453,6 +413,12 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
             return Optional.of(success);
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across every field.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -480,6 +446,11 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
                     && Objects.equals(this.membershipApprovalGroupJoinMode, that.membershipApprovalGroupJoinMode);
         }
 
+        /**
+         * Returns a hash composed of every field.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(locked, announcement, noFrequentlyForwarded, ephemeralExpiration, ephemeralTrigger,
@@ -488,6 +459,11 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
                     allowNonAdminSubGroupCreation, notAllowNonAdminSubGroupCreation, groupHistory, noGroupHistory);
         }
 
+        /**
+         * Returns a debug string carrying every field.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetPropertyResponse.Success[locked=" + locked
@@ -511,28 +487,26 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * request as malformed (mutually exclusive toggles, empty
-     * payload), unauthorised, or referencing a non-existent group.
+     * The reply variant emitted when the relay rejected the request envelope as malformed (conflicting toggles,
+     * empty payload), unauthorised, or referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseClientError")
     final class ClientError implements SmaxGroupsSetPropertyResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -540,7 +514,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -549,24 +523,23 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetPropertyResponseClientError",
                 exports = "parseSetPropertyResponseClientError",
@@ -579,6 +552,12 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -591,11 +570,21 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetPropertyResponse.ClientError[errorCode=" + errorCode
@@ -604,27 +593,25 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure while processing the request.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetPropertyResponseServerError")
     final class ServerError implements SmaxGroupsSetPropertyResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -632,7 +619,7 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -641,24 +628,23 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetPropertyResponseServerError",
                 exports = "parseSetPropertyResponseServerError",
@@ -671,6 +657,12 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -683,11 +675,21 @@ public sealed interface SmaxGroupsSetPropertyResponse extends SmaxOperation.Resp
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetPropertyResponse.ServerError[errorCode=" + errorCode

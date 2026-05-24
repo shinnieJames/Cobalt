@@ -9,8 +9,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqEditBusinessProfileRequest}.
+ * The typed sealed family of inbound reply variants produced by the relay in response to an {@link IqEditBusinessProfileRequest}.
+ *
+ * @apiNote
+ * Use this type to switch over the three documented outcomes of an edit-profile mutation: {@link Success} confirms the mutation landed (the WAP parser carries an empty payload), {@link ClientError} surfaces a relay validation rejection, and {@link ServerError} reports a transport or backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant before handing it to the caller.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public sealed interface IqEditBusinessProfileResponse extends IqOperation.Response
@@ -18,6 +20,9 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
 
     /**
      * Tries each {@link IqEditBusinessProfileResponse} variant in priority order.
+     *
+     * @apiNote
+     * Call this entry from the dispatcher to fan the inbound stanza into the matching sealed variant; the success path is tried first, then the client-error envelope, then the server-error envelope. Returns empty only when none of the three documented shapes apply.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -39,23 +44,30 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
     }
 
     /**
-     * The {@code Success} reply variant — empty payload.
+     * The {@code Success} reply variant carrying an empty acknowledgement payload.
+     *
+     * @apiNote
+     * Use this variant to confirm that the relay accepted the edit-profile mutation; there is no body to read because {@code WAWebBusinessProfileJob.editBusinessProfile} ignores the result envelope and only checks the success flag.
      */
     final class Success implements IqEditBusinessProfileResponse {
         /**
-         * Constructs a successful reply.
+         * Constructs a typed success reply.
+         *
+         * @apiNote
+         * Call this constructor when projecting an empty {@code result} envelope into the typed model.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @apiNote
+         * Call this entry from {@link IqEditBusinessProfileResponse#of(Node, Node)} or directly when only the success branch is interesting; returns empty when the stanza does not carry a {@code result} envelope matching the original request.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         public static Optional<Success> of(Node node, Node request) {
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
@@ -84,25 +96,30 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The {@code ClientError} reply variant surfacing a client-side rejection.
+     *
+     * @apiNote
+     * Use this variant to react to a refused edit-profile mutation; typical examples include a relay validation rejection on a malformed field surfaced as a SMAX error envelope.
      */
     final class ClientError implements IqEditBusinessProfileResponse {
         /**
-         * The numeric error code.
+         * The numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a typed client-error reply.
+         *
+         * @apiNote
+         * Call this constructor when projecting a client-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the human-readable error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -111,6 +128,9 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -121,6 +141,9 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -128,13 +151,14 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @apiNote
+         * Call this entry from {@link IqEditBusinessProfileResponse#of(Node, Node)} or directly when only the client-error branch is interesting; returns empty when the stanza does not carry a client-error envelope matching the original request.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -169,25 +193,30 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The {@code ServerError} reply variant surfacing a server-side failure.
+     *
+     * @apiNote
+     * Use this variant to react to a backend failure that did not produce a typed acknowledgement; WA Web's {@code WAWebBusinessProfileJob.editBusinessProfile} surfaces this as a {@code ServerStatusCodeError} carrying the relay-supplied status.
      */
     final class ServerError implements IqEditBusinessProfileResponse {
         /**
-         * The numeric error code.
+         * The numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a typed server-error reply.
+         *
+         * @apiNote
+         * Call this constructor when projecting a server-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the human-readable error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -196,6 +225,9 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -206,6 +238,9 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -213,13 +248,14 @@ public sealed interface IqEditBusinessProfileResponse extends IqOperation.Respon
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @apiNote
+         * Call this entry from {@link IqEditBusinessProfileResponse#of(Node, Node)} or directly when only the server-error branch is interesting; returns empty when the stanza does not carry a server-error envelope matching the original request.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);

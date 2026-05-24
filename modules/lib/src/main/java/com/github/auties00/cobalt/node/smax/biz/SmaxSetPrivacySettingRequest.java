@@ -10,11 +10,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the
- * {@code <privacy><smb_data_sharing_with_meta_consent value="..."/></privacy>}
- * payload in the canonical
- * {@code <iq xmlns="w:biz" type="set" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that writes the SMB-to-Meta data-sharing
+ * consent to the relay.
+ *
+ * @apiNote
+ * Used by the CTWA biz-data-sharing surface in
+ * {@code WAWebCTWABizDataSharingJob.setCtwaBizDataSharingSettingJob},
+ * which propagates the user's choice on the SMB data-sharing
+ * settings screen. The {@code dataSharingConsent} payload accepts
+ * one of {@code "true"} / {@code "false"} / {@code "notset"};
+ * passing {@code null} omits the inner consent child entirely.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsSetPrivacySettingRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsSmbDataSharingSettingMixin")
@@ -22,19 +27,22 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutBizSettingsBaseIQSetRequestMixin")
 public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request {
     /**
-     * The optional consent value. One of {@code "true"} /
-     * {@code "false"} / {@code "notset"}; {@code null} omits the
-     * inner {@code <smb_data_sharing_with_meta_consent>} child via
-     * the {@code optionalMerge} of the JS mixin pair.
+     * The optional consent value; {@code null} omits the inner
+     * {@code <smb_data_sharing_with_meta_consent>} child.
      */
     private final String dataSharingConsent;
 
     /**
      * Constructs a new request optionally carrying a consent value.
      *
-     * @param dataSharingConsent the optional consent value; may be
-     *                           {@code null} to clear the stored
-     *                           choice
+     * @apiNote
+     * Pass {@code null} to clear the stored choice (the JS
+     * mixin's {@code optionalMerge} skips the inner child); pass
+     * one of {@code "true"} / {@code "false"} / {@code "notset"}
+     * to record the user's preference.
+     *
+     * @param dataSharingConsent the consent value; may be
+     *                           {@code null}
      */
     public SmaxSetPrivacySettingRequest(String dataSharingConsent) {
         this.dataSharingConsent = dataSharingConsent;
@@ -43,18 +51,35 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
     /**
      * Returns the optional consent value.
      *
-     * @return an {@link Optional} carrying the consent value, or
-     *         empty when no consent was supplied
+     * @apiNote
+     * Returns {@link Optional#empty()} when the request was built
+     * without a consent payload.
+     *
+     * @return an {@link Optional} carrying the consent value
      */
     public Optional<String> dataSharingConsent() {
         return Optional.ofNullable(dataSharingConsent);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <privacy/>} payload
+     * @apiNote
+     * Stamps {@code xmlns="w:biz"}, {@code type="set"},
+     * {@code to="s.whatsapp.net"} and emits a
+     * {@code <privacy>} child carrying the optional
+     * {@code <smb_data_sharing_with_meta_consent value="..."/>}
+     * inner. The IQ {@code id} is assigned by the dispatcher.
+     *
+     * @implNote
+     * This implementation stamps the {@code value} attribute on the
+     * inner consent child directly, fusing the JS pair
+     * {@code mergeSmbDataSharingSettingMixin} +
+     * {@code mergeSmbDataSharingSettingValueMixin} into a single
+     * builder call. The JS pipeline materialises an intermediate
+     * {@code smax$any{value=CUSTOM_STRING(anyValue)}} stanza and
+     * folds it via {@code mergeStanzas}; the wire result is
+     * identical.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizSettingsSetPrivacySettingRequest",
@@ -70,8 +95,8 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
                 .description("privacy");
         if (dataSharingConsent != null) {
             var consentNode = new NodeBuilder()
-                    .description("smb_data_sharing_with_meta_consent") // WASmaxOutBizSettingsSmbDataSharingSettingMixin.mergeSmbDataSharingSettingMixin: emits the <smb_data_sharing_with_meta_consent> child wrapped via WASmaxMixins.optionalMerge (skipped when args are absent)
-                    .attribute("value", dataSharingConsent) // ADAPTED: WASmaxOutBizSettingsSmbDataSharingSettingValueMixin.mergeSmbDataSharingSettingValueMixin -- JS emits smax$any{value=CUSTOM_STRING(anyValue)} then folds it into the target via mergeStanzas; Cobalt stamps the attribute directly
+                    .description("smb_data_sharing_with_meta_consent")
+                    .attribute("value", dataSharingConsent)
                     .build();
             privacyBuilder.content(consentNode);
         }
@@ -79,7 +104,7 @@ public final class SmaxSetPrivacySettingRequest implements SmaxOperation.Request
                 .description("iq")
                 .attribute("xmlns", "w:biz")
                 .attribute("to", JidServer.user())
-                .attribute("type", "set") // WASmaxOutBizSettingsBaseIQSetRequestMixin.mergeBaseIQSetRequestMixin: stamps type="set" via WASmaxMixins.mergeStanzas; id is added by the central IQ dispatch pipeline (WAWap.generateId())
+                .attribute("type", "set")
                 .content(privacyBuilder.build());
     }
 

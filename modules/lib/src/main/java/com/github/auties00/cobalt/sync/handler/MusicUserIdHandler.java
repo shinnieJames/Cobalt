@@ -6,52 +6,47 @@ import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.media.MusicUserIdAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles {@link MusicUserIdAction} sync mutations ({@code "music_user_id"}).
+ * Applies {@link MusicUserIdAction} sync mutations carrying the user's
+ * per-provider music account identifiers.
  *
- * <p>Each mutation carries either a single {@code musicUserId} string or a
- * {@code musicUserIdMap} of provider {@code -> userId} entries. The whole
- * action object is persisted on the local {@code WhatsAppStore} via
- * {@code setMusicUserIdState}. Only {@code SET} operations are accepted; any
- * other operation maps to {@link MutationApplicationResult#unsupported()} and
- * a missing, wrong-typed, or completely empty value maps to
- * {@link MutationApplicationResult#malformed()}.
+ * @apiNote
+ * Persists the user's resolved {@code (musicUserId, musicUserIdMap)} on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} so per-provider
+ * music identifiers are visible across linked devices. Only {@code SET}
+ * is accepted; non-{@code SET} operations and payloads where both
+ * {@code musicUserId} and {@code musicUserIdMap} are empty are reported
+ * as {@link MutationApplicationResult#unsupported()} and
+ * {@link MutationApplicationResult#malformed()} respectively.
  *
- * <p><b>NO_WA_BASIS:</b> The {@code SyncActionValue.MusicUserIdAction}
- * protobuf is defined in {@code WAWebProtobufSyncAction.pb} (exported as
- * {@code SyncActionValue$MusicUserIdActionSpec}) with two optional fields
- * ({@code musicUserId: string} at index {@code 1} and
- * {@code musicUserIdMap: map<string, string>} at index {@code 2}), but the
- * current WA Web snapshot does <em>not</em> ship a corresponding sync handler
- * module (no {@code WAWebMusicUserIdSync}). The action is also absent from
- * {@code WAWebCollectionHandlerActions.ActionHandlers}, the registry consumed
- * by {@code WAWebSyncdGetActionHandler.setActionHandlers}, so WA Web would
- * never dispatch any incoming mutation with this action via
- * {@code WAWebSyncdGetActionHandler.getActionHandler("music_user_id")} (the
- * lookup would return {@code undefined} and the mutation would be skipped).
- * The closest WA Web modules that touch the music surface
- * ({@code WAWebMusicParsingUtils}, {@code WAWebMusicGatingUtils},
- * {@code WAWebMusicPlaybackUtils}, {@code WAWebMusicUserPrefs},
- * {@code WAWebMusicConsumptionEligibilityUpdater},
- * {@code WAWebMusicEligibleCountriesProvider},
- * {@code WAWebFetchMusicEligibleCountries},
- * {@code WAWebUpdateMusicBlocklistAction},
- * {@code WAWebSNAPLUploadMusicConsumptionLogs},
- * {@code WAWebMediaDownloadMmsMusicArtwork}) all deal with music consumption
- * eligibility, country gating, parsing, playback or media download — none of
- * them consume {@code SyncActionValue.MusicUserIdAction}.
- *
- * <p>The Cobalt handler is a forward-looking implementation: it follows the
- * Cobalt sync handler conventions used by every other registered handler
- * (singleton, {@code applyMutation} producing a typed
- * {@link MutationApplicationResult}, eager store update on {@code SET}). Every
- * behavioural step here is Cobalt-inferred until WA Web ships the matching
- * {@code WAWebMusicUserIdSync} module.
+ * @implNote
+ * This implementation has no WA Web counterpart. The
+ * {@code SyncActionValue.MusicUserIdAction} protobuf is declared in
+ * {@code WAWebProtobufSyncAction.pb} (the search-code lookup of
+ * {@code "music_user_id"} returns exactly that one module), but no
+ * {@code WAWebMusicUserIdSync} module ships in the current snapshot
+ * and the action is absent from
+ * {@code WAWebCollectionHandlerActions.ActionHandlers}, so WA Web
+ * silently drops any incoming mutation. The handler exists in Cobalt
+ * as a forward-looking implementation that follows the same singleton
+ * + {@code applyMutation} contract as every other registered handler;
+ * the {@link SyncPatchType#REGULAR} collection and the
+ * empty-payload-rejects-as-malformed shape are inferred from sibling
+ * identifier-style handlers and from the protobuf shape itself.
  */
 public final class MusicUserIdHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor that enforces the singleton pattern.
+     * Constructs the music-user-id sync handler.
+     *
+     * @apiNote
+     * Used by the sync handler registry; consumers should never need to
+     * call this constructor directly.
+     *
+     * @implNote
+     * This implementation is stateless; the handler holds no
+     * AB-prop / store / WAM dependency.
      */
     public MusicUserIdHandler() {
 
@@ -59,7 +54,6 @@ public final class MusicUserIdHandler implements WebAppStateActionHandler {
 
     /**
      * {@inheritDoc}
-     * @return the canonical {@code "music_user_id"} string
      */
     @Override
     public String actionName() {
@@ -69,17 +63,19 @@ public final class MusicUserIdHandler implements WebAppStateActionHandler {
     /**
      * {@inheritDoc}
      *
-     * <p>Returns {@link SyncPatchType#REGULAR} as an inferred default.
-     * @return {@link SyncPatchType#REGULAR}
+     * @implNote
+     * This implementation returns {@link SyncPatchType#REGULAR} as a
+     * forward-looking default, because no WA Web handler module exists
+     * to consult; sibling identifier-style handlers use the same
+     * collection.
      */
     @Override
     public SyncPatchType collectionName() {
-        return SyncPatchType.REGULAR; // NO_WA_BASIS: no WA Web sync handler declares a collection for "music_user_id"; REGULAR matches sibling identifier-style handlers
+        return SyncPatchType.REGULAR;
     }
 
     /**
      * {@inheritDoc}
-     * @return the integer version constant declared on the action class
      */
     @Override
     public int version() {
@@ -87,36 +83,18 @@ public final class MusicUserIdHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a music user id mutation and returns the detailed outcome.
+     * {@inheritDoc}
      *
-     * <p>The processing pipeline is:
-     * <ol>
-     *   <li>If the operation is not {@link SyncdOperation#SET}, return
-     *       {@link MutationApplicationResult#unsupported()}. Only {@code SET}
-     *       mutations are accepted; the action carries an identifier-style
-     *       payload (a single string and/or a string-keyed map) and there is
-     *       no semantic for {@code REMOVE}.</li>
-     *   <li>Resolve the mutation value to a {@link MusicUserIdAction}; if the
-     *       value is missing or of the wrong type, return
-     *       {@link MutationApplicationResult#malformed()}.</li>
-     *   <li>Reject mutations where both {@code musicUserId} and
-     *       {@code musicUserIdMap} are empty by returning
-     *       {@link MutationApplicationResult#malformed()}: at least one of
-     *       the two protobuf fields must be present for the mutation to carry
-     *       any meaningful update.</li>
-     *   <li>Persist the resolved {@link MusicUserIdAction} on the store via
-     *       {@code WhatsAppStore.setMusicUserIdState} and return
-     *       {@link MutationApplicationResult#success()}.</li>
-     * </ol>
-     *
-     * <p>The store accessors {@code musicUserIdState()} and
-     * {@code setMusicUserIdState(...)} already exist on
-     * {@code WhatsAppStore} / {@code AbstractWhatsAppStore}; this handler is
-     * the sole writer.
-     * @param client   the {@link WhatsAppClient} instance linked to the
-     *                 mutation
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation accepts only {@link SyncdOperation#SET}: the
+     * action is identifier-style (a single string and/or a string-keyed
+     * map) and there is no semantic for {@code REMOVE}. A mutation whose
+     * resolved {@link MusicUserIdAction} has both {@code musicUserId}
+     * empty AND {@code musicUserIdMap} empty is rejected as
+     * {@link MutationApplicationResult#malformed()} so a
+     * default-constructed protobuf does not silently overwrite the
+     * stored identifiers. On success the resolved action is written via
+     * {@code WhatsAppStore.setMusicUserIdState}.
      */
     @Override
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {

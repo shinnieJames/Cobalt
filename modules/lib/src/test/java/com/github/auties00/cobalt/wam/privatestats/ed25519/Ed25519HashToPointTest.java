@@ -12,13 +12,15 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Validates {@link Ed25519HashToPoint} via algebraic properties: every
- * output must lie on the Ed25519 curve and within the prime-order subgroup,
- * and the function must be deterministic.
+ * Validates {@link Ed25519HashToPoint} via algebraic properties:
+ * every output must lie on the Ed25519 curve, lie in the
+ * prime-order subgroup, and be deterministic in its input.
  *
- * <p>This pins the math without a JS-bundle KAT; byte-identical agreement
- * with the live WA Web bundle is a separate validation step that requires
- * capturing vectors via the MCP {@code web_live_debug_eval} tool.
+ * @apiNote
+ * Pins the math without a JS-bundle KAT;
+ * {@code Ed25519LiveBundleKatTest} separately pins byte-identical
+ * agreement against vectors captured from the live WhatsApp Web
+ * bundle.
  */
 class Ed25519HashToPointTest {
     /**
@@ -34,19 +36,20 @@ class Ed25519HashToPointTest {
             BigInteger.ONE.shiftLeft(252).add(new BigInteger("27742317777372353535851937790883648493"));
 
     /**
-     * Edwards-curve constant {@code d = -121665 / 121666 (mod p)}.
+     * The Edwards-curve constant {@code d = -121665 / 121666 (mod p)}.
      */
     private static final BigInteger D_BIG =
             BigInteger.valueOf(-121665).multiply(BigInteger.valueOf(121666).modInverse(P)).mod(P);
 
     /**
-     * Number of random iterations per property.
+     * The number of random iterations per property-style test.
      */
     private static final int ITERATIONS = 16;
 
     /**
-     * Asserts every {@link Ed25519HashToPoint#compute} output satisfies the
-     * twisted-Edwards equation {@code -x^2 + y^2 = 1 + d*x^2*y^2}.
+     * Asserts every {@link Ed25519HashToPoint#compute} output
+     * satisfies the twisted-Edwards equation
+     * {@code -x^2 + y^2 = 1 + d*x^2*y^2}.
      */
     @Test
     void outputIsOnCurve() {
@@ -65,8 +68,8 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Asserts every {@link Ed25519HashToPoint#compute} output lies in the
-     * prime-order subgroup, i.e. {@code L * P = identity}.
+     * Asserts every {@link Ed25519HashToPoint#compute} output lies
+     * in the prime-order subgroup, i.e. {@code L * P == identity}.
      */
     @Test
     void outputIsInPrimeOrderSubgroup() {
@@ -89,8 +92,8 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Asserts {@link Ed25519HashToPoint#compute} is deterministic: the same
-     * input bytes always produce the same output point.
+     * Asserts {@link Ed25519HashToPoint#compute} is deterministic:
+     * the same input bytes always produce the same output point.
      */
     @Test
     void outputIsDeterministic() {
@@ -112,10 +115,14 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Asserts the hash output exercises both Elligator branches across
-     * randomised messages: the SHA-512 sign bit (top bit of byte 31) flips
-     * roughly half the time, and so should the Edwards-x parity. A
-     * statistical sanity check, not byte-perfect.
+     * Asserts the output exercises both Edwards-x parity branches
+     * across randomised messages.
+     *
+     * @apiNote
+     * The SHA-512 sign bit (the high bit of byte 31 of the digest)
+     * flips roughly half the time, and so should the recovered
+     * Edwards-x parity. A statistical sanity check, not a
+     * byte-perfect pin.
      */
     @Test
     void outputExercisesBothParityBranches() {
@@ -135,16 +142,21 @@ class Ed25519HashToPointTest {
                 parityZero++;
             }
         }
-        // Both branches must occur at least once; with 64 trials each is overwhelmingly likely.
         assertEquals(true, parityZero > 0, "hashToPoint never produced parity-0 outputs");
         assertEquals(true, parityOne > 0, "hashToPoint never produced parity-1 outputs");
     }
 
     /**
-     * Converts a {@link Ed25519Point#p3} point to its affine x-coordinate
-     * as a {@link BigInteger}. Pulls out {@code X} and {@code Z} from the
-     * extended-coordinate form, repacks each, and computes {@code X * Z^-1}
-     * in the BigInteger field.
+     * Returns the affine x-coordinate of an extended-Edwards point
+     * as a {@link BigInteger}.
+     *
+     * @apiNote
+     * Used by the curve-equation check; pulls {@code X} and
+     * {@code Z} out of the extended form and computes
+     * {@code X * Z^-1} in the BigInteger field.
+     *
+     * @param p the point
+     * @return the affine x-coordinate
      */
     private static BigInteger affineX(long[][] p) {
         var inv = Ed25519Field.gf();
@@ -155,8 +167,11 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Converts a {@link Ed25519Point#p3} point to its affine y-coordinate
+     * Returns the affine y-coordinate of an extended-Edwards point
      * as a {@link BigInteger}.
+     *
+     * @param p the point
+     * @return the affine y-coordinate
      */
     private static BigInteger affineY(long[][] p) {
         var inv = Ed25519Field.gf();
@@ -166,12 +181,26 @@ class Ed25519HashToPointTest {
         return packedToBigInteger(packField(y));
     }
 
+    /**
+     * Encodes a limb-form field element as 32 canonical
+     * little-endian bytes.
+     *
+     * @param fe the field element
+     * @return the canonical encoding
+     */
     private static byte[] packField(long[] fe) {
         var out = new byte[32];
         Ed25519Field.pack25519(out, fe);
         return out;
     }
 
+    /**
+     * Decodes 32 little-endian bytes as a non-negative
+     * {@link BigInteger}.
+     *
+     * @param le the little-endian bytes
+     * @return the decoded value
+     */
     private static BigInteger packedToBigInteger(byte[] le) {
         var be = new byte[le.length + 1];
         for (var i = 0; i < le.length; i++) {
@@ -180,6 +209,13 @@ class Ed25519HashToPointTest {
         return new BigInteger(be);
     }
 
+    /**
+     * Encodes a {@link BigInteger} as a 32-byte little-endian
+     * Ed25519 scalar.
+     *
+     * @param k the scalar value
+     * @return the scalar bytes
+     */
     private static byte[] bigIntegerToScalar(BigInteger k) {
         var be = k.mod(BigInteger.ONE.shiftLeft(256)).toByteArray();
         var out = new byte[32];
@@ -190,8 +226,14 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Returns the canonical compressed encoding of the identity point
-     * (X=0, Y=1, Z=1).
+     * Returns the canonical compressed encoding of the identity
+     * point ({@code X=0, Y=1, Z=1}).
+     *
+     * @apiNote
+     * Used as the assertion oracle for the prime-order-subgroup
+     * test.
+     *
+     * @return the 32-byte canonical identity encoding
      */
     private static byte[] packIdentity() {
         var identity = Ed25519Point.p3();
@@ -205,9 +247,13 @@ class Ed25519HashToPointTest {
     }
 
     /**
-     * Asserts {@link Ed25519HashToPoint#compute} agrees with a textbook
-     * SHA-512 reference for the digest-derivation step (sanity check that
-     * SHA-512 inputs are passed through unchanged).
+     * Asserts {@link Ed25519HashToPoint#compute} surfaces a real
+     * SHA-512 of the input bytes by flipping a single bit and
+     * observing a different output point.
+     *
+     * @throws NoSuchAlgorithmException if the JVM does not provide
+     *                                  SHA-512, which is impossible
+     *                                  per JCE conformance
      */
     @Test
     void usesSha512OfInput() throws NoSuchAlgorithmException {
@@ -216,9 +262,6 @@ class Ed25519HashToPointTest {
             var msg = new byte[16 + rng.nextInt(48)];
             rng.nextBytes(msg);
             var direct = MessageDigest.getInstance("SHA-512").digest(msg);
-            // Mutating direct to clear the sign bit yields the same field-element bytes
-            // that hashToPoint feeds into Elligator. We can't observe this directly,
-            // but a different SHA-512 input must produce a different output point.
             var msgFlipped = msg.clone();
             msgFlipped[0] ^= 1;
             var directFlipped = MessageDigest.getInstance("SHA-512").digest(msgFlipped);

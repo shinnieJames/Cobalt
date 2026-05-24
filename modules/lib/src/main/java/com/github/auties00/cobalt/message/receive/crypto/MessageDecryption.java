@@ -29,21 +29,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Decrypts incoming WhatsApp message payloads using the Signal Protocol and the MSMSG
- * bot message scheme.
+ * Decrypts every flavour of incoming end-to-end encrypted WhatsApp payload behind a
+ * single service: the Signal protocol for 1:1 and group messages plus the AES-GCM
+ * MSMSG scheme for bot messages.
  *
- * <p>Three decryption paths are exposed, one per encryption type:
+ * @apiNote
+ * Embedders rarely call this service directly; it is consumed by
+ * {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver} as part of
+ * the standard inbound message pipeline. The four public entry points cover the four
+ * encryption types that can appear in a stanza's {@code <enc>} children:
  * <ul>
- *   <li><b>Per-device</b> (PKMSG/MSG): Signal session cipher for 1:1 messages, via
- *       {@link #decryptFromDevice}.</li>
- *   <li><b>Group</b> (SKMSG): Signal sender-key cipher for group messages, via
- *       {@link #decryptFromGroup}.</li>
- *   <li><b>Bot</b> (MSMSG): AES-GCM with an HKDF-derived key from the target message's
- *       {@code messageSecret}, via {@link #decryptBotMessage}.</li>
+ *   <li>{@link #decryptFromDevice(byte[], Jid, MessageEncryptionType)} for PKMSG and
+ *       MSG (Signal session cipher).</li>
+ *   <li>{@link #decryptFromGroup(byte[], Jid, Jid)} for SKMSG (Signal group
+ *       cipher).</li>
+ *   <li>{@link #decryptBotMessage(byte[], byte[], String, Jid, Jid)} for MSMSG
+ *       (AES-GCM keyed via HKDF over the target message's secret).</li>
+ *   <li>{@link #processSenderKeyDistribution(Jid, Jid, byte[])} for storing a
+ *       received sender-key distribution so future SKMSG payloads can be
+ *       decrypted.</li>
  * </ul>
  *
- * <p>Helpers for processing incoming sender-key distribution messages and for
- * inspecting existing session state are also provided.
+ * @implNote
+ * This implementation maps libsignal's exception hierarchy onto the sealed
+ * {@link WhatsAppMessageException.Receive}
+ * subtypes so the upstream pipeline can pick the right receipt (delivery, retry,
+ * NACK) uniformly; WhatsApp Web folds the same Signal errors into a single
+ * {@code SignalDecryptionError} and re-discriminates them via string-match inside
+ * {@code WAWebSendRetryReceiptJob.getRetryReasonFromError}.
  */
 @WhatsAppWebModule(moduleName = "WAWebMsgProcessingDecryptEnc")
 @WhatsAppWebModule(moduleName = "WAWebSignalCipherApi")
@@ -52,64 +65,90 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASignalGroupCipher")
 public final class MessageDecryption {
     /**
-     * Minimum valid PKCS#7 padding length.
+     * Smallest valid PKCS#7 padding length used by the Signal protocol payload
+     * format.
      */
     private static final int MIN_PADDING = 1;
 
     /**
-     * Maximum valid PKCS#7 padding length.
+     * Largest valid PKCS#7 padding length used by the Signal protocol payload
+     * format.
      */
     private static final int MAX_PADDING = 16;
 
     /**
-     * HKDF-derived AES-GCM key size in bytes for MSMSG decryption.
+     * HKDF-derived AES-GCM key length, in bytes, used for the MSMSG bot-message
+     * scheme.
+     *
+     * @apiNote
+     * Mirrors the {@code u=32} byte length used by WhatsApp Web's
+     * {@code WAWebBotMessageSecret} module when expanding the per-message key.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "decryptMsmsgBotMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int HKDF_KEY_SIZE = 32;
 
     /**
-     * AES-GCM authentication tag size in bits for MSMSG decryption.
+     * AES-GCM authentication tag length, in bits, used for the MSMSG bot-message
+     * scheme.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "decryptMsmsgBotMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final int AES_GCM_TAG_BITS = 128;
 
     /**
-     * HKDF algorithm identifier for MSMSG key derivation (HKDF-SHA256).
+     * KDF algorithm identifier passed to {@link KDF#getInstance(String)} for MSMSG
+     * key derivation.
+     *
+     * @apiNote
+     * Matches WhatsApp Web's {@code WACryptoHkdf.extractAndExpand}, which uses
+     * HKDF-SHA256 internally.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "decryptMsmsgBotMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final String HKDF_ALGORITHM = "HKDF-SHA256";
 
     /**
-     * AES-GCM transformation identifier for MSMSG decryption.
+     * Cipher transformation identifier passed to {@link Cipher#getInstance(String)}
+     * for MSMSG decryption.
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "decryptMsmsgBotMessage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final String AES_GCM_ALGORITHM = "AES/GCM/NoPadding";
 
     /**
-     * WhatsApp store used for session and sender-key lookups.
+     * Central session store used for Signal-session and sender-key existence checks
+     * and for resolving bot-message metadata.
      */
     private final WhatsAppStore store;
 
     /**
-     * Signal session cipher used for per-device decryption.
+     * Signal session cipher used by
+     * {@link #decryptFromDevice(byte[], Jid, MessageEncryptionType)}.
      */
     private final SignalSessionCipher sessionCipher;
 
     /**
-     * Signal group cipher used for sender-key decryption.
+     * Signal group cipher used by
+     * {@link #decryptFromGroup(byte[], Jid, Jid)} and
+     * {@link #processSenderKeyDistribution(Jid, Jid, SignalSenderKeyDistributionMessage)}.
      */
     private final SignalGroupCipher groupCipher;
 
     /**
-     * Constructs a new decryption service.
+     * Constructs the decryption service from its three collaborators.
      *
-     * @param store         the WhatsApp store for session and key lookups
-     * @param sessionCipher the Signal session cipher for 1:1 decryption
-     * @param groupCipher   the Signal group cipher for group decryption
+     * @apiNote
+     * Constructor injection so the service can be stubbed in tests; the matching
+     * encryption service ({@code MessageEncryption}) is constructed the same way and
+     * the two halves share the same {@link WhatsAppStore}.
+     *
+     * @param store         the central session store used for sender-key and Signal
+     *                      session lookups
+     * @param sessionCipher the libsignal session cipher used for PKMSG and MSG
+     *                      decryption
+     * @param groupCipher   the libsignal group cipher used for SKMSG decryption and
+     *                      sender-key import
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptEnc", exports = "decryptEnc",
@@ -125,18 +164,32 @@ public final class MessageDecryption {
     }
 
     /**
-     * Decrypts a per-device message using the Signal Protocol.
+     * Decrypts a per-device Signal payload (PKMSG or MSG).
      *
-     * <p>Handles both {@code PreKeySignalMessage} (PKMSG, for new sessions) and
-     * {@code SignalMessage} (MSG, for existing sessions). Signal-specific exceptions
-     * are mapped onto the Cobalt {@link WhatsAppMessageException.Receive} hierarchy
-     * so upstream code can decide the receipt type uniformly.
+     * @apiNote
+     * Called by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * for the per-device slot of an incoming stanza; the caller dispatches between
+     * PKMSG (new session) and MSG (existing session) based on the {@code <enc>}
+     * node's {@code type} attribute. The returned plaintext has the Signal-protocol
+     * PKCS#7 padding already stripped by {@link #removePadding(byte[])}.
+     *
+     * @implNote
+     * This implementation maps the libsignal exception hierarchy onto the sealed
+     * {@link WhatsAppMessageException.Receive} subtypes so receipt selection can
+     * branch on a strongly-typed exception rather than a string-match against the
+     * underlying libsignal message; the SKMSG and MSMSG types throw
+     * {@link IllegalArgumentException} as a misuse signal because the caller must
+     * route those to {@link #decryptFromGroup(byte[], Jid, Jid)} and
+     * {@link #decryptBotMessage(byte[], byte[], String, Jid, Jid)}.
      *
      * @param ciphertext     the encrypted message bytes
      * @param senderJid      the sender's device JID
-     * @param encryptionType the type of encryption (PKMSG or MSG)
-     * @return the decrypted plaintext with padding already removed
+     * @param encryptionType the encryption type (PKMSG or MSG)
+     * @return the decrypted plaintext bytes with padding stripped
      * @throws WhatsAppMessageException.Receive if decryption fails
+     * @throws IllegalArgumentException         if {@code encryptionType} is
+     *                                          {@link MessageEncryptionType#SKMSG}
+     *                                          or {@link MessageEncryptionType#MSMSG}
      * @throws NullPointerException             if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptEnc", exports = "decryptEnc",
@@ -161,7 +214,6 @@ public final class MessageDecryption {
                     throw new WhatsAppMessageException.Receive.InvalidMessage(
                             "Invalid PreKeySignalMessage format from: " + senderJid, e);
                 } catch (SignalMissingSessionException e) {
-                    // PKMSG establishes a session, so missing-session is unusual but mapped for robustness.
                     throw new WhatsAppMessageException.Receive.NoSession(
                             "No session for PreKeyMessage from: " + senderJid, false, e);
                 } catch (SignalUninitializedSessionException e) {
@@ -191,7 +243,6 @@ public final class MessageDecryption {
                     throw new WhatsAppMessageException.Receive.InvalidMessage(
                             "Invalid SignalMessage format from: " + senderJid, e);
                 } catch (SignalMissingSessionException e) {
-                    // MSG requires an existing session; raise NoSession so the sender can re-send as PKMSG.
                     throw new WhatsAppMessageException.Receive.NoSession(
                             "No session exists for MSG from: " + senderJid, false, e);
                 } catch (SignalUninitializedSessionException e) {
@@ -218,16 +269,25 @@ public final class MessageDecryption {
     }
 
     /**
-     * Returns whether a {@link SignalDecryptException} indicates a duplicate-message
-     * or old-counter condition.
+     * Returns whether the given libsignal {@link SignalDecryptException} indicates a
+     * duplicate-counter or old-counter condition.
      *
-     * <p>Triggered when a message with an already-seen counter is received, typically
-     * due to resends or delivery races. Cobalt inspects the exception message text
-     * because libsignal does not currently expose a dedicated subtype for this
-     * condition.
+     * @apiNote
+     * Inspected by both the per-device and group branches so a duplicate is mapped
+     * onto {@link WhatsAppMessageException.Receive.DuplicateMessage} for dedup
+     * routing rather than a generic Unknown error.
      *
-     * @param e the decrypt exception to inspect
-     * @return {@code true} if the error message matches a duplicate counter condition
+     * @implNote
+     * This implementation inspects the exception message text because libsignal does
+     * not expose a dedicated duplicate-counter subtype; mirrors WhatsApp Web's
+     * {@code WAWebMsgProcessingDecryptionHandler} string-match
+     * ({@code e.message==="errDuplicateMsg"}) and the
+     * {@code WAWebSendRetryReceiptJob} branches that examine the literal Signal
+     * error messages.
+     *
+     * @param e the libsignal decrypt exception to inspect
+     * @return {@code true} when the underlying message matches a duplicate-counter
+     *         pattern
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = {"decryptSignalProto", "decryptGroupSignalProto"},
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -240,21 +300,31 @@ public final class MessageDecryption {
     }
 
     /**
-     * Decrypts a group message using Signal's sender-key scheme.
+     * Decrypts a group/broadcast sender-key payload (SKMSG).
      *
-     * <p>Signal-specific exceptions are mapped as follows:
+     * @apiNote
+     * Called by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * for the SKMSG slot of a group, community, or broadcast stanza; the returned
+     * plaintext has Signal-protocol PKCS#7 padding stripped.
+     *
+     * @implNote
+     * This implementation maps the four distinct libsignal exception subtypes onto
+     * the sealed Cobalt receive-exception hierarchy:
      * <ul>
-     *   <li>{@code SignalMissingSenderKeyException}: NoSenderKey (no record)</li>
-     *   <li>{@code SignalMissingSenderKeyStateException}: InvalidSenderKey (record
-     *       exists but no state for ID)</li>
-     *   <li>{@code SignalDecryptException}: Unknown or DuplicateMessage</li>
-     *   <li>{@code SecurityException}: InvalidSenderKey (signature verification failure)</li>
+     *   <li>{@code SignalMissingSenderKeyException} -> {@link WhatsAppMessageException.Receive.NoSenderKey}.</li>
+     *   <li>{@code SignalMissingSenderKeyStateException} -> {@link WhatsAppMessageException.Receive.InvalidSenderKey}
+     *       (the record exists but no state for the message-key id).</li>
+     *   <li>{@code SignalDecryptException} -> either
+     *       {@link WhatsAppMessageException.Receive.DuplicateMessage} (when
+     *       {@link #isDuplicateCounterError(SignalDecryptException)} matches) or
+     *       {@link WhatsAppMessageException.Receive.Unknown}.</li>
+     *   <li>{@link SecurityException} -> {@link WhatsAppMessageException.Receive.InvalidSenderKey}.</li>
      * </ul>
      *
      * @param ciphertext the encrypted message bytes
-     * @param groupJid   the group JID
+     * @param groupJid   the group, community, or broadcast JID
      * @param senderJid  the sender's device JID
-     * @return the decrypted plaintext with padding already removed
+     * @return the decrypted plaintext bytes with padding stripped
      * @throws WhatsAppMessageException.Receive if decryption fails
      * @throws NullPointerException             if any argument is {@code null}
      */
@@ -282,7 +352,6 @@ public final class MessageDecryption {
             throw new WhatsAppMessageException.Receive.NoSenderKey(
                     "No sender key exists for group: " + groupJid + " sender: " + senderJid, e);
         } catch (SignalMissingSenderKeyStateException e) {
-            // Record exists but no state for the message key id (sender rotated their key).
             throw new WhatsAppMessageException.Receive.InvalidSenderKey(
                     "Sender key state not found for ID " + e.id().orElse(-1) +
                             " in group: " + groupJid + " sender: " + senderJid, e);
@@ -303,22 +372,40 @@ public final class MessageDecryption {
     }
 
     /**
-     * Decrypts a bot message (MSMSG) payload.
+     * Decrypts a bot-message payload (MSMSG).
      *
-     * <p>The ciphertext is a serialised {@code MessageSecretMessage} protobuf
-     * containing {@code encIv} and {@code encPayload} fields. The decryption key is
-     * derived from the provided {@code messageSecret} via HKDF-SHA256 with the message
-     * id and sender JIDs as info; AAD equals {@code messageId + 0x00 + botSenderJid}.
+     * @apiNote
+     * Called by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * for the MSMSG slot of a stanza whose sender is a bot. The caller is
+     * responsible for resolving the {@code messageId} (preferring
+     * {@code botEditTargetId} from the {@code <bot>} stanza child when present),
+     * looking up the {@code messageSecret} from the target message, and resolving the
+     * sender JIDs from the stanza's addressing attributes. The ciphertext is a
+     * serialised {@code MessageSecretMessage} protobuf carrying {@code encIv} and
+     * {@code encPayload} fields.
      *
-     * <p>The caller is responsible for resolving the {@code messageId} (from bot edit
-     * target or stanza id), looking up the {@code messageSecret} from the target
-     * message, and resolving the sender JIDs from stanza addressing.
+     * @implNote
+     * This implementation derives the AES-GCM key as
+     * {@snippet :
+     *     // info = messageId || targetSenderJid || botSenderJid (UTF-8 bytes)
+     *     // aesKey = HKDF-SHA256(IKM = BotMessageSecret.derive(messageSecret),
+     *     //                      salt = empty,
+     *     //                      info = info,
+     *     //                      L = 32)
+     *     // aad = messageId || 0x00 || botSenderJid
+     * }
+     * mirroring WhatsApp Web's {@code WAWebBotMessageSecret.decryptMsmsgBotMessage}
+     * function. The {@code Bot Message} label that WA Web feeds into the inner HKDF
+     * over the raw secret is handled inside
+     * {@link BotMessageSecret#derive(byte[])} so this method only sees the derived
+     * base secret.
      *
-     * @param ciphertext      the MSMSG ciphertext (MessageSecretMessage protobuf)
+     * @param ciphertext      the MSMSG ciphertext (a {@code MessageSecretMessage}
+     *                        protobuf)
      * @param messageSecret   the 32-byte secret from the target message
      * @param messageId       the message id used for key derivation and AAD
      * @param targetSenderJid the target message sender's user JID
-     * @param botSenderJid    the bot's user JID
+     * @param botSenderJid    the bot sender's user JID
      * @return the decrypted inner plaintext
      * @throws WhatsAppMessageException.Receive if decryption fails
      * @throws NullPointerException             if any argument is {@code null}
@@ -367,13 +454,23 @@ public final class MessageDecryption {
     }
 
     /**
-     * Removes PKCS#7 padding from a decrypted plaintext.
+     * Strips Signal-protocol PKCS#7 padding from a decrypted plaintext.
      *
-     * <p>Reads the last byte to determine padding length and returns the original
-     * plaintext with the padding stripped.
+     * @apiNote
+     * Applied by the per-device and group decryption branches before returning to
+     * the caller; not applied to MSMSG ciphertexts because WA Web's
+     * {@code WAWebMsgProcessingDecryptApi.processDecryptedMessageProto} also skips
+     * unpadding for the {@code Msmsg} ciphertext type.
+     *
+     * @implNote
+     * This implementation reads the last byte as the padding length, validates that
+     * it falls in the {@code [1, 16]} range, and returns a fresh array containing
+     * only the unpadded prefix; mirrors WA Web's
+     * {@code WACryptoPkcs7.unpadPkcs7}.
+     *
      * @param paddedPlaintext the padded plaintext bytes
      * @return the plaintext with padding removed
-     * @throws IllegalArgumentException if the padding is invalid
+     * @throws IllegalArgumentException if the padding length is missing or invalid
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgProcess", exports = "processDecryptedMessageProto",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -406,12 +503,18 @@ public final class MessageDecryption {
 
 
     /**
-     * Processes a received sender key distribution message, storing the sender key
-     * for future group message decryption.
+     * Stores a received sender-key distribution message so future SKMSG payloads
+     * from the same sender in the same group can be decrypted.
+     *
+     * @apiNote
+     * Called by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * after the inner {@code MessageContainer} reveals a {@code SenderKeyDistributionMessage};
+     * the receiver verifies that the embedded group id matches the stanza chat JID
+     * before invoking this method.
      *
      * @param groupJid        the group JID
      * @param senderJid       the sender's device JID
-     * @param distributionMsg the sender key distribution message
+     * @param distributionMsg the parsed Signal sender-key distribution message
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "processSenderKeyDistributionMsg",
@@ -428,12 +531,18 @@ public final class MessageDecryption {
     }
 
     /**
-     * Processes a received sender key distribution message from raw bytes,
-     * deserialising the distribution message first.
+     * Stores a received sender-key distribution from raw protobuf bytes, parsing
+     * before delegating to
+     * {@link #processSenderKeyDistribution(Jid, Jid, SignalSenderKeyDistributionMessage)}.
+     *
+     * @apiNote
+     * Convenience overload for callers that hold the raw distribution-message bytes
+     * extracted from the decrypted {@code MessageContainer}; the parsed form is
+     * useful when the same distribution is also forwarded to another service.
      *
      * @param groupJid         the group JID
      * @param senderJid        the sender's device JID
-     * @param distributionData the raw distribution message bytes
+     * @param distributionData the raw distribution-message bytes
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "processSenderKeyDistributionMsg",
@@ -452,8 +561,15 @@ public final class MessageDecryption {
     /**
      * Returns whether a Signal session exists for the given device.
      *
+     * @apiNote
+     * Used as a defensive lookup before invoking
+     * {@link #decryptFromDevice(byte[], Jid, MessageEncryptionType)} when the caller
+     * needs to know whether a PKMSG-style session installation is still pending;
+     * mirrors WhatsApp Web's {@code WAWebCryptoLibrary.getRemoteRegId}, which also
+     * surfaces session existence via the registration-id presence check.
+     *
      * @param deviceJid the device JID to check
-     * @return {@code true} if a session exists, {@code false} otherwise
+     * @return {@code true} when a Signal session record is present
      * @throws NullPointerException if {@code deviceJid} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "getRemoteRegId",
@@ -466,11 +582,16 @@ public final class MessageDecryption {
     }
 
     /**
-     * Returns whether a sender key exists for the given group and sender.
+     * Returns whether a sender-key record exists for the given group and sender.
+     *
+     * @apiNote
+     * Used by callers that want to gate a send/receive decision on the existence of
+     * the sender-key state before invoking the group cipher; mirrors WA Web's
+     * {@code WAWebCryptoLibrary.getGroupSenderKeyInfo}.
      *
      * @param groupJid  the group JID
      * @param senderJid the sender's device JID
-     * @return {@code true} if a sender key exists, {@code false} otherwise
+     * @return {@code true} when a sender-key record is present
      * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebCryptoLibrary", exports = "getGroupSenderKeyInfo",
@@ -484,15 +605,24 @@ public final class MessageDecryption {
     }
 
     /**
-     * Extracts the sender's identity key from a PreKeySignalMessage ciphertext for
-     * use in ADV validation before decryption.
+     * Extracts the sender's identity public key from a {@code PreKeySignalMessage}
+     * ciphertext.
      *
-     * <p>The PreKeySignalMessage structure carries the sender's identity key, which
-     * can be extracted without decrypting the inner message. This allows verifying
-     * ADV signatures for companion devices before attempting decryption.
+     * @apiNote
+     * Used by ADV (Auxiliary Device Validation) so the receiver can verify the
+     * companion device's identity signature before attempting decryption; mirrors
+     * WhatsApp Web's {@code WAWebSignalUtilsApi.extractIdentityKey} helper.
+     *
+     * @implNote
+     * This implementation parses the PKMSG envelope just enough to surface the
+     * identity-key field; the inner message is not decrypted here. A
+     * {@link ProtobufDeserializationException} or
+     * {@link IllegalArgumentException} surfaces as an empty {@link Optional} so the
+     * caller decides whether to treat the failure as a fatal ADV mismatch or to
+     * retry.
      *
      * @param ciphertext the PKMSG ciphertext bytes
-     * @return an {@link Optional} wrapping the 32-byte identity key
+     * @return an {@link Optional} wrapping the 32-byte identity-key encoded point
      */
     @WhatsAppWebExport(moduleName = "WAWebSignalUtilsApi", exports = "extractIdentityKey",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -514,16 +644,23 @@ public final class MessageDecryption {
     }
 
     /**
-     * Derives the per-message AES-GCM key for MSMSG decryption using HKDF-SHA256.
+     * Derives the per-message AES-GCM key for MSMSG decryption.
      *
-     * <p>Performs HKDF-Extract with a null (all-zero) salt over the bot secret, then
-     * HKDF-Expand with info built as
-     * {@code messageId || targetSenderJid || botSenderJid}.
+     * @apiNote
+     * Called from {@link #decryptBotMessage(byte[], byte[], String, Jid, Jid)} after
+     * the base bot secret has been pulled from {@link BotMessageSecret#derive(byte[])}.
      *
-     * @param messageId       the message id (or bot edit target id)
+     * @implNote
+     * This implementation performs HKDF-SHA256 with an empty (default) salt over the
+     * bot secret and an {@code info} string built as
+     * {@code messageId || targetSenderJid || botSenderJid} (UTF-8 bytes, no
+     * delimiters). The output length is {@value #HKDF_KEY_SIZE} bytes. Mirrors WA
+     * Web's {@code v} helper inside {@code WAWebBotMessageSecret}.
+     *
+     * @param messageId       the message id (or bot edit-target id)
      * @param targetSenderJid the target message sender's user JID
-     * @param botSenderJid    the bot's user JID
-     * @param botSecret       the base bot secret derived from messageSecret
+     * @param botSenderJid    the bot sender's user JID
+     * @param botSecret       the base bot secret derived from {@code messageSecret}
      * @return the 32-byte AES-GCM key
      * @throws GeneralSecurityException if the HKDF provider is unavailable
      */
@@ -552,11 +689,21 @@ public final class MessageDecryption {
     }
 
     /**
-     * Builds the AAD for MSMSG AES-GCM decryption as
-     * {@code messageId + 0x00 + botSenderJid}.
+     * Builds the additional authenticated data for the MSMSG AES-GCM decryption.
+     *
+     * @apiNote
+     * Called from {@link #decryptBotMessage(byte[], byte[], String, Jid, Jid)} and
+     * fed into the cipher via {@link Cipher#updateAAD(byte[])} immediately before
+     * the {@code doFinal} call.
+     *
+     * @implNote
+     * This implementation builds the AAD as {@code messageId || 0x00 || botSenderJid}
+     * with bytes encoded in UTF-8; mirrors WhatsApp Web's
+     * {@code WAWebBotMessageSecret.decryptMsmsgBotMessage} call site that passes
+     * {@code y+"\0"+_} to {@code WACryptoAesGcm.gcmDecrypt}.
      *
      * @param messageId    the message id
-     * @param botSenderJid the bot's user JID
+     * @param botSenderJid the bot sender's user JID
      * @return the AAD bytes
      */
     @WhatsAppWebExport(moduleName = "WAWebBotMessageSecret", exports = "decryptMsmsgBotMessage",

@@ -21,17 +21,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for {@link LidMigrationService#processHistorySync}.
  *
- * <p>Uses the {@link com.github.auties00.cobalt.model.sync.history.HistorySync.Light}
- * variant (built via {@link HistorySyncLightBuilder}) so {@code chats()}
- * returns an empty list — that branch is exercised separately via
- * fixture-driven tests against a real history sync payload.
+ * @apiNote
+ * Pins the metadata-only ingestion path through the
+ * {@link com.github.auties00.cobalt.model.sync.history.HistorySync.Light}
+ * variant (built via {@link HistorySyncLightBuilder}); the
+ * conversation-level branch is exercised through the
+ * package-private
+ * {@link LidMigrationService#processConversationLidData} test
+ * seam. Together the cases pin top-level mapping ingestion into
+ * the store and the {@code GlobalSettings.chatDbLidMigrationTimestamp}
+ * absorption.
  *
- * <p>What this class covers is the metadata-only path:
- * <ul>
- *   <li>top-level {@code phoneNumberToLidMappings} learn into store + contact,</li>
- *   <li>{@code GlobalSettings.chatDbLidMigrationTimestamp} is recorded,</li>
- *   <li>null sync is a no-op.</li>
- * </ul>
+ * @implNote
+ * This implementation uses isolated harnesses through
+ * {@link MigrationFixtures#temporaryStore(Jid, Jid)} so each
+ * history-sync ingestion runs against a clean store.
  */
 @DisplayName("LidMigrationService.processHistorySync")
 class LidMigrationServiceProcessHistorySyncTest {
@@ -41,8 +45,20 @@ class LidMigrationServiceProcessHistorySyncTest {
     private static final Jid PEER_PN = Jid.of("393495089819@s.whatsapp.net");
     private static final Jid PEER_LID = Jid.of("258252122116273@lid");
 
+    /**
+     * Bundles the test client and the service under test.
+     *
+     * @param client  the test client harness
+     * @param service the service under test
+     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
+    /**
+     * Builds a fresh harness with a default
+     * {@link TestABPropsService}.
+     *
+     * @return a fresh {@link Harness}
+     */
     private static Harness build() {
         var props = TestABPropsService.builder().build();
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -52,6 +68,9 @@ class LidMigrationServiceProcessHistorySyncTest {
         return new Harness(client, service);
     }
 
+    /**
+     * Verifies that null sync is a no-op.
+     */
     @Test
     @DisplayName("null sync is a no-op")
     void nullSync() {
@@ -60,6 +79,9 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertFalse(h.client.store().findLidByPhone(PEER_PN).isPresent());
     }
 
+    /**
+     * Verifies that top-level mappings populate the store and mirror onto known contacts.
+     */
     @Test
     @DisplayName("top-level mappings populate the store and mirror onto known contacts")
     void topLevelMappingsLearned() {
@@ -81,6 +103,9 @@ class LidMigrationServiceProcessHistorySyncTest {
                 h.client.store().findContactByJid(PEER_PN).orElseThrow().lid().orElseThrow());
     }
 
+    /**
+     * Verifies that top-level mappings do NOT populate the primary cache.
+     */
     @Test
     @DisplayName("top-level mappings do NOT populate the primary cache")
     void topLevelMappingsBypassPrimaryCache() {
@@ -108,6 +133,9 @@ class LidMigrationServiceProcessHistorySyncTest {
                 "history-sync mappings stay out of primaryPnToLatestLidCache");
     }
 
+    /**
+     * Verifies that mapping with both fields null is skipped silently.
+     */
     @Test
     @DisplayName("mapping with both fields null is skipped silently")
     void mappingWithNullFields() {
@@ -122,6 +150,9 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertFalse(h.client.store().findLidByPhone(PEER_PN).isPresent());
     }
 
+    /**
+     * Verifies that GlobalSettings.chatDbLidMigrationTimestamp advances the effective sync timestamp when newer.
+     */
     @Test
     @DisplayName("GlobalSettings.chatDbLidMigrationTimestamp advances the effective sync timestamp when newer")
     void globalSettingsTimestampNewerAdvances() {
@@ -146,6 +177,9 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertTrue(true);
     }
 
+    /**
+     * Verifies that GlobalSettings without chatDbLidMigrationTimestamp leaves state untouched.
+     */
     @Test
     @DisplayName("GlobalSettings without chatDbLidMigrationTimestamp leaves state untouched")
     void globalSettingsWithoutTimestampNoOp() {
@@ -160,13 +194,15 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertTrue(true);
     }
 
-    // ===================== conversation-level branches =====================
     // HistorySync.Full and its nested Chat type are package-private, so we cannot construct a full
     // HistorySync payload from here. processConversationLidData is exposed as package-private for
-    // direct testing — same test-seam pattern as resolveThread/canDeleteChat/state().
+    // direct testing; same test-seam pattern as resolveThread/canDeleteChat/state().
 
+    /**
+     * Verifies that processConversationLidData: LID-keyed conversation with phoneNumberJid -> store + chat.setLid + chat.setPhoneNumberJid.
+     */
     @Test
-    @DisplayName("processConversationLidData: LID-keyed conversation with phoneNumberJid → store + chat.setLid + chat.setPhoneNumberJid")
+    @DisplayName("processConversationLidData: LID-keyed conversation with phoneNumberJid -> store + chat.setLid + chat.setPhoneNumberJid")
     void conversationLidKeyed() {
         var h = build();
         var chat = h.client.store().addNewChat(PEER_LID);
@@ -180,8 +216,11 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertEquals(PEER_PN, chat.phoneNumberJid().orElseThrow());
     }
 
+    /**
+     * Verifies that processConversationLidData: PN-keyed conversation with lid -> bidirectional mapping + chat.setLid.
+     */
     @Test
-    @DisplayName("processConversationLidData: PN-keyed conversation with lid → bidirectional mapping + chat.setLid")
+    @DisplayName("processConversationLidData: PN-keyed conversation with lid -> bidirectional mapping + chat.setLid")
     void conversationPnKeyed() {
         var h = build();
         var chat = h.client.store().addNewChat(PEER_PN);
@@ -194,26 +233,35 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertEquals(PEER_LID, chat.lid().orElseThrow());
     }
 
+    /**
+     * Verifies that processConversationLidData: non-user/non-LID conversation (group) -> skipped.
+     */
     @Test
-    @DisplayName("processConversationLidData: non-user/non-LID conversation (group) → skipped")
+    @DisplayName("processConversationLidData: non-user/non-LID conversation (group) -> skipped")
     void conversationNonUserOrLidServer() {
         var h = build();
-        var groupChat = h.client.store().addNewChat(com.github.auties00.cobalt.model.jid.Jid.of("120363012345678901@g.us"));
+        var groupChat = h.client.store().addNewChat(Jid.of("120363012345678901@g.us"));
 
         var processed = h.service.processConversationLidData(groupChat);
 
         assertFalse(processed);
     }
 
+    /**
+     * Verifies that processConversationLidData: null conversation -> false.
+     */
     @Test
-    @DisplayName("processConversationLidData: null conversation → false")
+    @DisplayName("processConversationLidData: null conversation -> false")
     void conversationNull() {
         var h = build();
         assertFalse(h.service.processConversationLidData(null));
     }
 
+    /**
+     * Verifies that processConversationLidData: LID-keyed conversation without phoneNumberJid -> skipped (incomplete).
+     */
     @Test
-    @DisplayName("processConversationLidData: LID-keyed conversation without phoneNumberJid → skipped (incomplete)")
+    @DisplayName("processConversationLidData: LID-keyed conversation without phoneNumberJid -> skipped (incomplete)")
     void conversationLidKeyedNoPnJid() {
         var h = build();
         var chat = h.client.store().addNewChat(PEER_LID);
@@ -222,8 +270,11 @@ class LidMigrationServiceProcessHistorySyncTest {
         assertFalse(processed);
     }
 
+    /**
+     * Verifies that processConversationLidData: PN-keyed conversation without lid -> skipped (incomplete).
+     */
     @Test
-    @DisplayName("processConversationLidData: PN-keyed conversation without lid → skipped (incomplete)")
+    @DisplayName("processConversationLidData: PN-keyed conversation without lid -> skipped (incomplete)")
     void conversationPnKeyedNoLid() {
         var h = build();
         var chat = h.client.store().addNewChat(PEER_PN);

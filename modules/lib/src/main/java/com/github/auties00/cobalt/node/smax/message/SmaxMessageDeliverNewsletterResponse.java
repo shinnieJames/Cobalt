@@ -12,9 +12,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of the
- * {@code <message type="media" from=NEWSLETTER_JID id server_id t
- * is_sender?>...</message>} stanza.
+ * The structured projection of an inbound
+ * {@code <message type="media">} stanza addressed from a newsletter
+ * JID; carries the envelope correlation metadata and a classifier for
+ * the fanout-content variant the inner payload represents.
+ *
+ * @apiNote
+ * Surfaced to callers handling newsletter deliveries; pair with a
+ * {@link SmaxMessageDeliverNewsletterAcknowledgement} to ack or NACK
+ * the delivery. The {@link #raw()} accessor exposes the underlying
+ * {@link Node} so callers can decrypt and extract the 14 documented
+ * fanout-content payload shapes (text, media, reaction, poll, etc.)
+ * without Cobalt having to model each shape here.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverNewsletterRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverNewsletterMessageWithJIDMixin")
@@ -22,34 +31,40 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxInMessageDeliverReceiverContentTypeMediaRCATMixin")
 public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation.Response {
     /**
-     * The newsletter JID the message was published to.
+     * The newsletter JID this delivery originated from.
      */
     private final Jid newsletterJid;
 
     /**
-     * The stanza id assigned by the relay.
+     * The relay-assigned stanza id.
      */
     private final String stanzaId;
 
     /**
-     * The server-assigned message id.
+     * The relay-assigned message id within the originating
+     * newsletter.
+     *
+     * @apiNote
+     * Used as a stable handle when correlating subsequent
+     * reactions and poll-votes back to this delivery.
      */
     private final long serverId;
 
     /**
-     * The unix-second timestamp of the message.
+     * The unix-second timestamp of the post.
      */
     private final long timestamp;
 
     /**
-     * Whether the {@code is_sender="true"} attribute was present.
-     * i.e. the connected client authored the post.
+     * Whether the {@code is_sender="true"} attribute was present;
+     * {@code true} when the connected client authored this post.
      */
     private final boolean fromSelf;
 
     /**
      * The optional original-message timestamp from the
-     * {@code <meta original_msg_t/>} child, when the post is an edit.
+     * {@code <meta original_msg_t/>} child; set when this post is an
+     * edit.
      */
     private final Long metaOriginalMsgT;
 
@@ -60,28 +75,36 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     private final Long metaMsgEditT;
 
     /**
-     * The optional admin-profile metadata projection from the
-     * {@code <meta><admin_profile/></meta>} child.
+     * The optional {@code <meta><admin_profile/></meta>} child as a
+     * raw {@link Node} for downstream projection.
      */
     private final Node adminProfileMeta;
 
     /**
-     * Whether the {@code <meta><paid_partnership/></meta>} marker
-     * child was present.
+     * Whether the {@code <meta><paid_partnership/></meta>} marker was
+     * present.
      */
     private final boolean hasPaidPartnership;
 
     /**
-     * The optional offline counter from the {@code offline} attribute.
+     * The optional offline counter from the {@code offline}
+     * attribute; bounded to {@code 0..12}.
      */
     private final Integer offline;
 
     /**
-     * The fanout-content variant name. One of {@code "NewsletterText"},
-     * {@code "NewsletterMedia"}, {@code "NewsletterReaction"},
+     * The fanout-content variant name classifying the inner payload
+     * shape.
+     *
+     * @apiNote
+     * Lets callers branch on a single field rather than re-walking
+     * the children; the documented values are
+     * {@code "NewsletterText"}, {@code "NewsletterMedia"},
+     * {@code "NewsletterReaction"},
      * {@code "NewsletterReactionRevoke"}, {@code "NewsletterEdit"},
      * {@code "NewsletterRevoke"}, {@code "NewsletterPollCreation"},
-     * {@code "NewsletterQuizCreation"}, {@code "NewsletterPollVote"},
+     * {@code "NewsletterQuizCreation"},
+     * {@code "NewsletterPollVote"},
      * {@code "NewsletterPollResultSnapshot"},
      * {@code "NewsletterQuestion"},
      * {@code "NewsletterQuestionResponse"},
@@ -91,26 +114,38 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     private final String fanoutContentName;
 
     /**
-     * The {@code mediatype} on the {@code <plaintext/>} child.
-     * always {@code "url"} per the relay schema.
+     * The {@code mediatype} attribute on the {@code <plaintext/>}
+     * child; always the literal {@code "url"} on documented
+     * deliveries.
      */
     private final String plaintextMediatype;
 
     /**
      * The raw bytes carried by the {@code <rcat/>} child.
+     *
+     * @apiNote
+     * Feeds the receiver-content-type-media decrypt step; opaque to
+     * Cobalt.
      */
     private final byte[] rcatBytes;
 
     /**
-     * The raw underlying {@code <message/>} {@link Node}. Exposed so
-     * callers can project the variable-shape fanout-content children
-     * (text body, media descriptor, poll metadata, etc.) without
-     * Cobalt having to model 14 distinct payload variants here.
+     * The raw {@code <message>} {@link Node} backing this projection.
+     *
+     * @apiNote
+     * Exposed so callers can project the variable-shape
+     * fanout-content children (text body, media descriptor, poll
+     * metadata, etc.) without Cobalt having to model 14 distinct
+     * payload variants here.
      */
     private final Node raw;
 
     /**
-     * Constructs a new inbound projection.
+     * Constructs a newsletter-delivery projection.
+     *
+     * @apiNote
+     * Called by {@link #of(Node)} after a successful parse; not
+     * intended for direct caller use.
      *
      * @param newsletterJid      the source newsletter JID; never
      *                           {@code null}
@@ -120,24 +155,23 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
      * @param timestamp          the unix-second timestamp
      * @param fromSelf           whether the connected client authored
      *                           the post
-     * @param metaOriginalMsgT   the optional original timestamp; may
-     *                           be {@code null}
+     * @param metaOriginalMsgT   the optional original timestamp;
+     *                           may be {@code null}
      * @param metaMsgEditT       the optional edit timestamp; may be
      *                           {@code null}
-     * @param adminProfileMeta   the optional admin-profile child node;
-     *                           may be {@code null}
+     * @param adminProfileMeta   the optional admin-profile child
+     *                           node; may be {@code null}
      * @param hasPaidPartnership whether the paid-partnership marker
      *                           was present
      * @param offline            the optional offline counter; may be
      *                           {@code null}
-     * @param fanoutContentName  the fanout-content variant name; never
+     * @param fanoutContentName  the fanout-content variant name;
+     *                           never {@code null}
+     * @param plaintextMediatype the plaintext mediatype literal;
+     *                           never {@code null}
+     * @param rcatBytes          the raw rcat bytes; never {@code null}
+     * @param raw                the underlying message node; never
      *                           {@code null}
-     * @param plaintextMediatype the {@code <plaintext/>} mediatype;
-     *                           never {@code null}
-     * @param rcatBytes          the raw {@code <rcat/>} content bytes;
-     *                           never {@code null}
-     * @param raw                the underlying {@code <message/>}
-     *                           node; never {@code null}
      * @throws NullPointerException if any non-nullable argument is
      *                              {@code null}
      */
@@ -183,6 +217,10 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     /**
      * Returns the relay-assigned stanza id.
      *
+     * @apiNote
+     * Echo this into the matching
+     * {@link SmaxMessageDeliverNewsletterAcknowledgement} stanza.
+     *
      * @return the id; never {@code null}
      */
     public String stanzaId() {
@@ -190,16 +228,16 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Returns the server-assigned message id.
+     * Returns the server-assigned message id within the newsletter.
      *
-     * @return the server id
+     * @return the id
      */
     public long serverId() {
         return serverId;
     }
 
     /**
-     * Returns the unix-second timestamp.
+     * Returns the unix-second timestamp of the post.
      *
      * @return the timestamp
      */
@@ -208,31 +246,34 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Returns whether the connected client authored the post.
+     * Reports whether the connected client authored this post.
      *
-     * @return {@code true} when {@code is_sender="true"} was set
+     * @return {@code true} when the {@code is_sender="true"}
+     *         attribute was present
      */
     public boolean fromSelf() {
         return fromSelf;
     }
 
     /**
-     * Returns the optional original-message timestamp from the
-     * {@code <meta original_msg_t/>} child.
+     * Returns the optional original-message timestamp.
      *
-     * @return an {@link Optional} carrying the timestamp, or empty
-     *         when the message is not an edit
+     * @apiNote
+     * Set when the post is an edit, pointing at the original post's
+     * timestamp.
+     *
+     * @return an {@link Optional} carrying the timestamp, or
+     *         {@link Optional#empty()} when the post is not an edit
      */
     public Optional<Long> metaOriginalMsgT() {
         return Optional.ofNullable(metaOriginalMsgT);
     }
 
     /**
-     * Returns the optional last-edit timestamp from the
-     * {@code <meta msg_edit_t/>} child.
+     * Returns the optional last-edit timestamp.
      *
-     * @return an {@link Optional} carrying the timestamp, or empty
-     *         when omitted
+     * @return an {@link Optional} carrying the timestamp, or
+     *         {@link Optional#empty()} when omitted
      */
     public Optional<Long> metaMsgEditT() {
         return Optional.ofNullable(metaMsgEditT);
@@ -241,15 +282,20 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     /**
      * Returns the optional admin-profile metadata projection.
      *
-     * @return an {@link Optional} carrying the
-     *         {@code <admin_profile/>} node, or empty when omitted
+     * @apiNote
+     * The wrapped node is the raw
+     * {@code <meta><admin_profile/></meta>} child; callers project
+     * its attributes as needed.
+     *
+     * @return an {@link Optional} carrying the node, or
+     *         {@link Optional#empty()} when omitted
      */
     public Optional<Node> adminProfileMeta() {
         return Optional.ofNullable(adminProfileMeta);
     }
 
     /**
-     * Returns whether the paid-partnership marker child was present.
+     * Reports whether the paid-partnership marker was present.
      *
      * @return {@code true} when the marker was present
      */
@@ -260,15 +306,20 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     /**
      * Returns the optional offline counter.
      *
-     * @return an {@link Optional} carrying the counter, or empty when
-     *         the {@code offline} attribute was absent
+     * @apiNote
+     * Bounded to {@code 0..12} by the WA Web schema; set on
+     * deliveries replayed from the relay's offline backlog.
+     *
+     * @return an {@link Optional} carrying the counter, or
+     *         {@link Optional#empty()} when omitted
      */
     public Optional<Integer> offline() {
         return Optional.ofNullable(offline);
     }
 
     /**
-     * Returns the fanout-content variant name.
+     * Returns the fanout-content variant name classifying the inner
+     * payload shape.
      *
      * @return the variant name; never {@code null}
      */
@@ -277,7 +328,10 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Returns the {@code <plaintext/>} mediatype.
+     * Returns the {@code <plaintext mediatype>} literal.
+     *
+     * @apiNote
+     * Always the literal {@code "url"} on documented deliveries.
      *
      * @return the mediatype; never {@code null}
      */
@@ -286,7 +340,11 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Returns the raw {@code <rcat/>} content bytes.
+     * Returns the raw bytes carried by {@code <rcat/>}.
+     *
+     * @apiNote
+     * Feeds the receiver-content-type-media decrypt pipeline; opaque
+     * to Cobalt.
      *
      * @return the bytes; never {@code null}
      */
@@ -295,8 +353,12 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Returns the underlying {@code <message/>} node for downstream
-     * inspection of the variable-shape fanout-content payload.
+     * Returns the underlying {@code <message>} {@link Node}.
+     *
+     * @apiNote
+     * Lets callers project the variable-shape fanout-content
+     * children without Cobalt having to model every documented
+     * payload variant.
      *
      * @return the raw node; never {@code null}
      */
@@ -305,12 +367,33 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Tries to parse an {@link SmaxMessageDeliverNewsletterResponse} projection from the given
-     * {@code <message/>} stanza.
+     * Parses a newsletter-delivery projection from the given
+     * {@code <message>} stanza.
+     *
+     * @apiNote
+     * Returns {@link Optional#empty()} for any deviation from the
+     * documented schema (wrong description, wrong type, non-newsletter
+     * sender JID, missing or out-of-range server_id / timestamp /
+     * offline, missing plaintext, missing or non-url mediatype,
+     * missing rcat, missing rcat bytes, unrecognised fanout-content
+     * shape).
+     *
+     * @implNote
+     * This implementation rolls the WA Web
+     * {@code parseNewsletterRequest},
+     * {@code parseNewsletterMessageWithJIDMixin},
+     * {@code parseNewsletterMessageFanoutMixin}, and
+     * {@code parseReceiverContentTypeMediaRCATMixin} cascades into
+     * one straight-line pass. The server-id range
+     * ({@code 99..2147476647}) and timestamps ({@code original_msg_t}
+     * in {@code 1577865600..4102473600}, {@code msg_edit_t} in
+     * millisecond-domain bounds) mirror the WA Web range checks
+     * verbatim.
      *
      * @param node the inbound message stanza; never {@code null}
-     * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza does not match the expected shape
+     * @return an {@link Optional} carrying the projection, or
+     *         {@link Optional#empty()} when the stanza does not match
+     *         the expected shape
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMessageDeliverNewsletterRequest",
@@ -348,7 +431,6 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
             return Optional.empty();
         }
         var fromSelf = node.hasAttribute("is_sender", "true");
-        // <meta original_msg_t> / <meta msg_edit_t> / <meta><admin_profile/> / <meta><paid_partnership/>
         var meta = node.getChild("meta").orElse(null);
         Long metaOriginalMsgT = null;
         Long metaMsgEditT = null;
@@ -374,7 +456,6 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
             adminProfileMeta = meta.getChild("admin_profile").orElse(null);
             hasPaidPartnership = meta.hasChild("paid_partnership");
         }
-        // offline mixin (optional 0..12)
         Integer offline = null;
         var offlineOpt = node.getAttributeAsInt("offline");
         if (offlineOpt.isPresent()) {
@@ -384,7 +465,6 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
             }
             offline = ov;
         }
-        // receiver content-type media RCAT mixin
         var plaintext = node.getChild("plaintext").orElse(null);
         if (plaintext == null) {
             return Optional.empty();
@@ -400,7 +480,6 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
         if (rcatBytes == null) {
             return Optional.empty();
         }
-        // fanout-content disjunction. Pick the first matching content child as a label.
         var fanoutContentName = classifyFanoutContent(node);
         if (fanoutContentName == null) {
             return Optional.empty();
@@ -423,16 +502,21 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
     }
 
     /**
-     * Classifies the fanout-content variant by inspecting the child
-     * structure of the message stanza.
+     * Classifies the fanout-content variant by inspecting the
+     * child structure of the message stanza.
      *
-     * <p>Mirrors
-     * {@code WASmaxInMessageDeliverNewsletterMessageFanoutContent.parseNewsletterMessageFanoutContent}'s
-     * disjunctive try-cascade. We walk the same priority order
-     * (question → question-response → edit → question-reply → revoke
-     * → text → media → reaction → reaction-revoke → poll-creation →
-     * quiz-creation → poll-vote → poll-result-snapshot → wamo-empty)
-     * and return the matching variant label.
+     * @apiNote
+     * Returns {@code null} when no variant matched.
+     *
+     * @implNote
+     * This implementation walks the WA Web
+     * {@code parseNewsletterMessageFanoutContent} priority order
+     * (question, question-response, edit, question-reply, revoke,
+     * reaction (optionally revoke), poll-creation, quiz-creation,
+     * poll-vote, poll-result-snapshot, wamo-empty) and collapses the
+     * Cobalt classifier to a label-only result. Downstream callers
+     * re-walk {@link #raw} to extract the variant payload, so this
+     * function only needs to surface the variant name.
      *
      * @param node the message stanza; never {@code null}
      * @return the variant name, or {@code null} when no variant
@@ -442,8 +526,6 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
             exports = "parseNewsletterMessageFanoutContent",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private static String classifyFanoutContent(Node node) {
-        // Disjunction is structural. Cobalt collapses to a label-only classifier
-        // since downstream code re-walks the raw node for content extraction.
         if (node.hasChild("question")) {
             return "NewsletterQuestion";
         }
@@ -482,11 +564,18 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
         if (node.hasChild("wamo")) {
             return "NewsletterWAMOEmpty";
         }
-        // Plaintext + rcat with no other child: text/media variant. Distinguished
-        // by the inner protobuf shape that downstream code parses from <plaintext/>.
         return "NewsletterText";
     }
 
+    /**
+     * Compares this projection to another for value equality on
+     * every field including the underlying {@link Node}.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxMessageDeliverNewsletterResponse} with
+     *         identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -512,6 +601,16 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
                 && Objects.equals(this.raw, that.raw);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @implNote
+     * This implementation mixes
+     * {@link Arrays#hashCode(byte[])} of the rcat bytes into the
+     * field-wise hash so byte-array contents drive the result.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(newsletterJid, stanzaId, serverId, timestamp, fromSelf,
@@ -521,6 +620,16 @@ public final class SmaxMessageDeliverNewsletterResponse implements SmaxOperation
         return result;
     }
 
+    /**
+     * Returns a debug-friendly representation of this projection.
+     *
+     * @apiNote
+     * Intended for logging; the rcat bytes and underlying node are
+     * deliberately omitted to keep the result readable. The format
+     * is not part of the public contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxMessageDeliverNewsletterResponse[newsletterJid=" + newsletterJid

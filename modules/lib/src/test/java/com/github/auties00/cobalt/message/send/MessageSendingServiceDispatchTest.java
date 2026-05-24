@@ -11,34 +11,35 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Routing-shape tests for {@link MessageSendingService}'s dispatch switch.
+ * Pins the {@link Jid}-server predicate semantics that drive
+ * {@link MessageSendingService}'s dispatch switch.
  *
- * <p>The orchestrator picks the sub-sender by JID-server predicates on the
- * parent JID:
- * <ul>
- *   <li>{@link Jid#hasUserServer()} or {@link Jid#hasLidServer()} →
- *       {@link UserMessageSender}</li>
- *   <li>{@link Jid#hasGroupOrCommunityServer()} →
- *       {@link GroupMessageSender}</li>
- *   <li>{@link Jid#isStatusBroadcastAccount()} →
- *       {@link StatusMessageSender}</li>
- *   <li>{@link Jid#hasNewsletterServer()} →
- *       {@link NewsletterMessageSender}</li>
- *   <li>otherwise → throws
- *       {@code WhatsAppMessageException.Send.InvalidRecipient}</li>
- * </ul>
+ * @apiNote
+ * The orchestrator picks the per-chat-kind sender by inspecting the
+ * parent JID through five predicates: {@link Jid#hasUserServer()} or
+ * {@link Jid#hasLidServer()} route to {@link UserMessageSender},
+ * {@link Jid#hasGroupOrCommunityServer()} routes to
+ * {@link GroupMessageSender},
+ * {@link Jid#isStatusBroadcastAccount()} routes to
+ * {@link StatusMessageSender},
+ * {@link Jid#hasNewsletterServer()} routes to
+ * {@link NewsletterMessageSender}, and any unmatched JID raises
+ * {@code WhatsAppMessageException.Send.InvalidRecipient}.
  *
- * <p>This test pins the predicate semantics rather than the dispatch
- * itself, which keeps the test independent of the full DI graph wired by
- * {@code MessageSendingService}'s constructor (5 sub-senders + 4 stanza
- * builders). The integration coverage for the dispatch result is in the
- * synthetic {@code UserMessageSenderTest} / {@code GroupMessageSenderTest}
- * / {@code NewsletterMessageSenderTest} families.
+ * @implNote
+ * This implementation tests the predicate cascade directly rather than
+ * exercising the dispatch end-to-end, which keeps the cells independent
+ * of the full DI graph that the orchestrator's constructor wires up.
+ * The dispatch result itself is covered by the per-sender test families.
  */
 @DisplayName("MessageSendingService dispatch routing")
 class MessageSendingServiceDispatchTest {
 
-    @ParameterizedTest(name = "{0} → exactly one route ({1})")
+    /**
+     * Asserts that every captured corpus JID matches exactly one dispatch
+     * predicate.
+     */
+    @ParameterizedTest(name = "{0} -> exactly one route ({1})")
     @CsvSource({
             // jid                                            ,   expected route
             "12025550100@s.whatsapp.net                       , USER",
@@ -56,7 +57,7 @@ class MessageSendingServiceDispatchTest {
     void exactlyOneRoutePerJid(String jidString, String expectedRoute) {
         var jid = Jid.of(jidString.trim());
 
-        int matched = 0;
+        var matched = 0;
         String matchedRoute = null;
         if (jid.hasUserServer()) { matched++; matchedRoute = "USER"; }
         if (jid.hasLidServer())  { matched++; matchedRoute = "USER_LID"; }
@@ -69,6 +70,10 @@ class MessageSendingServiceDispatchTest {
                 jidString + " expected to route to " + expectedRoute + " but matched " + matchedRoute);
     }
 
+    /**
+     * Asserts that LID and PN user JIDs both qualify as the User route via
+     * mutually exclusive predicates.
+     */
     @Test
     @DisplayName("LID and PN-form user JIDs both qualify as the User route, mutually exclusive on which predicate fires")
     void lidAndPnAreBothUserRoutes() {
@@ -82,6 +87,9 @@ class MessageSendingServiceDispatchTest {
         assertFalse(lid.hasUserServer(), "@lid is not a user (PN) server");
     }
 
+    /**
+     * Asserts that group and community JIDs route via the same predicate.
+     */
     @Test
     @DisplayName("group and community JIDs share the same predicate")
     void groupCommunitySamePredicate() {
@@ -97,6 +105,10 @@ class MessageSendingServiceDispatchTest {
         assertFalse(community.isStatusBroadcastAccount());
     }
 
+    /**
+     * Asserts that {@code status@broadcast} is exclusive to the Status
+     * route.
+     */
     @Test
     @DisplayName("status@broadcast is its own route, distinct from groups and users")
     void statusBroadcastIsOwnRoute() {
@@ -113,6 +125,9 @@ class MessageSendingServiceDispatchTest {
         assertFalse(status.hasNewsletterServer());
     }
 
+    /**
+     * Asserts that newsletter JIDs are exclusive to the Newsletter route.
+     */
     @Test
     @DisplayName("newsletter JIDs are their own route, distinct from everything else")
     void newsletterIsOwnRoute() {
@@ -125,6 +140,14 @@ class MessageSendingServiceDispatchTest {
         assertFalse(newsletter.isStatusBroadcastAccount());
     }
 
+    /**
+     * Asserts that bot JIDs are rejected by every chat-dispatch predicate.
+     *
+     * @apiNote
+     * Bot sends are dispatched via the user-path with an inner bot-flag
+     * rather than by their own JID server kind, so the dispatch switch
+     * intentionally does not accept a bot JID as a chat JID directly.
+     */
     @Test
     @DisplayName("@bot JIDs do not match any chat-dispatch predicate (bot routing goes through the user path with a bot-flag, not its own server kind)")
     void botJidDoesNotMatchChatDispatch() {
@@ -135,11 +158,11 @@ class MessageSendingServiceDispatchTest {
         assertFalse(bot.hasGroupOrCommunityServer(), "@bot is not @g.us");
         assertFalse(bot.isStatusBroadcastAccount(), "@bot is not status@broadcast");
         assertFalse(bot.hasNewsletterServer(), "@bot is not @newsletter");
-        // Bot sends are dispatched via a peer JID lookup, not by the bot's own
-        // JID server kind — the dispatch switch in MessageSendingService.send()
-        // doesn't accept @bot as a chat JID directly.
     }
 
+    /**
+     * Asserts that device-suffixed PN JIDs still route to the User path.
+     */
     @Test
     @DisplayName("bare @s.whatsapp.net device JIDs (user:device@s.whatsapp.net) still route to USER")
     void deviceJidsRouteAsUser() {

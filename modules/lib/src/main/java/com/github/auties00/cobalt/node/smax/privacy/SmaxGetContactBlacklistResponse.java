@@ -17,21 +17,33 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay.
+ * The sealed family of inbound replies to a {@link SmaxGetContactBlacklistRequest}.
+ *
+ * @apiNote
+ * Drives Settings > Account > Privacy refresh for one of the four disallowed-list categories ({@code last},
+ * {@code status}, {@code groupadd}, {@code profile}); matches the three WA Web parser arms dispatched by
+ * {@code WASmaxPrivacyGetContactBlacklistRPC.sendGetContactBlacklistRPC}, namely the LID-addressed and
+ * PN-addressed success variants plus a generic error.
+ *
+ * @implNote
+ * This implementation preserves WA Web's parser priority order in {@link #of(Node, Node)}: the LID variant is
+ * tried first so it can catch the migrated wire shape before the PN arm's lenient
+ * {@code optionalLiteral(addressing_mode, "pn")} would otherwise accept it.
  */
 public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Response
         permits SmaxGetContactBlacklistResponse.SuccessLID, SmaxGetContactBlacklistResponse.Success, SmaxGetContactBlacklistResponse.Error {
 
     /**
-     * Tries each {@link SmaxGetContactBlacklistResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound stanza onto the matching variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty when no documented variant matched
+     * @apiNote
+     * Called by the SMAX dispatcher in response to a previously-issued {@link SmaxGetContactBlacklistRequest};
+     * an empty {@link Optional} signals no documented WA Web arm matched, which WA Web reports as
+     * {@code SmaxParsingFailure}.
+     *
+     * @param node    the inbound {@code <iq>} stanza; never {@code null}
+     * @param request the original {@link SmaxGetContactBlacklistRequest} stanza; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPrivacyGetContactBlacklistRPC",
@@ -51,30 +63,36 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * One {@code <user/>} child of the LID-addressed success variant.
-     * carries an optional LID JID plus the
-     * {@link SmaxGetContactBlacklistContactListId} discriminator.
+     * One {@code <user/>} entry of a LID-addressed success reply.
+     *
+     * @apiNote
+     * Surfaced through {@link SuccessLID#users()}; consumed by
+     * {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid} which falls back to the
+     * {@link SmaxGetContactBlacklistContactListId.PnJid} arm when {@link #jid()} is absent so it can recover the
+     * LID via {@code WAWebLidMigrationUtils.toUserLid}.
      */
     final class LidUser {
         /**
-         * The optional LID JID of this entry.
+         * The LID JID of the entry when present.
          */
         private final Jid jid;
 
         /**
-         * The {@code contactListIds} discriminator. Never
-         * {@code null}.
+         * The mandatory {@code contactListIds} discriminator.
          */
         private final SmaxGetContactBlacklistContactListId contactListId;
 
         /**
-         * Constructs a LID user entry.
+         * Constructs a LID-addressed user entry.
          *
-         * @param jid           the optional LID JID; may be
-         *                      {@code null}
-         * @param contactListId the discriminator; never {@code null}
-         * @throws NullPointerException if {@code contactListId} is
-         *                              {@code null}
+         * @apiNote
+         * Built by {@link SuccessLID#of(Node, Node)} for each {@code <user/>} child of the {@code <list/>} body;
+         * the {@code contactListId} discriminator is mandatory whereas the LID itself is optional and may be
+         * filled in by the consumer through LID-migration utilities.
+         *
+         * @param jid           the LID JID echoed by the relay, or {@code null} when absent
+         * @param contactListId the discriminator projecting the auxiliary attributes; never {@code null}
+         * @throws NullPointerException if {@code contactListId} is {@code null}
          */
         public LidUser(Jid jid, SmaxGetContactBlacklistContactListId contactListId) {
             this.jid = jid;
@@ -82,10 +100,14 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Returns the optional LID JID.
+         * Returns the LID JID when present.
          *
-         * @return an {@link Optional} carrying the JID, or empty when
-         *         the relay omitted it
+         * @apiNote
+         * The WA Web consumer treats an absent JID as a cue to recover the LID by resolving the entry's
+         * {@link SmaxGetContactBlacklistContactListId.PnJid} arm through
+         * {@code WAWebLidMigrationUtils.toUserLid}; if neither path yields a LID the entry is dropped.
+         *
+         * @return an {@link Optional} carrying the LID JID, or empty when the relay omitted it
          */
         public Optional<Jid> jid() {
             return Optional.ofNullable(jid);
@@ -126,23 +148,29 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * One {@code <user/>} child of the legacy PN-addressed success
-     * variant. Carries a required PN JID plus an optional LID echo.
+     * One {@code <user/>} entry of a PN-addressed success reply.
+     *
+     * @apiNote
+     * Surfaced through {@link Success#users()}; the {@link #lid()} echo lets the consumer eagerly prime the
+     * LID-to-PN mapping store before migration completes.
      */
     final class PnUser {
         /**
-         * The legacy PN JID of this entry.
+         * The required phone-number JID of the entry.
          */
         private final Jid jid;
 
         /**
-         * The optional LID echo. Populated when the relay has
-         * already migrated the entry.
+         * The optional LID echo when the relay has already migrated the entry.
          */
         private final Jid lid;
 
         /**
-         * Constructs a PN user entry.
+         * Constructs a PN-addressed user entry.
+         *
+         * @apiNote
+         * Built by {@link Success#of(Node, Node)} for each {@code <user/>} child; the PN JID is mandatory
+         * whereas the LID echo is optional and populated only on entries already migrated server-side.
          *
          * @param jid the PN JID; never {@code null}
          * @param lid the optional LID echo; may be {@code null}
@@ -154,19 +182,22 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Returns the PN JID.
+         * Returns the phone-number JID.
          *
-         * @return the JID; never {@code null}
+         * @return the PN JID; never {@code null}
          */
         public Jid jid() {
             return jid;
         }
 
         /**
-         * Returns the optional LID echo.
+         * Returns the LID echo when present.
          *
-         * @return an {@link Optional} carrying the LID JID, or empty
-         *         when omitted
+         * @apiNote
+         * Use to opportunistically prime the LID-to-PN mapping cache so subsequent LID-addressed lookups for
+         * the same contact resolve without an extra round-trip.
+         *
+         * @return an {@link Optional} carrying the LID JID, or empty when the relay omitted it
          */
         public Optional<Jid> lid() {
             return Optional.ofNullable(lid);
@@ -198,14 +229,16 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * Validates the IQ-result envelope and extracts the inner
-     * {@code <privacy/>} child common to both success variants.
+     * Validates the IQ-result envelope and extracts the inner {@code <privacy/>} child.
+     *
+     * @apiNote
+     * Shared helper used by both success variants ({@link SuccessLID} and {@link Success}); the error variant
+     * uses {@link SmaxIqErrorResponseMixin} instead.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return an {@link Optional} carrying the {@code <privacy/>}
-     *         child, or empty when the envelope check fails or the
-     *         child is missing
+     * @return an {@link Optional} carrying the {@code <privacy/>} child, or empty when the envelope check
+     *         fails or the child is missing
      */
     private static Optional<Node> validateSuccessEnvelope(Node node, Node request) {
         if (!SmaxIqResultResponseMixin.validate(node, request)) {
@@ -215,9 +248,16 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * Parses a single {@code <user/>} child as a {@link SmaxGetContactBlacklistContactListId}
-     * discriminator, mirroring the WA Web disjunction priority
-     * ({@code Username} → {@code PnJid} → {@code Empty}).
+     * Parses a {@code <user/>} child into a {@link SmaxGetContactBlacklistContactListId} discriminator.
+     *
+     * @apiNote
+     * Shared by the LID-addressed parser; the PN variant does not run the discriminator because PN entries
+     * carry the {@code jid}/{@code lid} attributes directly.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's disjunction priority ({@code Username} first, then {@code PnJid},
+     * then fall through to {@link SmaxGetContactBlacklistContactListId.Empty}). The {@code Empty} arm is the
+     * structural default; no user-visible failure mode arises from an unrecognised wire shape.
      *
      * @param userNode the {@code <user/>} child node
      * @return the parsed discriminator; never {@code null}
@@ -237,34 +277,37 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code SuccessLID} reply variant. The relay returned a
-     * {@code <privacy addressing_mode="lid">} envelope carrying the
-     * LID-addressed contact-blacklist entries.
+     * The LID-addressed success reply.
+     *
+     * @apiNote
+     * {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid} consumes this variant to drive
+     * the LID-migrated disallowed-list surface; it pre-seeds the LID-to-PN mapping cache from
+     * {@link SmaxGetContactBlacklistContactListId.PnJid} arms and primes the username cache from
+     * {@link SmaxGetContactBlacklistContactListId.Username} arms before rendering the contact list.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseSuccessLID")
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyDeprecatedIQResultResponseOptionalFromMixin")
     final class SuccessLID implements SmaxGetContactBlacklistResponse {
         /**
-         * The optional list-side digest. Present only when the relay
-         * emitted a {@code <list/>} child.
+         * The list-side digest when the relay emitted a {@code <list/>} child.
          */
         private final String listDhash;
 
         /**
-         * The parsed list of LID-addressed user entries. Empty when
-         * the relay omitted the {@code <list/>} child entirely.
+         * The parsed LID-addressed user entries; empty when the relay omitted the {@code <list/>} child entirely.
          */
         private final List<LidUser> users;
 
         /**
-         * Constructs a {@code SuccessLID} reply.
+         * Constructs a LID-addressed success reply.
          *
-         * @param listDhash the optional list digest; may be
-         *                  {@code null}
-         * @param users     the parsed list of users; never
-         *                  {@code null}
-         * @throws NullPointerException if {@code users} is
-         *                              {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only; the {@code users} list is defensively copied for
+         * immutability.
+         *
+         * @param listDhash the optional list digest; may be {@code null}
+         * @param users     the parsed user entries; never {@code null}
+         * @throws NullPointerException if {@code users} is {@code null}
          */
         public SuccessLID(String listDhash, List<LidUser> users) {
             this.listDhash = listDhash;
@@ -272,17 +315,20 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Returns the optional list digest.
+         * Returns the list digest when present.
          *
-         * @return an {@link Optional} carrying the digest, or empty
-         *         when the {@code <list/>} child was omitted
+         * @apiNote
+         * Absent when the relay omitted the {@code <list/>} child entirely, indicating the user has no
+         * disallowed-list entries for the requested category.
+         *
+         * @return an {@link Optional} carrying the digest, or empty when the relay omitted the list body
          */
         public Optional<String> listDhash() {
             return Optional.ofNullable(listDhash);
         }
 
         /**
-         * Returns the parsed list of LID-addressed user entries.
+         * Returns the parsed LID-addressed user entries.
          *
          * @return an unmodifiable list of users; never {@code null}
          */
@@ -291,12 +337,17 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Tries to parse a {@link SuccessLID} variant.
+         * Parses a LID-addressed success variant.
+         *
+         * @apiNote
+         * Returns empty when the envelope is wrong, when {@code addressing_mode} is not {@code "lid"}, or when
+         * the {@code <list/>} child is present but the required {@code dhash} attribute is missing. A
+         * {@code <privacy/>} body without a {@code <list/>} child is folded into an empty-users success rather
+         * than rejected, mirroring the WA Web caller which treats it as a no-disallowed-list state.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the envelope shape does not match
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseSuccessLID",
                 exports = "parseGetContactBlacklistResponseSuccessLID",
@@ -354,34 +405,36 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code Success} reply variant. The legacy PN-addressed
-     * success envelope. The {@code addressing_mode} attribute is
-     * optional but, when present, must equal {@code "pn"}.
+     * The legacy phone-number-addressed success reply.
+     *
+     * @apiNote
+     * Surfaces when the relay returns a PN-addressed disallowed-list (the historical default). The PN variant
+     * is rare in production now that LID migration is the default; consumers fold it into the same UI surface
+     * as {@link SuccessLID} via the optional LID echo on each {@link PnUser}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyDeprecatedIQResultResponseOptionalFromMixin")
     final class Success implements SmaxGetContactBlacklistResponse {
         /**
-         * The optional list-side digest. Present only when the relay
-         * emitted a {@code <list/>} child.
+         * The list-side digest when the relay emitted a {@code <list/>} child.
          */
         private final String listDhash;
 
         /**
-         * The parsed list of PN-addressed user entries. Empty when
-         * the relay omitted the {@code <list/>} child entirely.
+         * The parsed PN-addressed user entries; empty when the relay omitted the {@code <list/>} child entirely.
          */
         private final List<PnUser> users;
 
         /**
-         * Constructs a {@code Success} reply.
+         * Constructs a PN-addressed success reply.
          *
-         * @param listDhash the optional list digest; may be
-         *                  {@code null}
-         * @param users     the parsed list of users; never
-         *                  {@code null}
-         * @throws NullPointerException if {@code users} is
-         *                              {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only; the {@code users} list is defensively copied for
+         * immutability.
+         *
+         * @param listDhash the optional list digest; may be {@code null}
+         * @param users     the parsed user entries; never {@code null}
+         * @throws NullPointerException if {@code users} is {@code null}
          */
         public Success(String listDhash, List<PnUser> users) {
             this.listDhash = listDhash;
@@ -389,17 +442,16 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Returns the optional list digest.
+         * Returns the list digest when present.
          *
-         * @return an {@link Optional} carrying the digest, or empty
-         *         when the {@code <list/>} child was omitted
+         * @return an {@link Optional} carrying the digest, or empty when the relay omitted the list body
          */
         public Optional<String> listDhash() {
             return Optional.ofNullable(listDhash);
         }
 
         /**
-         * Returns the parsed list of PN-addressed user entries.
+         * Returns the parsed PN-addressed user entries.
          *
          * @return an unmodifiable list of users; never {@code null}
          */
@@ -408,12 +460,18 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Parses a PN-addressed success variant.
+         *
+         * @apiNote
+         * Returns empty when the envelope is wrong, when {@code addressing_mode} is set to anything other than
+         * {@code "pn"}, when a {@code <list/>} child is present but lacks {@code dhash}, or when any
+         * {@code <user/>} child lacks a {@code jid} attribute. WA Web's parser tolerates the
+         * {@code addressing_mode} attribute being either absent or explicitly {@code "pn"}, and this variant
+         * mirrors that contract.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the envelope shape does not match
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseSuccess",
                 exports = "parseGetContactBlacklistResponseSuccess",
@@ -477,13 +535,15 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
     }
 
     /**
-     * The {@code Error} reply variant. Covers every documented
-     * {@code <iq type="error">} shape produced by the relay
-     * ({@code BadRequest}, {@code FeatureNotImplemented},
-     * {@code ServiceUnavailable}, {@code RateOverlimit},
-     * {@code InternalServerError}). Collapsed to the universal
-     * {@code (errorCode, errorText)} pair since the per-shape
-     * disjunction carries no additional payload.
+     * The {@code <iq type="error">} reply variant covering every documented error shape produced by the relay.
+     *
+     * @apiNote
+     * {@code WAWebQueryPrivacyDisallowedListLidJob.queryPrivacyDisallowedListLid} treats this variant as a fatal
+     * fetch failure and throws an internal error; Cobalt surfaces it as a typed response so the caller chooses
+     * the retry policy. The variant collapses WA Web's per-shape disjunction
+     * ({@code BadRequest}, {@code FeatureNotImplemented}, {@code ServiceUnavailable}, {@code RateOverlimit},
+     * {@code InternalServerError}) to the universal {@code (errorCode, errorText)} pair because the per-shape
+     * payload is empty.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInPrivacyGetPrivacyListError")
@@ -500,11 +560,14 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         private final String errorText;
 
         /**
-         * Constructs an {@code Error} reply.
+         * Constructs an error reply.
          *
-         * @param errorCode the numeric error code
-         * @param errorText the optional error text; may be
-         *                  {@code null}
+         * @apiNote
+         * Invoked from {@link #of(Node, Node)} only after the shared
+         * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} envelope check succeeds.
+         *
+         * @param errorCode the numeric error code echoed by the relay
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public Error(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -521,22 +584,25 @@ public sealed interface SmaxGetContactBlacklistResponse extends SmaxOperation.Re
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the human-readable error text when present.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse an {@link Error} variant.
+         * Parses an error variant.
+         *
+         * @apiNote
+         * Delegates the envelope check to {@link SmaxIqErrorResponseMixin#validate(Node, Node)} and the
+         * payload extraction to {@link SmaxIqErrorResponseMixin#parseError(Node)} so the shared error-parsing
+         * logic is exercised consistently across SMAX replies.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the envelope shape does not match
+         * @return an {@link Optional} carrying the variant, or empty when the envelope shape does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPrivacyGetContactBlacklistResponseError",
                 exports = "parseGetContactBlacklistResponseError",

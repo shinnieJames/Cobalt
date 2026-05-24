@@ -16,34 +16,45 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the {@code <my_addons/>} payload
- * in the canonical
- * {@code <iq xmlns="newsletter" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that fetches the connected user's own
+ * newsletter add-ons (reactions and poll votes).
+ *
+ * @apiNote
+ * Drives WA Web's {@code WAWebGetMyAddOnsRPC.getMyNewsletterAddOnsRPC}
+ * fetch, surfaced into the local cache of the user's own reactions /
+ * poll-votes per newsletter message. The resulting IQ has shape:
+ * {@snippet :
+ *     <iq xmlns="newsletter" type="get" to="s.whatsapp.net">
+ *         <my_addons limit="50" jid="<newsletterJid>"/>
+ *     </iq>
+ * }
+ * Omit {@link #newsletterJid()} to fetch add-ons across every
+ * newsletter the user follows.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersMyAddOnsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersSelfIQGetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersBaseIQGetRequestMixin")
 public final class SmaxNewslettersMyAddOnsRequest implements SmaxOperation.Request {
     /**
-     * The maximum number of {@code <messages>} blocks the relay should
-     * return.
+     * The cap on returned {@code <messages>} blocks per round-trip.
      */
     private final int limit;
 
     /**
-     * The optional newsletter JID to scope the query to a single
-     * newsletter; {@code null} fetches add-ons across every newsletter
-     * the user follows.
+     * The optional newsletter scope; {@code null} fetches across every
+     * newsletter the user follows.
      */
     private final Jid newsletterJid;
 
     /**
-     * Constructs a request with the given limit and optional
-     * newsletter scope.
+     * Constructs a new request.
+     *
+     * @apiNote
+     * Pass {@code null} for {@code newsletterJid} to fetch the user's
+     * own add-ons across every followed newsletter.
      *
      * @param limit         the per-newsletter cap; must be non-negative
-     * @param newsletterJid the optional newsletter to scope to; may be
+     * @param newsletterJid the optional newsletter scope; may be
      *                      {@code null}
      */
     public SmaxNewslettersMyAddOnsRequest(int limit, Jid newsletterJid) {
@@ -54,7 +65,7 @@ public final class SmaxNewslettersMyAddOnsRequest implements SmaxOperation.Reque
     /**
      * Returns the per-newsletter cap on returned messages.
      *
-     * @return the limit
+     * @return the cap
      */
     public int limit() {
         return limit;
@@ -63,15 +74,17 @@ public final class SmaxNewslettersMyAddOnsRequest implements SmaxOperation.Reque
     /**
      * Returns the optional newsletter scope.
      *
-     * @return an {@link Optional} carrying the newsletter JID, or empty
-     *         when the request fetches add-ons across every newsletter
+     * @return an {@link Optional} carrying the newsletter
+     *         {@link Jid}, or empty when the request fetches across
+     *         every followed newsletter
      */
     public Optional<Jid> newsletterJid() {
         return Optional.ofNullable(newsletterJid);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza carrying the
+     * {@code <my_addons/>} payload.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <my_addons/>} payload
@@ -94,6 +107,13 @@ public final class SmaxNewslettersMyAddOnsRequest implements SmaxOperation.Reque
                 .content(myAddOnsBuilder.build());
     }
 
+    /**
+     * Compares two requests for value equality on both fields.
+     *
+     * @param obj the reference object to compare against
+     * @return {@code true} when {@code obj} is a request with equal
+     *         {@link #limit()} and {@link #newsletterJid()}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -106,11 +126,22 @@ public final class SmaxNewslettersMyAddOnsRequest implements SmaxOperation.Reque
         return this.limit == that.limit && Objects.equals(this.newsletterJid, that.newsletterJid);
     }
 
+    /**
+     * Returns the hash code derived from both fields.
+     *
+     * @return the combined hash of {@link #limit()} and
+     *         {@link #newsletterJid()}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(limit, newsletterJid);
     }
 
+    /**
+     * Returns a debug representation including both fields.
+     *
+     * @return a record-like rendering of this request
+     */
     @Override
     public String toString() {
         return "SmaxNewslettersMyAddOnsRequest[limit=" + limit

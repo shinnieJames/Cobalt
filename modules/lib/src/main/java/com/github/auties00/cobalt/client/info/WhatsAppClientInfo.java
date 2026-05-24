@@ -4,64 +4,42 @@ import com.github.auties00.cobalt.model.device.pairing.ClientAppVersion;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 
 /**
- * Represents the public identity of the WhatsApp client that Cobalt impersonates
- * when it opens a connection to WhatsApp servers.
+ * Sealed root of the client identity that Cobalt advertises to WhatsApp servers during the Noise handshake and registration.
  *
- * <p>Every WhatsApp client (web, desktop or mobile) must announce a build
- * version and a platform during the Noise handshake and throughout registration.
- * Servers compare the declared build against the supported range and may
- * refuse sessions whose advertised version looks outdated, so providing a
- * truthful and up to date {@code WhatsAppClientInfo} is essential for Cobalt
- * to establish and keep a session alive.
+ * <p>The selected variant determines which {@link ClientAppVersion} is placed into the handshake client payload, which
+ * browser or device platform string the server observes, and (on the mobile variants) which registration token algorithm
+ * the mobile registration endpoints expect. Each variant resolves the latest published version at runtime rather than
+ * embedding a fixed one, and caches the result for the lifetime of the JVM. The web variant scrapes
+ * {@code web.whatsapp.com}, the Windows variant additionally folds in the Microsoft Store package build, and the mobile
+ * variants either download the current Play Store APK or query the Apple App Store lookup API.
  *
- * <p>This sealed root exposes the minimum data every flavour needs to publish,
- * namely a {@link ClientAppVersion}. The mobile sub interface
- * {@link WhatsAppMobileClientInfo} additionally contributes a
- * business-versus-personal flag and a per platform registration token
- * computation.
- *
- * <p>Concrete implementations are produced by static factories that scrape the
- * latest published build metadata from the appropriate distribution channel.
- * {@link WhatsAppWebClientInfo} reads the {@code client_revision} field
- * embedded in the {@code web.whatsapp.com} landing page,
- * {@link WhatsAppWindowsClientInfo} combines that web revision with the
- * Microsoft Store package build of the native Windows shell, and
- * {@link WhatsAppMobileClientInfo} resolves to either an Android APK
- * downloaded from the Play Store or to the iOS bundle reported by the App
- * Store lookup API. Results are cached per platform-and-flavour behind a
- * double checked lock so a Cobalt process performs at most one network round
- * trip per unique client flavour.
- *
- * @apiNote This interface has no direct WhatsApp Web counterpart. WhatsApp
- *          Web hardcodes its build constants at compile time inside
- *          {@code WAWebBuildConstants} ({@code VERSION_PRIMARY},
- *          {@code VERSION_SECONDARY}, {@code VERSION_TERTIARY} read from
- *          {@code SiteData.client_revision}). Because Cobalt is not shipped
- *          as part of a WhatsApp release it must discover the running version
- *          dynamically, which is why this interface and its implementations
- *          live outside the WhatsApp Web module hierarchy.
+ * @apiNote Embedders do not construct these directly; they obtain one through {@link #of(ClientPlatformType)} or through a
+ *          variant specific factory and pass the result on when building a client. The variant must match the platform the
+ *          session impersonates: servers reject sessions whose advertised build is too old or whose platform fingerprint
+ *          does not match the credentials.
+ * @implNote This implementation has no single WA Web counterpart because WA Web embeds its constants at compile time inside
+ *           {@code WAWebBuildConstants}. Cobalt is not shipped as part of a WhatsApp release and must therefore discover
+ *           those values at runtime from public distribution channels, which is why this hierarchy lives outside the WA
+ *           module mapping.
  * @see ClientAppVersion
  * @see ClientPlatformType
  */
 public sealed interface WhatsAppClientInfo
         permits WhatsAppWebClientInfo, WhatsAppWindowsClientInfo, WhatsAppMobileClientInfo {
     /**
-     * Returns the {@code WhatsAppClientInfo} implementation that matches the
-     * given client platform.
+     * Returns the {@link WhatsAppClientInfo} variant matching the requested {@link ClientPlatformType}.
      *
-     * <p>Mobile platforms resolve to the consumer or business APK or IPA
-     * flavour, the Windows desktop platform resolves to
-     * {@link WhatsAppWindowsClientInfo} so its handshake carries the Microsoft
-     * Store build number in the {@code quaternary} version slot, and the
-     * macOS and web platforms share {@link WhatsAppWebClientInfo} because
-     * the macOS desktop client is a Mac Catalyst port that loads the same
-     * JavaScript bundle as {@code web.whatsapp.com}.
+     * <p>{@link ClientPlatformType#WEB} and {@link ClientPlatformType#MACOS} both resolve to {@link WhatsAppWebClientInfo}
+     * because the macOS desktop client is a Mac Catalyst port that loads the same bundle as {@code web.whatsapp.com}.
+     * {@link ClientPlatformType#WINDOWS} resolves to {@link WhatsAppWindowsClientInfo}. The four mobile platforms resolve
+     * to a consumer or business {@link WhatsAppAndroidClientInfo} or {@link WhatsAppIosClientInfo}. The chosen variant is
+     * resolved lazily on the first call and the cached instance is returned thereafter.
      *
+     * @apiNote Use this when the platform is known dynamically; for a mobile only entry point that rejects web and desktop
+     *          platforms see {@link WhatsAppMobileClientInfo#of(ClientPlatformType)}.
      * @param platform the target client platform
-     * @return a cached {@code WhatsAppClientInfo} whose advertised version
-     *         matches the latest published build for that platform
-     * @throws IllegalStateException if {@code platform} does not correspond to
-     *                               any known Cobalt client flavour
+     * @return the cached {@link WhatsAppClientInfo} for {@code platform}
+     * @throws IllegalStateException if {@code platform} is not one of the platforms this dispatcher recognises
      */
     static WhatsAppClientInfo of(ClientPlatformType platform) {
         return switch (platform) {
@@ -76,14 +54,14 @@ public sealed interface WhatsAppClientInfo
     }
 
     /**
-     * Returns the application version that this client flavour advertises to
-     * WhatsApp servers.
+     * Returns the application version this variant advertises to WhatsApp servers.
      *
-     * <p>The returned value is placed into the handshake client payload's
-     * {@code userAgent.appVersion} field and, on mobile flavours, also feeds
-     * the MD5 build hash consumed by the registration token algorithm.
+     * <p>The returned value is folded into the handshake client payload; the mobile variants additionally feed it into the
+     * build hash that {@link WhatsAppMobileClientInfo#computeRegistrationToken(long)} consumes.
      *
-     * @return the advertised client application version
+     * @apiNote The version is resolved from a public distribution channel, so a fresh process may observe a newer build
+     *          than a long lived one started earlier.
+     * @return the advertised {@link ClientAppVersion}
      */
     ClientAppVersion version();
 }

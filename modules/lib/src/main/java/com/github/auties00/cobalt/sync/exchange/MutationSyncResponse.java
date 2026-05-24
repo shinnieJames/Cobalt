@@ -8,55 +8,76 @@ import com.github.auties00.cobalt.model.sync.data.SyncdPatch;
 import java.util.*;
 
 /**
- * Represents the parsed response from a sync request, containing either
- * a snapshot reference (as an {@link ExternalBlobReference} to be downloaded)
- * or a collection of patches.
+ * Carrier for one parsed {@code <collection>} response, returned by
+ * {@link MutationResponseParser}.
  *
- * <p>Per WhatsApp Web {@code WAWebSyncdResponseParser.h}: each collection in
- * a batched response may independently succeed or fail. The collection-level
- * error state is captured in {@link #collectionError()} so that callers can
- * process successful collections even when some fail.
+ * <p>Each instance describes a single collection: its {@link SyncPatchType}, the server's
+ * reported {@code version} and {@code has_more_patches} flag, the decoded patches (or
+ * snapshot blob reference), and any captured collection-level error from a batched parse.
+ *
+ * @apiNote
+ * Returned by both {@link MutationResponseParser#parseSyncResponse(com.github.auties00.cobalt.node.Node)}
+ * (single-collection) and
+ * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}
+ * (multi-collection). Snapshot responses populate {@link #snapshotReference()} and leave
+ * {@link #patches()} empty; patch responses do the inverse. Batched responses additionally
+ * may surface an exception via {@link #collectionError()} so the caller can apply the
+ * surviving collections without losing the failure.
+ *
+ * @implNote
+ * This implementation is a hand-rolled value class rather than a {@link Record} because
+ * the {@link #patches()} accessor wraps the field in
+ * {@link Collections#unmodifiableSequencedCollection(SequencedCollection)} on each call,
+ * which a record would not let us do.
  */
 public final class MutationSyncResponse {
     /**
-     * The collection this response applies to.
+     * The collection type this response applies to.
      */
     private final SyncPatchType collectionName;
 
     /**
-     * The collection version reported by the server.
+     * The collection version reported by the server, or {@code 0} when the response was a
+     * captured collection-level error.
      */
     private final long version;
 
     /**
-     * {@code true} when the server signalled that more patches are available.
+     * Whether the server signalled that more patches are available beyond this response.
      */
     private final boolean hasMore;
 
     /**
-     * The patches returned for this collection, possibly empty.
+     * The decoded patches in document order, or {@code null} when the response was a
+     * snapshot or carried a collection-level error.
      */
     private final SequencedCollection<SyncdPatch> patches;
 
     /**
-     * The external blob reference for a snapshot, or {@code null} when the
-     * response carries patches instead.
+     * The decoded {@link ExternalBlobReference} for a snapshot response, or {@code null}
+     * when the response carried patches.
      */
     private final ExternalBlobReference snapshotReference;
 
     /**
-     * The collection-level error captured during parsing, or {@code null}
-     * when the collection was processed successfully.
+     * The collection-level error captured during a batched parse, or {@code null} when the
+     * collection succeeded.
      */
     private final WhatsAppWebAppStateSyncException collectionError;
 
     /**
-     * Constructs a new sync response.
-     * @param collectionName the sync collection type
-     * @param version the collection version
+     * Constructs a successful sync response (no collection-level error).
+     *
+     * @apiNote
+     * Used by {@link MutationResponseParser#parseSyncResponse(com.github.auties00.cobalt.node.Node)}
+     * and the success path of
+     * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}.
+     *
+     * @param collectionName the {@link SyncPatchType}; never {@code null}
+     * @param version the collection version reported by the server
      * @param hasMore whether more patches are available
-     * @param patches the patches in this response
-     * @param snapshotReference the external blob reference for the snapshot, or {@code null}
+     * @param patches the decoded patches; may be {@code null} (treated as empty)
+     * @param snapshotReference the snapshot reference; {@code null} for patch responses
      */
     public MutationSyncResponse(
             SyncPatchType collectionName,
@@ -69,18 +90,19 @@ public final class MutationSyncResponse {
     }
 
     /**
-     * Constructs a new sync response with an optional collection-level error.
+     * Constructs a sync response, optionally with a captured collection-level error.
      *
-     * <p>Per WhatsApp Web {@code WAWebSyncdResponseParser.h}: when a collection
-     * node has {@code type="error"}, the error state is captured on the response
-     * object rather than thrown, so that other collections in a batch can still
-     * be processed.
-     * @param collectionName  the sync collection type
-     * @param version         the collection version
-     * @param hasMore         whether more patches are available
-     * @param patches         the patches in this response
-     * @param snapshotReference the external blob reference for the snapshot, or {@code null}
-     * @param collectionError the collection-level error, or {@code null} if successful
+     * @apiNote
+     * Used by the failure capture path of
+     * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)}
+     * so a single failed collection in a batch does not poison the surviving ones.
+     *
+     * @param collectionName the {@link SyncPatchType}; never {@code null}
+     * @param version the collection version reported by the server
+     * @param hasMore whether more patches are available
+     * @param patches the decoded patches; may be {@code null} (treated as empty)
+     * @param snapshotReference the snapshot reference; {@code null} for patch responses
+     * @param collectionError the captured collection-level error, or {@code null} on success
      */
     public MutationSyncResponse(
             SyncPatchType collectionName,
@@ -99,25 +121,36 @@ public final class MutationSyncResponse {
     }
 
     /**
-     * Returns whether this response contains a snapshot reference.
+     * Returns whether this response carries a snapshot blob reference rather than patches.
      *
-     * @return {@code true} if a snapshot reference is present
+     * @apiNote
+     * Convenience predicate used by
+     * {@link com.github.auties00.cobalt.sync.WebAppStateService} to decide between the
+     * snapshot-apply and patch-apply branches without unwrapping the
+     * {@link #snapshotReference()} {@link Optional}.
+     *
+     * @return {@code true} when this response carries a snapshot reference
      */
     public boolean isSnapshot() {
         return snapshotReference != null;
     }
 
     /**
-     * Returns the sync collection type.
+     * Returns the {@link SyncPatchType} this response applies to.
      *
-     * @return the collection name
+     * @return the collection type
      */
     public SyncPatchType collectionName() {
         return collectionName;
     }
 
     /**
-     * Returns the collection version.
+     * Returns the collection version reported by the server.
+     *
+     * @apiNote
+     * For a successful patch response this is the version after applying the contained
+     * patches; for a snapshot response it is the version of the snapshot; for a captured
+     * collection-level error it is {@code 0}.
      *
      * @return the version number
      */
@@ -126,51 +159,74 @@ public final class MutationSyncResponse {
     }
 
     /**
-     * Returns whether more patches are available from the server.
+     * Returns whether the server signalled that more patches are available.
      *
-     * @return {@code true} if more patches are available
+     * @apiNote
+     * The caller uses this to decide whether to issue a follow-up pull immediately. Mapped
+     * directly from the {@code has_more_patches} attribute on the {@code <collection>}
+     * node.
+     *
+     * @return {@code true} when more patches remain
      */
     public boolean hasMore() {
         return hasMore;
     }
 
     /**
-     * Returns the patches in this response.
+     * Returns the decoded patches in document order, wrapped to be unmodifiable.
      *
-     * @return an unmodifiable collection of patches
+     * @apiNote
+     * Returns an empty collection when the response was a snapshot or a captured error;
+     * the wrapping ensures callers cannot mutate the parser-owned list.
+     *
+     * @implNote
+     * This implementation re-wraps on every call rather than caching the unmodifiable
+     * wrapper because the field may be {@code null}; the {@code null} branch returns
+     * {@link List#of()} which is itself already unmodifiable.
+     *
+     * @return the patches; never {@code null}
      */
     public SequencedCollection<SyncdPatch> patches() {
         return patches == null ? List.of() : Collections.unmodifiableSequencedCollection(patches);
     }
 
     /**
-     * Returns the external blob reference for the snapshot, if present.
+     * Returns the decoded snapshot blob reference, if any.
      *
-     * @return an optional containing the snapshot reference
+     * @apiNote
+     * Present only for snapshot responses; the caller streams the actual
+     * {@code SyncdSnapshot} bytes from MMS through
+     * {@link com.github.auties00.cobalt.client.WhatsAppClient.MediaConnection}.
+     *
+     * @return the snapshot reference wrapped in an {@link Optional}
      */
     public Optional<ExternalBlobReference> snapshotReference() {
         return Optional.ofNullable(snapshotReference);
     }
 
     /**
-     * Returns the collection-level error, if present.
+     * Returns the collection-level error captured during a batched parse, if any.
      *
-     * <p>Per WhatsApp Web {@code WAWebSyncdResponseParser.h}: when the
-     * collection node has {@code type="error"}, the error is captured here
-     * rather than thrown, so batched responses can process other collections
-     * independently.
-     * @return an optional containing the collection-level error
+     * @apiNote
+     * Present only on responses produced by
+     * {@link MutationResponseParser#parseBatchedSyncResponse(com.github.auties00.cobalt.node.Node)};
+     * always empty on responses produced by the throwing single-collection parser.
+     *
+     * @return the captured error wrapped in an {@link Optional}
      */
     public Optional<WhatsAppWebAppStateSyncException> collectionError() {
         return Optional.ofNullable(collectionError);
     }
 
     /**
-     * Compares this response to the given object for equality on every field.
+     * Returns whether this response is field-equal to the supplied object.
+     *
+     * @apiNote
+     * Equality covers every field including the {@link #patches()} list and the captured
+     * {@link #collectionError()} reference.
      *
      * @param o the object to compare against
-     * @return {@code true} when both responses carry the same name, version, flags, patches,
-     *         snapshot reference and collection error
+     * @return {@code true} when {@code o} is a {@code MutationSyncResponse} with identical fields
      */
     @Override
     public boolean equals(Object o) {
@@ -184,9 +240,9 @@ public final class MutationSyncResponse {
     }
 
     /**
-     * Computes a hash consistent with {@link #equals(Object)}.
+     * Returns the field-combined hash that pairs with {@link #equals(Object)}.
      *
-     * @return the combined hash over every field of this response
+     * @return the {@link Objects#hash} of every field
      */
     @Override
     public int hashCode() {
@@ -194,9 +250,13 @@ public final class MutationSyncResponse {
     }
 
     /**
-     * Returns a debug-only representation listing every field.
+     * Returns a single-line bracketed dump of every field for diagnostic logs.
      *
-     * @return a single-line bracketed string for diagnostic logging
+     * @apiNote
+     * Intended for log lines only; the format is unstable and not part of the API
+     * contract.
+     *
+     * @return the diagnostic representation
      */
     @Override
     public String toString() {

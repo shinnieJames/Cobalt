@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.stream.notification;
 
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
 import com.github.auties00.cobalt.pairing.CompanionPairingService;
@@ -18,82 +19,124 @@ import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.wam.WamService;
 
 /**
- * Routes incoming {@code <notification>} stanzas to the appropriate
- * category-specific dispatcher based on their {@code type} attribute.
+ * Dispatches inbound {@code <notification>} stanzas to the appropriate
+ * category-specific handler based on their {@code type} attribute.
  *
- * <p>WhatsApp multiplexes many distinct server-to-client notification flows
- * onto the single {@code <notification>} tag and distinguishes them via the
- * {@code type} attribute. Cobalt groups the known notification types into
- * four functional families and delegates to one dispatcher per family:
+ * @apiNote
+ * Surfaces the {@code "notification"} arm of
+ * {@code WAWebCommsHandleLoggedInStanza.handleLoggedInStanza}, where
+ * every server-to-client out-of-band event (contact sync, profile
+ * picture changes, device registration churn, payments, business
+ * profile updates, group membership churn, app-state replication, etc.)
+ * is routed by the value of {@code type}. Cobalt groups the 21 WA Web
+ * notification types into four functional families and forwards each
+ * family to its dedicated dispatcher:
  * <ul>
- *   <li>Account family: {@code account_sync}, {@code contacts},
- *       {@code disappearing_mode}, {@code picture}, {@code privacy_token},
- *       {@code status}</li>
- *   <li>Business family: {@code business},
+ *   <li>account-scoped events ({@code account_sync}, {@code contacts},
+ *       {@code disappearing_mode}, {@code picture},
+ *       {@code privacy_token}, {@code status}) go to
+ *       {@link NotificationAccountDispatcher};</li>
+ *   <li>business-scoped events ({@code business},
  *       {@code digital_commerce_subscription}, {@code fb:update},
- *       {@code mex}, {@code pay}</li>
- *   <li>Device family: {@code companion_reg_refresh}, {@code devices},
- *       {@code encrypt}, {@code hosted}, {@code link_code_companion_reg},
- *       {@code mediaretry}, {@code newsletter}, {@code psa},
- *       {@code registration}, {@code server}, {@code server_sync},
- *       {@code w:growth}, {@code waffle}</li>
- *   <li>Group family: {@code w:gp2}</li>
+ *       {@code mex}, {@code pay}) go to
+ *       {@link NotificationBusinessDispatcher};</li>
+ *   <li>device-scoped events ({@code companion_reg_refresh},
+ *       {@code devices}, {@code encrypt}, {@code hosted},
+ *       {@code link_code_companion_reg}, {@code mediaretry},
+ *       {@code newsletter}, {@code psa}, {@code registration},
+ *       {@code server}, {@code server_sync}, {@code w:growth},
+ *       {@code waffle}) go to
+ *       {@link NotificationDeviceDispatcher};</li>
+ *   <li>group-scoped events ({@code w:gp2}) go to
+ *       {@link NotificationGroupStreamHandler}.</li>
  * </ul>
  *
- * <p>Notifications whose {@code type} is not recognised are silently
- * discarded, matching WhatsApp Web's behaviour of ignoring unknown
- * notification categories rather than treating them as errors.
+ * @implNote
+ * This implementation collapses WA Web's flat 21-arm {@code switch}
+ * into a four-family family tree to keep each sub-handler at a
+ * manageable size and to share dependencies across thematically
+ * related notification types. Unknown {@code type} values are silently
+ * dropped here; WA Web instead routes the unknown stanza through a
+ * generic NACK path which Cobalt centralises in its socket-stream
+ * error model.
  */
 @WhatsAppWebModule(moduleName = "WAWebCommsHandleLoggedInStanza")
 public final class NotificationStreamHandler implements SocketStream.Handler {
     /**
-     * Dispatcher for account-related notifications (contacts sync, profile
-     * picture changes, privacy settings, disappearing mode, status updates).
+     * Sub-dispatcher handling notifications that affect the current
+     * account's contact list, privacy settings, profile picture, or
+     * status broadcasts.
      */
     private final NotificationAccountDispatcher accountHandler;
 
     /**
-     * Dispatcher for business-related notifications (business profile,
-     * digital commerce, Facebook updates, MEX payloads, payments).
+     * Sub-dispatcher handling notifications that target the business
+     * profile, MEX payloads, Facebook-side updates, and payment events.
      */
     private final NotificationBusinessDispatcher businessHandler;
 
     /**
-     * Dispatcher for device-related notifications (companion registration,
-     * linked-device list changes, pre-key bundles, newsletter updates,
-     * server sync, waffle, and other administrative events).
+     * Sub-dispatcher handling notifications that affect device-level
+     * state: companion registration, prekey churn, server sync,
+     * newsletter membership, waffle account-linking, and the residual
+     * miscellaneous WA Web events.
      */
     private final NotificationDeviceDispatcher deviceHandler;
 
     /**
-     * Dispatcher for group-related notifications ({@code w:gp2} stanzas
-     * covering membership, subject, description, and settings changes).
+     * Sub-dispatcher handling {@code w:gp2} notifications that report
+     * group membership, subject, description, and settings changes.
      */
     private final NotificationGroupStreamHandler groupHandler;
 
     /**
-     * Constructs a new notification dispatcher and wires each of the four
-     * sub-dispatchers with their own dependencies.
+     * Constructs the dispatcher and wires its four sub-dispatchers with
+     * their respective dependencies.
      *
-     * @param whatsapp                       the WhatsApp client used by every
-     *                                       sub-dispatcher
-     * @param deviceLinkingService           the alt-device-linking service that owns
-     *                                       the pairing-code handshake state
-     * @param lidMigrationService            service used to reconcile LID/PN
-     *                                       addressing during business-related
-     *                                       notifications
-     * @param abPropsService                 service used to retrieve feature flags
-     *                                       during device notification handling
-     * @param deviceService                  service used to reconcile linked-device
-     *                                       state during device and account
-     *                                       notifications
-     * @param offlineNotificationsReporter   shared reporter that accumulates per-collection
-     *                                       offline {@code server_sync} notification counts
-     *                                       for the {@code MdAppStateOfflineNotifications}
-     *                                       WAM event; forwarded to the device dispatcher
-     *                                       for consumption by the server-sync handler
-     * @param wamService                     the WAM telemetry service forwarded to sub-dispatchers
-     *                                       that commit notification-driven events
+     * @apiNote
+     * Invoked by the socket-stream wiring at client construction time;
+     * downstream code never instantiates this handler directly.
+     *
+     * @implNote
+     * This implementation eagerly creates each sub-dispatcher so that
+     * routing in {@link #handle(Node)} is a single
+     * {@code switch}-and-delegate; the constructor is the single place
+     * where per-family dependency wiring lives.
+     *
+     * @param whatsapp                     the {@link WhatsAppClient}
+     *                                     shared by every sub-dispatcher
+     * @param deviceLinkingService         the
+     *                                     {@link CompanionPairingService}
+     *                                     that owns the pairing-code
+     *                                     handshake state
+     * @param lidMigrationService          the {@link LidMigrationService}
+     *                                     used to reconcile LID and PN
+     *                                     addressing during business
+     *                                     notifications
+     * @param abPropsService               the {@link ABPropsService} used
+     *                                     to retrieve feature flags from
+     *                                     the device sub-dispatcher
+     * @param deviceService                the {@link DeviceService} used
+     *                                     to reconcile linked-device
+     *                                     state on the device and
+     *                                     account sub-dispatchers
+     * @param offlineNotificationsReporter the shared
+     *                                     {@link OfflineNotificationsReporter}
+     *                                     that accumulates per-collection
+     *                                     offline {@code server_sync}
+     *                                     counts for the
+     *                                     {@code MdAppStateOfflineNotifications}
+     *                                     WAM event; forwarded to the
+     *                                     device sub-dispatcher
+     * @param wamService                   the {@link WamService}
+     *                                     telemetry sink forwarded to
+     *                                     sub-dispatchers that commit
+     *                                     notification-driven events
+     * @param ackSender                    the {@link AckSender}
+     *                                     forwarded to every
+     *                                     sub-dispatcher for emitting
+     *                                     the per-notification outbound
+     *                                     {@code <ack>} stanza
      */
     public NotificationStreamHandler(
             WhatsAppClient whatsapp,
@@ -102,22 +145,31 @@ public final class NotificationStreamHandler implements SocketStream.Handler {
             ABPropsService abPropsService,
             DeviceService deviceService,
             OfflineNotificationsReporter offlineNotificationsReporter,
-            WamService wamService
+            WamService wamService,
+            AckSender ackSender
     ) {
-        this.accountHandler = new NotificationAccountDispatcher(whatsapp, deviceService);
-        this.businessHandler = new NotificationBusinessDispatcher(whatsapp, lidMigrationService);
-        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, deviceLinkingService, abPropsService, deviceService, offlineNotificationsReporter, wamService);
-        this.groupHandler = new NotificationGroupStreamHandler(whatsapp, wamService);
+        this.accountHandler = new NotificationAccountDispatcher(whatsapp, deviceService, ackSender);
+        this.businessHandler = new NotificationBusinessDispatcher(whatsapp, lidMigrationService, ackSender);
+        this.deviceHandler = new NotificationDeviceDispatcher(whatsapp, deviceLinkingService, abPropsService, deviceService, offlineNotificationsReporter, wamService, ackSender);
+        this.groupHandler = new NotificationGroupStreamHandler(whatsapp, wamService, ackSender);
     }
 
     /**
-     * Routes an incoming {@code <notification>} stanza to the dispatcher
-     * whose family includes the stanza's {@code type} attribute.
+     * {@inheritDoc}
      *
-     * <p>Stanzas missing the {@code type} attribute or carrying an
-     * unrecognised value are silently discarded.
+     * @apiNote
+     * Routes the {@code <notification>} stanza to the sub-dispatcher
+     * whose family includes the value of its {@code type} attribute.
+     * Stanzas lacking a {@code type} attribute or carrying an
+     * unrecognised value are silently dropped.
      *
-     * @param node the incoming {@code <notification>} stanza
+     * @implNote
+     * This implementation handles {@code w:gp2} in this same dispatcher
+     * even though WA Web wires that path through a separate handler;
+     * Cobalt consolidates routing here for symmetry. Unknown type
+     * values are dropped without emitting a NACK because the unrecognised
+     * stanza NACK policy is enforced centrally by
+     * {@link SocketStream}'s error model.
      */
     @Override
     @WhatsAppWebExport(
@@ -140,19 +192,26 @@ public final class NotificationStreamHandler implements SocketStream.Handler {
                     "mediaretry", "newsletter", "psa", "registration", "server", "server_sync",
                     "w:growth", "waffle" ->
                     deviceHandler.handle(node);
-            // WA Web dispatches w:gp2 via a separate path; Cobalt consolidates all notification routing here for symmetry.
             case "w:gp2" ->
                     groupHandler.handle(node);
-            // Unknown notification types are silently discarded; the unrecognised-stanza NACK policy is applied centrally by the socket stream's error model.
             default -> {
             }
         }
     }
 
     /**
-     * Resets the per-connection state of every sub-dispatcher. Invoked by
-     * the socket stream when the underlying connection is torn down so that
-     * the next connection starts from a clean slate.
+     * {@inheritDoc}
+     *
+     * @apiNote
+     * Invoked by the socket-stream when the underlying connection is
+     * torn down so that each sub-dispatcher's per-connection caches
+     * and pending operations are cleared before the next connection
+     * starts.
+     *
+     * @implNote
+     * This implementation fans the call out to every sub-dispatcher in
+     * a fixed order; sub-dispatchers are responsible for tolerating
+     * being reset while a stanza-handling call is still mid-flight.
      */
     @Override
     public void reset() {

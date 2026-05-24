@@ -27,45 +27,38 @@ import java.util.NoSuchElementException;
 import java.util.zip.ZipInputStream;
 
 /**
- * Represents the build identity of the native Android WhatsApp application
- * and resolves it by downloading and parsing the current APK from the Play
- * Store.
+ * {@link WhatsAppMobileClientInfo} flavour for the consumer ({@code com.whatsapp}) and business ({@code com.whatsapp.w4b})
+ * Android WhatsApp APKs.
  *
- * <p>The Android registration protocol binds every request to the identity
- * of the signed APK that is claiming the phone number. The server expects
- * an HMAC-SHA1 token computed over the APK signing certificates, the MD5
- * digest of the embedded {@code classes.dex}, and the national phone number,
- * keyed by a PBKDF2 derived key seeded from the package name, the
- * {@code about_logo.png} resource and a hardcoded salt. This class downloads
- * the current APK through {@link PlayStoreUtils#downloadApk(String, int)}
- * (the base APK plus every split in the Play Store App Bundle), extracts all
- * of that material, and caches it so that the heavy download runs at most
- * once per flavour per JVM.
- *
- * <p>Two flavours are supported: the consumer build ({@code com.whatsapp})
- * and the business build ({@code com.whatsapp.w4b}). Each flavour has its
- * own lazily initialised singleton protected by a double checked lock.
- *
- * @apiNote This class has no WhatsApp Web counterpart: it implements the
- *          native Android registration token scheme that lives inside the
- *          Android WhatsApp APK. WhatsApp Web clients pair via QR or link
- *          and never touch this protocol.
+ * @apiNote Selected automatically by {@link WhatsAppMobileClientInfo#of(com.github.auties00.cobalt.model.device.pairing.ClientPlatformType)}
+ *          for {@code ANDROID} and {@code ANDROID_BUSINESS}; embedders can also reach a flavour directly through
+ *          {@link #ofPersonal()} or {@link #ofBusiness()}. The first call per flavour downloads the current APK through the
+ *          anonymous Play Store pipeline, parses the version and signing certificates, derives the HMAC key, and persists the
+ *          result to {@code $user.home/.cobalt/cache/wa-android-{personal,business}.json} so that subsequent JVMs avoid the
+ *          download as long as the Play Store {@code versionCode} has not changed.
+ * @implNote This implementation has no WA Web counterpart; the Android registration token scheme lives entirely inside the
+ *           Android WhatsApp APK and is reverse engineered here. The cache file is keyed by Play Store {@code versionCode} so
+ *           a real WhatsApp release naturally invalidates it; on a cache miss the heavy download runs at most once per JVM
+ *           per flavour behind a double checked lock.
  * @see WhatsAppMobileClientInfo
  */
 final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     /**
-     * Holds the static salt used by the PBKDF2-HMAC-SHA1 routine that
-     * derives the HMAC key for the registration token.
+     * Static salt fed into the PBKDF2-HMAC-SHA1 routine that derives the registration token HMAC key.
+     *
+     * @apiNote Reverse engineered from the Android WhatsApp binary; the value is identical for consumer and business builds.
+     * @implNote This implementation embeds the salt directly because rotating it would require coordinating with WhatsApp;
+     *           it has been stable across many releases.
      */
     private static final byte[] MOBILE_ANDROID_SALT = Base64.getDecoder().decode("PkTwKSZqUfAUyR0rPQ8hYJ0wNsQQ3dW1+3SCnyTXIfEAxxS75FwkDf47wNv/c8pP3p0GXKR6OOQmhyERwx74fw1RYSU10I4r1gyBVDbRJ40pidjM41G1I1oN");
 
     /**
-     * Holds the known paths under which the {@code about_logo.png} drawable
-     * has shipped across WhatsApp releases.
+     * Known APK paths under which the {@code about_logo.png} drawable has shipped across WhatsApp releases.
      *
-     * <p>The PBKDF2 password derivation consumes the first matching entry,
-     * with the remaining paths acting as fallbacks for older or
-     * differently bucketed builds.
+     * @apiNote The PBKDF2 password derivation in {@link #getSecretKey(String, byte[])} consumes the bytes of the first
+     *          matching entry; trying multiple paths absorbs reorganisations of the resource bucketing across releases.
+     * @implNote This implementation searches the base APK first and falls back to density configuration splits because newer
+     *           App Bundle releases moved density qualified drawables out of the base APK and into per density splits.
      */
     private static final List<String> ABOUT_LOGO_PATHS = List.of(
             "res/drawable-hdpi/about_logo.png",
@@ -74,89 +67,108 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     );
 
     /**
-     * Holds the Play Store package identifier for the consumer WhatsApp APK.
+     * Play Store package identifier of the consumer WhatsApp APK.
+     *
+     * @apiNote Used by {@link #ofPersonal()}.
      */
     private static final String PERSONAL_PACKAGE = "com.whatsapp";
 
     /**
-     * Holds the Play Store package identifier for the WhatsApp Business APK.
+     * Play Store package identifier of the WhatsApp Business APK.
+     *
+     * @apiNote Used by {@link #ofBusiness()}.
      */
     private static final String BUSINESS_PACKAGE = "com.whatsapp.w4b";
 
     /**
-     * Holds the cached instance for the consumer APK flavour, populated on
-     * first access by {@link #ofPersonal()}.
+     * Cached singleton for the consumer APK flavour.
+     *
+     * @apiNote Populated lazily by the first call to {@link #ofPersonal()}.
+     * @implNote This implementation pairs the field with {@link #personalApkInfoLock} for the double checked locking idiom;
+     *           the {@code volatile} keyword publishes a fully constructed instance to readers on the unsynchronised fast
+     *           path.
      */
     private static volatile WhatsAppAndroidClientInfo personalApkInfo;
 
     /**
-     * Holds the monitor used to serialise initialisation of
-     * {@link #personalApkInfo}.
+     * Monitor that serialises initialisation of {@link #personalApkInfo}.
+     *
+     * @apiNote Not exposed; callers go through {@link #ofPersonal()}.
      */
     private static final Object personalApkInfoLock = new Object();
 
     /**
-     * Holds the cached instance for the business APK flavour, populated on
-     * first access by {@link #ofBusiness()}.
+     * Cached singleton for the business APK flavour.
+     *
+     * @apiNote Populated lazily by the first call to {@link #ofBusiness()}.
+     * @implNote This implementation pairs the field with {@link #businessApkInfoLock} for the double checked locking idiom;
+     *           the {@code volatile} keyword publishes a fully constructed instance to readers on the unsynchronised fast
+     *           path.
      */
     private static volatile WhatsAppAndroidClientInfo businessApkInfo;
 
     /**
-     * Holds the monitor used to serialise initialisation of
-     * {@link #businessApkInfo}.
+     * Monitor that serialises initialisation of {@link #businessApkInfo}.
+     *
+     * @apiNote Not exposed; callers go through {@link #ofBusiness()}.
      */
     private static final Object businessApkInfoLock = new Object();
 
     /**
-     * Holds the application version read from the APK's
-     * {@code AndroidManifest.xml} via {@link ClientAppVersion#of(String)}.
+     * Resolved {@link ClientAppVersion} read from the APK's {@code AndroidManifest.xml}.
+     *
+     * @apiNote Returned verbatim from {@link #version()}.
      */
     private final ClientAppVersion version;
 
     /**
-     * Holds the MD5 hash of the APK's {@code classes.dex} entry.
+     * MD5 digest of the APK's {@code classes.dex} entry.
      *
-     * <p>This hash is fed into the registration token HMAC so that the
-     * server can verify the caller knows the contents of a real signed
-     * DEX file.
+     * @apiNote Folded into the registration token HMAC by {@link #computeRegistrationToken(long)} so the server can verify
+     *          the caller knows the contents of a real signed DEX file.
      */
     private final byte[] md5Hash;
 
     /**
-     * Holds the HMAC-SHA1 secret key derived via PBKDF2 from the package
-     * name and the {@code about_logo.png} asset.
+     * HMAC-SHA1 secret key derived from the package name and the {@code about_logo.png} asset.
+     *
+     * @apiNote Used as the key of the registration token HMAC in {@link #computeRegistrationToken(long)}; never exposed to
+     *          callers.
      */
     private final SecretKeySpec secretKey;
 
     /**
-     * Holds the APK signing certificates, each in its raw X.509 DER form.
+     * Raw X.509 DER bytes of every certificate that signs the APK.
      *
-     * <p>All certificates are folded into the registration token HMAC in
-     * order so that the server can verify the signature chain identity.
+     * @apiNote Folded into the registration token HMAC in order by {@link #computeRegistrationToken(long)} so the server can
+     *          verify the signature chain identity.
      */
     private final byte[][] certificates;
 
     /**
-     * Indicates whether this instance represents the WhatsApp Business APK.
+     * Whether this instance represents the WhatsApp Business APK rather than the consumer APK.
+     *
+     * @apiNote Returned verbatim from {@link #business()}.
      */
     private final boolean business;
 
     /**
-     * Holds the Play Store {@code versionCode} the APK was fetched at, used
-     * purely as the invalidation key for the on disk JSON cache.
+     * Play Store {@code versionCode} the APK was fetched at.
+     *
+     * @apiNote Used purely as the invalidation key for the on disk JSON cache; never advertised to the server.
      */
     private final int versionCode;
 
     /**
-     * Constructs a new instance from the values extracted out of the APK.
+     * Constructs an immutable instance from the values extracted out of the APK.
      *
-     * @param version the parsed application version
-     * @param versionCode the Play Store {@code versionCode} used as the
-     *                    cache invalidation key
-     * @param md5Hash the MD5 digest of {@code classes.dex}
-     * @param secretKey the derived HMAC-SHA1 key
+     * @apiNote Package private; callers always go through {@link #ofPersonal()} or {@link #ofBusiness()}.
+     * @param version      the parsed application version
+     * @param versionCode  the Play Store {@code versionCode} used as the cache invalidation key
+     * @param md5Hash      the MD5 digest of {@code classes.dex}
+     * @param secretKey    the derived HMAC-SHA1 key
      * @param certificates the APK signing certificates in DER form
-     * @param business whether this represents the business flavour
+     * @param business     whether this represents the business flavour
      */
     private WhatsAppAndroidClientInfo(ClientAppVersion version, int versionCode, byte[] md5Hash, SecretKeySpec secretKey, byte[][] certificates, boolean business) {
         this.version = version;
@@ -168,10 +180,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the cached consumer APK info, downloading and parsing the APK
-     * on the first call.
+     * Returns the cached consumer APK identity, downloading and parsing the APK on the first call.
      *
-     * @return the consumer Android client info
+     * @apiNote Subsequent calls in the same JVM return the same instance. A failed download is not cached, so callers may
+     *          retry by simply calling this method again.
+     * @implNote This implementation uses double checked locking; the {@code volatile} {@link #personalApkInfo} field
+     *           publishes the fully constructed instance to readers on the unsynchronised fast path.
+     * @return the consumer Android client identity
      * @throws RuntimeException if the APK download or parsing fails
      */
     public static WhatsAppAndroidClientInfo ofPersonal() {
@@ -186,10 +201,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the cached business APK info, downloading and parsing the APK
-     * on the first call.
+     * Returns the cached business APK identity, downloading and parsing the APK on the first call.
      *
-     * @return the business Android client info
+     * @apiNote Subsequent calls in the same JVM return the same instance. A failed download is not cached, so callers may
+     *          retry by simply calling this method again.
+     * @implNote This implementation uses double checked locking; the {@code volatile} {@link #businessApkInfo} field
+     *           publishes the fully constructed instance to readers on the unsynchronised fast path.
+     * @return the business Android client identity
      * @throws RuntimeException if the APK download or parsing fails
      */
     public static WhatsAppAndroidClientInfo ofBusiness() {
@@ -204,26 +222,19 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Downloads the consumer or business APK through the anonymous Play
-     * Store pipeline and extracts the version, {@code classes.dex} hash,
-     * signing certificates, and derived HMAC key.
+     * Downloads the consumer or business APK through the anonymous Play Store pipeline and extracts the version,
+     * {@code classes.dex} hash, signing certificates, and derived HMAC key.
      *
-     * <p>Play Store distributes modern WhatsApp builds as an App Bundle, so
-     * the returned collection contains a base APK plus one or more
-     * configuration splits. The base APK carries the manifest,
-     * {@code classes.dex} and signing certificates and is fully materialised
-     * into a {@link ByteArrayApkFile} because cert extraction needs random
-     * access to the APK Signing Block at the tail of the archive. Splits
-     * are only consulted for {@code about_logo.png} when the base APK omits
-     * it, and are stream scanned with {@link ZipInputStream} so they never
-     * get parsed by {@code apk-parser} nor fully held in memory. Any split
-     * stream left unread is closed eagerly so its HTTP transfer is aborted.
-     *
-     * @param business {@code true} for the business flavour, {@code false}
-     *                 for the consumer flavour
-     * @return a populated {@code WhatsAppAndroidClientInfo} instance
-     * @throws RuntimeException if the HTTP download, the APK parsing, or
-     *                          the cryptographic derivation fails
+     * @apiNote Called at most once per JVM per flavour by {@link #ofPersonal()} or {@link #ofBusiness()}. Persists the
+     *          result through {@link #saveCached(WhatsAppAndroidClientInfo)} so subsequent JVMs can skip the download.
+     * @implNote This implementation fully materialises the base APK into a {@link ByteArrayApkFile} because certificate
+     *           extraction needs random access to the APK Signing Block at the tail of the archive. Splits are stream
+     *           scanned with {@link ZipInputStream} so they never have to be held in memory; non density splits and any
+     *           split left unread once the {@code about_logo.png} is found are closed eagerly so the underlying HTTP
+     *           transfer is aborted instead of draining to completion.
+     * @param business {@code true} for the business flavour, {@code false} for the consumer flavour
+     * @return a populated {@link WhatsAppAndroidClientInfo} instance
+     * @throws RuntimeException if the HTTP download, the APK parsing, or the cryptographic derivation fails
      */
     private static WhatsAppAndroidClientInfo queryApkInfo(boolean business) {
         var packageName = business ? BUSINESS_PACKAGE : PERSONAL_PACKAGE;
@@ -276,14 +287,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Reads and decodes the on disk JSON cache for the given flavour.
+     * Reads and decodes the on disk JSON cache for the requested flavour.
      *
-     * <p>Any read or parse failure is swallowed and causes {@code null} to
-     * be returned, which triggers a fresh download.
-     *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} before attempting a fresh APK download.
+     * @implNote This implementation swallows any read or parse failure and returns {@code null} so a corrupted or
+     *           incompatible cache file simply triggers a fresh download rather than propagating an exception.
      * @param business whether this is the business flavour
-     * @return the decoded client info, or {@code null} if the file is
-     *         missing, unreadable or malformed
+     * @return the decoded client info, or {@code null} if the file is missing, unreadable or malformed
      */
     private static WhatsAppAndroidClientInfo loadCached(boolean business) {
         var path = cacheFile(business);
@@ -309,14 +319,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Serialises {@code info} to JSON and writes it to the per flavour
-     * cache file, creating parent directories as needed.
+     * Serialises the given info to JSON and writes it to the per flavour cache file.
      *
-     * <p>Byte fields are emitted as Base64 strings so the payload stays
-     * plain JSON. Any write failure is silently swallowed because the
-     * cache is a best effort optimisation and a failed write just means
-     * the next invocation will refetch.
-     *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} after a successful APK download so subsequent JVMs can skip the
+     *          download.
+     * @implNote This implementation emits byte fields as Base64 strings so the payload is plain JSON, creates the parent
+     *           directory if missing, and silently swallows any write failure because the cache is best effort: a failed
+     *           write just means the next JVM will refetch.
      * @param info the client info to persist
      */
     private static void saveCached(WhatsAppAndroidClientInfo info) {
@@ -343,9 +352,10 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Resolves the on disk path of the JSON cache file for the given
-     * flavour, rooted at {@code $user.home/.cobalt/cache/}.
+     * Resolves the on disk path of the JSON cache file for the requested flavour.
      *
+     * @apiNote The cache lives under {@code $user.home/.cobalt/cache/wa-android-{personal,business}.json} so all Cobalt JVMs
+     *          for the same OS user share it.
      * @param business whether this is the business flavour
      * @return the cache file path
      */
@@ -359,29 +369,26 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns whether the given Play Store split identifier designates a
-     * density configuration split (such as {@code config.hdpi},
-     * {@code config.xxhdpi} or {@code config.xxxhdpi}).
+     * Returns whether the given Play Store split identifier designates a density configuration split.
      *
-     * <p>Only density splits can carry density qualified drawables such as
-     * {@code about_logo.png}. ABI splits ({@code config.arm64_v8a} and
-     * similar) and locale splits ({@code config.en} and similar) never do.
-     *
+     * @apiNote Used by {@link #queryApkInfo(boolean)} to skip ABI splits ({@code config.arm64_v8a} and friends) and locale
+     *          splits ({@code config.en} and friends) when scanning for {@code about_logo.png}, since only density splits
+     *          can carry density qualified drawables.
+     * @implNote This implementation matches by the trailing {@code dpi} suffix because Play Store density splits are always
+     *           named {@code config.hdpi}, {@code config.xxhdpi}, {@code config.xxxhdpi} or similar.
      * @param splitName the split identifier reported by the Play Store
-     * @return {@code true} if the split can carry density qualified
-     *         drawables
+     * @return {@code true} when the split can carry density qualified drawables
      */
     private static boolean isDensityConfigSplit(String splitName) {
         return splitName != null && splitName.endsWith("dpi");
     }
 
     /**
-     * Looks up each {@link #ABOUT_LOGO_PATHS} entry in the base APK and
-     * returns the first match.
+     * Looks up each {@link #ABOUT_LOGO_PATHS} entry in the base APK and returns the first matching entry's bytes.
      *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} before falling back to density splits.
      * @param baseApk the materialised base APK
-     * @return the raw PNG bytes, or {@code null} when the base APK does
-     *         not carry the drawable
+     * @return the raw PNG bytes, or {@code null} when the base APK does not carry the drawable
      * @throws IOException if reading an APK entry fails
      */
     private static byte[] findAboutLogoInBase(ByteArrayApkFile baseApk) throws IOException {
@@ -395,19 +402,15 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Stream scans a split APK for an {@code about_logo.png} entry under
-     * any of the known {@link #ABOUT_LOGO_PATHS} and returns the first
-     * match.
+     * Stream scans a density configuration split for any {@link #ABOUT_LOGO_PATHS} entry and returns the first match.
      *
-     * <p>Uses {@link ZipInputStream} rather than {@link ByteArrayApkFile}
-     * so the caller never has to hold the full split in memory and can
-     * abort the underlying HTTP transfer as soon as the entry is located.
-     *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} when the base APK omits the drawable.
+     * @implNote This implementation uses {@link ZipInputStream} rather than {@link ByteArrayApkFile} so the caller never has
+     *           to materialise the full split in memory and can abort the underlying HTTP transfer as soon as the entry is
+     *           located, simply by closing the stream.
      * @param stream the split's response body stream
-     * @return the raw PNG bytes, or {@code null} when the split does not
-     *         carry any of the candidate paths
-     * @throws IOException if reading the stream or an entry's decompressed
-     *                     bytes fails
+     * @return the raw PNG bytes, or {@code null} when the split does not carry any of the candidate paths
+     * @throws IOException if reading the stream or an entry's decompressed bytes fails
      */
     private static byte[] findAboutLogoInSplit(InputStream stream) throws IOException {
         try (var zip = new ZipInputStream(stream)) {
@@ -425,10 +428,11 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     /**
      * Extracts the raw DER bytes of every certificate that signs the APK.
      *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} to populate {@link #certificates}, which
+     *          {@link #computeRegistrationToken(long)} folds into the HMAC in order.
      * @param apkFile the parsed APK
-     * @return a two dimensional array with one certificate per row in DER
-     *         form
-     * @throws IOException if reading the signers metadata fails
+     * @return a two dimensional array with one certificate per row in DER form
+     * @throws IOException          if reading the signers metadata fails
      * @throws CertificateException if any certificate cannot be parsed
      */
     private static byte[][] getCertificates(ByteArrayApkFile apkFile) throws IOException, CertificateException {
@@ -441,17 +445,19 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Derives the HMAC-SHA1 secret key used to sign registration tokens by
-     * running a manual PBKDF2-HMAC-SHA1 over the concatenation of the
-     * package name and the {@code about_logo.png} bytes.
-     * @param packageName the APK package identifier used as the salt prefix
-     * @param resource the raw {@code about_logo.png} bytes appended to the
-     *                 package name to form the password
-     * @return a {@code SecretKeySpec} wrapping the derived 64 byte key as
-     *         {@code PBKDF2}
-     * @throws IOException if I/O fails (declared by contract, not thrown
-     *                     in practice)
-     * @throws GeneralSecurityException if HMAC-SHA1 cannot be instantiated
+     * Derives the HMAC-SHA1 secret key used to sign registration tokens.
+     *
+     * @apiNote Called by {@link #queryApkInfo(boolean)} once per flavour; the resulting key is stored in
+     *          {@link #secretKey} and reused for every {@link #computeRegistrationToken(long)} call.
+     * @implNote This implementation runs PBKDF2-HMAC-SHA1 manually rather than going through
+     *           {@code SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1")} because the password is binary (raw PNG bytes
+     *           appended to the package name) which the JCA factory rejects; iterations are fixed at {@code 128} and the
+     *           output size at {@code 64} bytes to match the values the Android binary uses.
+     * @param packageName the APK package identifier prepended to the {@code about_logo.png} bytes to form the password
+     * @param resource    the raw {@code about_logo.png} bytes appended to the package name to form the password
+     * @return a {@link SecretKeySpec} wrapping the derived 64 byte key as {@code PBKDF2}
+     * @throws IOException              declared by contract; never thrown in practice
+     * @throws GeneralSecurityException if HMAC-SHA1 cannot be instantiated on the running JDK
      */
     private static SecretKeySpec getSecretKey(String packageName, byte[] resource) throws IOException, GeneralSecurityException {
         var packageBytes = packageName.getBytes(StandardCharsets.UTF_8);
@@ -504,9 +510,10 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns the application version extracted from the APK manifest.
+     * {@inheritDoc}
      *
-     * @return the parsed version
+     * @apiNote The version is read from the APK's {@code AndroidManifest.xml} {@code versionName} attribute, which mirrors
+     *          what Play Store displays.
      */
     @Override
     public ClientAppVersion version() {
@@ -514,9 +521,10 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Returns whether this instance represents the WhatsApp Business APK.
+     * {@inheritDoc}
      *
-     * @return {@code true} for business, {@code false} for consumer
+     * @apiNote Determined by which Play Store package the APK was downloaded from
+     *          ({@link #PERSONAL_PACKAGE} versus {@link #BUSINESS_PACKAGE}).
      */
     @Override
     public boolean business() {
@@ -524,21 +532,13 @@ final class WhatsAppAndroidClientInfo implements WhatsAppMobileClientInfo {
     }
 
     /**
-     * Computes the Android registration token for the given national phone
-     * number.
+     * {@inheritDoc}
      *
-     * <p>Feeds each APK signing certificate, followed by the
-     * {@code classes.dex} MD5 hash and finally the decimal ASCII of the
-     * phone number, into an HMAC-SHA1 keyed by the derived
-     * {@link #secretKey}, then Base64 encodes the result and URL encodes
-     * the Base64. The resulting string is suitable for direct inclusion as
-     * the {@code token} form parameter of the mobile registration requests.
-     *
-     * @param nationalPhoneNumber the phone number in its national form,
-     *                            without the country code
-     * @return the URL encoded Base64 HMAC
-     * @throws InternalError if HMAC-SHA1 is not available, which should not
-     *                       happen on any JDK
+     * @implNote This implementation feeds each APK signing certificate, the {@code classes.dex} MD5 hash, and the decimal
+     *           ASCII of the phone number into an HMAC-SHA1 keyed by the derived {@link #secretKey}, in that order, then
+     *           Base64 encodes the digest and URL encodes the Base64 so callers can drop the result straight into a form
+     *           encoded request body.
+     * @throws InternalError if HMAC-SHA1 is not available on the running JDK
      */
     @Override
     public String computeRegistrationToken(long nationalPhoneNumber) {

@@ -22,6 +22,7 @@ import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageDistributionEnumType;
 import com.github.auties00.cobalt.wam.type.ReachabilityStatus;
 import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
 
 import java.util.Optional;
@@ -104,6 +105,9 @@ public interface E2eMessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 11, type = WamType.ENUM)
     Optional<RevokeType> revokeType();
+
+    @WamProperty(index = 27, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 13, type = WamType.ENUM)
     Optional<TypeOfGroupEnum> typeOfGroup();

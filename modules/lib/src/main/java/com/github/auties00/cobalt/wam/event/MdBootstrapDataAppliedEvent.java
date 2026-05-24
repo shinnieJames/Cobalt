@@ -37,6 +37,9 @@ public interface MdBootstrapDataAppliedEvent extends WamEventSpec {
     @WamProperty(index = 5, type = WamType.ENUM)
     Optional<Collection> collection();
 
+    @WamProperty(index = 26, type = WamType.STRING)
+    Optional<String> gkContext();
+
     @WamProperty(index = 14, type = WamType.INTEGER)
     OptionalInt historySyncChunkOrder();
 

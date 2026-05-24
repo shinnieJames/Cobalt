@@ -12,53 +12,114 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The regular (non-hosted) companion's pair-success reply, carrying
- * the signed device-identity bundle plus the optional key-attestation
- * and gpia material.
+ * The outbound
+ * {@code <iq type="result"><pair-device-sign><device-identity/>[<key_attestation/>][<gpia/>]</pair-device-sign></iq>}
+ * reply emitted by a regular (non-hosted) companion after verifying
+ * a {@link SmaxMdSetRegResponse}.
+ *
+ * @apiNote
+ * Sent by companions that have countersigned the
+ * {@code ADVSignedDeviceIdentity} payload extracted from the inbound
+ * pair-success; the device-identity bytes here are the freshly signed
+ * variant, and {@code key-index} is taken from the inner ADV
+ * {@code keyIndex} field. Hosted-account companions use
+ * {@link SmaxMdSetRegResponseHostedClient} instead, and rejection
+ * flows use {@link SmaxMdSetRegResponseError}.
+ *
+ * @implNote
+ * This implementation folds WA Web's
+ * {@code WASmaxOutMdRegularCompanionSetRegResponseBundleMixin} into
+ * the builder: the outer envelope is pinned to
+ * {@code <iq to="s.whatsapp.net" type="result">} with the original
+ * {@code id} echoed, and the inner {@code <pair-device-sign/>}
+ * carries the device-identity child plus the optional
+ * {@code <key_attestation/>} (with optional {@code key_id} attribute)
+ * and {@code <gpia/>} children when their bytes are present. The
+ * upstream {@code OPTIONAL_CHILD} helper omits absent children
+ * entirely rather than emitting empty placeholders.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutMdSetRegResponseClientResponse")
 @WhatsAppWebModule(moduleName = "WASmaxOutMdRegularCompanionSetRegResponseBundleMixin")
 public final class SmaxMdSetRegResponseClient implements SmaxOperation.Request {
     /**
-     * The id of the inbound IQ being replied to.
+     * The {@code id} of the inbound IQ being replied to.
+     *
+     * @apiNote
+     * Echoed into the outbound {@code <iq id="..."/>} attribute so
+     * the relay can pair request and response.
      */
     private final String iqId;
 
     /**
-     * The {@code key-index} attribute on {@code <device-identity/>}.
+     * The {@code key-index} attribute carried on the outbound
+     * {@code <device-identity/>}.
+     *
+     * @apiNote
+     * Mirrors the ADV {@code keyIndex} field decoded from the inner
+     * {@code ADVSignedDeviceIdentity}; tells the relay which ADV
+     * signing slot is now active for this companion.
      */
     private final int deviceIdentityKeyIndex;
 
     /**
-     * The signed device-identity content bytes.
+     * The signed device-identity bytes carried in
+     * {@code <device-identity/>}.
+     *
+     * @apiNote
+     * The re-encoded {@code ADVSignedDeviceIdentity} produced by the
+     * companion after stripping the throwaway
+     * {@code accountSignatureKey} and signing with the companion's
+     * own identity key.
      */
     private final byte[] deviceIdentity;
 
     /**
-     * The optional key-attestation content bytes
-     * ({@code <key_attestation/>}).
+     * The optional key-attestation bytes carried in
+     * {@code <key_attestation/>}.
+     *
+     * @apiNote
+     * Present for devices that ship hardware-backed key attestation
+     * (Android StrongBox, iOS Secure Enclave); omitted for plain
+     * software-keyed companions.
      */
     private final byte[] keyAttestation;
 
     /**
-     * The optional key-attestation {@code key_id} attribute.
+     * The optional {@code key_id} attribute carried on the
+     * {@code <key_attestation/>} child.
+     *
+     * @apiNote
+     * Echoes the platform-specific attestation key identifier so the
+     * server can rotate trusted keys; only meaningful when
+     * {@link #keyAttestation()} is also present.
      */
     private final String keyAttestationKeyId;
 
     /**
-     * The optional gpia content bytes ({@code <gpia/>}).
+     * The optional Google Play Integrity Attestation (GPIA) bytes
+     * carried in {@code <gpia/>}.
+     *
+     * @apiNote
+     * Present for Android companions that ship Play Integrity tokens;
+     * omitted for other platforms.
      */
     private final byte[] gpia;
 
     /**
-     * Constructs a new regular pair-success reply.
+     * Constructs a regular pair-success reply.
      *
-     * @param iqId                   the IQ id; never {@code null}
-     * @param deviceIdentityKeyIndex the device-identity key-index
+     * @apiNote
+     * Library code typically populates {@code iqId} and
+     * {@code deviceIdentity} from the matching
+     * {@link SmaxMdSetRegResponse}, and supplies attestation material
+     * only when the host platform offers it.
+     *
+     * @param iqId                   the inbound IQ id; never {@code null}
+     * @param deviceIdentityKeyIndex the ADV key-index
      * @param deviceIdentity         the signed device-identity bytes; never {@code null}
      * @param keyAttestation         the optional key-attestation bytes; may be {@code null}
-     * @param keyAttestationKeyId    the optional key_id attribute; may be {@code null}
-     * @param gpia                   the optional gpia bytes; may be {@code null}
+     * @param keyAttestationKeyId    the optional {@code key_id} attribute; may be {@code null}
+     * @param gpia                   the optional GPIA bytes; may be {@code null}
      * @throws NullPointerException if {@code iqId} or {@code deviceIdentity} is {@code null}
      */
     public SmaxMdSetRegResponseClient(String iqId, int deviceIdentityKeyIndex, byte[] deviceIdentity,
@@ -81,9 +142,10 @@ public final class SmaxMdSetRegResponseClient implements SmaxOperation.Request {
     }
 
     /**
-     * Returns the device-identity key-index.
+     * Returns the ADV key-index.
      *
-     * @return the key-index
+     * @return the key-index value emitted on
+     *         {@code <device-identity key-index="..."/>}
      */
     public int deviceIdentityKeyIndex() {
         return deviceIdentityKeyIndex;
@@ -101,25 +163,28 @@ public final class SmaxMdSetRegResponseClient implements SmaxOperation.Request {
     /**
      * Returns the optional key-attestation bytes.
      *
-     * @return an {@link Optional} carrying the bytes
+     * @return an {@link Optional} carrying the bytes, or empty when
+     *         the companion has no hardware-attested key material
      */
     public Optional<byte[]> keyAttestation() {
         return Optional.ofNullable(keyAttestation);
     }
 
     /**
-     * Returns the optional key-attestation key_id.
+     * Returns the optional key-attestation {@code key_id} attribute.
      *
-     * @return an {@link Optional} carrying the value
+     * @return an {@link Optional} carrying the value, or empty when
+     *         absent
      */
     public Optional<String> keyAttestationKeyId() {
         return Optional.ofNullable(keyAttestationKeyId);
     }
 
     /**
-     * Returns the optional gpia bytes.
+     * Returns the optional Google Play Integrity Attestation bytes.
      *
-     * @return an {@link Optional} carrying the bytes
+     * @return an {@link Optional} carrying the bytes, or empty for
+     *         non-Android companions
      */
     public Optional<byte[]> gpia() {
         return Optional.ofNullable(gpia);
@@ -128,7 +193,20 @@ public final class SmaxMdSetRegResponseClient implements SmaxOperation.Request {
     /**
      * Builds the outbound regular pair-success reply stanza.
      *
-     * @return a {@link NodeBuilder} carrying the reply envelope
+     * @apiNote
+     * Returns the unfinished {@link NodeBuilder} so the dispatch path
+     * can stamp the wire-level identifiers before flushing, matching
+     * {@link SmaxOperation.Request#toNode()}.
+     *
+     * @implNote
+     * This implementation produces exactly the four shapes the
+     * upstream {@code OPTIONAL_CHILD} helper produces: device-identity
+     * alone, plus key-attestation only, plus GPIA only, or all three.
+     * The {@code key_id} attribute on {@code <key_attestation/>} is
+     * itself optional and is omitted when {@link #keyAttestationKeyId()}
+     * is empty.
+     *
+     * @return a {@link NodeBuilder} carrying the {@code <iq>} envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutMdSetRegResponseClientResponse",

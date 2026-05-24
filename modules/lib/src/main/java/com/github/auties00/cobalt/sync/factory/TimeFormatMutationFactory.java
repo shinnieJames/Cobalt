@@ -17,12 +17,31 @@ import java.util.Objects;
 /**
  * Builds outgoing time-format sync mutations.
  *
- * <p>The factory is the outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the 12h/24h time-format toggle on the Settings general surface;
+ * one call produces a single {@link SyncPendingMutation} that propagates
+ * the chosen format to every linked device and is consumed on receiving
+ * devices by
  * {@link com.github.auties00.cobalt.sync.handler.TimeFormatHandler}.
+ *
+ * @implNote
+ * This implementation has no direct WA Web counterpart on the
+ * {@code WAWebTimeFormatSync} module, which exposes only the inbound
+ * {@code applyMutations} half; outgoing time-format changes there are
+ * wrapped via the generic
+ * {@code WAWebSyncdActionUtils.buildPendingMutation} pathway shared by
+ * every {@code AccountSyncdActionBase} subclass. Cobalt surfaces the
+ * typed helper directly so the public time-format setter can build a
+ * single mutation without hand-rolling the protobuf wrapping.
  */
 public final class TimeFormatMutationFactory {
     /**
      * Constructs a time-format mutation factory.
+     *
+     * @apiNote
+     * Required by the dependency-injection container before the factory
+     * is wired into the public 24-hour-format setter. The factory keeps
+     * no state, so a single instance is sufficient per client.
      */
     public TimeFormatMutationFactory() {
 
@@ -32,34 +51,43 @@ public final class TimeFormatMutationFactory {
      * Builds a pending {@code time_format} mutation that broadcasts the
      * given 12h/24h preference to every linked device.
      *
-     * <p>WA Web does not expose a dedicated {@code getTimeFormatMutation} on
-     * {@code WAWebTimeFormatSync}; outgoing time-format changes reuse
-     * {@code WAWebSyncdActionUtils.buildPendingMutation} directly. Cobalt
-     * surfaces the typed helper — mirroring sibling handlers — so the public
-     * {@code WhatsAppClient.editTwentyFourHourFormat} setter can build a single
-     * mutation without hand-rolling the protobuf wrapping.
+     * @apiNote
+     * Invoked from the public 24-hour-format setter; receiving devices
+     * call {@code WAWebBackendApi.frontendFireAndForget("setIs24Hour")}
+     * with the carried boolean. The index carries only the action name
+     * because the preference is a singleton per account.
      *
-     * @param timestamp               the mutation timestamp
-     * @param twentyFourHourFormat    {@code true} to enable 24-hour display,
-     *                                {@code false} for 12-hour display
+     * @implNote
+     * This implementation models the
+     * {@code SyncActionValue.timeFormatAction} protobuf shape as used by
+     * {@code WAWebSyncdActionUtils.buildPendingMutation}; the mutation
+     * is routed through the {@code RegularLow} collection alongside the
+     * other account-scoped device settings.
+     *
+     * @param timestamp            the mutation timestamp recorded on
+     *                             both the outer mutation and the inner
+     *                             {@code SyncActionValue}
+     * @param twentyFourHourFormat {@code true} to enable 24-hour
+     *                             display, {@code false} for 12-hour
+     *                             display
      * @return a pending mutation carrying the {@code time_format} action
      * @throws NullPointerException if {@code timestamp} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdActionUtils", exports = "buildPendingMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getTimeFormatMutation(Instant timestamp, boolean twentyFourHourFormat) {
         Objects.requireNonNull(timestamp, "timestamp cannot be null");
-        var action = new TimeFormatActionBuilder() // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation value shape: {timeFormatAction: {isTwentyFourHourFormatEnabled: t}}
+        var action = new TimeFormatActionBuilder()
                 .isTwentyFourHourFormatEnabled(twentyFourHourFormat)
                 .build();
         var value = new SyncActionValueBuilder()
                 .timestamp(timestamp)
                 .timeFormatAction(action)
                 .build();
-        var index = JSON.toJSONString(List.of(TimeFormatAction.ACTION_NAME)); // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: index = JSON.stringify([action]) with indexArgs = []
+        var index = JSON.toJSONString(List.of(TimeFormatAction.ACTION_NAME));
         var pending = new DecryptedMutation.Trusted(
                 index,
                 value,
-                SyncdOperation.SET, // ADAPTED: WAWebSyncdActionUtils.buildPendingMutation: operation: SyncdOperation.SET
+                SyncdOperation.SET,
                 timestamp,
                 TimeFormatAction.ACTION_VERSION
         );

@@ -15,15 +15,28 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxNewslettersGetNewsletterStatusUpdatesRequest}.
+ * Sealed family of inbound reply variants for a
+ * {@link SmaxNewslettersGetNewsletterStatusUpdatesRequest}.
+ *
+ * @apiNote
+ * Pattern-match on the three permitted variants ({@link Success},
+ * {@link ClientError}, {@link ServerError}) when handling a reply from
+ * WA Web's
+ * {@code WAWebNewsletterGetStatusUpdatesJob.fetchNewsletterStatusUpdates};
+ * the job logs and swallows non-success variants and rebuilds the
+ * status maps from {@link Success#statuses()} only.
  */
 public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extends SmaxOperation.Response
         permits SmaxNewslettersGetNewsletterStatusUpdatesResponse.Success, SmaxNewslettersGetNewsletterStatusUpdatesResponse.ClientError, SmaxNewslettersGetNewsletterStatusUpdatesResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxNewslettersGetNewsletterStatusUpdatesResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Dispatches the inbound IQ stanza to the first matching variant
+     * parser.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code sendGetNewsletterStatusUpdatesRPC}
+     * entry-point: try {@link Success}, then {@link ClientError}, then
+     * {@link ServerError} in order.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
@@ -52,13 +65,18 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
     }
 
     /**
-     * The {@code Success} reply variant. The relay returned the
-     * delta-of-status-updates batch.
+     * The variant that carries the delta-of-status-updates batch.
+     *
+     * @apiNote
+     * Project {@link #statuses()} onto the local view-count and
+     * reaction maps; the entries reuse the same
+     * {@link SmaxNewslettersGetNewsletterStatusesResponse.NewsletterStatus}
+     * envelope as the full status fetch.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterStatusUpdatesResponseSuccess")
     final class Success implements SmaxNewslettersGetNewsletterStatusUpdatesResponse {
         /**
-         * The optional newsletter JID echoed by the relay on the
+         * The optional newsletter {@link Jid} echoed on the
          * {@code <statuses>} block.
          */
         private final Jid newsletterJid;
@@ -76,12 +94,17 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
         /**
          * Constructs a new successful reply.
          *
-         * @param newsletterJid the optional echoed JID; may be
+         * @apiNote
+         * Both {@code newsletterJid} and {@code timestamp} are optional
+         * because the relay only echoes them when the corresponding
+         * attributes were present on the wire.
+         *
+         * @param newsletterJid the optional echoed {@link Jid}; may be
          *                      {@code null}
-         * @param timestamp     the optional echoed timestamp; may be
-         *                      {@code null}
+         * @param timestamp     the optional echoed unix-second
+         *                      timestamp; may be {@code null}
          * @param statuses      the status-update entries; never
-         *                      {@code null}
+         *                      {@code null} (empty allowed)
          */
         public Success(Jid newsletterJid,
                        Long timestamp,
@@ -92,21 +115,20 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
         }
 
         /**
-         * Returns the optional newsletter JID echoed by the relay.
+         * Returns the optional echoed newsletter {@link Jid}.
          *
-         * @return an {@link Optional} carrying the JID, or empty when
-         *         omitted
+         * @return an {@link Optional} carrying the {@link Jid}, or
+         *         empty when the relay omitted it
          */
         public Optional<Jid> newsletterJid() {
             return Optional.ofNullable(newsletterJid);
         }
 
         /**
-         * Returns the optional unix-second timestamp echoed by the
-         * relay.
+         * Returns the optional echoed unix-second timestamp.
          *
          * @return an {@link Optional} carrying the timestamp, or empty
-         *         when omitted
+         *         when the relay omitted it
          */
         public Optional<Long> timestamp() {
             return Optional.ofNullable(timestamp);
@@ -115,21 +137,29 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
         /**
          * Returns the status-update entries.
          *
-         * @return an unmodifiable list; never {@code null}
+         * @return an unmodifiable {@link List} of entries; never
+         *         {@code null}
          */
         public List<SmaxNewslettersGetNewsletterStatusesResponse.NewsletterStatus> statuses() {
             return statuses;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the IQ envelope fails
+         * {@link SmaxIqResultResponseMixin} validation, the
+         * {@code <status_updates>} or {@code <statuses>} envelopes are
+         * missing, the {@code t} attribute is negative, or any nested
+         * {@code <status>} fails its own
+         * {@link SmaxNewslettersGetNewsletterStatusesResponse.NewsletterStatus#of(Node)}
+         * parse.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         *         empty on no-match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInNewslettersGetNewsletterStatusUpdatesResponseSuccess",
                 exports = "parseGetNewsletterStatusUpdatesResponseSuccess",
@@ -168,6 +198,13 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
             return Optional.of(new Success(jid, timestamp, entries));
         }
 
+        /**
+         * Compares two replies for value equality on every field.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Success}
+         *         with equal field values
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -182,11 +219,21 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
                     && Objects.equals(this.statuses, that.statuses);
         }
 
+        /**
+         * Returns the hash code derived from every field.
+         *
+         * @return the combined hash of every field
+         */
         @Override
         public int hashCode() {
             return Objects.hash(newsletterJid, timestamp, statuses);
         }
 
+        /**
+         * Returns a debug representation including every field.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterStatusUpdatesResponse.Success[newsletterJid="
@@ -196,27 +243,35 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request as malformed, unauthorised, or referencing a
-     * non-existent newsletter.
+     * The variant carrying a relay-side client-rejection.
+     *
+     * @apiNote
+     * WA Web's status-updates job logs and discards every documented
+     * sub-error rather than propagating, since the poll is best-effort
+     * and re-fires on the next tick.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterStatusUpdatesResponseClientError")
     final class ClientError implements SmaxNewslettersGetNewsletterStatusUpdatesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new client-error reply.
          *
-         * @param errorCode the numeric error code
-         * @param errorText the optional text; may be {@code null}
+         * @apiNote
+         * The text is optional because not every sub-error carries a
+         * human-readable message.
+         *
+         * @param errorCode the numeric error code echoed by the relay
+         * @param errorText the optional human-readable text; may be
+         *                  {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -226,28 +281,31 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text.
          *
          * @return an {@link Optional} carrying the text, or empty when
-         *         omitted
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ClientError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the client-error
          *         schema
@@ -263,6 +321,14 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ClientError}
+         *         with equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -275,11 +341,22 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterStatusUpdatesResponse.ClientError[errorCode="
@@ -288,26 +365,34 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure while processing the request.
+     * The variant carrying a transient relay-side failure.
+     *
+     * @apiNote
+     * WA Web's status-updates job swallows this variant after logging;
+     * the next periodic tick re-fires the same query.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInNewslettersGetNewsletterStatusUpdatesResponseServerError")
     final class ServerError implements SmaxNewslettersGetNewsletterStatusUpdatesResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text. When the relay supplied one.
+         * The optional human-readable error text from the relay.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
          *
-         * @param errorCode the numeric error code
-         * @param errorText the optional text; may be {@code null}
+         * @apiNote
+         * Mirror of {@link ClientError} for relay-side internal
+         * failures; the text is optional.
+         *
+         * @param errorCode the numeric error code echoed by the relay
+         * @param errorText the optional human-readable text; may be
+         *                  {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -317,28 +402,31 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code echoed by the relay
          */
         public int errorCode() {
             return errorCode;
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text.
          *
          * @return an {@link Optional} carrying the text, or empty when
-         *         omitted
+         *         the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link ServerError} from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
-         * @param request the original outbound request
+         * @param request the original outbound stanza
          * @return an {@link Optional} carrying the parsed variant, or
          *         empty when the stanza does not match the server-error
          *         schema
@@ -354,6 +442,14 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares two replies for value equality on both fields.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link ServerError}
+         *         with equal {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -366,11 +462,22 @@ public sealed interface SmaxNewslettersGetNewsletterStatusUpdatesResponse extend
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns the hash code derived from both fields.
+         *
+         * @return the combined hash of {@link #errorCode()} and
+         *         {@link #errorText()}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug representation including both fields.
+         *
+         * @return a record-like rendering of this reply
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterStatusUpdatesResponse.ServerError[errorCode="

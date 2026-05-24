@@ -14,41 +14,43 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps optional {@code <approve>} and
- * {@code <reject>} children inside a
- * {@code <membership_requests_action>} envelope.
+ * The outbound {@code <iq xmlns="w:g2" type="set">} stanza that approves or rejects pending membership-approval
+ * requests on a group.
+ *
+ * @apiNote Drives the {@code WAWebGroupMembershipRequestsActionJob.membershipApprovalRequestAction} flow surfaced from
+ * the admin "Pending requests" UI: WA Web issues this IQ with either the approve list or the reject list populated
+ * (never both), but the wire schema permits both lists to be populated in a single request. At least one of
+ * {@link #participantsToApprove()} / {@link #participantsToReject()} must be non-empty.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsMembershipRequestsActionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQSetRequestMixin")
 public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOperation.Request {
     /**
-     * The group JID hosting the pending requests.
+     * The group {@link Jid} hosting the pending requests; surfaced on the IQ's {@code to} attribute.
      */
     private final Jid groupJid;
 
     /**
-     * The participant JIDs whose pending requests should be
-     * approved. May be empty.
+     * The participant {@link Jid}s whose pending requests should be approved.
      */
     private final List<Jid> participantsToApprove;
 
     /**
-     * The participant JIDs whose pending requests should be
-     * rejected. May be empty.
+     * The participant {@link Jid}s whose pending requests should be rejected.
      */
     private final List<Jid> participantsToReject;
 
     /**
      * Constructs a request.
      *
-     * @param groupJid              the group JID; never {@code null}
-     * @param participantsToApprove the JIDs to approve; never
-     *                              {@code null}, may be empty
-     * @param participantsToReject  the JIDs to reject; never
-     *                              {@code null}, may be empty
-     * @throws NullPointerException     if any argument is
-     *                                  {@code null}
+     * @apiNote Passing both lists empty triggers an {@link IllegalArgumentException}; the relay rejects no-op
+     * requests as a client error.
+     *
+     * @param groupJid              the group {@link Jid}; never {@code null}
+     * @param participantsToApprove the JIDs to approve; never {@code null}, may be empty
+     * @param participantsToReject  the JIDs to reject; never {@code null}, may be empty
+     * @throws NullPointerException     if any argument is {@code null}
      * @throws IllegalArgumentException if both lists are empty
      */
     public SmaxGroupsMembershipRequestsActionRequest(Jid groupJid, List<Jid> participantsToApprove,
@@ -65,9 +67,9 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
     }
 
     /**
-     * Returns the target group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID; never {@code null}
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
@@ -92,10 +94,20 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <membership_requests_action>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <membership_requests_action>
+     *             <approve><participant jid="<jid>"/>...</approve>
+     *             <reject><participant jid="<jid>"/>...</reject>
+     *         </membership_requests_action>
+     *     </iq>
+     * }
+     * where each {@code <approve>}/{@code <reject>} container is emitted only when the matching list is non-empty.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <membership_requests_action/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsMembershipRequestsActionRequest",
@@ -140,6 +152,13 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
                 .content(actionBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsMembershipRequestsActionRequest} with identical
+     *         fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -154,11 +173,21 @@ public final class SmaxGroupsMembershipRequestsActionRequest implements SmaxOper
                 && Objects.equals(this.participantsToReject, that.participantsToReject);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, participantsToApprove, participantsToReject);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsMembershipRequestsActionRequest[groupJid=" + groupJid

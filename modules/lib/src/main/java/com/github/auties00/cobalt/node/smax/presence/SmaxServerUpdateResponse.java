@@ -10,7 +10,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound presence-update variants.
+ * The sealed family of inbound {@code <presence/>} server-pushed
+ * update variants.
+ *
+ * @apiNote
+ * Surfaced by WA Web's
+ * {@code WASmaxPresenceServerUpdateRPC.receiveServerUpdateRPC},
+ * consumed by {@code WAWebHandlePresence} to drive the
+ * {@code WAWebChangeGroupPresenceHandlerAction} and
+ * {@code WAWebChangePresenceHandlerAction} dispatchers; Cobalt
+ * embedders pattern-match on the variant to update their local view
+ * of peer online state and last-seen timestamps.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInPresenceServerUpdateRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInPresencePresenceUpdates")
@@ -20,14 +30,28 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         SmaxServerUpdateResponse.Available {
 
     /**
-     * Tries each {@link SmaxServerUpdateResponse} variant in the WA Web declared
-     * order and returns the first that parses cleanly.
+     * Tries each {@link SmaxServerUpdateResponse} variant in the WA
+     * Web declared order.
      *
-     * @param node the inbound {@code <presence/>} stanza. Never
+     * @apiNote
+     * Models the disjunction in
+     * {@code WASmaxInPresencePresenceUpdates.parsePresenceUpdates}:
+     * {@link GroupAvailable} first, then {@link GroupUnavailable},
+     * then {@link LastSeenWithOtherValue}, then {@link UserUnavailable},
+     * then {@link Available}; embedders pass the inbound stanza and
+     * pattern-match on the returned variant.
+     *
+     * @implNote
+     * This implementation returns {@link Optional#empty()} when no
+     * documented variant matches the stanza shape; WA Web instead
+     * raises an {@code errorMixinDisjunction} so the upstream
+     * {@code WAWebHandlePresence} promise rejects through its catch
+     * block. Cobalt's dispatcher routes the empty Optional through
+     * the configurable error handler instead.
+     *
+     * @param node the inbound {@code <presence/>} stanza; never
      *             {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @return an {@link Optional} carrying the parsed variant
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxPresenceServerUpdateRPC",
@@ -56,8 +80,13 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code GroupAvailable} variant. The relay reports how
-     * many members of a group are currently online.
+     * The variant reporting how many members of a group are currently
+     * online.
+     *
+     * @apiNote
+     * Drives {@code WAWebChangeGroupPresenceHandlerAction} with a
+     * positive count; embedders surface the value in the group's
+     * online-member badge.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceGroupAvailableMixin")
     final class GroupAvailable implements SmaxServerUpdateResponse {
@@ -67,18 +96,24 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         private final Jid from;
 
         /**
-         * The number of currently-online members
-         * ({@code [1, 1024]}).
+         * The number of currently-online members, in {@code [1, 1024]}.
+         *
+         * @apiNote
+         * The {@code 1024} ceiling matches
+         * {@code WASmaxParseUtils.attrIntRange(e, "count", 1, 1024)}.
          */
         private final int count;
 
         /**
          * Constructs a new {@code GroupAvailable} projection.
          *
-         * @param from  the group JID. Never {@code null}
+         * @apiNote
+         * Called by {@link #of(Node)} after the stanza passes the
+         * group-JID and {@code count} range validation.
+         *
+         * @param from  the group JID; never {@code null}
          * @param count the online-member count
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public GroupAvailable(Jid from, int count) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -88,7 +123,12 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the group JID.
          *
-         * @return the group JID. Never {@code null}
+         * @apiNote
+         * Embedders convert this to a chat WID via
+         * {@code WAWebJidToWid.chatJidToChatWid} before driving the
+         * presence handler action, matching the WA Web pipeline.
+         *
+         * @return the group JID; never {@code null}
          */
         public Jid from() {
             return from;
@@ -97,6 +137,10 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the online-member count.
          *
+         * @apiNote
+         * In {@code [1, 1024]}; values outside the range cause
+         * {@link #of(Node)} to reject the stanza.
+         *
          * @return the count
          */
         public int count() {
@@ -104,13 +148,17 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         }
 
         /**
-         * Tries to parse a {@link GroupAvailable} variant from the
-         * given stanza.
+         * Tries to parse a {@link GroupAvailable} variant.
+         *
+         * @apiNote
+         * Mirrors
+         * {@code WASmaxInPresenceGroupAvailableMixin.parseGroupAvailableMixin};
+         * empty when the stanza is not a {@code <presence/>}, when
+         * {@code from} is not a {@code g.us} JID, or when
+         * {@code count} is missing or outside {@code [1, 1024]}.
          *
          * @param node the inbound presence stanza
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code GroupAvailable} schema
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPresenceGroupAvailableMixin",
                 exports = "parseGroupAvailableMixin",
@@ -161,8 +209,13 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code GroupUnavailable} variant. The relay reports the
-     * group has dropped to zero online members.
+     * The variant reporting a group has dropped to zero online
+     * members.
+     *
+     * @apiNote
+     * Drives {@code WAWebChangeGroupPresenceHandlerAction} with
+     * {@code count=0}; embedders clear the group's online-member
+     * badge.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceGroupUnavailableMixin")
     final class GroupUnavailable implements SmaxServerUpdateResponse {
@@ -174,9 +227,12 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Constructs a new {@code GroupUnavailable} projection.
          *
-         * @param from the group JID. Never {@code null}
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @apiNote
+         * Called by {@link #of(Node)} once the stanza is confirmed as
+         * a group-scoped {@code type="unavailable"} presence.
+         *
+         * @param from the group JID; never {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public GroupUnavailable(Jid from) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -185,20 +241,27 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the group JID.
          *
-         * @return the group JID. Never {@code null}
+         * @apiNote
+         * Embedders convert this to a chat WID via
+         * {@code WAWebJidToWid.chatJidToChatWid}.
+         *
+         * @return the group JID; never {@code null}
          */
         public Jid from() {
             return from;
         }
 
         /**
-         * Tries to parse a {@link GroupUnavailable} variant from
-         * the given stanza.
+         * Tries to parse a {@link GroupUnavailable} variant.
+         *
+         * @apiNote
+         * Mirrors
+         * {@code WASmaxInPresenceGroupUnavailableMixin.parseGroupUnavailableMixin};
+         * empty when {@code from} is not a {@code g.us} JID or when
+         * {@code type} is not {@code "unavailable"}.
          *
          * @param node the inbound presence stanza
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code GroupUnavailable} schema
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPresenceGroupUnavailableMixin",
                 exports = "parseGroupUnavailableMixin",
@@ -244,10 +307,16 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code LastSeenWithOtherValue} variant. The relay reports
-     * the peer is offline and the last-seen value is a
-     * privacy-suppressed sentinel ({@code "deny"} / {@code "error"}
-     * / {@code "none"}).
+     * The variant reporting a peer is offline with a
+     * privacy-suppressed last-seen sentinel.
+     *
+     * @apiNote
+     * Surfaces when the peer's privacy settings forbid the
+     * subscriber from seeing a real last-seen timestamp; WA Web's
+     * {@code WAWebHandlePresence} maps {@code "deny"} to the
+     * {@code deny} attribute on the dispatched presence change and
+     * derives the {@code t} field from the current time via
+     * {@code WATimeUtils.unixTime()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceLastSeenWithOtherValueMixin")
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceEnums")
@@ -258,19 +327,26 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         private final Jid from;
 
         /**
-         * The optional sentinel from the
-         * {@code ENUM_DENY_ERROR_NONE} set.
+         * The optional sentinel value.
+         *
+         * @apiNote
+         * One of {@code "deny"} (privacy block), {@code "error"}
+         * (relay-side fault), or {@code "none"} (no last-seen
+         * recorded) per
+         * {@code WASmaxInPresenceEnums.ENUM_DENY_ERROR_NONE}.
          */
         private final String last;
 
         /**
-         * Constructs a new {@code LastSeenWithOtherValue}
-         * projection.
+         * Constructs a new {@code LastSeenWithOtherValue} projection.
          *
-         * @param from the user JID. Never {@code null}
-         * @param last the optional sentinel. May be {@code null}
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @apiNote
+         * Called by {@link #of(Node)} after the stanza passes the
+         * user-JID and sentinel-set validation.
+         *
+         * @param from the user JID; never {@code null}
+         * @param last the optional sentinel; may be {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public LastSeenWithOtherValue(Jid from, String last) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -280,7 +356,7 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the user JID.
          *
-         * @return the user JID. Never {@code null}
+         * @return the user JID; never {@code null}
          */
         public Jid from() {
             return from;
@@ -289,22 +365,30 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the optional sentinel value.
          *
+         * @apiNote
+         * Empty when the relay omitted the {@code last} attribute;
+         * otherwise one of {@code "deny"}, {@code "error"},
+         * {@code "none"}.
+         *
          * @return an {@link Optional} carrying the sentinel
-         *         ({@code "deny"} / {@code "error"} / {@code "none"}),
-         *         or empty when the relay omitted it
          */
         public Optional<String> last() {
             return Optional.ofNullable(last);
         }
 
         /**
-         * Tries to parse a {@link LastSeenWithOtherValue} variant
-         * from the given stanza.
+         * Tries to parse a {@link LastSeenWithOtherValue} variant.
+         *
+         * @apiNote
+         * Mirrors
+         * {@code WASmaxInPresenceLastSeenWithOtherValueMixin.parseLastSeenWithOtherValueMixin};
+         * empty when {@code from} is not a user JID (either
+         * {@code s.whatsapp.net} or {@code c.us}), when {@code type}
+         * is not {@code "unavailable"}, or when {@code last} carries
+         * a value outside the {@code deny/error/none} enum.
          *
          * @param node the inbound presence stanza
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code LastSeenWithOtherValue} schema
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPresenceLastSeenWithOtherValueMixin",
                 exports = "parseLastSeenWithOtherValueMixin",
@@ -357,9 +441,14 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code UserUnavailable} variant. The relay reports the
-     * peer is offline with a free-form {@code last} string (a
-     * Unix-timestamp-as-text. The actual last-seen moment).
+     * The variant reporting a peer is offline with a free-form
+     * last-seen timestamp.
+     *
+     * @apiNote
+     * Surfaces when the peer's privacy settings permit a real
+     * last-seen; WA Web's {@code WAWebHandlePresence} runs the
+     * value through {@code WATimeUtils.castToUnixTime(Number(last))}
+     * before stamping it on the dispatched presence change.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceUserUnavailableMixin")
     final class UserUnavailable implements SmaxServerUpdateResponse {
@@ -369,19 +458,22 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         private final Jid from;
 
         /**
-         * The optional free-form {@code last} attribute (the
-         * Unix-timestamp-as-text last-seen moment).
+         * The optional free-form {@code last} attribute, a Unix
+         * timestamp as text.
          */
         private final String last;
 
         /**
          * Constructs a new {@code UserUnavailable} projection.
          *
-         * @param from the user JID. Never {@code null}
-         * @param last the optional free-form {@code last}. May be
+         * @apiNote
+         * Called by {@link #of(Node)} after the stanza passes the
+         * user-JID and {@code type="unavailable"} validation.
+         *
+         * @param from the user JID; never {@code null}
+         * @param last the optional {@code last} attribute; may be
          *             {@code null}
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public UserUnavailable(Jid from, String last) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -391,30 +483,37 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the user JID.
          *
-         * @return the user JID. Never {@code null}
+         * @return the user JID; never {@code null}
          */
         public Jid from() {
             return from;
         }
 
         /**
-         * Returns the optional free-form {@code last} value.
+         * Returns the optional {@code last} value.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when the relay omitted it
+         * @apiNote
+         * Empty when the relay omitted the attribute; otherwise a
+         * Unix-timestamp-as-text the embedder converts to an
+         * {@code Instant}.
+         *
+         * @return an {@link Optional} carrying the value
          */
         public Optional<String> last() {
             return Optional.ofNullable(last);
         }
 
         /**
-         * Tries to parse a {@link UserUnavailable} variant from the
-         * given stanza.
+         * Tries to parse a {@link UserUnavailable} variant.
+         *
+         * @apiNote
+         * Mirrors
+         * {@code WASmaxInPresenceUserUnavailableMixin.parseUserUnavailableMixin};
+         * empty when {@code from} is not a user JID or when
+         * {@code type} is not {@code "unavailable"}.
          *
          * @param node the inbound presence stanza
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code UserUnavailable} schema
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPresenceUserUnavailableMixin",
                 exports = "parseUserUnavailableMixin",
@@ -464,15 +563,18 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Available} variant. The relay reports the peer
-     * is online (group or user JID), with optional {@code type}
-     * {@code "available"} literal and optional free-form
-     * {@code last}.
+     * The variant reporting a peer is online.
+     *
+     * @apiNote
+     * Drives {@code WAWebChangePresenceHandlerAction} with
+     * {@code type="available"}; the optional {@code last} attribute,
+     * when present, carries the timestamp of the last activity that
+     * triggered the presence push.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInPresenceAvailableMixin")
     final class Available implements SmaxServerUpdateResponse {
         /**
-         * The peer JID. Either a group or a user.
+         * The peer JID; either a group or a user.
          */
         private final Jid from;
 
@@ -489,13 +591,16 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Constructs a new {@code Available} projection.
          *
-         * @param from the peer JID. Never {@code null}
-         * @param type the optional literal {@code "available"}
-         *             type tag. May be {@code null}
-         * @param last the optional free-form {@code last}. May be
+         * @apiNote
+         * Called by {@link #of(Node)} once the stanza passes the
+         * peer-JID and optional {@code type="available"} validation.
+         *
+         * @param from the peer JID; never {@code null}
+         * @param type the optional literal {@code "available"}; may
+         *             be {@code null}
+         * @param last the optional {@code last} attribute; may be
          *             {@code null}
-         * @throws NullPointerException if {@code from} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code from} is {@code null}
          */
         public Available(Jid from, String type, String last) {
             this.from = Objects.requireNonNull(from, "from cannot be null");
@@ -506,7 +611,7 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the peer JID.
          *
-         * @return the JID. Never {@code null}
+         * @return the JID; never {@code null}
          */
         public Jid from() {
             return from;
@@ -515,31 +620,41 @@ public sealed interface SmaxServerUpdateResponse extends SmaxOperation.Response
         /**
          * Returns the optional {@code type} attribute.
          *
-         * @return an {@link Optional} carrying the type, or empty
-         *         when the relay omitted it
+         * @apiNote
+         * Empty when the relay omitted it; otherwise the literal
+         * {@code "available"}.
+         *
+         * @return an {@link Optional} carrying the type
          */
         public Optional<String> type() {
             return Optional.ofNullable(type);
         }
 
         /**
-         * Returns the optional free-form {@code last} value.
+         * Returns the optional {@code last} value.
          *
-         * @return an {@link Optional} carrying the value, or empty
-         *         when the relay omitted it
+         * @apiNote
+         * Empty when the relay omitted the attribute; otherwise a
+         * Unix-timestamp-as-text.
+         *
+         * @return an {@link Optional} carrying the value
          */
         public Optional<String> last() {
             return Optional.ofNullable(last);
         }
 
         /**
-         * Tries to parse an {@link Available} variant from the
-         * given stanza.
+         * Tries to parse an {@link Available} variant.
+         *
+         * @apiNote
+         * Mirrors
+         * {@code WASmaxInPresenceAvailableMixin.parseAvailableMixin};
+         * empty when {@code from} is not a peer JID (group or user)
+         * or when {@code type} carries a non-{@code "available"}
+         * literal.
          *
          * @param node the inbound presence stanza
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         {@code Available} schema
+         * @return an {@link Optional} carrying the parsed variant
          */
         @WhatsAppWebExport(moduleName = "WASmaxInPresenceAvailableMixin",
                 exports = "parseAvailableMixin",

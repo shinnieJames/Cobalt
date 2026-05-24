@@ -2,7 +2,6 @@
 package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.*;
-import com.github.auties00.cobalt.media.MediaConnection;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
@@ -42,7 +41,11 @@ import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
+import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
+import com.github.auties00.cobalt.model.setting.AppTheme;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
@@ -54,7 +57,8 @@ import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartn
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
+import com.github.auties00.cobalt.client.WhatsAppProxy;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.wam.model.WamChannel;
 import com.github.auties00.libsignal.SignalProtocolAddress;
@@ -73,38 +77,35 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Public interface representing the persistent and transient state of a
- * WhatsApp client session. Conceptually this is everything that the official
- * WhatsApp app keeps on disk plus everything the app keeps in memory while
- * the user is logged in.
+ * The persistent and transient state of a WhatsApp client session.
  *
- * <p>For readers not familiar with WhatsApp internals, the data exposed here
- * roughly maps to the following user-visible features:
+ * <p>Conceptually this is everything that the official WhatsApp app keeps
+ * on disk plus everything the app keeps in memory while the user is logged
+ * in. The data exposed here maps to the following user-visible WhatsApp
+ * features:
  *
  * <ul>
- *   <li><b>Identity and pairing.</b> The phone number, the WhatsApp JID
- *       (for example {@code 1234567890@s.whatsapp.net}), the LID (the
- *       hidden-phone-number variant introduced for privacy), the device
+ *   <li><b>Identity and pairing.</b> The phone number, the WhatsApp
+ *       {@link Jid} ({@code 1234567890@s.whatsapp.net}), the LID
+ *       ({@code <id>@lid}, the hidden-phone-number variant), the device
  *       record shown under <i>Linked devices</i>, the Noise/Signal key
  *       material and the ADV (Auth Device V2) signed identity that makes
  *       this client a recognised companion of the primary phone.
- *   <li><b>Profile.</b> Display name, profile picture, about/status text,
- *       and, for WhatsApp Business accounts, the verified business name,
- *       address, location, description, website, email and category shown
- *       on the business profile card.
- *   <li><b>Address book.</b> Contacts (your saved or synced WhatsApp
- *       contacts), out-contacts (contacts you have invited but who have not
- *       yet joined), the bidirectional phone-number/LID mapping table, and
- *       the block list.
+ *   <li><b>Profile.</b> Display name, profile picture, about/status text;
+ *       for WhatsApp Business accounts the verified business name,
+ *       address, location, description, websites, email and categories
+ *       shown on the business profile card.
+ *   <li><b>Address book.</b> {@link Contact}s, {@link OutContact}s
+ *       (invitees who have not yet joined), the bidirectional
+ *       phone-number/LID mapping table and the block list.
  *   <li><b>Conversations.</b> Chats (one-to-one, groups, communities,
- *       broadcast lists), newsletters (Cobalt's name, mirroring WA Web,
- *       for what end users see as <b>Channels</b> in the Updates tab),
- *       status updates (the 24-hour disappearing posts shown in the
- *       Status tab), call history and group/community metadata.
- *   <li><b>Settings.</b> Privacy settings (last-seen, profile photo, about,
- *       groups), chat lock, archived-chat behaviour, link-preview and
- *       call-relay toggles, time-format preference, default disappearing
- *       message timer, locale and the favourite-chats list.
+ *       broadcast lists), newsletters (WA Web's name for what end users
+ *       see as <b>Channels</b> in the Updates tab), status updates,
+ *       call history and group/community metadata.
+ *   <li><b>Settings.</b> Privacy settings (last-seen, profile photo,
+ *       about, groups), chat lock, archived-chat behaviour, link-preview
+ *       and call-relay toggles, time-format preference, default
+ *       disappearing message timer, locale and the favourite-chats list.
  *   <li><b>Stickers, labels and quick replies.</b> Recent and favourite
  *       stickers, business labels and quick-reply shortcuts.
  *   <li><b>Sync state.</b> The Web/Desktop history-sync policy, the syncd
@@ -114,8 +115,8 @@ import java.util.*;
  *       server.
  *   <li><b>Signal protocol storage.</b> Identity keys, sessions, pre-keys,
  *       signed pre-keys, sender keys, the X3DH base-key dedup table and
- *       sender-key distribution tracking — all the cryptographic state
- *       that makes WhatsApp's end-to-end encryption work.
+ *       sender-key distribution tracking; the cryptographic state behind
+ *       WhatsApp's end-to-end encryption.
  *   <li><b>Business and payments.</b> Subscription status, marketing
  *       broadcast lists, broadcast campaigns and insights, custom payment
  *       methods, merchant-payment partner state and orphan payment
@@ -127,13 +128,19 @@ import java.util.*;
  * collections and a key-value preferences store. Cobalt collapses that
  * fan-out into this single abstraction.
  *
- * <p>Implementations control how and where session data is stored, ranging
- * from fully in-memory with protobuf file persistence to tiered approaches
- * that trade memory for lazy decoding.
+ * @apiNote
+ * Embedders never construct this directly. Instances are obtained
+ * exclusively through {@link WhatsAppStoreFactory}, which is responsible
+ * for choosing the backing implementation (in-memory with protobuf file
+ * persistence, tiered, etc.).
  *
- * <p>Instances are obtained exclusively through {@link WhatsAppStoreFactory}.
+ * @implSpec
+ * Implementations control how and where session data is stored.
+ * Read methods must return defensive (unmodifiable) views of any internal
+ * collection. Setters return {@code this} so they can be chained.
  *
  * @see SignalProtocolStore
+ * @see WhatsAppStoreFactory
  */
 @WhatsAppWebModule(moduleName = "WAWebModelStorageInitialize")
 @WhatsAppWebModule(moduleName = "WAWebCollections")
@@ -153,18 +160,27 @@ import java.util.*;
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public interface WhatsAppStore extends SignalProtocolStore {
     /**
-     * Blocks until all asynchronous initialization operations for this
-     * store are complete (e.g., background deserialization of chats and
-     * newsletters).
+     * Blocks until all asynchronous initialization operations for this store complete.
      *
-     * <p>Implementations that perform all initialization synchronously
-     * may provide an empty implementation of this method.
-     * @throws IOException if the store cannot be deserialized completely and/or correctly
+     * @apiNote
+     * Callers should invoke this after construction and before relying on
+     * any read accessor that may still be hydrating from disk (typically
+     * the chat, message and newsletter caches).
+     *
+     * @implSpec
+     * Implementations that perform all initialization synchronously may
+     * leave the method body empty.
+     *
+     * @throws IOException if the store cannot be deserialized completely or correctly
      */
     void await() throws IOException;
 
     /**
      * Flushes all pending changes to the underlying storage.
+     *
+     * @apiNote
+     * Callers use this to force a checkpoint at known-safe moments;
+     * implementations are also free to autosave on their own schedule.
      *
      * @return this store instance for method chaining
      * @throws IOException if the session cannot be saved
@@ -172,8 +188,13 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore save() throws IOException;
 
     /**
-     * Permanently deletes this session from storage. After this method
-     * returns, the session data cannot be recovered.
+     * Permanently deletes this session from storage.
+     *
+     * @apiNote
+     * After this method returns, the session data cannot be recovered.
+     * Embedders call this when the user signs out and wants their data
+     * wiped, or when handling a logout / banned event surfaced by
+     * {@link WhatsAppClientListener}.
      *
      * @throws IOException if the session cannot be deleted
      */
@@ -182,26 +203,43 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the unique identifier for this store instance.
      *
-     * @return the UUID, never {@code null}
+     * @apiNote
+     * The UUID is the embedder-facing handle used to look the store up
+     * through {@link WhatsAppStoreFactory}; it has no WhatsApp meaning
+     * and is independent of the account's {@link Jid} or phone number.
+     *
+     * @return the {@link UUID}, never {@code null}
      */
     UUID uuid();
 
     /**
-     * Returns the client type for this session.
+     * Returns the {@link WhatsAppClientType} for this session.
+     *
+     * @apiNote
+     * The client type selects which WhatsApp surface this session
+     * impersonates (Web companion, mobile primary, etc.) and affects
+     * which login and pairing flows the {@link WhatsAppClient} runs.
      *
      * @return the client type, never {@code null}
      */
     WhatsAppClientType clientType();
 
     /**
-     * Returns the Unix timestamp (seconds) when this store was created.
+     * Returns the instant at which this store was first created.
      *
-     * @return the initialization timestamp in seconds since epoch, never {@code null}
+     * @apiNote
+     * Used by the client to age-out fields whose validity is bounded by
+     * the session lifetime (for example pre-key bundles and routing
+     * tokens). Stored as Unix seconds.
+     *
+     * @return the initialization timestamp, never {@code null}
      */
     Instant initializationTimeStamp();
 
     /**
      * Returns the Signal-protocol registration id assigned to this device.
+     *
+     * @apiNote
      * This is the {@code registrationId} field in every Signal pre-key
      * bundle this client publishes; servers and peers use it to tell
      * apart different installs of the same WhatsApp account.
@@ -211,79 +249,96 @@ public interface WhatsAppStore extends SignalProtocolStore {
     int registrationId();
 
     /**
-     * Returns the long-term Noise key pair this client uses to negotiate
-     * the encrypted transport with the WhatsApp servers. The Noise XX
-     * handshake at the start of every WebSocket connection authenticates
-     * this client by proving possession of the corresponding private key.
+     * Returns the long-term Noise key pair used to negotiate the encrypted transport with the WhatsApp servers.
+     *
+     * @apiNote
+     * The Noise XX handshake at the start of every WebSocket connection
+     * authenticates this client by proving possession of the
+     * corresponding private key. Embedders rarely access this directly;
+     * the {@link WhatsAppClient} consumes it during connect.
      *
      * @return the noise key pair, never {@code null}
      */
     SignalIdentityKeyPair noiseKeyPair();
 
     /**
-     * Returns the long-term Signal identity key pair used for end-to-end
-     * encryption with other WhatsApp users. This key pair is what
-     * underlies the "Verify security code" QR/number pair that two users
-     * can compare in the contact info screen.
+     * Returns the long-term Signal identity key pair used for end-to-end encryption with other WhatsApp users.
+     *
+     * @apiNote
+     * This key pair underlies the "Verify security code" QR/number pair
+     * that two users can compare in the contact info screen; rotating
+     * it invalidates every active Signal session.
      *
      * @return the identity key pair, never {@code null}
      */
     SignalIdentityKeyPair identityKeyPair();
 
     /**
-     * Returns the currently active signed pre-key. WhatsApp rotates this
-     * pair periodically; it is the pair every peer uses to bootstrap a
-     * new Signal session with this device when no one-time pre-key is
-     * available.
+     * Returns the currently active signed pre-key.
+     *
+     * @apiNote
+     * WhatsApp rotates this pair periodically; it is the pair every peer
+     * uses to bootstrap a new Signal session with this device when no
+     * one-time pre-key is available.
      *
      * @return the signed key pair, never {@code null}
      */
     SignalSignedKeyPair signedKeyPair();
 
     /**
-     * Returns the FDID (Facebook Device Id) used by mobile WhatsApp during
-     * registration. This is the cross-Meta device fingerprint that the
-     * WhatsApp/Facebook/Instagram apps share to identify the same physical
-     * device across the family of apps; the WhatsApp registration server
-     * checks it for anti-abuse signals.
+     * Returns the FDID (Facebook Device Id) used by mobile WhatsApp during registration.
+     *
+     * @apiNote
+     * The FDID is the cross-Meta device fingerprint that the
+     * WhatsApp/Facebook/Instagram apps share to identify the same
+     * physical device across the family of apps; the WhatsApp
+     * registration server checks it for anti-abuse signals.
      *
      * @return the FDID, never {@code null}
      */
     UUID fdid();
 
     /**
-     * Returns the random per-installation device id sent to the WhatsApp
-     * registration server. Mobile WhatsApp generates this once at first
-     * launch and persists it; it disambiguates re-registrations of the
-     * same phone number.
+     * Returns the random per-installation device id sent to the WhatsApp registration server.
+     *
+     * @apiNote
+     * Mobile WhatsApp generates this once at first launch and persists
+     * it; it disambiguates re-registrations of the same phone number.
      *
      * @return the device id bytes, never {@code null}
      */
     byte[] deviceId();
 
     /**
-     * Returns the OS-level advertising identifier (Android AAID / iOS
-     * IDFA) reported to WhatsApp's analytics for opt-in conversion
-     * attribution (notably click-to-WhatsApp ads).
+     * Returns the OS-level advertising identifier reported to WhatsApp's analytics.
+     *
+     * @apiNote
+     * On mobile this is the Android AAID or iOS IDFA, sent for opt-in
+     * conversion attribution (notably click-to-WhatsApp ads).
      *
      * @return the advertising id, never {@code null}
      */
     UUID advertisingId();
 
     /**
-     * Returns the per-installation identity id sent during the
-     * registration handshake. Used together with the noise and Signal
-     * identity key pairs to bind this client install to its phone-number
-     * registration record.
+     * Returns the per-installation identity id sent during the registration handshake.
+     *
+     * @apiNote
+     * Used together with the {@link #noiseKeyPair()} and
+     * {@link #identityKeyPair()} to bind this client install to its
+     * phone-number registration record.
      *
      * @return the identity id bytes, never {@code null}
      */
     byte[] identityId();
 
     /**
-     * Returns the backup/recovery token for mobile WhatsApp. This token is
-     * what powers the "transfer your account" / chat backup restore flow
-     * by binding the encrypted backup blob to the new install.
+     * Returns the backup/recovery token for mobile WhatsApp.
+     *
+     * @apiNote
+     * This token powers the "transfer your account" and chat backup
+     * restore flows by binding the encrypted backup blob to the new
+     * install.
      *
      * @return the backup token bytes, never {@code null}
      */
@@ -292,32 +347,45 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the phone number associated with this WhatsApp account.
      *
-     * <p>The phone number is in international format without the {@code +} prefix
-     * (e.g., {@code 1234567890} for +1-234-567-890). It may not be present during
-     * initial Web client setup before QR code authentication completes.
+     * @apiNote
+     * The phone number is in international format without the {@code +}
+     * prefix; for example {@code 1234567890} for +1-234-567-890. It may
+     * not be present during initial Web client setup before QR-code
+     * authentication completes.
      *
-     * @return an {@code OptionalLong} containing the phone number, or an empty
-     *         {@code OptionalLong} if not yet set
+     * @return an {@link OptionalLong} containing the phone number, or
+     *         empty if not yet set
      */
     OptionalLong phoneNumber();
 
     /**
      * Sets the phone number for this account.
      *
-     * @param phoneNumber the phone number in international format, may be {@code null}
+     * @apiNote
+     * Embedders rarely set this directly; the pairing and login flows
+     * driven by {@link WhatsAppClient} populate it.
+     *
+     * @param phoneNumber the phone number in international format, or
+     *                    {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setPhoneNumber(Long phoneNumber);
 
     /**
-     * Returns the device information identifying this client.
+     * Returns the {@link WhatsAppDevice} identifying this client.
+     *
+     * @apiNote
+     * The device record carries the user-agent fields, manufacturer,
+     * model and OS version that WhatsApp shows under <i>Linked
+     * devices</i> for companions; the primary phone uses its real
+     * hardware identifiers.
      *
      * @return the device info, never {@code null}
      */
     WhatsAppDevice device();
 
     /**
-     * Sets the device information.
+     * Sets the {@link WhatsAppDevice} record for this client.
      *
      * @param device the device info, must not be {@code null}
      * @return this store instance for method chaining
@@ -325,14 +393,19 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setDevice(WhatsAppDevice device);
 
     /**
-     * Returns the release channel for this connection.
+     * Returns the {@link ClientReleaseChannel} this client advertises during the handshake.
+     *
+     * @apiNote
+     * Release channel selects which build cohort (release, beta,
+     * alpha, debug) the server treats this client as; it gates some
+     * feature flags and the WAM debug surfaces.
      *
      * @return the release channel, never {@code null}
      */
     ClientReleaseChannel releaseChannel();
 
     /**
-     * Sets the release channel.
+     * Sets the {@link ClientReleaseChannel}.
      *
      * @param releaseChannel the release channel, must not be {@code null}
      * @return this store instance for method chaining
@@ -340,7 +413,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setReleaseChannel(ClientReleaseChannel releaseChannel);
 
     /**
-     * Returns whether this account appears online to other users.
+     * Returns whether this account currently appears online to other users.
+     *
+     * @apiNote
+     * Drives the presence broadcast emitted from this session;
+     * appearing online affects last-seen visibility for peers
+     * regardless of their own privacy settings.
      *
      * @return {@code true} if online, {@code false} otherwise
      */
@@ -355,16 +433,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setOnline(boolean online);
 
     /**
-     * Returns the locale/language code for this account.
+     * Returns the locale code for this account.
      *
-     * @return an {@code Optional} containing the locale, or empty if not set
+     * @apiNote
+     * Sent in the user-agent and used by the server to localise system
+     * messages, the help-centre URL and templated payment / business
+     * notifications. Format is {@code "language_COUNTRY"} for example
+     * {@code "en_US"}.
+     *
+     * @return an {@link Optional} containing the locale, or empty if not set
      */
     Optional<String> locale();
 
     /**
      * Sets the locale code.
      *
-     * @param locale the locale in format "language_COUNTRY", may be {@code null}
+     * @param locale the locale in {@code "language_COUNTRY"} format, or
+     *               {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setLocale(String locale);
@@ -372,106 +457,132 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the display name shown to other WhatsApp users.
      *
-     * @return the name, defaults to "User" if not set
+     * @apiNote
+     * This is the name peers see in the chat list and contact info
+     * card. Distinct from {@link #verifiedName()} which is shown only
+     * for verified business accounts.
+     *
+     * @return the name, defaults to {@code "User"} if not set
      */
     String name();
 
     /**
      * Sets the display name.
      *
-     * @param name the display name, may be {@code null}
+     * @param name the display name, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setName(String name);
 
     /**
-     * Returns the verified business name for verified business accounts.
+     * Returns the verified business name for verified WhatsApp Business accounts.
      *
-     * @return an {@code Optional} containing the verified name, or empty for
-     *         non-business accounts
+     * @apiNote
+     * Verified business names are issued through WhatsApp's business
+     * verification programme; they appear with a green checkmark and
+     * are surfaced regardless of whether the user has saved the
+     * business as a contact.
+     *
+     * @return an {@link Optional} containing the verified name, or
+     *         empty for non-verified business accounts
      */
     Optional<String> verifiedName();
 
     /**
      * Sets the verified business name.
      *
-     * @param verifiedName the verified name, may be {@code null}
+     * @param verifiedName the verified name, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setVerifiedName(String verifiedName);
 
     /**
-     * Returns the URL of this account's profile picture.
+     * Returns the {@link URI} of this account's profile picture.
      *
-     * @return an {@code Optional} containing the profile picture URI, or empty
-     *         if not set
+     * @apiNote
+     * Points at the CDN-hosted full-size avatar; thumbnails are fetched
+     * via a separate {@code iq:profile-picture} round-trip.
+     *
+     * @return an {@link Optional} containing the profile picture URI,
+     *         or empty if not set
      */
     Optional<URI> profilePicture();
 
     /**
-     * Sets the profile picture URI.
+     * Sets the profile picture {@link URI}.
      *
-     * @param profilePicture the profile picture URI, may be {@code null}
+     * @param profilePicture the profile picture URI, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setProfilePicture(URI profilePicture);
 
     /**
-     * Returns the authenticated user's own text status (the "about" line
-     * shown on their profile, optionally with an emoji and an ephemeral
-     * expiration). This is the self-account counterpart of
+     * Returns the authenticated user's own text status.
+     *
+     * @apiNote
+     * This is the "about" line shown on the user's own profile
+     * (optionally with an emoji and an ephemeral expiration). It is the
+     * self-account counterpart of
      * {@link #findContactTextStatus(JidProvider)} for other contacts.
      *
-     * @return an {@code Optional} containing the self text status, or empty
-     *         if not set
+     * @return an {@link Optional} containing the self text status, or
+     *         empty if not set
      */
     Optional<ContactTextStatus> selfTextStatus();
 
     /**
      * Sets the authenticated user's own text status.
      *
-     * @param selfTextStatus the new text status, may be {@code null}
+     * @param selfTextStatus the new text status, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setSelfTextStatus(ContactTextStatus selfTextStatus);
 
     /**
-     * Returns the WhatsApp JID that uniquely identifies this user. A user
-     * JID is the international phone number plus
-     * {@code @s.whatsapp.net}, with a device suffix appended on
-     * companion-device traffic ({@code phoneNumber:deviceId@s.whatsapp.net}).
-     * It is the address every other WhatsApp client uses to send messages
-     * to this account.
+     * Returns the {@link Jid} that uniquely identifies this user.
      *
-     * @return an {@code Optional} containing the JID, or empty before
+     * @apiNote
+     * A user JID is the international phone number plus
+     * {@code @s.whatsapp.net}, with a device suffix on companion-device
+     * traffic. It is the address every other WhatsApp client uses to
+     * send messages to this account.
+     * {@snippet :
+     *     // 1234567890@s.whatsapp.net           (primary)
+     *     // 1234567890:5@s.whatsapp.net         (companion device 5)
+     *     var ownJid = store.jid().orElseThrow();
+     * }
+     *
+     * @return an {@link Optional} containing the JID, or empty before
      *         authentication completes
      */
     Optional<Jid> jid();
 
     /**
-     * Sets the WhatsApp JID for this account.
+     * Sets the WhatsApp {@link Jid} for this account.
      *
-     * @param jid the JID, may be {@code null}
+     * @param jid the JID, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setJid(Jid jid);
 
     /**
-     * Returns the LID (Local Identifier) for this user. WhatsApp issues
-     * each account a phone-number-free shadow id of the form
-     * {@code <opaqueId>@lid}; this id is used inside groups, communities
-     * and Channels so participants do not see each other's real phone
-     * numbers. A bidirectional mapping between the JID and the LID is
-     * maintained server-side.
+     * Returns the LID (Local Identifier) for this user.
      *
-     * @return an {@code Optional} containing the LID, or empty if not set
+     * @apiNote
+     * WhatsApp issues each account a phone-number-free shadow id of
+     * the form {@code <opaqueId>@lid}; this id is used inside groups,
+     * communities and Channels so participants do not see each other's
+     * real phone numbers. A bidirectional mapping between the JID and
+     * the LID is maintained server-side.
+     *
+     * @return an {@link Optional} containing the LID, or empty if not set
      */
     Optional<Jid> lid();
 
     /**
-     * Sets the user's LID.
+     * Sets the user's LID {@link Jid}.
      *
-     * @param lid the LID, may be {@code null}
+     * @param lid the LID, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setLid(Jid lid);
@@ -479,7 +590,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the physical address of the business.
      *
-     * @return an {@code Optional} containing the address, or empty for
+     * @apiNote
+     * Shown on the business-profile card in the WhatsApp app. Empty
+     * for non-business accounts.
+     *
+     * @return an {@link Optional} containing the address, or empty for
      *         non-business accounts
      */
     Optional<String> businessAddress();
@@ -487,7 +602,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the business address.
      *
-     * @param businessAddress the business address, may be {@code null}
+     * @param businessAddress the business address, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessAddress(String businessAddress);
@@ -495,15 +610,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the geographic longitude of the business location.
      *
-     * @return an {@code OptionalDouble} containing the longitude, or empty for
-     *         non-business accounts
+     * @apiNote
+     * Pairs with {@link #businessLatitude()} to drive the map widget
+     * on the business-profile card.
+     *
+     * @return an {@link OptionalDouble} containing the longitude, or
+     *         empty for non-business accounts
      */
     OptionalDouble businessLongitude();
 
     /**
      * Sets the business longitude.
      *
-     * @param businessLongitude the longitude (-180.0 to 180.0), may be {@code null}
+     * @param businessLongitude the longitude (-180.0 to 180.0), or
+     *                          {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessLongitude(Double businessLongitude);
@@ -511,31 +631,36 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the geographic latitude of the business location.
      *
-     * @return an {@code OptionalDouble} containing the latitude, or empty for
-     *         non-business accounts
+     * @apiNote
+     * Pairs with {@link #businessLongitude()} to drive the map widget
+     * on the business-profile card.
+     *
+     * @return an {@link OptionalDouble} containing the latitude, or
+     *         empty for non-business accounts
      */
     OptionalDouble businessLatitude();
 
     /**
      * Sets the business latitude.
      *
-     * @param businessLatitude the latitude (-90.0 to 90.0), may be {@code null}
+     * @param businessLatitude the latitude (-90.0 to 90.0), or
+     *                         {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessLatitude(Double businessLatitude);
 
     /**
-     * Returns the business description.
+     * Returns the business description shown on the business-profile card.
      *
-     * @return an {@code Optional} containing the description, or empty for
-     *         non-business accounts
+     * @return an {@link Optional} containing the description, or empty
+     *         for non-business accounts
      */
     Optional<String> businessDescription();
 
     /**
      * Sets the business description.
      *
-     * @param businessDescription the description, may be {@code null}
+     * @param businessDescription the description, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessDescription(String businessDescription);
@@ -543,9 +668,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the business website URLs.
      *
-     * <p>A business profile supports multiple website URLs; the field is
-     * empty for non-business accounts and for accounts that never published
-     * a website on their profile.
+     * @apiNote
+     * A business profile supports multiple website URLs; the field is
+     * empty for non-business accounts and for accounts that never
+     * published a website on their profile.
      *
      * @return an unmodifiable list of website URLs, or an empty list
      */
@@ -554,7 +680,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the business websites.
      *
-     * @param businessWebsites the list of website URLs, may be {@code null}
+     * @param businessWebsites the list of website URLs, or {@code null}
      *                         which is treated as an empty list
      * @return this store instance for method chaining
      */
@@ -563,7 +689,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the business email address.
      *
-     * @return an {@code Optional} containing the email, or empty for
+     * @return an {@link Optional} containing the email, or empty for
      *         non-business accounts
      */
     Optional<String> businessEmail();
@@ -571,7 +697,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the business email.
      *
-     * @param businessEmail the email, may be {@code null}
+     * @param businessEmail the email, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessEmail(String businessEmail);
@@ -579,8 +705,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the business category classifications.
      *
-     * <p>A business profile supports multiple categories; the field is
-     * empty for non-business accounts.
+     * @apiNote
+     * A business profile supports multiple {@link BusinessCategory}
+     * values which appear under the business name; the field is empty
+     * for non-business accounts.
      *
      * @return an unmodifiable list of categories, or an empty list
      */
@@ -589,18 +717,21 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the business categories.
      *
-     * @param businessCategories the list of categories, may be {@code null}
-     *                           which is treated as an empty list
+     * @param businessCategories the list of {@link BusinessCategory}
+     *                           entries, or {@code null} which is
+     *                           treated as an empty list
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessCategories(List<BusinessCategory> businessCategories);
 
     /**
-     * Returns whether the "Keep chats archived" toggle is off — that is,
-     * whether an archived chat should automatically pop back into the main
-     * list when a new message arrives. This is the inverse of the
-     * <i>Settings → Chats → Keep chats archived</i> switch in the
-     * WhatsApp app.
+     * Returns whether archived chats unarchive automatically on new messages.
+     *
+     * @apiNote
+     * Mirrors the inverse of the <i>Settings, Chats, Keep chats
+     * archived</i> switch in the WhatsApp app: when this returns
+     * {@code true} the "keep archived" toggle is off and archived chats
+     * pop back into the main list on each new message.
      *
      * @return {@code true} if archived chats unarchive automatically on
      *         new messages
@@ -618,6 +749,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns whether 24-hour time format is used.
      *
+     * @apiNote
+     * Drives timestamp rendering in chat bubbles and the chat list;
+     * the value is synced across companions through the app-state
+     * collection.
+     *
      * @return {@code true} if using 24-hour format
      */
     boolean twentyFourHourFormat();
@@ -631,14 +767,18 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setTwentyFourHourFormat(boolean twentyFourHourFormat);
 
     /**
-     * Returns the default ephemeral timer for new chats.
+     * Returns the default {@link ChatEphemeralTimer} for new chats.
+     *
+     * @apiNote
+     * Applies to chats the user starts after the setting is updated;
+     * existing chats keep whatever per-chat timer they already had.
      *
      * @return the ephemeral timer, never {@code null}
      */
     ChatEphemeralTimer newChatsEphemeralTimer();
 
     /**
-     * Sets the default ephemeral timer for new chats.
+     * Sets the default {@link ChatEphemeralTimer} for new chats.
      *
      * @param timer the ephemeral timer, must not be {@code null}
      * @return this store instance for method chaining
@@ -648,78 +788,36 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the history-sync policy for Web/Desktop sessions.
      *
-     * <p>When a companion device first pairs with the primary phone, the
+     * @apiNote
+     * When a companion device first pairs with the primary phone, the
      * primary uploads an encrypted snapshot of recent chat history (the
-     * "history sync") so the new device is not blank. This setting
-     * controls how much history the primary should send: nothing, recent,
-     * or full archive.
+     * "history sync") so the new device is not blank. The selected
+     * {@link WhatsAppWebClientHistory} controls how much history the
+     * primary should send: nothing, recent, or full archive.
      *
-     * @return an {@code Optional} containing the history policy, or empty
-     *         if not configured
+     * @return an {@link Optional} containing the history policy, or
+     *         empty if not configured
      */
     Optional<WhatsAppWebClientHistory> webHistoryPolicy();
 
     /**
      * Sets the Web/Desktop history-sync policy.
      *
-     * @param policy the history policy, may be {@code null}
+     * @param policy the {@link WhatsAppWebClientHistory}, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setWebHistoryPolicy(WhatsAppWebClientHistory policy);
 
     /**
-     * Returns whether the client should automatically broadcast its
-     * presence ({@code available} / {@code unavailable} and typing /
-     * recording indicators) to the server.
+     * Returns whether incoming app-state patches must have their snapshot MACs verified before being applied.
      *
-     * <p>When on, contacts will see the standard "online" / "typing…"
-     * indicators while the client is connected; when off, the client is
-     * effectively invisible. This is the library-level equivalent of
-     * keeping the WhatsApp app running in the foreground.
-     *
-     * @return {@code true} if automatic presence broadcasting is on
-     */
-    boolean automaticPresenceUpdates();
-
-    /**
-     * Sets whether the client automatically broadcasts presence and
-     * typing indicators.
-     *
-     * @param enabled {@code true} to enable
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setAutomaticPresenceUpdates(boolean enabled);
-
-    /**
-     * Returns whether the client automatically sends delivered/read
-     * receipts for incoming messages.
-     *
-     * <p>This is roughly the library-side equivalent of WhatsApp's
-     * <i>Settings → Privacy → Read receipts</i> switch combined with
-     * acting on the messages: when off, peers will not see the second
-     * tick or the blue ticks for messages this client has received.
-     *
-     * @return {@code true} if automatic receipts are on
-     */
-    boolean automaticMessageReceipts();
-
-    /**
-     * Sets whether automatic delivered/read receipts are sent.
-     *
-     * @param enabled {@code true} to enable
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setAutomaticMessageReceipts(boolean enabled);
-
-    /**
-     * Returns whether incoming app-state patches must have their snapshot
-     * MACs verified before being applied.
-     *
-     * <p>App-state patches are the encrypted records that propagate
-     * settings, archived/starred/muted state and similar metadata between
-     * the primary phone and companions. Each patch carries a MAC that
-     * proves it has not been tampered with; turning verification off is
-     * an interop escape hatch and weakens integrity guarantees.
+     * @apiNote
+     * App-state patches are the encrypted records that propagate
+     * settings, archived/starred/muted state and similar metadata
+     * between the primary phone and companions. Each patch carries a
+     * MAC that proves it has not been tampered with; turning
+     * verification off is an interop escape hatch and weakens integrity
+     * guarantees.
      *
      * @return {@code true} if patch MACs are verified
      */
@@ -735,8 +833,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns whether the primary device supports syncd snapshot recovery.
-     * The flag is set when the primary device advertises support via peer
-     * data operations.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebSyncdSnapshotRecoveryGatingUtils} gates the
+     * snapshot-recovery flow on this signal (stored under the
+     * {@code WAPrimaryDeviceSupportsSyncdRecovery} prefs key) and on
+     * the {@code enable_peer_snapshot_recovery} AB prop. The flag is
+     * set when the primary device advertises support through peer data
+     * operations.
      *
      * @return {@code true} if the primary device supports syncd recovery
      */
@@ -753,6 +857,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns whether chat data has been synchronized from the server.
      *
+     * @apiNote
+     * Cleared on every fresh login; flipped to {@code true} once the
+     * initial history-sync chat batch has been ingested. Embedders use
+     * this to know when the chat list is safe to render.
+     *
      * @return {@code true} if synchronized
      */
     boolean syncedChats();
@@ -768,6 +877,9 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns whether contact data has been synchronized from the server.
      *
+     * @apiNote
+     * Flipped on once the contact address-book sync has completed.
+     *
      * @return {@code true} if synchronized
      */
     boolean syncedContacts();
@@ -781,7 +893,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setSyncedContacts(boolean synced);
 
     /**
-     * Returns whether newsletter data has been synchronized from the server.
+     * Returns whether newsletter (Channels) data has been synchronized from the server.
      *
      * @return {@code true} if synchronized
      */
@@ -813,6 +925,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns whether the business certificate has been synchronized.
      *
+     * @apiNote
+     * Business accounts only; the certificate proves that a verified
+     * business name belongs to a Meta-vetted business and underpins the
+     * green-checkmark UI.
+     *
      * @return {@code true} if synchronized
      */
     boolean syncedBusinessCertificate();
@@ -828,6 +945,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns whether the client has completed registration with WhatsApp.
      *
+     * @apiNote
+     * Registration is the cryptographic onboarding (Noise + Signal
+     * key publication) performed during the first connect; subsequent
+     * connections check this flag to short-circuit re-registration.
+     *
      * @return {@code true} if registered
      */
     boolean registered();
@@ -841,7 +963,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setRegistered(boolean registered);
 
     /**
-     * Returns whether to show security notifications when chatting.
+     * Returns whether to show security notifications when the peer's identity key changes.
+     *
+     * @apiNote
+     * Corresponds to the <i>Settings, Account, Security notifications</i>
+     * switch in the WhatsApp app. When {@code true}, the chat renders
+     * the "Your security code with X changed" system message.
      *
      * @return {@code true} if security notifications are shown
      */
@@ -856,58 +983,69 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setShowSecurityNotifications(boolean show);
 
     /**
-     * Returns the ADV (Auth Device V2) signed device identity issued by
-     * the primary phone when this companion device was paired.
+     * Returns the ADV (Auth Device V2) signed device identity issued by the primary phone when this companion device was paired.
      *
-     * <p>ADV is the protocol behind WhatsApp's multi-device feature: each
+     * @apiNote
+     * ADV is the protocol behind WhatsApp's multi-device feature: each
      * companion (Web, Desktop, second phone) is endorsed by a signature
      * from the primary phone's identity key, and that signature is what
      * makes the companion a recognised participant on the account.
-     * Losing this record forces a re-pairing through the QR-code or phone-
-     * number flow.
+     * Losing this record forces a re-pairing through the QR-code or
+     * phone-number flow.
      *
-     * @return an {@code Optional} containing the identity, or empty if not
-     *         set
+     * @return an {@link Optional} containing the
+     *         {@link ADVSignedDeviceIdentity}, or empty if not set
      */
     Optional<ADVSignedDeviceIdentity> signedDeviceIdentity();
 
     /**
      * Sets the ADV (Auth Device V2) signed device identity.
      *
-     * @param identity the signed device identity, may be {@code null}
+     * @param identity the {@link ADVSignedDeviceIdentity}, or {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore setSignedDeviceIdentity(ADVSignedDeviceIdentity identity);
 
     /**
-     * Returns the 32-byte ADV (Auth Device V2) secret used to HMAC the
-     * pairing handshake with the primary phone. Together with
-     * {@link #signedDeviceIdentity()} this is what binds a companion's
-     * key material to the primary's signature.
+     * Returns the 32-byte ADV (Auth Device V2) secret used to HMAC the pairing handshake with the primary phone.
      *
-     * @return an {@code Optional} containing the 32-byte key, or empty if
-     *         not set
+     * @apiNote
+     * Together with {@link #signedDeviceIdentity()}, this binds a
+     * companion's key material to the primary's signature.
+     *
+     * @return an {@link Optional} containing the 32-byte key, or empty
+     *         if not set
      */
     Optional<byte[]> advSecretKey();
 
     /**
      * Sets the ADV pairing-handshake secret key.
      *
-     * @param key the ADV secret key (should be 32 bytes), or {@code null}
-     *            to clear
+     * @param key the ADV secret key (should be 32 bytes), or
+     *            {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setAdvSecretKey(byte[] key);
 
     /**
-     * Returns all registered pre-keys in insertion order.
+     * Returns all registered Signal pre-keys in insertion order.
      *
-     * @return a non-null sequenced collection of pre-key pairs
+     * @apiNote
+     * Used by the pre-key publishing pipeline to choose which pairs are
+     * uploaded next to the WhatsApp directory; rotation logic preserves
+     * insertion order so the oldest unused pair is selected first.
+     *
+     * @return a non-null sequenced collection of {@link SignalPreKeyPair}
      */
     SequencedCollection<SignalPreKeyPair> preKeys();
 
     /**
-     * Checks whether any pre-keys are currently available.
+     * Returns whether any pre-keys are currently available.
+     *
+     * @apiNote
+     * When this returns {@code false} the client must replenish the
+     * directory before peers can start new Signal sessions against
+     * this account.
      *
      * @return {@code true} if pre-keys are available
      */
@@ -916,20 +1054,37 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Removes a Signal protocol session by address.
      *
-     * @param address the address of the session to remove
+     * @apiNote
+     * Used after authentication failures (bad MAC, stale session) or
+     * when a peer's identity key changes, to force the next outgoing
+     * message to rebuild a fresh Signal session.
+     *
+     * @param address the {@link SignalProtocolAddress} of the session
+     *                to remove
      * @return {@code true} if a session was removed
      */
     boolean removeSession(SignalProtocolAddress address);
 
     /**
-     * Removes all sender key records where the given device JID is the sender.
+     * Removes all sender-key records where the given device JID is the sender.
      *
-     * @param deviceJid the device JID whose sender keys should be removed
+     * @apiNote
+     * Invoked when a participant leaves a group or rotates their device
+     * so cached group-message keys for the departing device are
+     * discarded.
+     *
+     * @param deviceJid the device {@link Jid} whose sender keys should
+     *                  be removed
      */
     void removeSenderKeys(Jid deviceJid);
 
     /**
-     * Removes the sender keys for a sender key name.
+     * Removes the sender keys for a {@link SignalSenderKeyName}.
+     *
+     * @apiNote
+     * Targets a single (group, sender) pair rather than all records for
+     * the sender; used when only one group needs its sender-key state
+     * reset.
      *
      * @param senderKeyName the sender key name
      */
@@ -938,30 +1093,38 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Cleans up all Signal sessions and sender keys for a device.
      *
-     * @param deviceJid the device JID to clean up
+     * @apiNote
+     * Run when the {@link DeviceList} for a peer drops a device or when
+     * the peer logs out and is no longer reachable.
+     *
+     * @param deviceJid the device {@link Jid} to clean up
      */
     void cleanupSignalSessions(Jid deviceJid);
 
     /**
-     * Persists Alice's X3DH base key for a pre-key message so the receive
-     * path can dedupe replays of the same {@code originalMsgId}.
+     * Persists Alice's X3DH base key for a pre-key message so the receive path can dedupe replays of the same {@code originalMsgId}.
      *
-     * @param address       the peer Signal address that initiated the
-     *                      session
-     * @param originalMsgId the {@code originalMsgId} carried by the pre-key
-     *                      stanza
-     * @param baseKey       the 32-byte X3DH ephemeral public key extracted
-     *                      from the pre-key message
+     * @apiNote
+     * Invoked from the Signal receive path on every incoming pre-key
+     * message; subsequent receives with the same {@code originalMsgId}
+     * compare against {@link #hasSameBaseKey} to drop replays.
+     *
+     * @param address       the peer {@link SignalProtocolAddress} that
+     *                      initiated the session
+     * @param originalMsgId the {@code originalMsgId} carried by the
+     *                      pre-key stanza
+     * @param baseKey       the 32-byte X3DH ephemeral public key
+     *                      extracted from the pre-key message
      * @throws NullPointerException if any argument is {@code null}
      */
     void saveSessionBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] baseKey);
 
     /**
-     * Returns the previously-saved Alice base key for a
-     * {@code (address, originalMsgId)} pair, if any.
+     * Returns the previously-saved Alice base key for a {@code (address, originalMsgId)} pair.
      *
-     * @param address       the peer Signal address
-     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @param address       the peer {@link SignalProtocolAddress}
+     * @param originalMsgId the {@code originalMsgId} of the pre-key
+     *                      stanza
      * @return an {@link Optional} containing the 32-byte base key, or
      *         {@link Optional#empty()} if no entry exists
      * @throws NullPointerException if any argument is {@code null}
@@ -969,11 +1132,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<byte[]> findSessionBaseKey(SignalProtocolAddress address, String originalMsgId);
 
     /**
-     * Reports whether a stored base key matches the candidate one for the
-     * given {@code (address, originalMsgId)} pair.
+     * Returns whether a stored base key matches the candidate one for the given {@code (address, originalMsgId)} pair.
      *
-     * @param address       the peer Signal address
-     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @apiNote
+     * This is the replay-detection primitive: a {@code true} return
+     * means the incoming pre-key message duplicates a previously seen
+     * one and the Signal session should not be rebuilt.
+     *
+     * @param address       the peer {@link SignalProtocolAddress}
+     * @param originalMsgId the {@code originalMsgId} of the pre-key
+     *                      stanza
      * @param candidate     the candidate base key extracted from the
      *                      newly-received pre-key message
      * @return {@code true} if a base key was previously stored for this
@@ -983,28 +1151,36 @@ public interface WhatsAppStore extends SignalProtocolStore {
     boolean hasSameBaseKey(SignalProtocolAddress address, String originalMsgId, byte[] candidate);
 
     /**
-     * Removes the persisted base key for a {@code (address, originalMsgId)}
-     * pair, if any.
+     * Removes the persisted base key for a {@code (address, originalMsgId)} pair.
      *
-     * @param address       the peer Signal address
-     * @param originalMsgId the {@code originalMsgId} of the pre-key stanza
+     * @apiNote
+     * Called once the corresponding Signal session has been
+     * successfully bootstrapped so the dedup table does not grow
+     * unboundedly.
+     *
+     * @param address       the peer {@link SignalProtocolAddress}
+     * @param originalMsgId the {@code originalMsgId} of the pre-key
+     *                      stanza
      * @return {@code true} if an entry was removed
      * @throws NullPointerException if any argument is {@code null}
      */
     boolean removeSessionBaseKey(SignalProtocolAddress address, String originalMsgId);
 
     /**
-     * Returns all contacts stored in this session.
+     * Returns all {@link Contact}s stored in this session.
      *
      * @return an unmodifiable collection of all contacts
      */
     Collection<Contact> contacts();
 
     /**
-     * Returns every cached "About" text status. In the WhatsApp app each
-     * contact can publish a short personal status (the line under the
-     * profile name, for example "At work"); this method exposes the cache
-     * of those values for contacts known to this session.
+     * Returns every cached "About" {@link ContactTextStatus} for known contacts.
+     *
+     * @apiNote
+     * In the WhatsApp app each contact can publish a short personal
+     * status (the line under the profile name, for example "At work");
+     * this method exposes the cache of those values for contacts known
+     * to this session.
      *
      * @return an unmodifiable collection of cached text statuses, never
      *         {@code null}
@@ -1012,100 +1188,114 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<ContactTextStatus> contactTextStatuses();
 
     /**
-     * Finds a contact by either phone number JID or LID.
+     * Finds a {@link Contact} by either phone-number JID or LID.
      *
-     * <p>WhatsApp identifies users by JID. A regular user JID is the phone
-     * number plus {@code @s.whatsapp.net} (for example
+     * @apiNote
+     * A regular user JID is the phone number plus
+     * {@code @s.whatsapp.net} (for example
      * {@code 1234567890@s.whatsapp.net}). A LID is a privacy-preserving
-     * alternate identifier ({@code <id>@lid}) that WhatsApp uses in groups,
-     * communities and Channels so the real phone number is not exposed.
-     * This lookup accepts either form.
+     * alternate identifier ({@code <id>@lid}) WhatsApp uses in groups,
+     * communities and Channels so the real phone number is not
+     * exposed. This lookup accepts either form.
      *
-     * @param jid the JID to search for (phone or LID)
-     * @return an {@code Optional} containing the contact if found
+     * @param jid the {@link JidProvider} to search for (phone or LID)
+     * @return an {@link Optional} containing the contact if found
      */
     Optional<Contact> findContactByJid(JidProvider jid);
 
     /**
-     * Adds or updates a contact in the store. A contact represents a
-     * WhatsApp user the local account is aware of — typically through the
-     * device address book sync or by receiving a message from them.
+     * Adds or updates a {@link Contact} in the store.
      *
-     * @param contact the contact to add or update, must not be {@code null}
+     * @apiNote
+     * A contact represents a WhatsApp user the local account is aware
+     * of, typically populated through the device address-book sync or
+     * after receiving a message from them.
+     *
+     * @param contact the contact to add or update, must not be
+     *                {@code null}
      * @return the contact that was added
      */
     Contact addContact(Contact contact);
 
     /**
-     * Finds the cached "About" text status for the given contact.
+     * Finds the cached "About" {@link ContactTextStatus} for the given contact.
      *
-     * @param jid the contact JID, may be {@code null}
-     * @return an {@code Optional} containing the cached text status if
+     * @param jid the contact {@link JidProvider}, or {@code null}
+     * @return an {@link Optional} containing the cached text status if
      *         known
      */
     Optional<ContactTextStatus> findContactTextStatus(JidProvider jid);
 
     /**
-     * Caches an "About" text status for a contact. Called when the server
-     * pushes an update to a contact's about line.
+     * Caches an "About" {@link ContactTextStatus} for a contact.
      *
-     * @param contactJid the contact JID, must not be {@code null}
+     * @apiNote
+     * Called from the presence/notification receive path when the
+     * server pushes an update to a contact's about line.
+     *
+     * @param contactJid the contact {@link Jid}, must not be {@code null}
      * @param status     the cached status, must not be {@code null}
      */
     void addContactTextStatus(Jid contactJid, ContactTextStatus status);
 
     /**
-     * Removes the cached "About" text status for a contact.
+     * Removes the cached "About" {@link ContactTextStatus} for a contact.
      *
-     * @param jid the contact JID, may be {@code null}
-     * @return an {@code Optional} containing the removed entry if present
+     * @param jid the contact {@link JidProvider}, or {@code null}
+     * @return an {@link Optional} containing the removed entry if present
      */
     Optional<ContactTextStatus> removeContactTextStatus(JidProvider jid);
 
     /**
-     * Returns the current state of the link between this WhatsApp account
-     * and the user's Meta (Facebook/Instagram) account.
+     * Returns the current state of the link between this WhatsApp account and the user's Meta (Facebook/Instagram) account.
      *
-     * <p>This corresponds to Meta's <i>Accounts Center</i> integration:
-     * the user can link WhatsApp with their Facebook/Instagram identity
-     * for shared sign-in, cross-app posting and federated profile data.
-     * The value reflects whether that link is active, paused or absent.
-     * (The underlying WA Web codename for this feature is "Waffle".)
+     * @apiNote
+     * Corresponds to Meta's <i>Accounts Center</i> integration: the
+     * user can link WhatsApp with their Facebook/Instagram identity for
+     * shared sign-in, cross-app posting and federated profile data. The
+     * value reflects whether that link is active, paused or absent. WA
+     * Web's internal codename for this feature is "Waffle".
      *
-     * @return an {@code Optional} containing the link state if the server
-     *         has ever reported it
+     * @return an {@link Optional} containing the link state if the
+     *         server has ever reported it
      */
     Optional<WaffleAccountLinkStateAction.AccountLinkState> linkedMetaAccountState();
 
     /**
      * Sets the linked-Meta-account state.
      *
-     * @param state the link state, may be {@code null} to clear
+     * @param state the link state, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setLinkedMetaAccountState(WaffleAccountLinkStateAction.AccountLinkState state);
 
     /**
-     * Returns the timestamp of the most recent linked-Meta-account
-     * change. Used to ignore older updates that arrive out of order.
+     * Returns the timestamp of the most recent linked-Meta-account change.
      *
-     * @return an {@code Optional} containing the timestamp if known
+     * @apiNote
+     * Used to ignore older updates that arrive out of order; only
+     * updates strictly newer than this stamp should mutate
+     * {@link #linkedMetaAccountState()}.
+     *
+     * @return an {@link Optional} containing the timestamp if known
      */
     Optional<Instant> linkedMetaAccountStateTimestamp();
 
     /**
      * Sets the timestamp of the most recent linked-Meta-account change.
      *
-     * @param timestamp the timestamp, may be {@code null} to clear
+     * @param timestamp the timestamp, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setLinkedMetaAccountStateTimestamp(Instant timestamp);
 
     /**
-     * Returns whether this WhatsApp Business account has completed the
-     * "hosted automation" onboarding wizard. Hosted automation lets a
-     * business automate replies and broadcasts through WhatsApp's hosted
-     * tooling rather than running their own Cloud API integration.
+     * Returns whether this WhatsApp Business account has completed the "hosted automation" onboarding wizard.
+     *
+     * @apiNote
+     * Hosted automation lets a business automate replies and broadcasts
+     * through WhatsApp's hosted tooling rather than running their own
+     * Cloud API integration.
      *
      * @return {@code true} if the wizard has been completed
      */
@@ -1120,45 +1310,50 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setHostedAutomationOnboarded(boolean onboarded);
 
     /**
-     * Looks up an orphan WhatsApp Pay notification by message id.
+     * Looks up an orphan WhatsApp Pay {@link OrphanPaymentNotification} by message id.
      *
-     * <p>Payment notifications can arrive before the chat message they
-     * belong to (for example after a fresh history sync). The orphan store
-     * holds them until the parent message lands, then attaches them.
+     * @apiNote
+     * Payment notifications can arrive before the chat message they
+     * belong to (for example after a fresh history sync). The orphan
+     * store holds them until the parent message lands, then attaches
+     * them.
      *
-     * @param messageId the parent message id, may be {@code null}
-     * @return an {@code Optional} containing the orphan notification if one
-     *         is buffered
+     * @param messageId the parent message id, or {@code null}
+     * @return an {@link Optional} containing the orphan notification if
+     *         one is buffered
      */
     Optional<OrphanPaymentNotification> findOrphanPaymentNotification(String messageId);
 
     /**
-     * Buffers a WhatsApp Pay notification whose parent message has not yet
-     * arrived.
+     * Buffers a WhatsApp Pay notification whose parent message has not yet arrived.
      *
-     * @param notification the notification to buffer, must not be
-     *                     {@code null}
+     * @param notification the {@link OrphanPaymentNotification} to
+     *                     buffer, must not be {@code null}
      */
     void addOrphanPaymentNotification(OrphanPaymentNotification notification);
 
     /**
-     * Removes a buffered WhatsApp Pay orphan notification, typically once
-     * its parent message has been attached.
+     * Removes a buffered WhatsApp Pay orphan notification.
      *
-     * @param messageId the parent message id, may be {@code null}
-     * @return an {@code Optional} containing the removed notification if it
-     *         existed
+     * @apiNote
+     * Called once the parent message has been attached to the
+     * notification.
+     *
+     * @param messageId the parent message id, or {@code null}
+     * @return an {@link Optional} containing the removed notification
+     *         if it existed
      */
     Optional<OrphanPaymentNotification> removeOrphanPaymentNotification(String messageId);
 
     /**
      * Returns the opaque server-routing token issued by WhatsApp.
      *
-     * <p>WhatsApp returns this token from the routing-info HTTP endpoint;
-     * the client echoes it on every subsequent reconnect so that the load
-     * balancer can pin the session to a specific edge cluster.
+     * @apiNote
+     * WhatsApp returns this token from the routing-info HTTP endpoint;
+     * the client echoes it on every subsequent reconnect so that the
+     * load balancer can pin the session to a specific edge cluster.
      *
-     * @return an {@code Optional} containing the routing-info bytes if
+     * @return an {@link Optional} containing the routing-info bytes if
      *         known
      */
     Optional<byte[]> routingInfo();
@@ -1166,53 +1361,61 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Stores the opaque server-routing token.
      *
-     * @param routingInfo the routing token, may be {@code null} to clear
+     * @param routingInfo the routing token, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setRoutingInfo(byte[] routingInfo);
 
     /**
-     * Returns the routing domain hint paired with {@link #routingInfo()},
-     * which selects the WhatsApp edge cluster (for example
+     * Returns the routing domain hint paired with {@link #routingInfo()}.
+     *
+     * @apiNote
+     * Selects the WhatsApp edge cluster (for example
      * {@code mmg-fna.whatsapp.net}) for the next handshake.
      *
-     * @return an {@code Optional} containing the routing domain if known
+     * @return an {@link Optional} containing the routing domain if known
      */
     Optional<String> routingDomain();
 
     /**
      * Sets the routing domain hint.
      *
-     * @param routingDomain the routing domain, may be {@code null} to clear
+     * @param routingDomain the routing domain, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setRoutingDomain(String routingDomain);
 
     /**
-     * Returns the moment at which this companion device's pairing is set
-     * to expire. WhatsApp force-unpairs companion devices that go offline
-     * for too long (the "Linked devices" screen lists this as the device
-     * being inactive); this is the deadline.
+     * Returns the moment at which this companion device's pairing is set to expire.
      *
-     * @return an {@code Optional} containing the expiration instant if the
-     *         server has communicated one
+     * @apiNote
+     * WhatsApp force-unpairs companion devices that go offline for too
+     * long (the "Linked devices" screen lists this as the device being
+     * inactive); this is the deadline. WA Web's
+     * {@code WASmaxClientExpirationClientExpirationRPC} delivers the
+     * value to the client.
+     *
+     * @return an {@link Optional} containing the expiration instant if
+     *         the server has communicated one
      */
     Optional<Instant> clientExpiration();
 
     /**
      * Sets the companion-device expiration deadline.
      *
-     * @param clientExpiration the expiration instant, may be {@code null}
+     * @param clientExpiration the expiration instant, or {@code null}
      *                         to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setClientExpiration(Instant clientExpiration);
 
     /**
-     * Returns the identifiers of the Terms-of-Service notices the user has
-     * already acknowledged. WhatsApp shows in-app banners for ToS or
-     * privacy-policy updates and remembers which ones the user dismissed
-     * so they are not shown again.
+     * Returns the identifiers of the Terms-of-Service notices the user has already acknowledged.
+     *
+     * @apiNote
+     * WhatsApp shows in-app banners for ToS or privacy-policy updates
+     * and remembers which ones the user dismissed so they are not
+     * shown again.
      *
      * @return an unmodifiable set of acknowledged notice ids, never
      *         {@code null}
@@ -1222,16 +1425,19 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Replaces the set of acknowledged Terms-of-Service notices.
      *
-     * @param noticeIds the new set of notice ids, may be {@code null} to
+     * @param noticeIds the new set of notice ids, or {@code null} to
      *                  clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setTosNoticeIds(Set<String> noticeIds);
 
     /**
-     * Returns whether the Meta AI assistant features are enabled for this
-     * account by the server. Meta AI is the conversational assistant
-     * available in WhatsApp ("Ask Meta AI") in supported regions.
+     * Returns whether the Meta AI assistant features are enabled for this account by the server.
+     *
+     * @apiNote
+     * Meta AI is the conversational assistant available in WhatsApp
+     * ("Ask Meta AI") in supported regions; availability is dictated
+     * by server-side rollout, not user choice.
      *
      * @return {@code true} when Meta AI features are enabled
      */
@@ -1246,12 +1452,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setAiAvailable(boolean aiAvailable);
 
     /**
-     * Returns the hash of the marketing-message opt-out list, used by
-     * WhatsApp Business to detect that the locally cached opt-out roster is
-     * up to date with the server. Customers who opt out of marketing
-     * messages from a business are added to that list.
+     * Returns the hash of the marketing-message opt-out list.
      *
-     * @return an {@code Optional} containing the hash if it has been
+     * @apiNote
+     * Used by WhatsApp Business to detect that the locally cached
+     * opt-out roster is up to date with the server. Customers who opt
+     * out of marketing messages from a business are added to that list.
+     *
+     * @return an {@link Optional} containing the hash if it has been
      *         received from the server
      */
     Optional<String> businessOptOutListHash();
@@ -1259,7 +1467,7 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the marketing-message opt-out list hash.
      *
-     * @param hash the new hash, may be {@code null} to clear
+     * @param hash the new hash, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessOptOutListHash(String hash);
@@ -1267,25 +1475,27 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns every per-account WhatsApp Business feature flag.
      *
-     * <p>WhatsApp Business uses these flags to gradually roll out features
-     * such as catalogs, carts, payments and broadcast variants. Each entry
-     * pairs a feature name with whether it is enabled for this account.
+     * @apiNote
+     * WhatsApp Business uses these flags to gradually roll out features
+     * such as catalogs, carts, payments and broadcast variants. Each
+     * entry pairs a feature name with whether it is enabled for this
+     * account.
      *
-     * @return an unmodifiable collection of feature flags, never
-     *         {@code null}
+     * @return an unmodifiable collection of {@link BusinessFeatureFlag},
+     *         never {@code null}
      */
     Collection<BusinessFeatureFlag> businessFeatureFlags();
 
     /**
-     * Finds the feature flag with the given name.
+     * Finds the {@link BusinessFeatureFlag} with the given name.
      *
-     * @param name the feature name, may be {@code null}
-     * @return an {@code Optional} containing the flag if found
+     * @param name the feature name, or {@code null}
+     * @return an {@link Optional} containing the flag if found
      */
     Optional<BusinessFeatureFlag> findBusinessFeatureFlag(String name);
 
     /**
-     * Adds or replaces a WhatsApp Business feature flag.
+     * Adds or replaces a {@link BusinessFeatureFlag}.
      *
      * @param flag the flag to add or replace, must not be {@code null}
      * @return this store instance for method chaining
@@ -1293,26 +1503,28 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore putBusinessFeatureFlag(BusinessFeatureFlag flag);
 
     /**
-     * Removes the feature flag with the given name.
+     * Removes the {@link BusinessFeatureFlag} with the given name.
      *
-     * @param name the feature name, may be {@code null}
-     * @return an {@code Optional} containing the removed flag if it
+     * @param name the feature name, or {@code null}
+     * @return an {@link Optional} containing the removed flag if it
      *         existed
      */
     Optional<BusinessFeatureFlag> removeBusinessFeatureFlag(String name);
 
     /**
-     * Removes every WhatsApp Business feature flag.
+     * Removes every {@link BusinessFeatureFlag}.
      *
      * @return this store instance for method chaining
      */
     WhatsAppStore clearBusinessFeatureFlags();
 
     /**
-     * Returns the lifecycle status of every WhatsApp Business broadcast
-     * campaign known to this account. A campaign is a scheduled bulk send
-     * to a marketing list; each entry pairs a campaign identifier with its
-     * lifecycle status string (for example {@code "DRAFT"},
+     * Returns the lifecycle status of every WhatsApp Business broadcast campaign known to this account.
+     *
+     * @apiNote
+     * A campaign is a scheduled bulk send to a marketing list; each
+     * {@link BusinessCampaignStatus} pairs a campaign identifier with
+     * its lifecycle status string (for example {@code "DRAFT"},
      * {@code "SCHEDULED"}, {@code "SENDING"} or {@code "DONE"}).
      *
      * @return an unmodifiable collection of campaign statuses, never
@@ -1321,15 +1533,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<BusinessCampaignStatus> businessCampaignStatuses();
 
     /**
-     * Finds the campaign status entry for the given campaign id.
+     * Finds the {@link BusinessCampaignStatus} entry for the given campaign id.
      *
-     * @param campaignId the campaign identifier, may be {@code null}
-     * @return an {@code Optional} containing the entry if found
+     * @param campaignId the campaign identifier, or {@code null}
+     * @return an {@link Optional} containing the entry if found
      */
     Optional<BusinessCampaignStatus> findBusinessCampaignStatus(String campaignId);
 
     /**
-     * Adds or replaces a WhatsApp Business campaign status entry.
+     * Adds or replaces a {@link BusinessCampaignStatus} entry.
      *
      * @param status the entry to add or replace, must not be {@code null}
      * @return this store instance for method chaining
@@ -1337,25 +1549,29 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore putBusinessCampaignStatus(BusinessCampaignStatus status);
 
     /**
-     * Removes the campaign status entry for the given campaign id.
+     * Removes the {@link BusinessCampaignStatus} entry for the given campaign id.
      *
-     * @param campaignId the campaign identifier, may be {@code null}
-     * @return an {@code Optional} containing the removed entry if it
+     * @param campaignId the campaign identifier, or {@code null}
+     * @return an {@link Optional} containing the removed entry if it
      *         existed
      */
     Optional<BusinessCampaignStatus> removeBusinessCampaignStatus(String campaignId);
 
     /**
-     * Removes every WhatsApp Business campaign status entry.
+     * Removes every {@link BusinessCampaignStatus} entry.
      *
      * @return this store instance for method chaining
      */
     WhatsAppStore clearBusinessCampaignStatuses();
 
     /**
-     * Returns every click-to-WhatsApp (CTWA) per-customer data sharing
-     * preference. Each entry pairs a customer's account LID with the
-     * enabled flag chosen by the user.
+     * Returns every click-to-WhatsApp (CTWA) per-customer data sharing preference.
+     *
+     * @apiNote
+     * Each {@link CtwaDataSharingPreference} pairs a customer's account
+     * LID with the enabled flag chosen by the user; consumed by WA
+     * Web's {@code WAWebCommonCTWADataSharing} surface to decide which
+     * downstream signals are forwarded to the advertiser.
      *
      * @return an unmodifiable collection of CTWA preferences, never
      *         {@code null}
@@ -1363,17 +1579,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<CtwaDataSharingPreference> ctwaDataSharingPreferences();
 
     /**
-     * Finds the CTWA per-customer data sharing preference for the given
-     * account LID.
+     * Finds the {@link CtwaDataSharingPreference} for the given account LID.
      *
      * @param accountLid the account LID raw string identifying the
-     *                   customer, may be {@code null}
-     * @return an {@code Optional} containing the preference if recorded
+     *                   customer, or {@code null}
+     * @return an {@link Optional} containing the preference if recorded
      */
     Optional<CtwaDataSharingPreference> findCtwaDataSharing(String accountLid);
 
     /**
-     * Adds or replaces a CTWA per-customer data sharing preference.
+     * Adds or replaces a {@link CtwaDataSharingPreference}.
      *
      * @param preference the preference to add or replace, must not be
      *                   {@code null}
@@ -1382,51 +1597,59 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore putCtwaDataSharing(CtwaDataSharingPreference preference);
 
     /**
-     * Removes the CTWA per-customer data sharing preference for the given
-     * account LID.
+     * Removes the {@link CtwaDataSharingPreference} for the given account LID.
      *
      * @param accountLid the account LID raw string identifying the
-     *                   customer, may be {@code null}
-     * @return an {@code Optional} containing the removed preference if it
-     *         existed
+     *                   customer, or {@code null}
+     * @return an {@link Optional} containing the removed preference if
+     *         it existed
      */
     Optional<CtwaDataSharingPreference> removeCtwaDataSharing(String accountLid);
 
     /**
-     * Removes every CTWA per-customer data sharing preference.
+     * Removes every {@link CtwaDataSharingPreference}.
      *
      * @return this store instance for method chaining
      */
     WhatsAppStore clearCtwaDataSharing();
 
     /**
-     * Returns the user's own SMB data sharing with Meta consent value, if
-     * known. This is the global single-value tri-state consent surfaced by
-     * the {@code <smb_data_sharing_with_meta_consent value="..."/>} child
-     * of the privacy notification, with valid wire literals
-     * {@code "true"} / {@code "false"} / {@code "notset"}.
+     * Returns the user's own SMB data-sharing-with-Meta consent value.
      *
-     * @return an {@link Optional} carrying the wire literal, or empty when
-     *         the value has never been observed or the relay cleared it
+     * @apiNote
+     * The global single-value tri-state consent surfaced by the
+     * {@code <smb_data_sharing_with_meta_consent value="..."/>} child
+     * of the privacy notification, with valid wire literals
+     * {@code "true"}, {@code "false"} and {@code "notset"}. WA Web
+     * exchanges this value through the
+     * {@code WASmaxInBizSettingsSmbDataSharingSettingMixin} and
+     * {@code WASmaxOutBizSettingsSmbDataSharingSettingMixin} RPCs.
+     *
+     * @return an {@link Optional} carrying the wire literal, or empty
+     *         when the value has never been observed or the relay
+     *         cleared it
      */
     Optional<String> smbDataSharingConsent();
 
     /**
-     * Stores the user's own SMB data sharing with Meta consent value.
+     * Stores the user's own SMB data-sharing-with-Meta consent value.
      *
-     * @param consent the wire literal; one of {@code "true"} /
-     *                {@code "false"} / {@code "notset"} / {@code null} to
-     *                clear
+     * @param consent the wire literal: one of {@code "true"},
+     *                {@code "false"}, {@code "notset"}, or {@code null}
+     *                to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setSmbDataSharingConsent(String consent);
 
     /**
-     * Returns every WhatsApp Business paid subscription this account
-     * holds. WhatsApp Business sells paid add-ons (for example catalog
-     * hosting or the marketing-messages billing tier); each entry exposes
-     * the subscription's lifecycle status, expiration and creation
-     * timestamps as a single coherent record.
+     * Returns every WhatsApp Business paid subscription this account holds.
+     *
+     * @apiNote
+     * WhatsApp Business sells paid add-ons (for example catalog hosting
+     * or the marketing-messages billing tier); each
+     * {@link BusinessSubscription} exposes the subscription's lifecycle
+     * status, expiration and creation timestamps as a single coherent
+     * record.
      *
      * @return an unmodifiable collection of subscriptions, never
      *         {@code null}
@@ -1434,45 +1657,46 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<BusinessSubscription> businessSubscriptions();
 
     /**
-     * Finds the WhatsApp Business subscription with the given identifier.
+     * Finds the {@link BusinessSubscription} with the given identifier.
      *
-     * @param id the subscription identifier, may be {@code null}
-     * @return an {@code Optional} containing the subscription if found
+     * @param id the subscription identifier, or {@code null}
+     * @return an {@link Optional} containing the subscription if found
      */
     Optional<BusinessSubscription> findBusinessSubscription(String id);
 
     /**
-     * Adds or replaces a WhatsApp Business subscription record.
+     * Adds or replaces a {@link BusinessSubscription} record.
      *
-     * @param subscription the subscription to add or replace, must not be
-     *                     {@code null}
+     * @param subscription the subscription to add or replace, must not
+     *                     be {@code null}
      * @return this store instance for method chaining
      */
     WhatsAppStore putBusinessSubscription(BusinessSubscription subscription);
 
     /**
-     * Removes the WhatsApp Business subscription with the given
-     * identifier.
+     * Removes the {@link BusinessSubscription} with the given identifier.
      *
-     * @param id the subscription identifier, may be {@code null}
-     * @return an {@code Optional} containing the removed subscription if
-     *         it existed
+     * @param id the subscription identifier, or {@code null}
+     * @return an {@link Optional} containing the removed subscription
+     *         if it existed
      */
     Optional<BusinessSubscription> removeBusinessSubscription(String id);
 
     /**
-     * Removes every WhatsApp Business subscription record.
+     * Removes every {@link BusinessSubscription} record.
      *
      * @return this store instance for method chaining
      */
     WhatsAppStore clearBusinessSubscriptions();
 
     /**
-     * Returns the opaque nonce returned by the server when this WhatsApp
-     * Business account was last identified. The nonce ties subsequent
-     * Business-API calls back to the same account session.
+     * Returns the opaque nonce returned by the server when this WhatsApp Business account was last identified.
      *
-     * @return an {@code Optional} containing the nonce if it has been
+     * @apiNote
+     * The nonce ties subsequent Business-API calls back to the same
+     * account session.
+     *
+     * @return an {@link Optional} containing the nonce if it has been
      *         issued
      */
     Optional<String> businessAccountNonce();
@@ -1480,16 +1704,21 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Sets the WhatsApp Business account nonce.
      *
-     * @param nonce the nonce, may be {@code null} to clear
+     * @param nonce the nonce, or {@code null} to clear
      * @return this store instance for method chaining
      */
     WhatsAppStore setBusinessAccountNonce(String nonce);
 
     /**
      * Returns whether the "detected outcomes" telemetry signal is enabled.
-     * WhatsApp records aggregate, on-device signals about the outcome of
-     * actions (for example whether a click-to-WhatsApp ad led to a reply)
-     * and uploads them in privacy-preserving form when this flag is on.
+     *
+     * @apiNote
+     * WhatsApp records aggregate on-device signals about the outcome of
+     * actions (for example whether a click-to-WhatsApp ad led to a
+     * reply) and uploads them in privacy-preserving form when this flag
+     * is on. WA Web's {@code WAWebDetectedOutcomesStatusSync} drives
+     * the toggle through the
+     * {@code ctwaDetectedOutcomeOnboardingStatusUpdate} backend call.
      *
      * @return {@code true} if detected-outcomes reporting is enabled
      */
@@ -1504,25 +1733,35 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setDetectedOutcomesEnabled(boolean enabled);
 
     /**
-     * Adds a new contact with only its JID populated.
+     * Adds a new {@link Contact} with only its JID populated.
      *
-     * @param jid the JID of the contact to add, must not be {@code null}
+     * @apiNote
+     * Used when a JID is observed in a stanza (group membership,
+     * message sender) before any address-book or presence record has
+     * surfaced a richer {@link Contact}.
+     *
+     * @param jid the {@link Jid} of the contact to add, must not be
+     *            {@code null}
      * @return the newly created contact
      */
     Contact addNewContact(Jid jid);
 
     /**
-     * Removes a contact from the store.
+     * Removes a {@link Contact} from the store.
      *
-     * @param contactJid the JID of the contact to remove, may be {@code null}
-     * @return an {@code Optional} containing the removed contact if it existed
+     * @param contactJid the {@link JidProvider} of the contact to
+     *                   remove, or {@code null}
+     * @return an {@link Optional} containing the removed contact if it
+     *         existed
      */
     Optional<Contact> removeContact(JidProvider contactJid);
 
     /**
-     * Returns every outgoing contact stored in this session. Outgoing
-     * contacts power the invite-by-contact feature and are persisted
-     * independently from regular {@link Contact} records.
+     * Returns every {@link OutContact} stored in this session.
+     *
+     * @apiNote
+     * Outgoing contacts power the invite-by-contact feature and are
+     * persisted independently from regular {@link Contact} records.
      *
      * @return an unmodifiable collection of outgoing contacts, never
      *         {@code null}
@@ -1530,12 +1769,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<OutContact> outContacts();
 
     /**
-     * Finds an outgoing contact by its phone-number JID.
+     * Finds an {@link OutContact} by its phone-number {@link Jid}.
      *
-     * @param jid the JID of the outgoing contact to look up, may be
+     * @param jid the JID of the outgoing contact to look up, or
      *            {@code null}
-     * @return an {@code Optional} containing the outgoing contact if it
-     *         exists
+     * @return an {@link Optional} containing the outgoing contact if
+     *         it exists
      */
     Optional<OutContact> findOutContact(Jid jid);
 
@@ -1571,65 +1810,85 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Registers a bidirectional LID mapping for a contact.
      *
-     * @param phoneJid the phone number JID
-     * @param lidJid   the LID JID
+     * @apiNote
+     * Drives {@link #findLidByPhone(Jid)} and {@link #findPhoneByLid(Jid)} so
+     * stanza handlers that observe either form can resolve the counterpart
+     * without round-tripping the server.
+     *
+     * @param phoneJid the phone number {@link Jid}
+     * @param lidJid   the LID {@link Jid}
      */
     void registerLidMapping(Jid phoneJid, Jid lidJid);
 
     /**
      * Registers a bidirectional LID mapping for a contact with a timestamp guard.
      *
-     * <p>If the provided {@code timestamp} is non-null and an existing mapping for the
-     * same LID was registered with a more recent timestamp, the mapping is not updated.
-     * A {@code null} timestamp unconditionally overwrites (equivalent to
-     * {@link #registerLidMapping(Jid, Jid)}).
+     * @apiNote
+     * Used when the mapping carries a server-supplied creation instant so
+     * older deliveries cannot overwrite a fresher mapping; pass a
+     * {@code null} {@code timestamp} to unconditionally overwrite, matching
+     * {@link #registerLidMapping(Jid, Jid)}.
      *
-     * @param phoneJid  the phone number JID
-     * @param lidJid    the LID JID
-     * @param timestamp the mapping creation timestamp, or {@code null} to always accept
+     * @implNote
+     * This implementation rejects the update when {@code timestamp} is
+     * non-{@code null} and the stored entry for the same LID carries a
+     * strictly more recent instant.
+     *
+     * @param phoneJid  the phone number {@link Jid}
+     * @param lidJid    the LID {@link Jid}
+     * @param timestamp the mapping creation instant, or {@code null} to always accept
      */
     void registerLidMapping(Jid phoneJid, Jid lidJid, Instant timestamp);
 
     /**
      * Finds the phone number JID for a given LID.
      *
+     * @apiNote
+     * Powers reverse lookups when the wire carries a LID but downstream code
+     * needs the human-readable phone number form. Returns
+     * {@link Optional#empty()} when neither the mapping table nor any
+     * {@link Contact} row carries the reverse pointer.
+     *
+     * @implNote
+     * This implementation consults two sources in order: the LID-to-phone
+     * mapping table populated by {@code PnForLidChatHandler} and
+     * {@link #registerLidMapping(Jid, Jid)}, then the
+     * {@link Contact#lid() Contact.lid()} field on stored contact rows. The
+     * dual-source read keeps callers correct under either population path.
+     *
      * @param lidJid the LID to look up
-     * @return an {@code Optional} containing the phone number JID if found
+     * @return an {@link Optional} containing the phone number {@link Jid} if found
      */
     Optional<Jid> findPhoneByLid(Jid lidJid);
 
     /**
      * Finds the LID for a given phone number JID.
      *
-     * @param phoneJid the phone number JID to look up
-     * @return an {@code Optional} containing the LID if found
+     * @apiNote
+     * Powers forward lookups when the wire carries a phone-number JID but
+     * the addressed surface expects a LID; returns the input verbatim when
+     * {@code phoneJid} is already a LID.
+     *
+     * @implNote
+     * This implementation consults two sources in order: the LID-to-phone
+     * mapping table populated by {@code PnForLidChatHandler} and
+     * {@link #registerLidMapping(Jid, Jid)}, then the
+     * {@link Contact#lid() Contact.lid()} field on the contact row.
+     *
+     * @param phoneJid the phone number {@link Jid} to look up
+     * @return an {@link Optional} containing the LID if found
      */
     Optional<Jid> findLidByPhone(Jid phoneJid);
 
     /**
-     * Converts a LID to its phone number equivalent by searching contacts.
-     *
-     * @param lidJid the LID JID
-     * @return an {@code Optional} containing the phone number JID
-     */
-    Optional<Jid> getPhoneNumberByLid(Jid lidJid);
-
-    /**
-     * Converts a phone number JID to its LID equivalent.
-     *
-     * @param phoneNumberJid the phone number JID
-     * @return an {@code Optional} containing the LID JID
-     */
-    Optional<Jid> getLidByPhoneNumber(Jid phoneNumberJid);
-
-    /**
      * Returns every chat stored in this session.
      *
-     * <p>"Chat" covers every conversation row visible in the Chats tab of
-     * the WhatsApp app: one-to-one chats with another user, group chats,
-     * communities (a parent of multiple group chats) and broadcast lists.
-     * Channels (newsletters) are stored separately, see
-     * {@link #newsletters()}.
+     * @apiNote
+     * Drives the Chats tab of the WhatsApp UI. A "chat" covers every
+     * conversation row in that tab: one-to-one chats with another user,
+     * group chats, communities (a parent of multiple group chats) and
+     * broadcast lists. Channels (newsletters) are stored separately and
+     * exposed via {@link #newsletters()}.
      *
      * @return an unmodifiable collection of all chats
      */
@@ -1716,10 +1975,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns every status update stored in this session.
      *
-     * <p>Statuses are the 24-hour disappearing photo, video and text posts
-     * shown in WhatsApp's "Status" tab (called "Updates" in newer
-     * versions). Each entry here represents one such post, either
-     * authored by the local user or received from a contact.
+     * @apiNote
+     * Drives the Status tab (called "Updates" in newer WhatsApp builds).
+     * Statuses are 24-hour disappearing photo, video and text posts; each
+     * entry here represents one such post, either authored by the local
+     * user or received from a contact.
      *
      * @return an unmodifiable collection of status updates
      */
@@ -1743,27 +2003,29 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<ChatMessageInfo> removeStatus(String id);
 
     /**
-     * Returns the cached status update with the given message id, if
-     * present.
+     * Returns the cached status update with the given message id, if present.
      *
-     * <p>Equivalent to scanning {@link #status()} for an entry whose
-     * {@code key().id()} matches, but answers in {@code O(log n)} for
-     * persistent stores and {@code O(1)} for transient ones.
+     * @apiNote
+     * Equivalent to scanning {@link #status()} for an entry whose
+     * {@link MessageKey#id() key().id()} matches; prefer this lookup so the
+     * implementation can answer in {@code O(log n)} for persistent stores
+     * and {@code O(1)} for transient ones.
      *
      * @param id the status message id to look up
-     * @return the matching status update, or empty if no such entry exists
+     * @return an {@link Optional} containing the matching status update,
+     *         or empty if no such entry exists
      */
     Optional<ChatMessageInfo> findStatusById(String id);
 
     /**
      * Returns every cached VoIP call offer.
      *
-     * <p>Each entry corresponds to a row in WhatsApp's Calls tab — one of
-     * the audio or video calls placed to or received by this device. The
-     * "offer" terminology comes from the WebRTC handshake the call rides
-     * on: the offer carries the media-negotiation parameters and stays
-     * around in the store so the call can be answered, declined or shown
-     * as missed.
+     * @apiNote
+     * Drives the Calls tab. Each entry corresponds to one audio or video
+     * call placed to or received by this device. The "offer" terminology
+     * comes from the WebRTC handshake the call rides on: the offer carries
+     * the media-negotiation parameters and stays around in the store so
+     * the call can be answered, declined or shown as missed.
      *
      * @return an unmodifiable collection of all calls
      */
@@ -1796,10 +2058,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns every WhatsApp Channel this account follows or owns.
      *
-     * <p>"Newsletter" is WhatsApp's internal name for what end users see
-     * as a <b>Channel</b>: a one-to-many broadcast surface where an admin
-     * publishes posts and followers can react but cannot reply. Channels
-     * appear in the Updates tab.
+     * @apiNote
+     * Drives the Updates tab. "Newsletter" is WhatsApp's internal name for
+     * what end users see as a Channel: a one-to-many broadcast surface
+     * where an admin publishes posts and followers can react but cannot
+     * reply.
      *
      * @return an unmodifiable collection of all newsletters (channels)
      */
@@ -1836,13 +2099,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<Newsletter> removeNewsletter(JidProvider newsletterJid);
 
     /**
-     * Returns every privacy setting controlling who can see this
-     * account's profile fields.
+     * Returns every privacy setting controlling who can see this account's
+     * profile fields.
      *
-     * <p>These are the toggles surfaced under <i>Settings → Privacy</i>:
-     * who can see last-seen and online status, profile photo, the
-     * "About" line, statuses, who can add the user to groups, who can
-     * call, read receipts and so on. Each entry pairs a category (the
+     * @apiNote
+     * Drives the toggles surfaced under Settings, Privacy: who can see
+     * last-seen and online status, profile photo, the "About" line,
+     * statuses, who can add the user to groups, who can call, read
+     * receipts and so on. Each entry pairs a category (the
      * {@link PrivacySettingType}) with a visibility scope.
      *
      * @return an unmodifiable collection of privacy settings
@@ -1984,6 +2248,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns all app state sync keys currently held in the store, in their
      * original insertion order.
      *
+     * @apiNote
+     * Drives the lookup that the app-state-sync decryption pipeline uses
+     * when the freshest key needs to be derived for a new outbound mutation
+     * (LT-hash MAC derivation, snapshot encryption); insertion order is
+     * preserved so the last key is the most recently rotated one.
+     *
      * @return an unmodifiable sequenced collection of every stored sync key,
      *         empty if no keys have been stored
      */
@@ -1996,8 +2266,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns the app state sync key with the given raw {@code keyId}, if
-     * one is stored. Direct, non-validated read intended for low-level
-     * subsystems only.
+     * one is stored.
+     *
+     * @apiNote
+     * Direct, non-validated read intended for low-level subsystems only;
+     * matches the {@code _DO_NOT_USE} suffix on the WA Web export, which
+     * warns callers that the result is not guarded against rotation or
+     * expiry. Most consumers should go through the higher-level patch
+     * decoder rather than calling this directly.
      *
      * @param id the raw sync key identifier bytes, must not be {@code null}
      * @return an {@link Optional} containing the matching key, or
@@ -2011,10 +2287,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Optional<AppStateSyncKey> findWebAppStateKeyById(byte[] id);
 
     /**
-     * Inserts or replaces a batch of app state sync keys. Cobalt accepts a
-     * {@link Collection} per call to amortise the rotation and key-share
-     * batched store paths. Implementations skip keys whose
-     * {@code keyData.keyData} payload is absent or empty.
+     * Inserts or replaces a batch of app state sync keys.
+     *
+     * @apiNote
+     * Driven by the key-share and key-rotation flows that arrive batched
+     * over the wire; passing a {@link Collection} per call amortises the
+     * rotation and key-share store paths into a single write.
+     *
+     * @implNote
+     * This implementation skips keys whose {@code keyData.keyData} payload
+     * is absent or empty, matching the defensive check WA Web performs in
+     * {@code setSyncKeyInTransaction}.
      *
      * @param keys the collection of keys to add or update, must not be
      *             {@code null}
@@ -2030,16 +2313,30 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Marks every app state sync key whose generation timestamp is at or
      * before the given instant as expired by zeroing its timestamp.
      *
-     * @param threshold the cutoff instant. Keys with timestamps at or before
-     *                  this value have their timestamp set to
-     *                  {@link Instant#EPOCH}
+     * @apiNote
+     * Soft-mark used by the key-rotation pipeline so that subsequent
+     * key-derivation requests refuse to use a stale key; the key bytes
+     * themselves remain in the store for any in-flight decryption that
+     * still references the {@code keyId}.
+     *
+     * @implNote
+     * This implementation sets the timestamp to {@link Instant#EPOCH}
+     * for any key whose generation timestamp is at or before
+     * {@code threshold}.
+     *
+     * @param threshold the cutoff instant
      */
     void expireAppStateKeys(Instant threshold);
 
     /**
-     * Marks every app state sync key whose derived epoch equals the provided
-     * value as expired by zeroing its embedded timestamp. Soft-mark only,
-     * keys remain in the store.
+     * Marks every app state sync key whose derived epoch equals the
+     * provided value as expired by zeroing its embedded timestamp.
+     *
+     * @apiNote
+     * Soft-mark variant of {@link #expireAppStateKeys(Instant)} keyed by
+     * the sync key epoch (the rotation generation embedded in the
+     * derived sub-keys); the key bytes remain in the store and are still
+     * fetchable by id.
      *
      * @param epoch the sync key epoch whose keys should be expired
      */
@@ -2051,10 +2348,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void expireAppStateKeysByEpoch(int epoch);
 
     /**
-     * Finds a hash state by patch type.
+     * Finds the stored LT-Hash and version state for the given patch type.
      *
-     * @param patchType the patch type to query
-     * @return an {@code Optional} containing the hash state if found
+     * @apiNote
+     * Drives app-state-sync collection bookkeeping: the LT-Hash is
+     * compared against the freshly computed hash of incoming patches to
+     * detect divergence, and the version is the monotonically increasing
+     * patch counter the server sends in {@code <sync>} notifications.
+     *
+     * @param patchType the collection type to query
+     * @return an {@link Optional} containing the hash state if found
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetCollectionVersion",
@@ -2066,6 +2369,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Adds or updates a hash state for app state synchronization.
      *
+     * @apiNote
+     * Called after every successful patch apply to commit the new
+     * version and LT-Hash so the next sync starts from the correct
+     * cursor. Replaces any prior state for the same
+     * {@link SyncPatchType}.
+     *
      * @param state the hash state to add, must not be {@code null}
      */
     void addWebAppHashState(SyncHashValue state);
@@ -2073,9 +2382,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Finds a sync action entry by collection and index MAC.
      *
+     * @apiNote
+     * Index-MAC keyed lookup used by the SET/REMOVE patch decoder when
+     * resolving an incoming mutation against the previously stored row;
+     * the MAC is keyed by the encrypting sync key so the lookup is exact.
+     *
      * @param patchType the collection type
      * @param indexMac  the index MAC identifying the entry
-     * @return an {@code Optional} containing the entry if found
+     * @return an {@link Optional} containing the entry if found
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncAction",
@@ -2086,13 +2400,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Finds a sync action entry by collection and plaintext action index.
-     * The plaintext index is key-independent, unlike the index MAC, which is
-     * required for REMOVE operations where the encrypting key may differ
-     * from the key used for the original SET.
+     *
+     * @apiNote
+     * The plaintext index is key-independent, unlike the index MAC, which
+     * is required for REMOVE operations where the encrypting key may
+     * differ from the key used for the original SET. Use this overload
+     * whenever the caller needs to locate a previously stored entry
+     * across key rotations.
      *
      * @param patchType    the collection type
      * @param actionIndex  the plaintext action index string
-     * @return an {@code Optional} containing the entry if found
+     * @return an {@link Optional} containing the entry if found
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncAction",
@@ -2103,6 +2421,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Stores or updates a sync action entry for the specified collection.
+     *
+     * @apiNote
+     * Commit point for a decoded SET mutation; the {@code indexMac} keys
+     * the row so a later REMOVE referring to the same plaintext index
+     * (possibly under a different sync key) can find and evict the entry
+     * via {@link #findSyncActionEntryByActionIndex(SyncPatchType, String)}.
      *
      * @param patchType the collection type
      * @param indexMac  the index MAC identifying the entry
@@ -2118,9 +2442,16 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Removes a sync action entry from the specified collection.
      *
+     * @apiNote
+     * Commit point for a decoded REMOVE mutation when the index MAC of
+     * the original SET is still available (same encrypting sync key).
+     * When the keys differ, callers should resolve the entry via
+     * {@link #findSyncActionEntryByActionIndex(SyncPatchType, String)}
+     * first.
+     *
      * @param patchType the collection type
      * @param indexMac  the index MAC identifying the entry to remove
-     * @return an {@code Optional} containing the removed entry if it existed
+     * @return an {@link Optional} containing the removed entry if it existed
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncAction",
@@ -2132,7 +2463,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Clears all sync action entries for the specified collection.
      *
-     * <p>Used when a full snapshot is received and the state must be rebuilt from scratch.
+     * @apiNote
+     * Invoked when a full snapshot is received and the local state must be
+     * rebuilt from scratch, dropping every previously decoded entry for
+     * the given {@link SyncPatchType}.
      *
      * @param patchType the collection type
      */
@@ -2146,8 +2480,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns all sync action entries for the specified collection.
      *
+     * @apiNote
+     * Used by snapshot consumers that need to enumerate the full state of
+     * one {@link SyncPatchType} collection at once (for example to compute
+     * the LT-Hash from scratch or to drive a UI replay).
+     *
      * @param patchType the collection type
-     * @return an unmodifiable collection of entries, or an empty collection if none exist
+     * @return an unmodifiable collection of entries, or an empty collection
+     *         if none exist
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncAction",
@@ -2157,11 +2497,18 @@ public interface WhatsAppStore extends SignalProtocolStore {
     Collection<SyncActionEntry> getSyncActionEntries(SyncPatchType patchType);
 
     /**
-     * Returns the total number of sync action entries currently held in the
-     * store across every {@link SyncPatchType} collection. WA Web stores the
-     * entries in an unpartitioned table keyed by plaintext {@code index};
-     * Cobalt partitions storage by patch type and therefore sums the
-     * per-patch-type entry counts.
+     * Returns the total number of sync action entries currently held in
+     * the store across every {@link SyncPatchType} collection.
+     *
+     * @apiNote
+     * Backs the global entry counter consulted by the app-state-sync
+     * health metrics and by the snapshot-vs-incremental decision.
+     *
+     * @implNote
+     * WA Web stores the entries in an unpartitioned table keyed by
+     * plaintext {@code index}; this implementation partitions storage by
+     * patch type and therefore sums the per-patch-type entry counts to
+     * reconstruct the same aggregate.
      *
      * @return the total number of sync action entries currently stored
      */
@@ -2176,8 +2523,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns every sync action entry currently held in the store across
      * every {@link SyncPatchType} collection.
      *
-     * @return an unmodifiable collection of every stored entry, empty if no
-     *         entries are stored
+     * @apiNote
+     * Used by diagnostic and migration paths that need to walk every
+     * stored mutation regardless of collection.
+     *
+     * @return an unmodifiable collection of every stored entry, empty if
+     *         no entries are stored
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetSyncAction",
@@ -2188,6 +2539,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns every missing sync key entry currently being tracked.
+     *
+     * @apiNote
+     * Backs the missing-key workflow: each entry records a sync key that
+     * a peer expected this companion to know about but that has not yet
+     * been received. The retry pipeline consults the full set to request
+     * the keys from the primary device.
      *
      * @return an unmodifiable collection of every stored missing-key entry,
      *         empty when no keys are tracked
@@ -2201,9 +2558,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Finds the missing sync key entry whose primary key matches the given
-     * raw {@code keyId} bytes. Single-element form of WA Web's bulk-get,
-     * encoding the input bytes with {@link HexFormat} to recover the
-     * {@code keyHex} primary key.
+     * raw {@code keyId} bytes.
+     *
+     * @apiNote
+     * Single-element form of WA Web's bulk-get; use this when a single
+     * decryption-failure path needs to check whether the key it is missing
+     * is already on the request list.
+     *
+     * @implNote
+     * This implementation encodes the input bytes with {@link HexFormat}
+     * to recover the {@code keyHex} primary key used by the WA Web
+     * persistent table.
      *
      * @param keyId the raw key identifier bytes to look up
      * @return an {@link Optional} containing the entry if present,
@@ -2219,6 +2584,10 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the number of missing sync keys currently being tracked.
      *
+     * @apiNote
+     * Backs the missing-key request-rate limiter: a large pending count
+     * suppresses further wake-ups until the queue drains.
+     *
      * @return the number of missing-key entries, {@code 0} when none are
      *         tracked
      */
@@ -2230,9 +2599,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
     int missingSyncKeyCount();
 
     /**
-     * Adds or updates a single missing sync key entry. The entry is keyed by
-     * its raw {@code keyId} bytes encoded as a hex string, replacing any
-     * existing record with the same key.
+     * Adds or updates a single missing sync key entry.
+     *
+     * @apiNote
+     * Single-element form of {@link #addMissingSyncKeys(Collection)};
+     * use when a single decryption failure has identified one missing key
+     * that should be requested from the primary.
+     *
+     * @implNote
+     * This implementation keys the entry by its raw {@code keyId} bytes
+     * encoded as a hex string, replacing any existing record with the
+     * same key.
      *
      * @param missingKey the missing-key entry to add or replace
      */
@@ -2244,10 +2621,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void addMissingSyncKey(MissingDeviceSyncKey missingKey);
 
     /**
-     * Adds or updates the given missing sync key entries in bulk. Each entry
-     * is keyed by its raw {@code keyId} bytes encoded as a hex string,
-     * replacing any existing record with the same key. Passing an empty
-     * collection is a no-op, {@code null} is not accepted.
+     * Adds or updates the given missing sync key entries in bulk.
+     *
+     * @apiNote
+     * Drives the bulk-upsert path used when a single patch decode failure
+     * surfaces several missing keys at once; passing an empty collection
+     * is a no-op, {@code null} is not accepted.
+     *
+     * @implNote
+     * This implementation keys each entry by its raw {@code keyId} bytes
+     * encoded as a hex string, replacing any existing record with the
+     * same key.
      *
      * @param missingKeys the missing-key entries to upsert
      */
@@ -2259,9 +2643,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void addMissingSyncKeys(Collection<MissingDeviceSyncKey> missingKeys);
 
     /**
-     * Removes the missing sync key entry whose primary key matches the given
-     * raw {@code keyId} bytes. Used by the missing-key workflow to evict a
-     * key once a companion device has supplied it.
+     * Removes the missing sync key entry whose primary key matches the
+     * given raw {@code keyId} bytes.
+     *
+     * @apiNote
+     * Called by the missing-key workflow to evict an entry once a
+     * companion device has supplied the key and decoding can proceed.
      *
      * @param keyId the raw key identifier bytes to remove
      */
@@ -2283,7 +2670,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void removePeerMessage(String id);
 
     /**
-     * Gets metadata for a web app state collection.
+     * Returns the metadata for a web app state collection.
+     *
+     * @apiNote
+     * Backs the collection-state machine driving app-state sync: the
+     * returned {@link SyncCollectionMetadata} carries the current
+     * {@link SyncCollectionMetadata#state() state}, the persisted
+     * version, the LT-Hash, and the finite-retry timestamp used to
+     * decide when a failing collection should be promoted to fatal.
      *
      * @param collectionName the collection name
      * @return the collection metadata
@@ -2298,9 +2692,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Updates a collection's version and LT-Hash.
      *
+     * @apiNote
+     * Commit point invoked after a successful patch apply; persists the
+     * new monotonic version and the recomputed LT-Hash so the next
+     * incremental sync starts from the right cursor.
+     *
      * @param collectionName the collection name
      * @param newVersion     the new version
-     * @param newLtHash      the new LT-Hash
+     * @param newLtHash      the new LT-Hash bytes
      */
     @WhatsAppWebExport(
             moduleName = "WAWebGetCollectionVersion",
@@ -2312,12 +2711,22 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Marks a web app state collection as dirty.
      *
+     * @apiNote
+     * Dirty means the collection has unpushed local mutations or an
+     * incoming notification has nudged it; the sync loop will pick the
+     * collection up on its next tick.
+     *
      * @param collectionName the collection name
      */
     void markWebAppStateDirty(SyncPatchType collectionName);
 
     /**
      * Marks a web app state collection as in-flight.
+     *
+     * @apiNote
+     * Set when the sync loop has started encoding or decoding patches for
+     * the collection so that a concurrent dirty notification does not
+     * re-enter the loop while the previous batch is still running.
      *
      * @param collectionName the collection name
      */
@@ -2326,12 +2735,23 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Marks a web app state collection as up-to-date.
      *
+     * @apiNote
+     * Terminal happy-path state: the local store matches the server's
+     * version and there is nothing further to push or pull until a new
+     * notification arrives.
+     *
      * @param collectionName the collection name
      */
     void markWebAppStateUpToDate(SyncPatchType collectionName);
 
     /**
      * Marks a web app state collection as pending.
+     *
+     * @apiNote
+     * Pending means the collection has been observed but its initial
+     * snapshot has not been fetched yet; the bootstrap path uses this
+     * state to defer eager catch-up until the user actually opens the
+     * relevant surface.
      *
      * @param collectionName the collection name
      */
@@ -2340,27 +2760,48 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Marks a web app state collection as blocked.
      *
+     * @apiNote
+     * Blocked means the collection cannot make progress until a
+     * prerequisite resolves (for example a missing sync key or an
+     * unsatisfied dependency on another collection); the loop will skip
+     * it until {@link #markWebAppStateDirty(SyncPatchType)} re-enters it.
+     *
      * @param collectionName the collection name
      */
     void markWebAppStateBlocked(SyncPatchType collectionName);
 
     /**
-     * Marks a web app state collection in error retry state.
+     * Marks a web app state collection as failing under finite retry.
+     *
+     * @apiNote
+     * Records the moment a transient failure started so the state
+     * machine can promote the collection to fatal when the
+     * finite-failure window expires; subsequent failures within the
+     * window preserve the original start instant.
      *
      * @param collectionName the collection name
      */
     void markWebAppStateErrorRetry(SyncPatchType collectionName);
 
     /**
-     * Marks a web app state collection in fatal error state.
+     * Marks a web app state collection as fatally failed.
+     *
+     * @apiNote
+     * Terminal failure state set when the finite-retry budget has been
+     * exhausted; further progress on the collection requires explicit
+     * recovery (full snapshot resync or key rotation).
      *
      * @param collectionName the collection name
      */
     void markWebAppStateErrorFatal(SyncPatchType collectionName);
 
     /**
-     * Returns whether the specified collection is currently flagged as having
-     * suffered a fatal MAC mismatch. Once set, the flag persists across all
+     * Returns whether the specified collection is currently flagged as
+     * having suffered a fatal MAC mismatch.
+     *
+     * @apiNote
+     * Backs the MAC-mismatch health probe consulted by the sync loop and
+     * by integrity telemetry; once set, the flag persists across all
      * collection state transitions until cleared by a successful resync.
      *
      * @param collectionName the collection name
@@ -2375,10 +2816,13 @@ public interface WhatsAppStore extends SignalProtocolStore {
     boolean isCollectionInMacMismatchFatal(SyncPatchType collectionName);
 
     /**
-     * Marks a web app state collection in MAC mismatch state. When a patch
-     * snapshot MAC does not match the locally computed value, the collection
-     * enters this degraded state rather than failing fatally. Processing
-     * continues but integrity may be compromised.
+     * Marks a web app state collection in MAC mismatch state.
+     *
+     * @apiNote
+     * Set when a patch snapshot MAC does not match the locally computed
+     * value; the collection enters a degraded state rather than failing
+     * fatally so processing can continue, although integrity may be
+     * compromised until a snapshot resync clears the flag.
      *
      * @param collectionName the collection name
      */
@@ -2428,9 +2872,13 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void clearPendingMutations(SyncPatchType collectionName);
 
     /**
-     * Adds an orphan mutation for the specified collection. Orphan mutations
-     * reference entities that do not yet exist locally and are retried when
-     * the referenced entities arrive.
+     * Adds an orphan mutation for the specified collection.
+     *
+     * @apiNote
+     * Orphan mutations reference entities (messages, chats, threads,
+     * agents, chat assignments, status mutes, favourite stickers) that
+     * have not yet arrived locally; the WA Web {@code checkOrphanMutations}
+     * pipeline replays them once the referenced entities are observed.
      *
      * @param collectionName the collection name
      * @param mutation       the orphan mutation entry
@@ -2445,6 +2893,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns all orphan mutations for the specified collection.
      *
+     * @apiNote
+     * Drives the orphan replay loop: when the referenced entity finally
+     * arrives, every orphan tagged against it is re-applied through the
+     * normal mutation pipeline.
+     *
      * @param collectionName the collection name
      * @return the list of orphan mutation entries, never {@code null}
      */
@@ -2457,17 +2910,26 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns orphan mutations matching the specified model identifier
-     * within a collection. Enables targeted orphan lookups by entity
-     * (for example by chat JID) instead of a full scan.
+     * within a collection.
+     *
+     * @apiNote
+     * Enables targeted orphan lookups by entity (for example by chat
+     * {@link Jid} string) instead of a full scan, used when a single
+     * entity arrives and only the orphans bound to it need to be replayed.
      *
      * @param collectionName the collection name
-     * @param modelId        the model identifier to match (for example a JID string)
+     * @param modelId        the model identifier to match
      * @return the list of matching orphan mutation entries, never {@code null}
      */
     List<OrphanMutationEntry> findOrphanMutationsByModel(SyncPatchType collectionName, String modelId);
 
     /**
      * Removes all orphan mutations for the specified collection.
+     *
+     * @apiNote
+     * Invoked by the {@code applyAllOrphansAndUnsupported} sweep after
+     * the orphan batch has been replayed, draining the queue so the same
+     * mutations are not re-played on the next tick.
      *
      * @param collectionName the collection name
      */
@@ -2480,6 +2942,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Removes specific orphan mutation entries from the specified collection.
+     *
+     * @apiNote
+     * Selective drain used when only a subset of the orphan queue has
+     * been replayed (for example because only some referenced entities
+     * have arrived).
      *
      * @param collectionName the collection name
      * @param entries        the entries to remove
@@ -2750,19 +3217,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void clearUnconfirmedIdentityChanges();
 
     /**
-     * Records that the given peer JID has been verified as a hosted (i.e.
-     * server-side, not on-device) WhatsApp interop user.
+     * Records that the given peer JID has been verified as a hosted (server-side,
+     * not on-device) WhatsApp interop user.
      *
-     * <p>WhatsApp interoperability — required by the EU Digital Markets
-     * Act — lets WhatsApp users exchange messages with users on other
-     * messengers (Signal, Messenger, etc.). Hosted-mode interop runs the
+     * @apiNote
+     * Drives WhatsApp interoperability (mandated by the EU Digital Markets
+     * Act), which lets WhatsApp users exchange messages with users on other
+     * messengers such as Signal or Messenger. Hosted-mode interop runs the
      * encryption on Meta's servers under E2EE attestation rather than on
      * the third-party app; this cache memoizes which peers have already
-     * been verified as hosted so the verification handshake is not
-     * re-run on every message. (The underlying WA Web codename is
-     * "coex", short for "coexistence".)
+     * been verified as hosted so the verification handshake is not re-run
+     * on every message. The underlying WA Web codename is "coex", short
+     * for "coexistence".
      *
-     * @param userJid the user JID to record
+     * @param userJid the user {@link Jid} to record
      */
     void addToInteropHostedVerificationCache(Jid userJid);
 
@@ -2849,6 +3317,212 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void setBlockedContacts(Collection<Jid> contacts);
 
     /**
+     * Returns the last server-supplied blocklist digest.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebUserPrefsMultiDevice.getBlocklistHash}
+     * UserPrefs entry. Pass the value back to
+     * {@code <iq xmlns="blocklist" type="get">} so the relay can
+     * answer with the cache-match short-circuit when the local cache
+     * is still authoritative.
+     *
+     * @return an {@code Optional} carrying the digest, or empty when
+     *         no fetch has succeeded yet
+     */
+    Optional<String> blocklistHash();
+
+    /**
+     * Stores the latest server-supplied blocklist digest.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebUserPrefsMultiDevice.setBlocklistHash}
+     * UserPrefs setter.
+     *
+     * @param blocklistHash the digest to remember, or {@code null} to
+     *                      clear the cache
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setBlocklistHash(String blocklistHash);
+
+    /**
+     * Returns whether the local blocklist has been migrated from PN to
+     * LID addressing.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebBlocklistMigration.isBlocklistMigrated} UserPrefs
+     * flag.
+     *
+     * @return {@code true} when the blocklist has been migrated
+     */
+    boolean blocklistMigrated();
+
+    /**
+     * Sets the blocklist-migrated flag.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebBlocklistMigration.setBlocklistMigrated} and
+     * {@code setBlocklistUnmigrated} UserPrefs setters.
+     *
+     * @param blocklistMigrated the new flag value
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setBlocklistMigrated(boolean blocklistMigrated);
+
+    /**
+     * Returns whether the relay has delivered a LID-addressed blocklist
+     * before the device has completed its own 1:1 LID migration.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAReceivedBlocklistMigrationBefore1x1Migration} UserPrefs
+     * entry. The deferred blocklist migration runs after the 1:1 LID
+     * migration completes.
+     *
+     * @return {@code true} when the relay has delivered a
+     *         LID-addressed blocklist early
+     */
+    boolean receivedBlocklistMigrationBefore1x1Migration();
+
+    /**
+     * Sets the early-blocklist-migration flag.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAReceivedBlocklistMigrationBefore1x1Migration} UserPrefs
+     * setter.
+     *
+     * @param value the new flag value
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setReceivedBlocklistMigrationBefore1x1Migration(boolean value);
+
+    /**
+     * Returns the cached server digest of the marketing-message
+     * opt-out list for one category.
+     *
+     * @apiNote
+     * The next refresh of that category passes this digest back so the
+     * server can answer with a cache-hit when the local view is still
+     * authoritative.
+     *
+     * @param category the opt-out category; never {@code null}
+     * @return an {@link Optional} carrying the digest, or empty when
+     *         no refresh has succeeded for that category yet
+     */
+    Optional<String> optOutListHash(String category);
+
+    /**
+     * Returns the cached entries of the marketing-message opt-out
+     * list for one category.
+     *
+     * @param category the opt-out category; never {@code null}
+     * @return an unmodifiable list of entries; empty when no refresh
+     *         has succeeded for that category yet
+     */
+    List<OptOutEntry> optOutListEntries(String category);
+
+    /**
+     * Stores a fresh marketing-message opt-out list for one category.
+     *
+     * @param category the opt-out category; never {@code null}
+     * @param hash     the new server digest, or {@code null} to clear
+     * @param entries  the new entries; never {@code null}
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setOptOutList(String category, String hash, List<OptOutEntry> entries);
+
+    /**
+     * Returns the cached server digest of the per-axis privacy
+     * contact blacklist for one category.
+     *
+     * @apiNote
+     * The next refresh of that category passes this digest back so the
+     * server can answer with a cache-hit when the local view is still
+     * authoritative.
+     *
+     * @param category the privacy axis category name; never {@code null}
+     * @return an {@link Optional} carrying the digest, or empty when
+     *         no refresh has succeeded for that category yet
+     */
+    Optional<String> contactBlacklistHash(String category);
+
+    /**
+     * Returns the cached entries of the per-axis privacy contact
+     * blacklist for one category.
+     *
+     * @param category the privacy axis category name; never {@code null}
+     * @return an unmodifiable list of blocked JIDs; empty when no
+     *         refresh has succeeded for that category yet
+     */
+    List<Jid> contactBlacklistEntries(String category);
+
+    /**
+     * Stores a fresh per-axis privacy contact blacklist for one
+     * category.
+     *
+     * @param category the privacy axis category name; never {@code null}
+     * @param hash     the new server digest, or {@code null} to clear
+     * @param entries  the new entries; never {@code null}
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setContactBlacklist(String category, String hash, List<Jid> entries);
+
+    /**
+     * Returns the cached Status story privacy setting.
+     *
+     * @return an {@link Optional} carrying the setting, or empty when
+     *         no refresh has succeeded yet
+     */
+    Optional<StatusPrivacySetting> statusPrivacy();
+
+    /**
+     * Stores the latest server-authoritative Status story privacy
+     * setting.
+     *
+     * @param statusPrivacy the setting to remember, or {@code null}
+     *                      to clear
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setStatusPrivacy(StatusPrivacySetting statusPrivacy);
+
+    /**
+     * Returns the cached account-level Disappearing Messages setting.
+     *
+     * @return an {@link Optional} carrying the setting, or empty when
+     *         no refresh has succeeded yet
+     */
+    Optional<AccountDisappearingMode> disappearingMode();
+
+    /**
+     * Stores the latest server-authoritative Disappearing Messages
+     * setting.
+     *
+     * @param disappearingMode the setting to remember, or {@code null}
+     *                         to clear
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setDisappearingMode(AccountDisappearingMode disappearingMode);
+
+    /**
+     * Returns the cached list of devices paired to this account.
+     *
+     * @return an unmodifiable list of device JIDs; empty when no
+     *         refresh has succeeded yet
+     */
+    List<Jid> linkedDevices();
+
+    /**
+     * Stores the latest server-authoritative list of paired devices.
+     *
+     * @param linkedDevices the device JIDs to remember, or
+     *                      {@code null} to clear
+     * @return this store for fluent chaining
+     */
+    WhatsAppStore setLinkedDevices(Collection<Jid> linkedDevices);
+
+    /**
      * Finds the verified business name record for the given JID.
      *
      * @param jid the user JID
@@ -2897,32 +3571,28 @@ public interface WhatsAppStore extends SignalProtocolStore {
     void removeChatMetadata(Jid groupJid);
 
     /**
-     * Applies the local-only fields of a {@link GroupMetadataEdit} to
-     * the in-memory {@link GroupMetadata} row for {@code groupJid},
-     * returning the mutated row when present.
+     * Applies the local-only fields of a {@link GroupMetadataEdit} to the
+     * in-memory {@link GroupMetadata} row for {@code groupJid}, returning
+     * the mutated row when present.
      *
-     * <p>Only fields that have a defined local merge are honoured —
-     * today that is exclusively
-     * {@link GroupMetadataEdit#statusMuted() statusMuted}, which the
-     * {@code WAWebUserStatusMuteSync.applyMutations} sync action drives
-     * directly into the store without a network round-trip. Other
-     * fields on the edit (subject, description, picture, settings
-     * flags) are not merged here because they are server-authoritative
-     * and only become visible to the local store via a subsequent
-     * {@code group_metadata} notification.
+     * @apiNote
+     * Used by sync action handlers that mutate group state without a
+     * server round-trip; today the only field honoured is
+     * {@link GroupMetadataEdit#statusMuted() statusMuted}, driven by the
+     * {@code WAWebUserStatusMuteSync.applyMutations} sync action.
      *
-     * <p>When the target group has no metadata row in the store, this
-     * method returns {@link Optional#empty()} without applying any
-     * mutation.
+     * @implNote
+     * This implementation skips other fields on the edit (subject,
+     * description, picture, settings flags) because they are
+     * server-authoritative and only become visible to the local store via
+     * a subsequent {@code group_metadata} notification. Returns
+     * {@link Optional#empty()} when the target group has no metadata row.
      *
-     * @param groupJid the group or community JID; must not be
-     *                 {@code null}
-     * @param edit     the edit packet whose local-only fields are
-     *                 merged into the stored row; must not be
-     *                 {@code null}
-     * @return an {@link Optional} carrying the mutated
-     *         {@link GroupMetadata} row, or empty when the group is
-     *         not known to the store
+     * @param groupJid the group or community {@link Jid}, must not be {@code null}
+     * @param edit     the edit packet whose local-only fields are merged into
+     *                 the stored row, must not be {@code null}
+     * @return an {@link Optional} carrying the mutated {@link GroupMetadata}
+     *         row, or empty when the group is not known to the store
      */
     Optional<GroupMetadata> applyGroupMetadataEdit(Jid groupJid, GroupMetadataEdit edit);
 
@@ -2965,28 +3635,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setProxy(WhatsAppProxy proxy);
 
     /**
-     * Blocks until a media connection is available.
-     *
-     * @return the media connection, never {@code null}
-     * @throws InterruptedException if the current thread is interrupted
-     */
-    MediaConnection awaitMediaConnection() throws InterruptedException;
-
-    /**
-     * Sets the media connection.
-     *
-     * @param mediaConnection the media connection, may be {@code null}
-     * @return this store instance for method chaining
-     */
-    WhatsAppStore setMediaConnection(MediaConnection mediaConnection);
-
-    /**
      * Returns the current offline resume state.
      *
-     * <p>The state is driven by the offline-resume info bulletins
-     * dispatched in {@code InfoBulletinStreamHandler}: the
-     * {@code offline_preview} IB advances {@link WhatsAppClientOfflineResumeState#INIT}
-     * to {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} (cold
+     * @apiNote
+     * Exposes the lifecycle position of the cold-start backlog replay; the
+     * state is driven by the offline-resume info bulletins dispatched in
+     * {@code InfoBulletinStreamHandler}. The {@code offline_preview} IB
+     * advances {@link WhatsAppClientOfflineResumeState#INIT} to
+     * {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART} (cold
      * start) or any past-restart state to
      * {@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB} (live
      * disconnect), and the {@code offline} IB closes the resume out by
@@ -3000,12 +3656,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Sets the offline resume state, transitioning the latch that gates
      * {@link #waitForOfflineDeliveryEnd()}.
      *
-     * <p>This setter is the only authoritative writer of the resume
-     * state. Setting {@link WhatsAppClientOfflineResumeState#COMPLETE}
-     * counts the latch down so that any thread blocked in
-     * {@link #waitForOfflineDeliveryEnd()} unblocks; setting
-     * {@link WhatsAppClientOfflineResumeState#INIT} re-creates the latch
-     * so a subsequent reconnect can re-block waiters.
+     * @apiNote
+     * Sole authoritative writer of the resume state: setting
+     * {@link WhatsAppClientOfflineResumeState#COMPLETE} counts the latch
+     * down so any thread blocked in {@link #waitForOfflineDeliveryEnd()}
+     * unblocks, while setting {@link WhatsAppClientOfflineResumeState#INIT}
+     * re-creates the latch so a subsequent reconnect can re-block waiters.
      *
      * @param state the new state, must not be {@code null}
      * @return this store instance for method chaining
@@ -3015,15 +3671,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Checks if the offline resume from restart is complete.
      *
-     * <p>Mirrors WA Web's {@code isResumeFromRestartComplete} on both the
-     * blocking and non-blocking offline resume managers: returns
-     * {@code true} as long as the state is neither
-     * {@link WhatsAppClientOfflineResumeState#INIT} nor
-     * {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}, i.e.
-     * the cold-start backlog has finished delivering. Live-tab
-     * reconnects ({@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB})
-     * therefore still report {@code true} so that subsystems already
-     * past the cold-start replay continue running real-time logic.
+     * @apiNote
+     * Returns {@code true} once the cold-start backlog has finished
+     * delivering, gating subsystems that should only run after replay
+     * (read receipts, presence reporting, etc.). Live-tab reconnects
+     * ({@link WhatsAppClientOfflineResumeState#RESUME_WITH_OPEN_TAB}) also
+     * report {@code true} so subsystems already past the cold-start replay
+     * continue running real-time logic.
+     *
+     * @implNote
+     * This implementation returns {@code true} as long as the state is
+     * neither {@link WhatsAppClientOfflineResumeState#INIT} nor
+     * {@link WhatsAppClientOfflineResumeState#RESUME_ON_RESTART}, mirroring
+     * WA Web's {@code isResumeFromRestartComplete} on both the blocking
+     * and non-blocking offline resume managers.
      *
      * @return {@code true} if offline resume is complete
      */
@@ -3032,11 +3693,17 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Blocks until offline delivery is complete, or the timeout expires.
      *
-     * <p>Returns immediately when the state is already
-     * {@link WhatsAppClientOfflineResumeState#COMPLETE}; otherwise waits
-     * up to five minutes for {@link #setOfflineResumeState(WhatsAppClientOfflineResumeState)}
-     * to be called with {@code COMPLETE}. The latch is one-shot per
-     * connection and is recycled when the state is reset to
+     * @apiNote
+     * Used by callers that must defer real-time work until the cold-start
+     * backlog has finished delivering; returns immediately when the state
+     * is already {@link WhatsAppClientOfflineResumeState#COMPLETE},
+     * otherwise waits up to five minutes for
+     * {@link #setOfflineResumeState(WhatsAppClientOfflineResumeState)} to
+     * be called with {@code COMPLETE}.
+     *
+     * @implNote
+     * This implementation backs the wait with a one-shot latch per
+     * connection that is recycled when the state is reset to
      * {@link WhatsAppClientOfflineResumeState#INIT} on reconnect.
      */
     void waitForOfflineDeliveryEnd();
@@ -3106,11 +3773,11 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the user's "Favourites" pinned chat list, in display order.
      *
-     * <p>These are the chats the user has marked as favourites in the
-     * Favourites section at the top of the Chats tab; the list ordering
-     * is what the UI renders.
+     * @apiNote
+     * Drives the Favourites section at the top of the Chats tab; the
+     * order of the returned list is what the UI renders.
      *
-     * @return an unmodifiable list of favourite chat JIDs, never
+     * @return an unmodifiable list of favourite chat {@link Jid}s, never
      *         {@code null}
      */
     List<Jid> favoriteChats();
@@ -3127,7 +3794,8 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the list of feature names the primary device has reported
      * supporting.
      *
-     * <p>Distinct from the AB-props bundle: AB-props are server-driven
+     * @apiNote
+     * Distinct from the AB-props bundle: AB-props are server-driven
      * rollout flags, while these are protocol-level capabilities that the
      * primary phone advertises (for example "supports new disappearing-
      * messages timer values"). Companion devices use the list to decide
@@ -3167,11 +3835,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setPrimaryAllowsAllMutations(boolean primaryAllowsAllMutations);
 
     /**
-     * Returns the synced state of every WhatsApp Business "agent" — a
-     * support-team member who handles incoming chats.
+     * Returns the synced state of every WhatsApp Business "agent" (a
+     * support-team member who handles incoming chats).
      *
-     * @return an unmodifiable collection of agent states, never
-     *         {@code null}
+     * @apiNote
+     * Drives the team-inbox surface in WhatsApp Business: each agent state
+     * carries the agent's identity and assignment metadata used to route
+     * incoming customer chats.
+     *
+     * @return an unmodifiable collection of agent states, never {@code null}
      */
     Collection<AgentState> agentStates();
 
@@ -3511,11 +4183,13 @@ public interface WhatsAppStore extends SignalProtocolStore {
 
     /**
      * Returns the post-send analytics ("insights") for every WhatsApp
-     * Business broadcast campaign — delivered, opened and replied counts
-     * that drive the campaign report screen.
+     * Business broadcast campaign.
      *
-     * @return an unmodifiable collection of broadcast insights, never
-     *         {@code null}
+     * @apiNote
+     * Drives the campaign report screen; each insight carries the
+     * delivered, opened and replied counts for one campaign.
+     *
+     * @return an unmodifiable collection of broadcast insights, never {@code null}
      */
     Collection<BusinessBroadcastInsight> businessBroadcastInsights();
 
@@ -3572,6 +4246,508 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setNotificationContentTokenSalt(byte[] salt);
 
     /**
+     * Returns the companion-side authentication nonce that authorises
+     * this device against WhatsApp's MMS (Media Management Service) when
+     * asking it to release the just-applied history-sync blob from the
+     * CDN.
+     *
+     * @apiNote
+     * Populated from the
+     * {@link com.github.auties00.cobalt.model.message.system.history.HistorySyncType#INITIAL_BOOTSTRAP}
+     * history-sync chunk and consumed by the post-apply MMS
+     * blob-deletion call; absent until the first bootstrap completes.
+     *
+     * @return an {@code Optional} containing the nonce if known
+     */
+    Optional<String> companionMmsAuthNonce();
+
+    /**
+     * Sets the companion MMS authentication nonce.
+     *
+     * @param nonce the nonce, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setCompanionMmsAuthNonce(String nonce);
+
+    /**
+     * Returns the per-account key that protects the opaque chat
+     * identifier embedded in WhatsApp's shareable-chat links (the
+     * {@code wa.me/} and QR deep-link surface).
+     *
+     * @apiNote
+     * Populated from the
+     * {@link com.github.auties00.cobalt.model.message.system.history.HistorySyncType#INITIAL_BOOTSTRAP}
+     * history-sync chunk and persisted for completeness. The
+     * deep-link generator runs entirely server-side: there is no
+     * client-side consumer on WhatsApp Web or on the Windows desktop
+     * bundle, so neither WA Web nor Cobalt ever invokes any local
+     * encryption routine with this key. The accessor exists so
+     * embedders can inspect the bytes for diagnostics, not because
+     * Cobalt needs to read them.
+     *
+     * @return an {@code Optional} containing the key bytes if known
+     */
+    Optional<byte[]> shareableChatLinkKey();
+
+    /**
+     * Sets the shareable-chat-link encryption key.
+     *
+     * @param key the key bytes, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setShareableChatLinkKey(byte[] key);
+
+    /**
+     * Returns whether the desktop client launches automatically at OS login.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean startAtLogin();
+
+    /**
+     * Sets whether the desktop client launches automatically at OS login.
+     *
+     * @param startAtLogin the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setStartAtLogin(boolean startAtLogin);
+
+    /**
+     * Returns whether closing the main window minimises the client to the
+     * system tray.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean minimizeToTray();
+
+    /**
+     * Sets whether closing the main window minimises the client to the
+     * system tray.
+     *
+     * @param minimizeToTray the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setMinimizeToTray(boolean minimizeToTray);
+
+    /**
+     * Returns whether typed emoticons are auto-replaced with graphical emoji
+     * while composing.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean replaceTextWithEmoji();
+
+    /**
+     * Sets whether typed emoticons are auto-replaced with graphical emoji.
+     *
+     * @param replaceTextWithEmoji the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setReplaceTextWithEmoji(boolean replaceTextWithEmoji);
+
+    /**
+     * Returns when banner notifications are shown on the desktop.
+     *
+     * @return an {@link Optional} containing the display mode, or empty if unset
+     */
+    Optional<SettingsSyncAction.DisplayMode> bannerNotificationDisplayMode();
+
+    /**
+     * Sets when banner notifications are shown on the desktop.
+     *
+     * @param mode the display mode, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setBannerNotificationDisplayMode(SettingsSyncAction.DisplayMode mode);
+
+    /**
+     * Returns when the unread counter badge is shown on the application icon.
+     *
+     * @return an {@link Optional} containing the display mode, or empty if unset
+     */
+    Optional<SettingsSyncAction.DisplayMode> unreadCounterBadgeDisplayMode();
+
+    /**
+     * Sets when the unread counter badge is shown on the application icon.
+     *
+     * @param mode the display mode, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setUnreadCounterBadgeDisplayMode(SettingsSyncAction.DisplayMode mode);
+
+    /**
+     * Returns whether incoming message notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean messagesNotificationEnabled();
+
+    /**
+     * Sets whether incoming message notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setMessagesNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether incoming call notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean callsNotificationEnabled();
+
+    /**
+     * Sets whether incoming call notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setCallsNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether reaction notifications are delivered for one-to-one
+     * chats.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean reactionsNotificationEnabled();
+
+    /**
+     * Sets whether reaction notifications are delivered for one-to-one chats.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setReactionsNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether status reaction notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean statusReactionsNotificationEnabled();
+
+    /**
+     * Sets whether status reaction notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setStatusReactionsNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether notification banners include a text preview of the
+     * message body.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean textPreviewForNotificationEnabled();
+
+    /**
+     * Sets whether notification banners include a text preview of the
+     * message body.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setTextPreviewForNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns the default tone identifier used for one-to-one chat
+     * notifications.
+     *
+     * @return an {@link OptionalInt} containing the tone id, or empty if unset
+     */
+    OptionalInt defaultNotificationToneId();
+
+    /**
+     * Sets the default tone identifier used for one-to-one chat
+     * notifications.
+     *
+     * @param toneId the tone id, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setDefaultNotificationToneId(Integer toneId);
+
+    /**
+     * Returns the default tone identifier used for group chat notifications.
+     *
+     * @return an {@link OptionalInt} containing the tone id, or empty if unset
+     */
+    OptionalInt groupDefaultNotificationToneId();
+
+    /**
+     * Sets the default tone identifier used for group chat notifications.
+     *
+     * @param toneId the tone id, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setGroupDefaultNotificationToneId(Integer toneId);
+
+    /**
+     * Returns the selected application theme.
+     *
+     * @return an {@link Optional} containing the theme constant, or empty if
+     *         unset
+     */
+    Optional<AppTheme> appTheme();
+
+    /**
+     * Sets the selected application theme.
+     *
+     * @param appTheme the theme constant, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAppTheme(AppTheme appTheme);
+
+    /**
+     * Returns the identifier of the selected chat wallpaper.
+     *
+     * @return an {@link OptionalInt} containing the wallpaper id, or empty if
+     *         unset
+     */
+    OptionalInt wallpaperId();
+
+    /**
+     * Sets the identifier of the selected chat wallpaper.
+     *
+     * @param wallpaperId the wallpaper id, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setWallpaperId(Integer wallpaperId);
+
+    /**
+     * Returns whether the doodle overlay is drawn on top of the chat
+     * wallpaper.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean doodleWallpaperEnabled();
+
+    /**
+     * Sets whether the doodle overlay is drawn on top of the chat wallpaper.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setDoodleWallpaperEnabled(boolean enabled);
+
+    /**
+     * Returns the selected font size preset for chat rendering.
+     *
+     * @return an {@link OptionalInt} containing the font size, or empty if
+     *         unset
+     */
+    OptionalInt fontSize();
+
+    /**
+     * Sets the selected font size preset for chat rendering.
+     *
+     * @param fontSize the font size preset, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setFontSize(Integer fontSize);
+
+    /**
+     * Returns whether incoming images are automatically downloaded.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean photosAutodownloadEnabled();
+
+    /**
+     * Sets whether incoming images are automatically downloaded.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setPhotosAutodownloadEnabled(boolean enabled);
+
+    /**
+     * Returns whether incoming audio messages are automatically downloaded.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean audiosAutodownloadEnabled();
+
+    /**
+     * Sets whether incoming audio messages are automatically downloaded.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setAudiosAutodownloadEnabled(boolean enabled);
+
+    /**
+     * Returns whether incoming videos are automatically downloaded.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean videosAutodownloadEnabled();
+
+    /**
+     * Sets whether incoming videos are automatically downloaded.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setVideosAutodownloadEnabled(boolean enabled);
+
+    /**
+     * Returns whether incoming documents are automatically downloaded.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean documentsAutodownloadEnabled();
+
+    /**
+     * Sets whether incoming documents are automatically downloaded.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setDocumentsAutodownloadEnabled(boolean enabled);
+
+    /**
+     * Returns the identifier of the chat notification tone override.
+     *
+     * @return an {@link OptionalInt} containing the tone id, or empty if unset
+     */
+    OptionalInt notificationToneId();
+
+    /**
+     * Sets the identifier of the chat notification tone override.
+     *
+     * @param toneId the tone id, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setNotificationToneId(Integer toneId);
+
+    /**
+     * Returns the quality preset applied when uploading photos and videos.
+     *
+     * @return an {@link Optional} containing the quality preset, or empty if
+     *         unset
+     */
+    Optional<SettingsSyncAction.MediaQualitySetting> mediaUploadQuality();
+
+    /**
+     * Sets the quality preset applied when uploading photos and videos.
+     *
+     * @param quality the quality preset, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setMediaUploadQuality(SettingsSyncAction.MediaQualitySetting quality);
+
+    /**
+     * Returns whether spell check is enabled in the message composer.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean spellCheckEnabled();
+
+    /**
+     * Sets whether spell check is enabled in the message composer.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setSpellCheckEnabled(boolean enabled);
+
+    /**
+     * Returns whether pressing Enter sends the current message.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean enterToSendEnabled();
+
+    /**
+     * Sets whether pressing Enter sends the current message.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setEnterToSendEnabled(boolean enabled);
+
+    /**
+     * Returns whether group message notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean groupMessageNotificationEnabled();
+
+    /**
+     * Sets whether group message notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setGroupMessageNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether group reaction notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean groupReactionsNotificationEnabled();
+
+    /**
+     * Sets whether group reaction notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setGroupReactionsNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns whether status update notifications are delivered.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean statusNotificationEnabled();
+
+    /**
+     * Sets whether status update notifications are delivered.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setStatusNotificationEnabled(boolean enabled);
+
+    /**
+     * Returns the identifier of the status notification tone.
+     *
+     * @return an {@link OptionalInt} containing the tone id, or empty if unset
+     */
+    OptionalInt statusNotificationToneId();
+
+    /**
+     * Sets the identifier of the status notification tone.
+     *
+     * @param toneId the tone id, may be {@code null} to clear
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setStatusNotificationToneId(Integer toneId);
+
+    /**
+     * Returns whether call notifications play a ringtone in addition to
+     * showing the banner.
+     *
+     * @return {@code true} if enabled
+     */
+    boolean playSoundForCallNotification();
+
+    /**
+     * Sets whether call notifications play a ringtone in addition to showing
+     * the banner.
+     *
+     * @param enabled the new value
+     * @return this store instance for method chaining
+     */
+    WhatsAppStore setPlaySoundForCallNotification(boolean enabled);
+
+    /**
      * Returns the dismissed state of every WhatsApp onboarding hint. These
      * are the one-shot tooltips and banners WhatsApp shows the first time
      * a user hits a new feature; an entry whose flag is {@code true} means
@@ -3618,13 +4794,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore clearOnboardingHintStates();
 
     /**
-     * Returns the capability set advertised by the primary device — the
-     * phone that owns this account. WhatsApp uses these flags to gate
-     * features that the companion can only enable when the primary
-     * supports them (for example LID-based messaging or new sync-action
-     * categories).
+     * Returns the capability set advertised by the primary device (the
+     * phone that owns this account).
      *
-     * @return an {@code Optional} containing the capability set if it has
+     * @apiNote
+     * Gates features that the companion can only enable when the primary
+     * supports them, for example LID-based messaging or new sync-action
+     * categories.
+     *
+     * @return an {@link Optional} containing the capability set if it has
      *         been received
      */
     Optional<DeviceCapabilities> primaryDeviceCapabilities();
@@ -3682,9 +4860,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore clearDeviceCapabilitiesStates();
 
     /**
-     * Returns the persisted state for every interactive-message thread —
-     * the rich card menus, list pickers and replies-to-quick-reply buttons
-     * the user has interacted with.
+     * Returns the persisted state for every interactive-message thread.
+     *
+     * @apiNote
+     * Covers the rich card menus, list pickers and replies-to-quick-reply
+     * buttons the user has interacted with; each entry remembers what
+     * choice the user made so the UI does not re-prompt on the next view.
      *
      * @return an unmodifiable collection of interactive-message states,
      *         never {@code null}
@@ -3960,14 +5141,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the identifiers of every persisted WAM buffer awaiting a
      * retry on the next session.
      *
-     * <p>A persisted buffer is a file written by
+     * @apiNote
+     * Enumerates buffers written by
      * {@link com.github.auties00.cobalt.wam.WamService} just before an
-     * upload attempt; if the process exits before the upload succeeds
-     * (or before the retry budget is exhausted) the file remains and is
-     * picked up here on the next start.
+     * upload attempt that did not complete before process exit; if the
+     * upload did not succeed (or the retry budget was not exhausted) the
+     * file remains and is picked up here on the next start.
      *
-     * @return an unmodifiable collection of save keys, never
-     *         {@code null}
+     * @return an unmodifiable collection of save keys, never {@code null}
      */
     Collection<String> wamPendingBufferKeys();
 
@@ -3975,13 +5156,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Opens an output stream that streams a new persisted WAM buffer to
      * disk under the given save key.
      *
-     * <p>Implementations must commit the file atomically when the
-     * stream is {@linkplain OutputStream#close() closed}. A file with
-     * the same save key already on disk is overwritten.
+     * @apiNote
+     * Invoked by {@link com.github.auties00.cobalt.wam.WamService} when
+     * persisting a buffer just before the upload attempt; the caller owns
+     * the returned stream and must close it. A file with the same save
+     * key already on disk is overwritten.
+     *
+     * @implSpec
+     * Implementations must commit the file atomically when the stream is
+     * {@linkplain OutputStream#close() closed}, so a partially-written
+     * file is never observable by {@link #openWamPendingBufferReader(String)}.
      *
      * @param saveKey the unique identifier for the buffer, must not be
      *                {@code null} or contain path separators
-     * @return a new output stream; the caller owns it and must close it
+     * @return a new output stream
      * @throws IOException if the underlying directory cannot be created
      */
     OutputStream openWamPendingBufferWriter(String saveKey) throws IOException;
@@ -4018,14 +5206,15 @@ public interface WhatsAppStore extends SignalProtocolStore {
     /**
      * Returns the persistent WAM sequence number for the given channel.
      *
-     * <p>WAM buffers carry a per-stream uint16 sequence number in their
-     * 8-byte header. Persisting it across sessions ensures the server
-     * does not see a reset to {@code 1} after every restart, matching
-     * WhatsApp Web's {@code WAWebWamStorage.getNextSequenceNumberForStream}
-     * semantics.
+     * @apiNote
+     * Drives WAM buffer header continuity across restarts: every WAM
+     * buffer carries a per-stream uint16 sequence number in its 8-byte
+     * header, and persisting it ensures the server does not see a reset
+     * to {@code 1} after every restart, matching WhatsApp Web's
+     * {@code WAWebWamStorage.getNextSequenceNumberForStream} semantics.
      *
      * @param channel the transport channel, must not be {@code null}
-     * @return an {@code OptionalInt} containing the persisted next
+     * @return an {@link OptionalInt} containing the persisted next
      *         sequence number, or empty if none has been recorded yet
      */
     OptionalInt findWamSequenceNumber(WamChannel channel);
@@ -4059,12 +5248,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setUsernameChatStartMode(UsernameChatStartModeAction.ChatStartMode mode);
 
     /**
-     * Returns the user's per-account "Notify me about" setting (the
-     * coarse switch under Notifications that selects which activity
-     * categories — messages, statuses, channels — should produce push
-     * notifications).
+     * Returns the user's per-account "Notify me about" setting.
      *
-     * @return an {@code Optional} containing the setting if it has been
+     * @apiNote
+     * Drives the coarse switch under Notifications that selects which
+     * activity categories (messages, statuses, channels) should produce
+     * push notifications for this account.
+     *
+     * @return an {@link Optional} containing the setting if it has been
      *         configured
      */
     Optional<NotificationActivitySettingAction.NotificationActivitySetting> notificationActivitySetting();
@@ -4095,20 +5286,20 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setRecentEmojiWeights(List<RecentEmojiWeight> weights);
 
     /**
-     * Returns the user's identifier for the paid newsletter
-     * (WhatsApp Channel) subscription subsystem.
+     * Returns the user's identifier for the paid newsletter (WhatsApp
+     * Channel) subscription subsystem.
      *
-     * <p>This is the back-end behind paid newsletter subscriptions — the
-     * feature that lets a newsletter admin gate posts behind a recurring
-     * fee and lets followers buy access. The id here ties the account to
-     * its subscription record (plan id, billing status, ToS acceptance,
-     * link with the Meta Accounts Center record), so both consumer and
-     * admin flows can resolve the right subscription profile. (The
-     * underlying WA Web codename is "WAMO", short for "WhatsApp
-     * Monetisation".)
+     * @apiNote
+     * Drives the paid-subscription back-end that lets a Channel admin gate
+     * posts behind a recurring fee and lets followers buy access. The id
+     * ties the account to its subscription record (plan id, billing
+     * status, ToS acceptance, link with the Meta Accounts Center record),
+     * so both consumer and admin flows can resolve the right subscription
+     * profile. The underlying WA Web codename is "WAMO", short for
+     * "WhatsApp Monetisation".
      *
-     * @return an {@code Optional} containing the user id if the server
-     *         has issued one
+     * @return an {@link Optional} containing the user id if the server has
+     *         issued one
      */
     Optional<String> newsletterSubscriptionUserIdentifier();
 
@@ -4138,12 +5329,14 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setMusicUserIdState(MusicUserIdAction action);
 
     /**
-     * Returns the user's saved interests for WhatsApp Channel
-     * recommendations — the categories the user picked in the
-     * "Find channels you'll love" onboarding screen, encoded as the
-     * server-supplied opaque string.
+     * Returns the user's saved interests for WhatsApp Channel recommendations.
      *
-     * @return an {@code Optional} containing the saved interests if any
+     * @apiNote
+     * Drives the personalised Channel discovery feed; the value is the
+     * server-supplied opaque string capturing the categories the user
+     * picked in the "Find channels you'll love" onboarding screen.
+     *
+     * @return an {@link Optional} containing the saved interests if any
      *         have been recorded
      */
     Optional<String> newsletterSavedInterests();
@@ -4236,23 +5429,22 @@ public interface WhatsAppStore extends SignalProtocolStore {
     WhatsAppStore setUserCreatedBotDefinition(byte[] definition);
 
     /**
-     * Returns the on/off status of the AI Business Agent for this
-     * account.
+     * Returns the on/off status of the AI Business Agent for this account.
      *
-     * <p>The AI Business Agent (referred to internally by the WA Web
-     * codename "Maiba" / "Maiba AI Hub") is the platform a WhatsApp
-     * Business owner uses to put an AI assistant in front of their
-     * customer chats: the owner uploads knowledge sources (websites,
-     * files, past chat history), configures auto-reply behaviour and
-     * lead-generation flows, and the AI then answers customers on their
-     * behalf via a Cloud-API thread takeover. This status records
-     * whether the AI agent is currently enabled, disabled or pending
-     * server confirmation for this account; it is updated by the
-     * {@code maiba_ai_features_control} sync action. The value is stored
-     * verbatim for round-trip fidelity but is not currently consumed by
-     * any read path.
+     * @apiNote
+     * Surfaces the WhatsApp Business AI Agent toggle (referred to
+     * internally by the WA Web codename "Maiba" / "Maiba AI Hub"), which
+     * lets a business owner put an AI assistant in front of customer
+     * chats via a Cloud-API thread takeover. The status records whether
+     * the AI agent is currently enabled, disabled or pending server
+     * confirmation and is updated by the
+     * {@code maiba_ai_features_control} sync action.
      *
-     * @return an {@code Optional} containing the status if one has been
+     * @implNote
+     * This implementation stores the value verbatim for round-trip
+     * fidelity; no read path inside Cobalt currently consumes the flag.
+     *
+     * @return an {@link Optional} containing the status if one has been
      *         received
      */
     Optional<MaibaAIFeaturesControlAction.MaibaAIFeatureStatus> aiBusinessAgentStatus();
@@ -4328,10 +5520,12 @@ public interface WhatsAppStore extends SignalProtocolStore {
      * Returns the AB-props {@code abKey} string most recently received
      * from the server.
      *
-     * <p>"AB-props" is WhatsApp's experiment / feature-flag bundle: a
-     * server-controlled blob of key/value pairs that gates rollouts and
-     * tunes per-user limits. The bundle is delta-synced and the
-     * {@code abKey} identifies the variant assignment for this account.
+     * @apiNote
+     * The "AB-props" bundle is WhatsApp's server-controlled
+     * experiment / feature-flag blob that gates rollouts and tunes
+     * per-user limits; the {@code abKey} identifies the variant
+     * assignment for this account and is sent on every subsequent
+     * AB-props sync to negotiate the delta.
      *
      * @return an {@link Optional} containing the AB key, or empty when
      *         none has been received yet

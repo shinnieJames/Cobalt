@@ -2,6 +2,7 @@ package com.github.auties00.cobalt.model.sync.action.privacy;
 
 import com.github.auties00.cobalt.model.sync.SyncActionEmptyArgs;
 import com.github.auties00.cobalt.model.sync.SyncAction;
+import com.github.auties00.cobalt.model.sync.SyncPatchType;
 
 import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
@@ -34,6 +35,12 @@ public final class PrivateProcessingSettingAction implements SyncAction<SyncActi
      * The canonical protocol version of this sync action.
      */
     public static final int ACTION_VERSION = 1;
+
+    /**
+     * Sync collection this action belongs to, used by the sync protocol to
+     * route the mutation into the correct replication stream.
+     */
+    public static final SyncPatchType COLLECTION_NAME = SyncPatchType.REGULAR_HIGH;
 
     /**
      * Returns the canonical action name used to identify this sync action on

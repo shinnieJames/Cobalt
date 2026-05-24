@@ -14,17 +14,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants.
+ * The sealed reply family for a {@link SmaxGroupsSetDescriptionRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher in {@code WASmaxGroupsSetDescriptionRPC}.
+ * {@link Success} additionally carries the optional {@code t} timestamp echoed by the relay, which callers use
+ * to stamp the local revision row.
  */
 public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.Response
         permits SmaxGroupsSetDescriptionResponse.Success, SmaxGroupsSetDescriptionResponse.ClientError, SmaxGroupsSetDescriptionResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsSetDescriptionResponse} variant in priority order.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsSetDescriptionResponse} variant in priority order
+     * and returns the first that parses cleanly.
+     *
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsSetDescriptionRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
      *
      * @param node    the inbound IQ stanza
-     * @param request the original outbound request
-     * @return an {@link Optional} carrying the parsed variant
+     * @param request the original outbound {@link SmaxGroupsSetDescriptionRequest} stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsSetDescriptionRPC",
@@ -44,23 +56,22 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code Success} reply variant — carries the optional
-     * {@code t} timestamp attached to the IQ envelope.
+     * The reply variant emitted when the relay committed the description mutation.
+     *
+     * @apiNote {@link #timestamp()} carries the optional {@code t} attribute echoed by the relay (unix epoch
+     * seconds); callers use it as the local revision wall-clock when persisting the new description.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseSuccess")
     final class Success implements SmaxGroupsSetDescriptionResponse {
         /**
-         * The optional {@code t} timestamp lifted from the IQ
-         * envelope, in seconds; {@code null} when the relay omitted
-         * it.
+         * The optional {@code t} timestamp lifted from the IQ envelope (unix epoch seconds).
          */
         private final Long timestamp;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success}.
          *
-         * @param timestamp the optional {@code t} timestamp; may be
-         *                  {@code null}
+         * @param timestamp the optional {@code t} timestamp; may be {@code null}
          */
         public Success(Long timestamp) {
             this.timestamp = timestamp;
@@ -69,6 +80,8 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         /**
          * Returns the optional {@code t} timestamp.
          *
+         * @apiNote Empty when the relay omitted the attribute; present values are unix epoch seconds.
+         *
          * @return an {@link Optional} carrying the timestamp
          */
         public Optional<Long> timestamp() {
@@ -76,11 +89,14 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseSetDescriptionResponseSuccess}: the IQ must be a valid
+         * {@code type="result"} echo of the request; the optional {@code t} attribute is captured when present.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetDescriptionResponseSuccess",
                 exports = "parseSetDescriptionResponseSuccess",
@@ -93,6 +109,12 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return Optional.of(new Success(t));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality on {@link #timestamp()}.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with the same timestamp
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -105,11 +127,21 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return Objects.equals(this.timestamp, that.timestamp);
         }
 
+        /**
+         * Returns a hash derived from {@link #timestamp()}.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(timestamp);
         }
 
+        /**
+         * Returns a debug string carrying {@link #timestamp()}.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetDescriptionResponse.Success[timestamp=" + timestamp + ']';
@@ -117,22 +149,23 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised,
+     * referencing a non-existent group, or failing the revision-chain check.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseClientError")
     final class ClientError implements SmaxGroupsSetDescriptionResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
@@ -143,7 +176,7 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -152,20 +185,23 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetDescriptionResponseClientError",
                 exports = "parseSetDescriptionResponseClientError",
@@ -178,6 +214,12 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -190,11 +232,21 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetDescriptionResponse.ClientError[errorCode=" + errorCode
@@ -203,22 +255,22 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsSetDescriptionResponseServerError")
     final class ServerError implements SmaxGroupsSetDescriptionResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The optional error text.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional error text; may be {@code null}
@@ -229,7 +281,7 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -238,20 +290,23 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
         }
 
         /**
-         * Returns the optional error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsSetDescriptionResponseServerError",
                 exports = "parseSetDescriptionResponseServerError",
@@ -264,6 +319,12 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -276,11 +337,21 @@ public sealed interface SmaxGroupsSetDescriptionResponse extends SmaxOperation.R
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsSetDescriptionResponse.ServerError[errorCode=" + errorCode

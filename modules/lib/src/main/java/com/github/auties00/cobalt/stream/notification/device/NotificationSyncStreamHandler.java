@@ -1,11 +1,12 @@
 package com.github.auties00.cobalt.stream.notification.device;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.jid.JidServer;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.node.Node;
-import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.cobalt.stream.SocketStream;
 import com.github.auties00.cobalt.stream.control.OfflineNotificationsReporter;
 
@@ -15,66 +16,86 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Handles server sync notifications by parsing the changed collection names,
- * triggering a pull sync for recognized collections, and acknowledging the
- * notification back to the server.
+ * Handles {@code type="server_sync"} notifications announcing app-state
+ * collection updates the client needs to pull.
  *
- * <p>The WA Web source module {@code WAWebHandleServerSyncNotification} uses a
- * {@code WADeprecatedWapParser} to extract {@code changedCollections} (a
- * {@code Map<string, int>} of collection name to version), a {@code stanzaId},
- * and an {@code offline} boolean from the incoming notification stanza. The
- * parsed result is then processed by the helper function {@code _} which
- * casts collection names to known {@code CollectionName} enum values, filters
- * to critical collections during bootstrap, calls
- * {@code WAWebSyncd.markCollectionsForSync}, and returns an ack promise.
+ * @apiNote
+ * Dispatched by {@link NotificationDeviceDispatcher}. Each notification
+ * carries one or more {@code <collection name="..." version="..."/>}
+ * children naming the collections whose latest version the server is
+ * advertising. When the bootstrap phase is still in progress, the
+ * handler filters down to the critical collections (
+ * {@link SyncPatchType#CRITICAL_BLOCK} and friends) so the initial sync
+ * does not stall on non-critical collections. Offline-window
+ * observations are also pushed to {@link OfflineNotificationsReporter}
+ * for the {@code MdAppStateOfflineNotifications} WAM event.
  *
+ * @implNote
+ * This implementation pulls via
+ * {@link WhatsAppClient#pullWebAppState}.
+ * WA Web routes through
+ * {@code WAWebSyncd.markCollectionsForSync(collectionList, map)} which
+ * batches with other markers; Cobalt's pull is direct because the
+ * Cobalt store has no equivalent marker indirection.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleServerSyncNotification")
 public final class NotificationSyncStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic output from this handler.
+     * Logger used for warnings about unknown collection names and
+     * errors during sync.
      */
     private static final System.Logger LOGGER =
             System.getLogger(NotificationSyncStreamHandler.class.getName());
 
     /**
-     * The WhatsApp client used to access the store and send nodes.
+     * The {@link WhatsAppClient} used for store reads and app-state
+     * pulls.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * The shared reporter used to accumulate per-collection offline {@code server_sync} notification counts for the {@code MdAppStateOfflineNotifications} WAM event.
+     * The {@link OfflineNotificationsReporter} that accumulates
+     * per-collection observation counts during the offline window for
+     * the {@code MdAppStateOfflineNotifications} WAM event.
      */
     private final OfflineNotificationsReporter offlineNotificationsReporter;
 
     /**
-     * Constructs a new notification sync stream handler.
-     *
-     * @param whatsapp                     the WhatsApp client instance
-     * @param offlineNotificationsReporter the shared reporter used to record per-collection offline server-sync observations for later WAM flushing
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification" type="server_sync" to="s.whatsapp.net"/>}
+     * stanza.
      */
-    public NotificationSyncStreamHandler(WhatsAppClient whatsapp, OfflineNotificationsReporter offlineNotificationsReporter) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with shared dependencies.
+     *
+     * @apiNote
+     * Called once by {@link NotificationDeviceDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp                     the {@link WhatsAppClient}
+     * @param offlineNotificationsReporter the {@link OfflineNotificationsReporter}
+     * @param ackSender                    the {@link AckSender}
+     */
+    public NotificationSyncStreamHandler(WhatsAppClient whatsapp, OfflineNotificationsReporter offlineNotificationsReporter, AckSender ackSender) {
         this.whatsapp = whatsapp;
         this.offlineNotificationsReporter = offlineNotificationsReporter;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Handles an incoming server sync notification by extracting the changed
-     * collection names, casting them to {@link SyncPatchType} values, and
-     * triggering a pull sync for recognized collections. Unknown collection
-     * names are logged and skipped. An acknowledgement stanza is always sent
-     * back to the server regardless of success or failure.
+     * Validates the stanza shape, processes the collection list, and
+     * always sends the protocol-level ACK.
      *
-     * <p>Per WhatsApp Web, the parser ({@code WADeprecatedWapParser}) first asserts
-     * the tag is {@code "notification"} and throws a parse error if no
-     * {@code <collection>} children exist. If parsing succeeds, the helper
-     * function {@code _} iterates over the parsed {@code changedCollections}
-     * map, casts each name to a {@code CollectionName} enum value, and
-     * collects up to 3 unknown names for a warning log. During bootstrap
-     * (critical data sync in process), only critical collections
-     * ({@code critical_block}, {@code critical_unblock_low}) are processed.
+     * @apiNote
+     * Invoked by {@link NotificationDeviceDispatcher}. A stanza with
+     * no {@code <collection>} child is logged as an error and ACKed
+     * without further work, matching WA Web's parser which throws
+     * {@code "Server sync notification does not contain any collections"}
+     * before the dispatch helper runs.
      *
-     * @param node the incoming notification node
+     * @param node the incoming {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -101,20 +122,24 @@ public final class NotificationSyncStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Processes the parsed notification data: validates the {@code from}
-     * attribute, iterates collection children to build a map of recognized
-     * {@link SyncPatchType} to version, logs unknown names, optionally filters
-     * to critical collections during bootstrap, and triggers a pull sync.
+     * Builds the collection-version map, applies the bootstrap filter,
+     * triggers the pull, and updates the offline-observation reporter.
      *
-     * <p>Per WhatsApp Web, the {@code from} attribute is validated against
-     * {@code S_WHATSAPP_NET} and an error is logged if they do not match.
-     * When the notification carries the {@code offline} attribute, each
-     * affected collection also bumps the shared
-     * {@link OfflineNotificationsReporter}, which is flushed into a
-     * {@code MdAppStateOfflineNotifications} WAM event by the info
-     * bulletin handler once the offline backlog window ends.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebHandleServerSyncNotification._} helper. The
+     * {@code from} attribute is asserted against the server-domain
+     * JID; mismatches are error-logged (matching WA Web's
+     * {@code WALogger.ERROR}) but do not abort processing because the
+     * server is the only sender of this stanza.
      *
-     * @param node the notification node to process
+     * @implNote
+     * This implementation caps the unknown-name warning at three
+     * names per stanza, mirroring WA Web's
+     * {@code unknownNames.length < 3} guard which limits log spam
+     * during a server-side collection rollout.
+     *
+     * @param node the {@code <notification>} stanza
      */
     private void processNotification(Node node) {
         var from = node.getAttributeAsString("from", null);
@@ -144,7 +169,6 @@ public final class NotificationSyncStreamHandler implements SocketStream.Handler
 
         var collectionsToSync = new ArrayList<>(changedCollections.keySet());
 
-        // Records per-collection observation counts when offline so the info-bulletin offline handler can emit MdAppStateOfflineNotifications with the accumulated redundantCount once the offline backlog window ends.
         var offline = node.hasAttribute("offline");
         if (offline) {
             for (var collection : collectionsToSync) {
@@ -172,16 +196,24 @@ public final class NotificationSyncStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Checks whether a critical data sync (bootstrap) is currently in process.
+     * Returns whether the bootstrap-critical sync phase is still
+     * in-progress.
      *
-     * <p>Per WhatsApp Web {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess}:
-     * returns {@code true} when the state machine variable {@code $3} equals
-     * {@code ce.InProcess}, meaning the critical sync phase is active. In Cobalt,
-     * this is approximated by checking whether the {@code critical_block}
-     * collection has not yet been bootstrapped, which yields the same behavioral
-     * result.
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAWebSyncBootstrap.isSyncDCriticalDataSyncInProcess}
+     * which returns {@code true} while the bootstrap state machine
+     * has not yet completed the initial critical-collection pull.
      *
-     * @return {@code true} if critical data sync is still in process
+     * @implNote
+     * This implementation approximates the WA Web state machine by
+     * checking whether the {@link SyncPatchType#CRITICAL_BLOCK}
+     * collection has been bootstrapped. WA Web's bootstrap pipeline
+     * has additional staging steps not modelled in Cobalt; this
+     * approximation produces the same observable behaviour
+     * (non-critical collections deferred until critical_block lands).
+     *
+     * @return {@code true} when the bootstrap is still in progress
      */
     private boolean isCriticalDataSyncInProcess() {
         return !whatsapp.store()
@@ -190,28 +222,17 @@ public final class NotificationSyncStreamHandler implements SocketStream.Handler
     }
 
     /**
-     * Sends an acknowledgement for the server sync notification.
+     * Sends the {@code <ack class="notification" type="server_sync"
+     * to="s.whatsapp.net"/>} stanza.
      *
-     * <p>Per WhatsApp Web {@code WAWebHandleServerSyncNotification._}: the ack stanza
-     * is constructed as {@code wap("ack", {id: CUSTOM_STRING(e.stanzaId),
-     * class: "notification", type: "server_sync", to: S_WHATSAPP_NET})} and
-     * returned as a resolved promise. In Cobalt, this is sent as a fire-and-forget
-     * node via {@link WhatsAppClient#sendNodeWithNoResponse(Node)}.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleServerSyncNotification._} ack-builder which
+     * hard-codes the destination to the server-domain JID.
      *
-     * @param node the notification node to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        if (stanzaId == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("type", "server_sync")
-                .attribute("to", JidServer.user())
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).to(JidServer.user().toJid()).type("server_sync").send();
     }
 }

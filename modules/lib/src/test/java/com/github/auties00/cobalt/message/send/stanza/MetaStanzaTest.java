@@ -14,21 +14,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * Structural tests for {@link MetaStanza}, mirroring
  * {@code WAWebSendMsgMetaNode.genMetaNode}.
  *
- * <p>The unit produces the optional {@code <meta>} child of the outer
- * {@code <message>} stanza, carrying the conversation thread id, status
- * privacy, view-once flag, etc. When none of these signals are
- * applicable the output is {@code null} — the orchestrator suppresses
- * the empty node entirely.
+ * @apiNote
+ * Pins the constructor null guard and the two attribute pass-through
+ * paths driven by build inputs rather than chat state:
+ * {@code status_setting} for status broadcasts and
+ * {@code conversation_thread_id} for AI threads. The richer message-type
+ * branches (polls, events, view-once, hosted business) are exercised by
+ * the upstream send-pipeline tests with seeded message containers.
+ *
+ * @implNote
+ * This implementation uses
+ * {@link MessageFixtures#temporaryStore(Jid, Jid)} to obtain a usable
+ * store; no contact records are seeded so the LID origin and
+ * hosted-business branches are not exercised.
  */
 @DisplayName("MetaStanza")
 class MetaStanzaTest {
 
+    /**
+     * A null store rejects construction up front.
+     */
     @Test
     @DisplayName("constructor: null store throws NullPointerException")
     void nullStoreThrows() {
         assertThrows(NullPointerException.class, () -> new MetaStanza(null));
     }
 
+    /**
+     * The {@code status_setting} argument propagates verbatim onto the
+     * {@code <meta>} attribute map for status broadcasts.
+     */
     @Test
     @DisplayName("buildChat: status_setting propagates to the meta attribute when supplied")
     void statusSettingPropagates() {
@@ -41,9 +56,14 @@ class MetaStanzaTest {
         assertNotNull(node, "status messages with status_setting must emit <meta>");
         assertEquals("meta", node.description());
         assertEquals("contacts", node.getAttributeAsString("status_setting").orElseThrow(),
-                "status_setting must propagate verbatim onto <meta status_setting=…>");
+                "status_setting must propagate verbatim onto <meta status_setting=...>");
     }
 
+    /**
+     * The pre-hashed AI thread id propagates onto the
+     * {@code conversation_thread_id} attribute when a message is sent
+     * inside an AI thread.
+     */
     @Test
     @DisplayName("buildChat: AI thread id propagates as conversation_thread_id")
     void aiThreadIdPropagates() {
@@ -55,7 +75,7 @@ class MetaStanzaTest {
                 Jid.of("12025550200@s.whatsapp.net"),
                 MessageContainer.of("hi"),
                 null, hashedThreadId);
-        assertNotNull(node, "messages in an AI thread must emit <meta conversation_thread_id=…>");
+        assertNotNull(node, "messages in an AI thread must emit <meta conversation_thread_id=...>");
         assertEquals(hashedThreadId, node.getAttributeAsString("conversation_thread_id").orElseThrow());
     }
 }

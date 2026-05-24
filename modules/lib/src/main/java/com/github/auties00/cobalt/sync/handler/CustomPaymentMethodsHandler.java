@@ -9,68 +9,73 @@ import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.CustomPaymentMethodsAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles custom payment methods sync actions.
+ * Persists the SMB-seller-configured custom payment methods (Brazil PIX phase 1) from {@code custom_payment_methods} sync mutations.
  *
- * <p>Per WhatsApp Web {@code WAWebCustomPaymentMethodsSync}, this handler
- * processes the {@code "custom_payment_methods"} sync action in the
- * {@code RegularLow} collection at version 7. Only SET operations are
- * supported, and the handler is restricted to SMB (Small/Medium Business)
- * platforms with the {@code payments_br_pix_phase_1_seller_sync_enabled}
- * AB prop enabled.
+ * @apiNote
+ * Drives the SMB Brazil PIX seller surface where the merchant can
+ * configure custom payment-method codes that are advertised to
+ * customers in chat. When the merchant edits the methods on another
+ * SMB device, the server replays the resulting
+ * {@link CustomPaymentMethodsAction} here. Cobalt embedders read the
+ * methods through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#customPaymentMethods()}.
  *
- * <p>On SET, validates that
- * {@code customPaymentMethodsAction.customPaymentMethods} is non-{@code null},
- * then persists the custom payment methods to the store.
- *
- * <p>Index format: {@code ["custom_payment_methods"]}
+ * @implNote
+ * This implementation is gated on the device platform being SMB
+ * ({@link ClientPlatformType#IOS_BUSINESS} or
+ * {@link ClientPlatformType#ANDROID_BUSINESS}) and on
+ * {@link ABProp#PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED} being
+ * set; both gates short-circuit to
+ * {@link MutationApplicationResult#unsupported()}. The WA Web
+ * {@code setCustomPaymentMethods} fire-and-forget frontend event is
+ * collapsed into a direct
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setCustomPaymentMethods}
+ * write because Cobalt has no browser frontend bridge.
  */
 @WhatsAppWebModule(moduleName = "WAWebCustomPaymentMethodsSync")
 public final class CustomPaymentMethodsHandler implements WebAppStateActionHandler {
     /**
-     * The AB-props service consulted before applying any mutation.
+     * The {@link ABPropsService} consulted before applying any mutation.
+     *
+     * @apiNote
+     * Used to read the {@link ABProp#PAYMENTS_BR_PIX_PHASE_1_SELLER_SYNC_ENABLED}
+     * gate; when off every mutation in the batch resolves to
+     * {@link MutationApplicationResult#unsupported()}.
      */
     private final ABPropsService abPropsService;
 
     /**
-     * Creates a new {@code CustomPaymentMethodsHandler}.
+     * Constructs the custom-payment-methods handler with its AB-props dependency.
      *
-     * @param abPropsService the AB-props service consulted on every
-     *                       mutation
+     * @apiNote
+     * Instantiated by the sync handler registry with the shared
+     * {@link ABPropsService}. Embedders do not normally construct this
+     * directly.
+     *
+     * @param abPropsService the {@link ABPropsService} consulted on every mutation
      */
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public CustomPaymentMethodsHandler(ABPropsService abPropsService) {
         this.abPropsService = abPropsService;
     }
 
-    /**
-     * Returns the action name for custom payment methods.
-     * @return the action name {@code "custom_payment_methods"}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return CustomPaymentMethodsAction.ACTION_NAME;
     }
 
-    /**
-     * Returns the collection name for custom payment methods.
-     * @return {@link SyncPatchType#REGULAR_LOW}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return CustomPaymentMethodsAction.COLLECTION_NAME;
     }
 
-    /**
-     * Returns the mutation format version for custom payment methods.
-     * @return {@code 7}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -78,30 +83,30 @@ public final class CustomPaymentMethodsHandler implements WebAppStateActionHandl
     }
 
     /**
-     * Applies a single custom payment methods mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebCustomPaymentMethodsSync.applyMutations}:
-     * <ol>
-     *   <li>If the platform is not SMB ({@code isSMB() !== true}), returns
-     *       {@code Unsupported} for all mutations in the batch.</li>
-     *   <li>If the AB prop {@code payments_br_pix_phase_1_seller_sync_enabled}
-     *       is not {@code true}, returns {@code Unsupported} for all mutations.</li>
-     *   <li>If the operation is not {@code "set"}, returns {@code Unsupported}.</li>
-     *   <li>If {@code customPaymentMethodsAction.customPaymentMethods} is
-     *       {@code null}, returns {@code Malformed} via
-     *       {@code WAWebSyncdIndexUtils.malformedActionValue}.</li>
-     *   <li>Otherwise calls
-     *       {@code WAWebBackendApi.frontendFireAndForget("setCustomPaymentMethods", ...)}
-     *       and returns {@code Success}.</li>
-     * </ol>
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @apiNote
+     * Validates SMB platform and AB-prop gating, then for SET
+     * mutations writes the
+     * {@link CustomPaymentMethodsAction#customPaymentMethods()} list
+     * into the store. Returns
+     * {@link MutationApplicationResult#unsupported()} for non-SMB
+     * platforms, when the AB-prop is off, or for non-{@code SET}
+     * operations; returns
+     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
+     * action is missing or mistyped.
+     *
+     * @implNote
+     * This implementation maps WA Web's
+     * {@code WAWebMobilePlatforms.isSMB()} to a direct
+     * {@link ClientPlatformType} comparison against the two business
+     * platform values; WA Web uses string sentinel values
+     * {@code "smba"} and {@code "smbi"}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebCustomPaymentMethodsSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
-        var platform = client.store().device().platform(); // ADAPTED: WAWebMobilePlatforms.isSMB — checks c === u.SMBA || c === u.SMBI where SMBA = "smba" (ANDROID_BUSINESS) and SMBI = "smbi" (IOS_BUSINESS)
+        var platform = client.store().device().platform();
         if (platform != ClientPlatformType.IOS_BUSINESS && platform != ClientPlatformType.ANDROID_BUSINESS) {
             return MutationApplicationResult.unsupported();
         }

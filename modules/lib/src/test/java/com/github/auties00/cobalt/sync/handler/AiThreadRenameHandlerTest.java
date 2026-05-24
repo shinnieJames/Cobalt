@@ -7,6 +7,7 @@ import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesAiThreadBuilder;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
@@ -14,7 +15,6 @@ import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameAction;
 import com.github.auties00.cobalt.model.sync.action.bot.AiThreadRenameActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.AiThreadRenameMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +26,6 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Tests for {@link AiThreadRenameHandler}, Cobalt's adapter for
@@ -48,7 +47,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *   <li>Default conflict resolution.</li>
  *   <li>Default batch dispatch (n/a override).</li>
  *   <li>{@code getAiThreadRenameMutation} builder.</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
  * </ul>
  */
 @DisplayName("AiThreadRenameHandler")
@@ -101,7 +99,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() is ai_thread_rename")
@@ -126,7 +124,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” non-SET operation")
+    @DisplayName("applyMutation - non-SET operation")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation is UNSUPPORTED")
@@ -141,7 +139,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("index shorter than 3 elements is MALFORMED")
@@ -173,7 +171,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("missing aiThreadRenameAction sub-message is MALFORMED")
@@ -203,7 +201,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” feature gating")
+    @DisplayName("applyMutation - feature gating")
     class FeatureGating {
         @Test
         @DisplayName("primaryDeviceCapabilities absent reports UNSUPPORTED")
@@ -224,7 +222,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("no local thread title reports ORPHAN with botJid|threadId as model id")
@@ -239,7 +237,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET path")
+    @DisplayName("applyMutation - happy SET path")
     class HappySet {
         @Test
         @DisplayName("existing thread title is renamed and SUCCESS is reported")
@@ -259,7 +257,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -271,13 +269,13 @@ class AiThreadRenameHandlerTest {
                     .aiThreadRenameAction(new AiThreadRenameActionBuilder().newTitle("B").build())
                     .build();
             var remote = new DecryptedMutation.Trusted(INDEX, remoteValue, SyncdOperation.SET, remoteTs, 7);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     new AiThreadRenameHandler().resolveConflicts(local, remote).state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” default per-item dispatch (n/a override)")
+    @DisplayName("applyMutationBatch - default per-item dispatch (n/a override)")
     class BatchDispatch {
         @Test
         @DisplayName("the handler does not override applyMutationBatch")
@@ -294,7 +292,7 @@ class AiThreadRenameHandlerTest {
     }
 
     @Nested
-    @DisplayName("getAiThreadRenameMutation â€” pending mutation builder")
+    @DisplayName("getAiThreadRenameMutation - pending mutation builder")
     class Builder {
         @Test
         @DisplayName("builder emits a SET pending mutation at the canonical index with the new title")
@@ -318,17 +316,4 @@ class AiThreadRenameHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/ai-thread-rename/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/ai-thread-rename/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

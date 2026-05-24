@@ -84,9 +84,10 @@ public sealed interface WhatsAppDeviceAttestor
          * supplied one. Returns {@link PlayIntegrityData#EMPTY} for the
          * Play Integrity verdict, {@link KeystoreAttestation#EMPTY} for
          * the body signature, and {@link DownloadSource#UNKNOWN} for
-         * the install source — the same values an off-Play-Services
-         * sideloaded device would report. The registration server
-         * tolerates these but treats the request as a low-trust signal.
+         * the install source; these are the same values an
+         * off-Play-Services sideloaded device would report. The
+         * registration server tolerates them but treats the request as a
+         * low-trust signal.
          */
         Android NONE = new Android() {
             @Override
@@ -177,16 +178,16 @@ public sealed interface WhatsAppDeviceAttestor
         enum DownloadSource {
             /**
              * The app was installed from the Google Play Store. The wire
-             * value is {@code "google-play|unknown"} — the second segment
+             * value is {@code "google-play|unknown"}; the second segment
              * is the campaign sub-source which the native client reports
              * as {@code "unknown"} unless deep-link install attribution
              * was used.
              */
             GOOGLE_PLAY("google-play|unknown"),
             /**
-             * The Play Store is not the install source — sideloaded APK,
+             * The Play Store is not the install source (sideloaded APK,
              * Huawei AppGallery, third-party APK mirror, or any
-             * non-Google channel. The wire value is
+             * non-Google channel). The wire value is
              * {@code "unknown|unknown"}.
              */
             UNKNOWN("unknown|unknown");
@@ -224,10 +225,10 @@ public sealed interface WhatsAppDeviceAttestor
          *       client reads from Google Play Services;</li>
          *   <li>{@code _ge} carries the base64-encoded Play Protect
          *       environment flags (e.g. {@code {"sb":false,"sv":false}}
-         *       — SafetyBrowsing and Safety Verify state);</li>
+         *       for SafetyBrowsing and Safety Verify state);</li>
          *   <li>{@code _ga} carries the base64-encoded GMS / app metadata
          *       blob (e.g. {@code {"bi":"...","ap":642,"ai":1342,"mp":false}}
-         *       — install backend identifier, app + ai versions, etc.).</li>
+         *       for install backend identifier, app + ai versions, etc.).</li>
          * </ul>
          * Each component is never {@code null}; attestors that cannot
          * produce a particular token should return the empty string for
@@ -330,9 +331,9 @@ public sealed interface WhatsAppDeviceAttestor
         /**
          * Low-trust iOS attestor used when the embedder has not supplied
          * one. Returns {@link AppAttestData#EMPTY} for the App Attest
-         * payload — the same value a simulator or jailbroken device with
-         * App Attest revoked would report. The registration server
-         * tolerates the empty payload but treats the request as a
+         * payload; this is the same value a simulator or jailbroken
+         * device with App Attest revoked would report. The registration
+         * server tolerates the empty payload but treats the request as a
          * low-trust signal.
          */
         Ios NONE = new Ios() {

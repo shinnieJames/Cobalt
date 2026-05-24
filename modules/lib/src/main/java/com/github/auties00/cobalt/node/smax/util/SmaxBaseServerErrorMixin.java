@@ -9,17 +9,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Shared parser for the catch-all {@code ServerError} variant produced by
- * every SMAX RPC.
+ * Shared parser for the {@code ClientError} and {@code ServerError} envelope
+ * shapes produced by every SMAX RPC.
  *
- * <p>Every domain in WA Web ships a {@code WASmaxIn*BaseServerErrorMixin}
- * module. These are all near-identical: assert the {@code <iq>} tag,
- * delegate envelope validation to {@link SmaxIqErrorResponseMixin#validate},
- * then route the {@code <error/>} child through {@code WASmaxIn*ServerErrors}
- * to extract a transient-internal-failure projection. Cobalt deduplicates
- * the family into the single helper here. Per-domain enums layer the
- * {@code 5xx} → semantic-name mapping where callers need it, but the bulk
- * of {@code ServerError} variants only need the {@code (code, text)} pair.
+ * @apiNote
+ * Every WA Web SMAX domain ships its own {@code WASmaxIn*BaseServerErrorMixin}
+ * and {@code WASmaxIn*IQErrorBadRequestMixin}/{@code WASmaxIn*IQErrorInternalServerErrorMixin}
+ * pair; they all follow the same shape (assert the {@code <iq>} tag, validate
+ * the envelope, extract the {@code <error code text/>} child, gate on the
+ * code range). Cobalt collapses every per-domain copy into the two helpers
+ * exposed here, {@link #parseServerError(Node, Node)} for codes greater than
+ * or equal to {@code 500} and {@link #parseClientError(Node, Node)} for the
+ * complementary range. Per-domain code-to-semantic mappings are still done
+ * at the per-RPC parser, but the envelope and range checks live here so the
+ * thirty-plus near-identical WA Web copies are not duplicated in Cobalt.
+ *
+ * @implNote
+ * This implementation lives outside the per-domain response classes so the
+ * sealed disjunctions stay focused on RPC-specific data shaping. The
+ * {@code @WhatsAppWebModule} list enumerates every WA Web module the helper
+ * adapts so the source manifest still surfaces the per-domain provenance.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsBaseServerErrorMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInGroupsServerErrors")
@@ -97,7 +106,11 @@ import java.util.Optional;
 public final class SmaxBaseServerErrorMixin {
 
     /**
-     * Private constructor. The class is a static-only utility.
+     * Refuses instantiation of the static-only utility.
+     *
+     * @apiNote
+     * The class exposes only static helpers; the throwing constructor
+     * guards against reflective instantiation.
      */
     private SmaxBaseServerErrorMixin() {
         throw new AssertionError("SmaxBaseServerErrorMixin cannot be instantiated");
@@ -106,17 +119,29 @@ public final class SmaxBaseServerErrorMixin {
     /**
      * Tries to parse a server-error envelope.
      *
-     * <p>Returns {@link Optional#empty()} when the envelope check fails
-     * ({@code description != "iq"} or {@code type != "error"} or echoed
-     * identifiers don't match), the {@code <error/>} child is missing or
-     * malformed, or the parsed code is below the {@code 500} threshold
-     * that distinguishes server-side from client-side errors.
+     * @apiNote
+     * Called by every per-RPC {@code ServerError.of(...)} factory.
+     * Returns {@link Optional#empty()} when the envelope check fails
+     * (wrong tag, wrong {@code type}, id/from echo mismatch), when the
+     * {@code <error>} child is missing or malformed, or when the parsed
+     * code is below the {@code 500} threshold that distinguishes
+     * server-side from client-side errors.
      *
-     * @param reply   the inbound error stanza. Never {@code null}
-     * @param request the outbound request. Used to validate echoed
-     *                identifiers. Never {@code null}
-     * @return an {@link Optional} carrying the parsed envelope, or empty
-     *         when the stanza does not match the server-error schema
+     * @implNote
+     * This implementation delegates the envelope validation to
+     * {@link SmaxIqErrorResponseMixin#validate(Node, Node)} and the
+     * {@code <error>} extraction to
+     * {@link SmaxIqErrorResponseMixin#parseError(Node)}, then gates on
+     * {@code code >= 500}; the gate is the complement of
+     * {@link #parseClientError(Node, Node)} so the two helpers partition
+     * the non-negative code space.
+     *
+     * @param reply   the inbound error stanza
+     * @param request the outbound request, used to validate echoed
+     *                identifiers
+     * @return an {@link Optional} carrying the parsed
+     *         {@link SmaxIqErrorResponseMixin.Envelope}, or empty when
+     *         the stanza does not match the server-error schema
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInGroupsBaseServerErrorMixin",
@@ -200,26 +225,28 @@ public final class SmaxBaseServerErrorMixin {
     }
 
     /**
-     * Tries to parse a client-error envelope (codes {@code < 500}).
+     * Tries to parse a client-error envelope (codes below {@code 500}).
      *
-     * <p>Used by the {@code ClientError} variants of every SMAX RPC. The
-     * complementary range to {@link #parseServerError(Node, Node)}, which
-     * gates on {@code code >= 500}; together the two ranges form a disjoint
-     * partition of the non-negative integer space. The lower bound is open
-     * (no floor) because a handful of WA mixins assert
-     * {@code code} values below {@code 400} that WA still groups under
-     * {@code ClientErrors} disjunctions — see
-     * {@code WASmaxInGroupsIQErrorAlreadyExistsMixin} ({@code code=304}),
-     * which participates in
-     * {@code WASmaxInGroupsAcceptGroupAddClientErrors.parseAcceptGroupAddClientErrors}
-     * and
-     * {@code WASmaxInGroupsJoinLinkedGroupClientErrors.parseJoinLinkedGroupClientErrors}.
+     * @apiNote
+     * Called by every per-RPC {@code ClientError.of(...)} factory; the
+     * complementary range to {@link #parseServerError(Node, Node)}.
+     * Returns {@link Optional#empty()} when the envelope check fails or
+     * the parsed code is at least {@code 500}.
      *
-     * @param reply   the inbound error stanza. Never {@code null}
-     * @param request the outbound request. Used to validate echoed
-     *                identifiers. Never {@code null}
-     * @return an {@link Optional} carrying the parsed envelope, or empty
-     *         when the stanza does not match the client-error schema
+     * @implNote
+     * This implementation accepts every non-negative code below
+     * {@code 500} without a floor because a handful of WA Web mixins
+     * (notably {@code WASmaxInGroupsIQErrorAlreadyExistsMixin} with
+     * {@code code=304}) participate in {@code ClientErrors} disjunctions
+     * with values below {@code 400}; the open lower bound mirrors the
+     * WA Web behaviour.
+     *
+     * @param reply   the inbound error stanza
+     * @param request the outbound request, used to validate echoed
+     *                identifiers
+     * @return an {@link Optional} carrying the parsed
+     *         {@link SmaxIqErrorResponseMixin.Envelope}, or empty when
+     *         the stanza does not match the client-error schema
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInAbPropsIQErrorBadRequestMixin",

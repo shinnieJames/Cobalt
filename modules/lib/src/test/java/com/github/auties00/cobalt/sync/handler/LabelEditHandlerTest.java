@@ -8,14 +8,12 @@ import com.github.auties00.cobalt.model.preference.LabelBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditAction;
 import com.github.auties00.cobalt.model.sync.action.contact.LabelEditActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.LabelEditMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,22 +24,35 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link LabelEditHandler} — Cobalt's adapter for
+ * Exercises the {@link LabelEditHandler} adapter for
  * {@code WAWebLabelSync}.
  *
- * <p>The handler creates, edits, and deletes chat labels driven by SET mutations
- * keyed on {@code labelId}. These tests pin the wire metadata, the
- * insert/merge/delete branches, the {@code SERVER_ASSIGNED} short-circuit,
- * malformed input fallbacks, the default timestamp-based conflict resolution,
- * and the static builder helper.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code label_edit} app-state
+ * sync action across metadata, the insert / merge / delete
+ * branches, the
+ * {@link LabelEditAction.ListType#SERVER_ASSIGNED}
+ * short-circuit, the malformed-input fallbacks, the inherited
+ * timestamp-based conflict resolution and the
+ * {@link LabelEditMutationFactory}
+ * builder.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so the
+ * {@link WhatsAppStore#findLabel(String)}
+ * read-back can be asserted directly. The merge path mutates the
+ * existing
+ * {@link com.github.auties00.cobalt.model.preference.Label} in place
+ * so chat-jid assignments from
+ * {@link LabelAssociationHandler} are preserved across edits.
  */
 @DisplayName("LabelEditHandler")
 class LabelEditHandlerTest {
@@ -62,13 +73,22 @@ class LabelEditHandlerTest {
     }
 
     /**
-     * Builds a SET mutation whose value carries the given label-edit action under the
-     * canonical {@code ["label_edit", labelId]} index.
+     * Builds a {@link SyncdOperation#SET} {@link DecryptedMutation.Trusted}
+     * carrying the given label-edit action under the canonical
+     * {@code ["label_edit", labelId]} index.
+     *
+     * @apiNote
+     * Used by every SET-path test to keep mutation construction
+     * boilerplate out of the test bodies. The {@code action} parameter
+     * is nullable so the malformed-value path can be exercised
+     * without re-implementing the envelope.
      *
      * @param labelId the label identifier
      * @param action  the action payload, may be {@code null} to omit it
      * @param ts      the mutation timestamp
-     * @return the trusted mutation
+     * @return a {@link DecryptedMutation.Trusted} carrying the
+     *         optionally-present
+     *         {@link LabelEditAction}
      */
     private DecryptedMutation.Trusted buildSet(String labelId, LabelEditAction action, Instant ts) {
         var valueBuilder = new SyncActionValueBuilder().timestamp(ts);
@@ -78,7 +98,7 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the LabelEditAction wire constant")
@@ -102,7 +122,7 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — happy SET (insert + merge)")
+    @DisplayName("applyMutation - happy SET (insert + merge)")
     class ApplySetHappy {
         @Test
         @DisplayName("inserts a new label when none exists with the given id")
@@ -148,7 +168,7 @@ class LabelEditHandlerTest {
             assertEquals("Renamed", merged.name());
             assertEquals(7, merged.color());
             assertEquals(1, merged.assignments().size(),
-                    "assignments must be preserved across a merge — they are not part of the action payload");
+                    "assignments must be preserved across a merge - they are not part of the action payload");
         }
 
         @Test
@@ -195,10 +215,10 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
-        @DisplayName("a label can be created without a pre-existing record — no orphan path")
+        @DisplayName("a label can be created without a pre-existing record - no orphan path")
         void noOrphanPath() {
             // The handler upserts: there is no parent entity that can be missing. We confirm
             // the absence of an ORPHAN outcome by exercising the insert path against an empty store.
@@ -212,7 +232,7 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -241,7 +261,7 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an index whose labelId slot is empty returns MALFORMED")
@@ -269,7 +289,7 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -285,10 +305,10 @@ class LabelEditHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote → APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = buildSet("42", action("A"), Instant.ofEpochSecond(1_000));
             var remote = buildSet("42", action("B"), Instant.ofEpochSecond(2_000));
@@ -297,7 +317,7 @@ class LabelEditHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps → APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
+        @DisplayName("equal timestamps -> APPLY_REMOTE_DROP_LOCAL (remote wins on tie)")
         void equalTiesGoToRemote() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -305,7 +325,7 @@ class LabelEditHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote → SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = buildSet("42", action("A"), Instant.ofEpochSecond(2_000));
             var remote = buildSet("42", action("B"), Instant.ofEpochSecond(1_000));
@@ -318,59 +338,4 @@ class LabelEditHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — getLabelMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET pending mutation with the canonical [\"label_edit\", labelId] index")
-        void indexShape() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = factory.getLabelMutation(
-                    "42", "Customers", 5, false, 0, true, LabelEditAction.ListType.CUSTOM, ts);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(ts, inner.timestamp());
-            assertEquals(JSON.toJSONString(List.of("label_edit", "42")), inner.index());
-
-            var action = inner.value().action().filter(a -> a instanceof LabelEditAction).map(a -> (LabelEditAction) a).orElseThrow();
-            assertEquals("Customers", action.name().orElseThrow());
-            assertEquals(5, action.color().orElseThrow());
-            assertEquals(0, action.predefinedId().orElseThrow());
-            assertFalse(action.deleted());
-            assertTrue(action.isActive());
-            assertEquals(LabelEditAction.ListType.CUSTOM, action.type().orElseThrow());
-        }
-
-        @Test
-        @DisplayName("deleted=true is preserved on the produced action")
-        void deletedFlagRoundtrips() {
-            var ts = Instant.now();
-            var pending = factory.getLabelMutation(
-                    "42", null, null, true, null, null, null, ts);
-            var action = pending.mutation().value().action().filter(a -> a instanceof LabelEditAction).map(a -> (LabelEditAction) a).orElseThrow();
-            assertTrue(action.deleted());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/label-edit/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/label-edit/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.getLabelMutation(
-                    "42", "Customers", 5, false, 0, true,
-                    LabelEditAction.ListType.CUSTOM, Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

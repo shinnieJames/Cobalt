@@ -19,33 +19,60 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches metadata for every newsletter followed by the authenticated user.
+ * Builds the MEX request that fetches metadata for every newsletter followed
+ * by the authenticated user.
  *
- * <p>WA Web uses this query during login and periodic syncs to hydrate the local newsletter list. The response provides a collection of newsletter entries each with thread metadata, viewer role, and state.
+ * @apiNote
+ * Drives the local newsletter list hydration consumed by
+ * {@code WAWebNewsletterMetadataQueryJob}: WA Web runs this query during
+ * login and periodic syncs and pipes the response through
+ * {@link FetchAllNewslettersMetadataMexResponse#partition()} to split active
+ * channels from those the relay reports as deleted. The two gating
+ * variables control whether the response carries the optional
+ * {@code wamo_sub} (WhatsApp paid newsletter subscription) and
+ * {@code status_metadata} fragments.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAllNewslettersMetadataJob")
 public final class FetchAllNewslettersMetadataMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchAllNewslettersMetadata} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchAllNewslettersMetadataJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "25399611239711790";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchAllNewsletters
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexFetchAllNewsletters";
+
+    /**
+     * The value of the {@code fetch_wamo_sub} GraphQL variable, or
+     * {@code null} to omit the entry.
+     */
     private final Boolean fetchWamoSub;
+
+    /**
+     * The value of the {@code fetch_status_metadata} GraphQL variable, or
+     * {@code null} to omit the entry.
+     */
     private final Boolean fetchStatusMetadata;
 
     /**
      * Constructs a request that selects only the {@code fetch_wamo_sub}
      * gating flag.
-     * @param fetchWamoSub the value of the {@code fetch_wamo_sub} GraphQL
-     *                     variable, or {@code null} to omit the field
+     *
+     * @apiNote
+     * Convenience overload; the {@code fetch_status_metadata} variable is
+     * implicitly omitted, leaving the {@code status_metadata} fragment
+     * unrequested.
+     *
+     * @param fetchWamoSub the value of the {@code fetch_wamo_sub} variable,
+     *                     or {@code null} to omit
      */
     public FetchAllNewslettersMetadataMexRequest(Boolean fetchWamoSub) {
         this(fetchWamoSub, null);
@@ -54,11 +81,18 @@ public final class FetchAllNewslettersMetadataMexRequest implements MexOperation
     /**
      * Constructs a request with both GraphQL gating variables.
      *
+     * @apiNote
+     * WA Web derives the two booleans from
+     * {@code WAWebNewsletterGatingUtils.isWamoSubExperienceEnabled()} and
+     * {@code WAWebNewsletterGatingUtils.isNewsletterStatusReceiverEnabled()};
+     * pass {@code null} to omit either variable from the GraphQL payload so
+     * the relay applies its default.
+     *
      * @param fetchWamoSub        the value of the {@code fetch_wamo_sub}
      *                            variable, or {@code null} to omit
      * @param fetchStatusMetadata the value of the
-     *                            {@code fetch_status_metadata} variable,
-     *                            or {@code null} to omit
+     *                            {@code fetch_status_metadata} variable, or
+     *                            {@code null} to omit
      */
     public FetchAllNewslettersMetadataMexRequest(Boolean fetchWamoSub, Boolean fetchStatusMetadata) {
         this.fetchWamoSub = fetchWamoSub;
@@ -66,10 +100,10 @@ public final class FetchAllNewslettersMetadataMexRequest implements MexOperation
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -77,10 +111,10 @@ public final class FetchAllNewslettersMetadataMexRequest implements MexOperation
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -88,11 +122,22 @@ public final class FetchAllNewslettersMetadataMexRequest implements MexOperation
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {fetch_wamo_sub?, fetch_status_metadata?}}}
+     * payload; either gating boolean is omitted when its backing
+     * {@link Boolean} is {@code null} so the GraphQL schema never receives
+     * an explicit {@code null} variable.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAllNewslettersMetadataJob", exports = "mexFetchAllNewsletters",
             adaptation = WhatsAppAdaptation.ADAPTED)

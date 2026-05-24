@@ -11,35 +11,37 @@ import java.util.Objects;
 
 /**
  * Shared envelope-validation helper for the legacy
- * {@code <iq id type="error">} reply produced by domains that pre-date the
- * standard echoed-{@code from} contract.
+ * {@code <iq id type="error">} reply produced by SMAX domains that pre-date
+ * the standard echoed-{@code from} contract.
  *
- * <p>Unlike {@link SmaxIqErrorResponseMixin#validate(Node, Node)}, the
- * deprecated envelope check makes the {@code from} attribute optional and,
- * when present, accepts either a domain JID
- * ({@code s.whatsapp.net}, {@code g.us}, or {@code call}) or a user JID
- * (phone, LID, interop, msgr, or bot). The relay does not have to echo
- * {@code request.to}.
- *
- * <p>The shape is the direct counterpart of WA Web's
- * {@code WASmaxIn*DeprecatedIQErrorResponseOptionalFromMixin.parseDeprecatedIQErrorResponseOptionalFromMixin}
- * family. Two byte-identical clones currently live in WA Web, one per
- * domain that still uses the legacy contract:
+ * @apiNote
+ * Two WA Web domains still use this relaxed envelope:
  * {@code WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin}
- * (the BizCtwaNativeAd domain, consumed by
+ * (BizCtwaNativeAd, consumed by
  * {@code WASmaxInBizCtwaNativeAdUploadAdMediaResponseError}) and
  * {@code WASmaxInPrivacyDeprecatedIQErrorResponseOptionalFromMixin}
- * (the Privacy domain, consumed by
- * {@code WASmaxInPrivacyGetContactBlacklistResponseError}). Both share the
- * identical validation pipeline, so Cobalt collapses them into this single
- * helper.
+ * (Privacy, consumed by
+ * {@code WASmaxInPrivacyGetContactBlacklistResponseError}). Both make
+ * the {@code from} attribute optional and accept either a domain JID
+ * ({@code s.whatsapp.net}, {@code g.us}, {@code call}) or a user JID
+ * (phone, LID, interop, msgr, or bot); the relay never has to echo the
+ * request's {@code to}.
+ *
+ * @implNote
+ * This implementation collapses both byte-identical WA Web clones into a
+ * single helper; the {@code @WhatsAppWebModule} list keeps the source
+ * manifest pointing at both upstream modules.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin")
 @WhatsAppWebModule(moduleName = "WASmaxInPrivacyDeprecatedIQErrorResponseOptionalFromMixin")
 public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
 
     /**
-     * Private constructor. The class is a static-only utility.
+     * Refuses instantiation of the static-only utility.
+     *
+     * @apiNote
+     * The class exposes only static helpers; the throwing constructor
+     * guards against reflective instantiation.
      */
     private SmaxDeprecatedIqErrorResponseOptionalFromMixin() {
         throw new AssertionError("SmaxDeprecatedIqErrorResponseOptionalFromMixin cannot be instantiated");
@@ -47,23 +49,27 @@ public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
 
     /**
      * Validates that the supplied reply is a well-formed legacy
-     * {@code <iq type="error">} echoing the request's {@code id} attribute,
-     * with an optional {@code from} attribute that, when present, must be
-     * either a domain JID or a user JID.
+     * {@code <iq type="error">} echoing the request's {@code id}
+     * attribute.
      *
-     * <p>Returns {@code true} only when every check passes. The reply has
-     * the {@code iq} tag, carries {@code type="error"}, echoes the
-     * request's {@code id} verbatim, and either omits the {@code from}
-     * attribute entirely or carries one that parses as a domain or user
-     * JID.
+     * @apiNote
+     * Returns {@code true} when the reply has the {@code iq} tag,
+     * carries {@code type="error"}, echoes the request's {@code id}
+     * verbatim, and either omits the {@code from} attribute or carries
+     * one that parses as a domain or user JID.
      *
-     * @param reply   the inbound stanza received from the relay; never
-     *                {@code null}
-     * @param request the outbound stanza emitted by the caller. Used to
-     *                cross-check the echoed {@code id} attribute. Never
-     *                {@code null}
+     * @implNote
+     * This implementation hand-rolls the validation rather than
+     * delegating to {@link SmaxIqErrorResponseMixin#validate(Node, Node)}
+     * because the legacy envelope makes {@code from} optional and does
+     * not require an echo of {@code request.to}.
+     *
+     * @param reply   the inbound stanza
+     * @param request the outbound stanza, used to cross-check the echoed
+     *                {@code id} attribute
      * @return {@code true} when {@code reply} is a legacy error envelope
-     *         echoing {@code request}'s {@code id}; {@code false} otherwise
+     *         echoing {@code request}'s {@code id}; {@code false}
+     *         otherwise
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin",
@@ -75,34 +81,42 @@ public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
     public static boolean validate(Node reply, Node request) {
         Objects.requireNonNull(reply, "reply cannot be null");
         Objects.requireNonNull(request, "request cannot be null");
-        // WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin: assertTag(reply, "iq")
         if (!reply.hasDescription("iq")) {
             return false;
         }
-        // WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin: attrStringFromReference(request, ["id"])
         var requestId = request.getAttributeAsString("id").orElse(null);
         if (requestId == null) {
             return false;
         }
-        // WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin: literal(attrString, reply, "id", request.id)
         if (!reply.hasAttribute("id", requestId)) {
             return false;
         }
-        // WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin: optional(attrJidEnum, reply, "from", DOMAINJID_USERJID)
         var from = reply.getAttributeAsString("from").orElse(null);
         if (from != null && !isDomainOrUserJid(from)) {
             return false;
         }
-        // WASmaxInBizCtwaNativeAdDeprecatedIQErrorResponseOptionalFromMixin: literal(attrString, reply, "type", "error")
         return reply.hasAttribute("type", "error");
     }
 
     /**
      * Returns whether the supplied attribute value parses as a domain JID
-     * ({@code s.whatsapp.net}, {@code g.us}, or {@code call}) or as a user
-     * JID (phone, LID, interop, msgr, or bot).
+     * or as a user JID.
      *
-     * @param value the raw attribute string; never {@code null}
+     * @apiNote
+     * Used by {@link #validate(Node, Node)} to enforce the WA Web
+     * {@code DOMAINJID_USERJID} optional-{@code from} contract: the
+     * relay may omit the attribute entirely, set it to a domain JID
+     * ({@code s.whatsapp.net}, {@code g.us}, or {@code call}), or set it
+     * to any user JID (phone, LID, interop, msgr, or bot).
+     *
+     * @implNote
+     * This implementation catches every {@link RuntimeException} from
+     * {@link Jid#of(String)} so a malformed attribute resolves to
+     * {@code false} rather than propagating; the domain-JID branch
+     * requires a missing user component while the user-JID branch
+     * requires a present user component.
+     *
+     * @param value the raw attribute string
      * @return {@code true} when {@code value} is a domain or user JID
      */
     private static boolean isDomainOrUserJid(String value) {
@@ -113,14 +127,12 @@ public final class SmaxDeprecatedIqErrorResponseOptionalFromMixin {
             return false;
         }
         var server = jid.server();
-        // validateDomainJid: s.whatsapp.net | g.us | call (server-only JID).
         if (!jid.hasUser()
                 && (server.equals(JidServer.user())
                 || server.equals(JidServer.groupOrCommunity())
                 || server.equals(JidServer.call()))) {
             return true;
         }
-        // validateUserJid: any phone/LID/interop/msgr/bot user JID (must carry a user component).
         return jid.hasUser();
     }
 }

@@ -16,29 +16,49 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Parsed response of the {@link FetchIntegritySignalsMexRequest} query,
- * exposing the {@code is_new_account} and {@code is_suspicious_start_chat}
- * scalars from the {@code XWA2IntegritySignals} fragment.
+ * Inbound parsed response of the {@link FetchIntegritySignalsMexRequest}
+ * query, exposing the {@code is_new_account} and
+ * {@code is_suspicious_start_chat} flags from the first
+ * {@code xwa2_fetch_wa_users} entry's {@code integrity_signals_info}
+ * sub-object.
+ *
+ * @apiNote Drives the FMX safety nudges in WA Web's chat composer; the
+ * matching call-site stores both flags in the chat row through
+ * {@code WAWebBackendApi.frontendSendAndReceive("chatCollectionUpdate", ...)}
+ * and {@code WAWebDBUpdateChatTable.updateChatTable}. Cobalt callers may
+ * map the booleans onto their own chat model without invoking the
+ * WA Web backend pipeline.
+ *
+ * @implNote This implementation surfaces the two boolean scalars as
+ * {@link Optional} containers; WA Web folds {@code undefined} values to
+ * {@code null} in the original {@code (x != null ? x : null)} JS guard so
+ * that {@link #of(byte[])} returning {@link Optional#empty()} for the
+ * outer envelope and {@code Optional} per-scalar keeps the absence
+ * semantics identical to the JS pipeline.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchIntegritySignals")
 public final class FetchIntegritySignalsMexResponse implements MexOperation.Response.Json {
     /**
-     * The {@code is_new_account} scalar from the integrity signals info
-     * sub-object.
+     * The {@code is_new_account} scalar projected from
+     * {@code xwa2_fetch_wa_users[0].integrity_signals_info.is_new_account}.
      */
     private final Boolean isNewAccount;
+
     /**
-     * The {@code is_suspicious_start_chat} scalar from the integrity signals
-     * info sub-object.
+     * The {@code is_suspicious_start_chat} scalar projected from
+     * {@code xwa2_fetch_wa_users[0].integrity_signals_info.is_suspicious_start_chat}.
      */
     private final Boolean isSuspicious;
 
     /**
-     * Constructs a response wrapping the two boolean scalars parsed from the
-     * {@code integrity_signals_info} sub-object.
+     * Constructs a new response wrapping the two boolean scalars parsed from
+     * the {@code integrity_signals_info} sub-object.
      *
-     * @param isNewAccount  the {@code is_new_account} scalar, or {@code null} if absent
-     * @param isSuspicious  the {@code is_suspicious_start_chat} scalar, or {@code null} if absent
+     * @apiNote Private; instances are produced by the {@link #of(Node)}
+     * parser.
+     *
+     * @param isNewAccount  the {@code is_new_account} scalar, may be {@code null}
+     * @param isSuspicious  the {@code is_suspicious_start_chat} scalar, may be {@code null}
      */
     private FetchIntegritySignalsMexResponse(Boolean isNewAccount, Boolean isSuspicious) {
         this.isNewAccount = isNewAccount;
@@ -46,11 +66,19 @@ public final class FetchIntegritySignalsMexResponse implements MexOperation.Resp
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the node is missing a result payload
+     * @apiNote Reads the {@code <result>} child's byte content and routes it
+     * through the private byte-level parser. Returns
+     * {@link Optional#empty()} when the stanza carries no result, when the
+     * envelope's {@code xwa2_fetch_wa_users} array is missing or empty, or
+     * when the first user entry's {@code integrity_signals_info} is absent;
+     * WA Web mirrors the same absence by logging a {@code "no integrity
+     * signals"} entry and returning {@code null}.
+     *
+     * @param node the inbound IQ stanza carrying the {@code <result>} child
+     * @return an {@link Optional} wrapping the parsed response, or
+     *         {@link Optional#empty()} if the expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchIntegritySignals", exports = "fetchIntegritySignals",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -61,30 +89,42 @@ public final class FetchIntegritySignalsMexResponse implements MexOperation.Resp
     }
 
     /**
-     * Returns the {@code is_new_account} scalar.
+     * Returns the {@code is_new_account} scalar reflecting whether the
+     * relay considers the target user to be a freshly registered account.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @return an {@link Optional} containing the new-account flag, or
+     *         {@link Optional#empty()} if the relay omitted the scalar
      */
     public Optional<Boolean> isNewAccount() {
         return Optional.ofNullable(isNewAccount);
     }
 
     /**
-     * Returns the {@code is_suspicious_start_chat} scalar.
+     * Returns the {@code is_suspicious_start_chat} scalar reflecting
+     * whether the relay considers starting a chat with the target user
+     * to be suspicious.
      *
-     * @return an {@link Optional} containing the value, or empty if absent
+     * @return an {@link Optional} containing the suspicious-start flag, or
+     *         {@link Optional#empty()} if the relay omitted the scalar
      */
     public Optional<Boolean> isSuspicious() {
         return Optional.ofNullable(isSuspicious);
     }
 
     /**
-     * Parses a {@link FetchIntegritySignalsMexResponse} from the raw JSON
-     * bytes of the {@code <result>} child.
+     * Parses the JSON payload carried by the {@code <result>} child into a
+     * {@link FetchIntegritySignalsMexResponse}.
+     *
+     * @apiNote Private; routed through {@link #of(Node)} after the byte
+     * content of the {@code <result>} child is extracted. Returns
+     * {@link Optional#empty()} when the envelope, the
+     * {@code xwa2_fetch_wa_users} array (empty array included), the first
+     * user entry, or the {@code integrity_signals_info} sub-object is
+     * absent.
      *
      * @param json the UTF-8 encoded JSON payload
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing expected fields
+     * @return an {@link Optional} wrapping the parsed response, or
+     *         {@link Optional#empty()} if the envelope is missing
      */
     private static Optional<FetchIntegritySignalsMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);
@@ -102,13 +142,11 @@ public final class FetchIntegritySignalsMexResponse implements MexOperation.Resp
             return Optional.empty();
         }
 
-        // l = (t = i.xwa2_fetch_wa_users) == null ? void 0 : t[0]
         var first = rootArr.getJSONObject(0);
         if (first == null) {
             return Optional.empty();
         }
 
-        // p = l.integrity_signals_info; if (p == null) return null
         var info = first.getJSONObject("integrity_signals_info");
         if (info == null) {
             return Optional.empty();

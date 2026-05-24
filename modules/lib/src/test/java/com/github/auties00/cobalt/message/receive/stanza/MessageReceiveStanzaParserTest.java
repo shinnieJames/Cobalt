@@ -4,10 +4,12 @@ import com.github.auties00.cobalt.message.MessageFixtures;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,21 +18,53 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link MessageReceiveStanzaParser}, mirroring
- * {@code WAWebHandleMsgParser.incomingMsgParser}.
+ * Exercises {@link MessageReceiveStanzaParser#parse} against synthesised
+ * stanzas and one captured live bot stanza.
  *
- * <p>Pure-function parser: takes an inbound {@code <message>} Node plus
- * the receiver's PN/LID and returns a {@link MessageReceiveStanza}.
- * Coverage exercises the required attributes, optional metadata, and
- * pulls a captured bot stream stanza through to verify end-to-end parse.
+ * @apiNote
+ * Covers the contract of WA Web's {@code WAWebHandleMsgParser.incomingMsgParser}:
+ * required attributes ({@code id}, {@code t}, {@code from}, {@code type}),
+ * optional metadata ({@code notify}, {@code edit}, {@code count}), the
+ * absent-child default for the HSM flag, and the missing-required-attribute
+ * error path. Pulls one captured bot stanza through end to end to verify
+ * that the parser does not regress on real wire input.
+ *
+ * @implNote
+ * This implementation builds synthetic stanzas via {@link NodeBuilder} so
+ * each invariant can be isolated. The live-fixture test is guarded by
+ * {@link MessageFixtures#isAvailable} so the suite stays green when the
+ * captured corpus is not present.
  */
 @DisplayName("MessageReceiveStanzaParser")
 class MessageReceiveStanzaParserTest {
 
+    /**
+     * The local account's phone-number JID used for self-account checks in
+     * the synthesised stanzas.
+     */
     private static final Jid SELF_PN = Jid.of("12025550100@s.whatsapp.net");
+
+    /**
+     * The local account's LID used for the LID branch of the self-account
+     * check.
+     */
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
+
+    /**
+     * A peer's phone-number JID used as the {@code from} attribute on
+     * synthesised 1:1 stanzas.
+     *
+     * @implNote
+     * Matches the {@code business} session captured in the corpus so
+     * downstream LID/PN derivations align between synthesised and captured
+     * input.
+     */
     private static final Jid PEER_PN = Jid.of("19254863482@s.whatsapp.net");
 
+    /**
+     * The required {@code id}, {@code t}, {@code from}, and {@code type}
+     * attributes propagate verbatim onto the parsed record.
+     */
     @Test
     @DisplayName("parse: required attributes (id, t, from, type) populate the result")
     void parseRequiredAttrs() {
@@ -47,10 +81,13 @@ class MessageReceiveStanzaParserTest {
         assertEquals("3EB0CAFEBABE", parsed.id());
         assertEquals(Instant.ofEpochSecond(1700000000L), parsed.timestamp());
         assertEquals(PEER_PN, parsed.chatJid());
-        // Wire-type attribute is consumed and reflected via the resolved MessageType enum.
-        org.junit.jupiter.api.Assertions.assertNotNull(parsed.messageType());
+        Assertions.assertNotNull(parsed.messageType());
     }
 
+    /**
+     * The optional {@code notify} attribute surfaces as the parsed push
+     * name.
+     */
     @Test
     @DisplayName("parse: optional notify (pushName) propagates")
     void parseOptionalNotify() {
@@ -66,6 +103,9 @@ class MessageReceiveStanzaParserTest {
         assertEquals("Alice", parsed.pushName().orElseThrow());
     }
 
+    /**
+     * The {@code edit} attribute defaults to {@code 0} when absent.
+     */
     @Test
     @DisplayName("parse: edit attribute defaults to 0 when absent")
     void parseEditDefaultsToZero() {
@@ -77,10 +117,13 @@ class MessageReceiveStanzaParserTest {
                 .attribute("type", "text")
                 .build();
         var parsed = MessageReceiveStanzaParser.parse(msg, SELF_PN, SELF_LID);
-        // Edit defaults to 0 — no in-place edit / revoke.
         assertEquals(0, parsed.editAttribute());
     }
 
+    /**
+     * Missing the required {@code id} attribute triggers
+     * {@link NoSuchElementException}.
+     */
     @Test
     @DisplayName("parse: missing required id throws IllegalArgumentException")
     void parseMissingIdThrows() {
@@ -90,10 +133,14 @@ class MessageReceiveStanzaParserTest {
                 .attribute("from", PEER_PN)
                 .attribute("type", "text")
                 .build();
-        assertThrows(java.util.NoSuchElementException.class,
+        assertThrows(NoSuchElementException.class,
                 () -> MessageReceiveStanzaParser.parse(msg, SELF_PN, SELF_LID));
     }
 
+    /**
+     * Missing the required {@code from} attribute triggers
+     * {@link NoSuchElementException}.
+     */
     @Test
     @DisplayName("parse: missing required from throws IllegalArgumentException")
     void parseMissingFromThrows() {
@@ -103,10 +150,14 @@ class MessageReceiveStanzaParserTest {
                 .attribute("t", 1700000000L)
                 .attribute("type", "text")
                 .build();
-        assertThrows(java.util.NoSuchElementException.class,
+        assertThrows(NoSuchElementException.class,
                 () -> MessageReceiveStanzaParser.parse(msg, SELF_PN, SELF_LID));
     }
 
+    /**
+     * Passing a {@code null} node triggers
+     * {@link NullPointerException} from the explicit guard.
+     */
     @Test
     @DisplayName("parse: null node throws NullPointerException")
     void parseNullNodeThrows() {
@@ -114,6 +165,15 @@ class MessageReceiveStanzaParserTest {
                 () -> MessageReceiveStanzaParser.parse(null, SELF_PN, SELF_LID));
     }
 
+    /**
+     * A captured Meta AI bot stanza parses end-to-end with the required
+     * fields populated.
+     *
+     * @apiNote
+     * Validates the parser against real wire input rather than only against
+     * synthesised stanzas; pairs with
+     * {@link BotMsmsgReceiveLiveOracleTest}.
+     */
     @Test
     @DisplayName("parse: live captured bot MSMSG stanza parses end-to-end with non-null fields")
     void parseLiveBotMsmsg() {
@@ -125,20 +185,22 @@ class MessageReceiveStanzaParserTest {
                 .filter(e -> "message".equals(e.getString("tag")))
                 .findFirst()
                 .orElseThrow();
-        Node node = MessageFixtures.buildNodeFromEvent(incoming);
+        var node = MessageFixtures.buildNodeFromEvent(incoming);
         var parsed = MessageReceiveStanzaParser.parse(node, SELF_PN, SELF_LID);
 
         assertNotNull(parsed.id());
         assertTrue(parsed.chatJid().toString().endsWith("@bot"),
                 "bot stream stanza must parse with @bot from JID");
-        // Wire-type attribute is consumed and reflected via the resolved MessageType enum.
-        org.junit.jupiter.api.Assertions.assertNotNull(parsed.messageType());
+        Assertions.assertNotNull(parsed.messageType());
         assertNotNull(parsed.timestamp());
-        // Bot replies come with notify="Meta AI" — visible in the live fixture.
         assertTrue(parsed.pushName().isPresent(),
                 "captured bot stanza carries a notify (push name) attribute");
     }
 
+    /**
+     * The optional {@code count} attribute round-trips into the parsed
+     * record's {@code Optional<Integer>} accessor.
+     */
     @Test
     @DisplayName("parse: count attribute (group ack-like) is preserved as Optional<Integer>")
     void parseCountAttribute() {
@@ -155,6 +217,9 @@ class MessageReceiveStanzaParserTest {
                 "count attribute must propagate to the parsed stanza");
     }
 
+    /**
+     * Absent {@code <hsm>} child resolves to {@code isHsm() == false}.
+     */
     @Test
     @DisplayName("parse: stanza with no <hsm> child has isHsm=false")
     void parseHsmAbsent() {
@@ -167,6 +232,6 @@ class MessageReceiveStanzaParserTest {
                 .build();
         var parsed = MessageReceiveStanzaParser.parse(msg, SELF_PN, SELF_LID);
         assertFalse(parsed.isHsm(),
-                "no <hsm> child → isHsm=false");
+                "no <hsm> child means isHsm=false");
     }
 }

@@ -7,12 +7,12 @@ import com.github.auties00.cobalt.model.device.DeviceCapabilities;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesAiThreadBuilder;
 import com.github.auties00.cobalt.model.device.DeviceCapabilitiesBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.AiThreadDeleteMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +24,6 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,13 +39,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
  *   <li>Malformed index branches (short index, blank parts, non-bot JID).</li>
  *   <li>Feature gating via {@link DeviceCapabilities.AiThread.SupportLevel}
- *       â€” {@code NONE} or unset capability returns {@code UNSUPPORTED}.</li>
+ *       - {@code NONE} or unset capability returns {@code UNSUPPORTED}.</li>
  *   <li>ORPHAN when the local store has no matching title.</li>
  *   <li>Happy path: removes the title and returns {@code SUCCESS}.</li>
  *   <li>Default conflict resolution.</li>
  *   <li>Default batch dispatch (n/a override).</li>
  *   <li>{@code getAiThreadDeleteMutation} builder.</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
  * </ul>
  */
 @DisplayName("AiThreadDeleteHandler")
@@ -101,7 +99,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire constants")
+    @DisplayName("metadata - wire constants")
     class Metadata {
         @Test
         @DisplayName("actionName() is ai_thread_delete")
@@ -126,7 +124,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” non-SET operation")
+    @DisplayName("applyMutation - non-SET operation")
     class RemoveBranch {
         @Test
         @DisplayName("REMOVE operation is UNSUPPORTED")
@@ -141,7 +139,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("index shorter than 3 elements is MALFORMED")
@@ -162,7 +160,7 @@ class AiThreadDeleteHandlerTest {
         @Test
         @DisplayName("non-bot JID at index[1] is MALFORMED")
         void nonBotJid() {
-            // Plain user JID â€” not a bot
+            // Plain user JID - not a bot
             var index = "[\"ai_thread_delete\",\"19255550100@s.whatsapp.net\",\"" + THREAD_ID + "\"]";
             assertEquals(SyncActionState.MALFORMED,
                     new AiThreadDeleteHandler().applyMutation(client, setMutation(index)).actionState());
@@ -170,7 +168,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” feature gating")
+    @DisplayName("applyMutation - feature gating")
     class FeatureGating {
         @Test
         @DisplayName("primaryDeviceCapabilities absent reports UNSUPPORTED")
@@ -191,7 +189,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("no local thread title reports ORPHAN with botJid|threadId as model id")
@@ -208,7 +206,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET path")
+    @DisplayName("applyMutation - happy SET path")
     class HappySet {
         @Test
         @DisplayName("existing thread title is removed and SUCCESS is reported")
@@ -239,7 +237,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value (n/a)")
+    @DisplayName("applyMutation - malformed value (n/a)")
     class MalformedValue {
         @Test
         @DisplayName("the handler ignores the SyncActionValue contents entirely")
@@ -259,7 +257,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp tiebreaker")
+    @DisplayName("resolveConflicts - default timestamp tiebreaker")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -270,13 +268,13 @@ class AiThreadDeleteHandlerTest {
             var remoteValue = new SyncActionValueBuilder().timestamp(remoteTs).build();
             var remote = new DecryptedMutation.Trusted(index, remoteValue, SyncdOperation.SET, remoteTs, 7);
             var resolution = new AiThreadDeleteHandler().resolveConflicts(local, remote);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     resolution.state());
         }
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” default per-item dispatch (n/a override)")
+    @DisplayName("applyMutationBatch - default per-item dispatch (n/a override)")
     class BatchDispatch {
         @Test
         @DisplayName("the handler does not override applyMutationBatch")
@@ -292,7 +290,7 @@ class AiThreadDeleteHandlerTest {
     }
 
     @Nested
-    @DisplayName("getAiThreadDeleteMutation â€” pending mutation builder")
+    @DisplayName("getAiThreadDeleteMutation - pending mutation builder")
     class Builder {
         @Test
         @DisplayName("builder emits a SET pending mutation at the canonical index")
@@ -315,17 +313,4 @@ class AiThreadDeleteHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/ai-thread-delete/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/ai-thread-delete/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

@@ -30,20 +30,25 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DeviceCapabilitiesHandler} — Cobalt's adapter for
+ * Exercises the {@link DeviceCapabilitiesHandler} adapter for
  * {@code WAWebDeviceCapabilitiesSync}.
  *
- * <p>The handler is non-singleton: it takes a {@link DefaultWamService} for
- * committing the {@code Lid11MigrationLifecycleEvent} when a chat-db
- * migration timestamp arrives. The tests cover metadata, the non-primary
- * device branch (where the store is updated but no LID migration side
- * effects fire), the early-return paths (non-SET operation, malformed
- * value, missing device JID), and the per-device store write.
+ * @apiNote
+ * Verifies parity with WA Web for the {@code device_capabilities}
+ * app-state sync action across metadata, the non-primary-device
+ * branch (store is updated but no LID-migration side effects fire),
+ * the early-return paths (non-SET, malformed value, missing JID) and
+ * the per-device store write. The primary-device branch reaches
+ * into {@link LidMigrationService} which {@link TestWhatsAppClient}
+ * does not stub; that path is exercised by the integration suite.
  *
- * <p>The primary-device branch additionally reaches into
- * {@code client.lidMigrationService()}, which {@link TestWhatsAppClient}
- * does not stub. That path is therefore documented as {@code n/a} here
- * and exercised through the integration suite instead.
+ * @implNote
+ * This implementation builds the handler with a real
+ * {@link DefaultWamService} and {@link LidMigrationService} so the
+ * dependency graph matches production wiring; A/B props are stubbed
+ * via {@link TestABPropsService}. Each test starts from a clean
+ * {@link DeviceFixtures#temporaryStore} so device-capability writes
+ * land in an empty per-JID map.
  */
 @DisplayName("DeviceCapabilitiesHandler")
 class DeviceCapabilitiesHandlerTest {
@@ -170,7 +175,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed index — n/a")
+    @DisplayName("applyMutation: malformed index - n/a")
     class MalformedIndexNa {
         @Test
         @DisplayName("the handler does not produce a malformed verdict; absent JID is silently SUCCESS")
@@ -184,7 +189,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: malformed value — n/a")
+    @DisplayName("applyMutation: malformed value - n/a")
     class MalformedValueNa {
         @Test
         @DisplayName("the handler does not produce a malformed verdict; foreign action is silently SUCCESS")
@@ -202,7 +207,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: orphan paths — n/a")
+    @DisplayName("applyMutation: orphan paths - n/a")
     class OrphanNa {
         @Test
         @DisplayName("device_capabilities does not require an existing entity; every device JID is acceptable")
@@ -219,7 +224,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation: primary-device branch — n/a (requires lidMigrationService stub)")
+    @DisplayName("applyMutation: primary-device branch - n/a (requires lidMigrationService stub)")
     class PrimaryDeviceNa {
         @Test
         @DisplayName("primary-device application is exercised through the integration suite")
@@ -233,7 +238,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins")
@@ -249,7 +254,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — n/a, default implementation")
+    @DisplayName("applyMutationBatch - n/a, default implementation")
     class BatchNa {
         @Test
         @DisplayName("default applyMutationBatch delegates per mutation")
@@ -268,7 +273,7 @@ class DeviceCapabilitiesHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builder methods — n/a, handler exposes none")
+    @DisplayName("static builder methods - n/a, handler exposes none")
     class BuilderNa {
         @Test
         @DisplayName("DeviceCapabilitiesHandler does not expose a getMutation helper")

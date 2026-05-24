@@ -15,57 +15,69 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant — wraps the registration id,
- * identity key, one-time pre-key list and signed pre-key in the
- * canonical {@code <iq xmlns="encrypt" type="set"
- * to="s.whatsapp.net">} envelope.
+ * Builds the {@code <iq xmlns="encrypt" type="set"/>} that uploads the local Signal pre-key
+ * bundle during multi-device registration.
+ *
+ * @apiNote
+ * Distinct from {@link IqUploadPreKeysRequest}: this variant is fired exactly once during the
+ * companion device-link flow, gated on the {@code UPLOAD_PREKEYS} stage of the
+ * {@code MD_LINK_DEVICE_COMPANION_STAGE} pipeline. WA Web models it as a
+ * {@code WAWebUploadPrekeysForRegTask} with two stages: {@code startKeyGenerationStage} fabricates
+ * the bundle from {@code waSignalStore.getOrGenPreKeys(UPLOAD_KEYS_COUNT, ...)}, and
+ * {@code startKeyUploadStage} ships it over the same wire shape as the steady-state upload. The
+ * payload layout is identical to {@link IqUploadPreKeysRequest}: {@code <registration/>},
+ * {@code <type/>}, {@code <identity/>}, {@code <list/>}, {@code <skey/>}.
+ *
+ * @implNote
+ * Cobalt keeps the registration-time and steady-state uploads as separate typed requests so the
+ * caller can dispatch them through different code paths and observe distinct
+ * {@link IqUploadPrekeysForRegResponse} vs {@link IqUploadPreKeysResponse} echoes; WA Web shares
+ * the payload assembly but parses the result with the same {@code uploadPreKeyResParser}.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPrekeysForRegTask")
 public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
     /**
-     * The local device's registration id — encoded as a four-byte
-     * big-endian unsigned integer in the {@code <registration/>}
-     * child.
+     * The local device's registration id; serialised as a four-byte big-endian unsigned integer
+     * into the {@code <registration/>} child.
      */
     private final int registrationId;
 
     /**
-     * The single-byte Signal key-bundle type marker carried by
-     * the {@code <type/>} child.
+     * The single-byte Signal key-bundle type marker carried by the {@code <type/>} child.
      */
     private final byte keyBundleType;
 
     /**
-     * The local long-term identity public key — thirty-two bytes
-     * carried verbatim by the {@code <identity/>} child.
+     * The thirty-two-byte long-term identity public key, written verbatim into the
+     * {@code <identity/>} child.
      */
     private final byte[] identityPublicKey;
 
     /**
-     * The list of one-time pre-keys carried by the
-     * {@code <list/>} wrapper.
+     * The non-empty list of one-time pre-keys, each rendered into one {@code <key/>} grandchild
+     * under the {@code <list/>} wrapper.
      */
     private final List<IqUploadPreKeysPreKey> preKeys;
 
     /**
-     * The current signed pre-key carried by the {@code <skey/>}
-     * child.
+     * The freshly generated signed pre-key carried by the {@code <skey/>} child.
      */
     private final IqUploadPreKeysSignedPreKey signedPreKey;
 
     /**
-     * Constructs a request for the supplied bundle.
+     * Constructs an upload-for-registration request for the supplied key bundle.
+     *
+     * @apiNote
+     * The {@code preKeys} list is defensively copied. WA Web generates this bundle exactly once
+     * per device link via {@code getOrGenPreKeys(UPLOAD_KEYS_COUNT)}; the caller is expected to
+     * persist the same {@code id}s against the local Signal store before issuing this request.
      *
      * @param registrationId    the local device's registration id
      * @param keyBundleType     the Signal key-bundle type marker
-     * @param identityPublicKey the local identity public key
-     *                          bytes; never {@code null}
-     * @param preKeys           the one-time pre-keys to upload;
-     *                          never {@code null} and never empty
-     * @param signedPreKey      the current signed pre-key; never
-     *                          {@code null}
-     * @throws NullPointerException     if any reference argument is
-     *                                  {@code null}
+     * @param identityPublicKey the local identity public key bytes
+     * @param preKeys           the one-time pre-keys to upload, non-empty
+     * @param signedPreKey      the freshly generated signed pre-key
+     * @throws NullPointerException     if any reference argument is {@code null}
      * @throws IllegalArgumentException if {@code preKeys} is empty
      */
     public IqUploadPrekeysForRegRequest(int registrationId, byte keyBundleType, byte[] identityPublicKey,
@@ -85,7 +97,7 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the registration id carried by this request.
+     * Returns the registration id.
      *
      * @return the registration id
      */
@@ -105,37 +117,38 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
     /**
      * Returns the identity public key bytes.
      *
-     * @return the thirty-two-byte identity public key; never
-     *         {@code null}
+     * @return the thirty-two-byte identity public key
      */
     public byte[] identityPublicKey() {
         return identityPublicKey;
     }
 
     /**
-     * Returns the list of one-time pre-keys carried by this
-     * request.
+     * Returns the unmodifiable list of one-time pre-keys.
      *
-     * @return an unmodifiable list of pre-keys; never {@code null}
+     * @return the pre-keys
      */
     public List<IqUploadPreKeysPreKey> preKeys() {
         return preKeys;
     }
 
     /**
-     * Returns the signed pre-key carried by this request.
+     * Returns the signed pre-key.
      *
-     * @return the signed pre-key; never {@code null}
+     * @return the signed pre-key
      */
     public IqUploadPreKeysSignedPreKey signedPreKey() {
         return signedPreKey;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the pre-key payload
+     * @implNote
+     * This implementation reproduces the payload shape of {@link IqUploadPreKeysRequest#toNode()}
+     * byte for byte; the only differences from the steady-state variant are the
+     * {@link WhatsAppWebExport#moduleName() module name} the annotation points at and the
+     * surrounding lifecycle (one-shot during link, vs the persisted-retry loop).
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUploadPrekeysForRegTask",
@@ -172,6 +185,13 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
                 .content(registrationNode, typeNode, identityNode, listNode, skeyNode);
     }
 
+    /**
+     * Compares this request to another instance for equality.
+     *
+     * @param obj the candidate instance
+     * @return {@code true} when {@code obj} is an {@code IqUploadPrekeysForRegRequest} carrying
+     *         identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -188,6 +208,11 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
                 && Objects.equals(this.signedPreKey, that.signedPreKey);
     }
 
+    /**
+     * Returns a hash code derived from every carried field.
+     *
+     * @return the combined hash
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(registrationId, keyBundleType, preKeys, signedPreKey);
@@ -195,6 +220,11 @@ public final class IqUploadPrekeysForRegRequest implements IqOperation.Request {
         return result;
     }
 
+    /**
+     * Returns the record-style rendering for this request.
+     *
+     * @return the rendered string
+     */
     @Override
     public String toString() {
         return "IqUploadPrekeysForRegRequest[registrationId=" + registrationId

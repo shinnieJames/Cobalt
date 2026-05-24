@@ -9,26 +9,49 @@ import com.github.auties00.cobalt.registration.push.apns.plist.value.PlistString
 import java.io.IOException;
 
 /**
- * Result of {@code GET http://init-p01st.push.apple.com/bag}: the
- * courier hostname plus the count of replicas Apple is currently
- * advertising. Clients pick a random index in {@code [1, hostCount)}
- * and connect to {@code <index>-<hostname>:443}.
+ * The decoded bag response published at
+ * {@code http://init-p01st.push.apple.com/bag}.
  *
- * @param hostCount how many courier replicas are live (Apple
- *                  typically reports a value between 30 and 50)
- * @param hostname  the suffix of the courier DNS name (typically
- *                  {@code "courier.push.apple.com"})
+ * @apiNote
+ * Consumed by the courier connection bootstrap to pick which courier
+ * replica to dial. The hostname is the DNS suffix
+ * (e.g. {@code "courier.push.apple.com"}) and the replica count is the
+ * number of live front-ends Apple is currently rotating between; the
+ * caller dials {@code <index>-<hostname>:443} for some random
+ * {@code index} in {@code [1, hostCount)}.
+ *
+ * @implNote
+ * This implementation models the bag as a plain {@link Record} with
+ * only the two fields the courier handshake actually needs; the
+ * remaining metadata in the bag plist (carrier-specific overrides,
+ * retry hints, region info) is parsed but discarded.
+ *
+ * @param hostCount the number of courier replicas advertised by Apple
+ * @param hostname  the DNS suffix shared by every replica
  */
 public record ApnsBag(int hostCount, String hostname) {
     /**
-     * Parses the bag response, which is itself a plist whose
-     * {@code "bag"} key holds a nested plist with the courier
-     * metadata.
+     * Decodes the bag response into an {@link ApnsBag}.
      *
-     * @param plist the raw plist bytes from the bag endpoint
+     * @apiNote
+     * Called once per courier connection by
+     * {@link com.github.auties00.cobalt.registration.push.apns.ApnsCourierConnection}
+     * after fetching {@code /bag}. The response is a plist-in-plist:
+     * the outer {@link PlistDictionaryValue} has a {@code "bag"} key
+     * whose {@link PlistDataValue} payload is itself a plist carrying
+     * {@code APNSCourierHostcount} and {@code APNSCourierHostname}.
+     *
+     * @implNote
+     * This implementation funnels every parsing failure (including
+     * {@link NullPointerException} from missing keys and
+     * {@link ClassCastException} from unexpected types) through a
+     * single {@link IOException} so callers can handle bag-parse
+     * failures as ordinary transport failures.
+     *
+     * @param plist the raw plist bytes returned by the bag endpoint
      * @return the decoded bag
-     * @throws IOException if the plist is malformed or missing the
-     *                     expected nested keys
+     * @throws IOException if the plist is malformed or missing either
+     *                     of the two required keys
      */
     public static ApnsBag ofPlist(byte[] plist) throws IOException {
         try {

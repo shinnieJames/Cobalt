@@ -18,40 +18,65 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Structural tests for {@link ChatFanoutStanza}, mirroring
  * {@code WAWebSendMsgCreateFanoutStanza.createFanoutMsgStanza}.
  *
- * <p>Covers the dimensions documented in the plan's test matrix:
+ * @apiNote
+ * Pins the outer-stanza dimensions that {@link ChatFanoutStanza#build}
+ * must round-trip without losing information: stanza type, edit marker,
+ * addressing mode, peer-recipient attributes, device-count topology, and
+ * the absent-when-null attribute discipline. The 479 regression guard
+ * verifies that LID self-sends produce LID-form participant JIDs.
  *
- * <ul>
- *   <li>D1 stanza type — text/media/reaction/poll/event propagate to the
- *       {@code type} attribute;</li>
- *   <li>D2 edit state — revoke/edit attributes propagate to the
- *       {@code edit} attribute;</li>
- *   <li>D3 addressing — {@code addressing_mode} propagates;</li>
- *   <li>D5 self vs peer — {@code peer_recipient_lid}, {@code peer_recipient_pn},
- *       {@code recipient_pn}, and {@code peer_recipient_username} all
- *       round-trip;</li>
- *   <li>D6 device count — single-primary places {@code <enc>} directly under
- *       {@code <message>}, multi-device wraps in {@code <participants>}.</li>
- * </ul>
- *
- * <p>The byte-equal WA Web oracle parity test lives in a separate test class
- * keyed off the captured corpus under
- * {@code fixtures/message/send/stanza/}, committed once
- * {@code capture-message-corpus.mjs} runs.
+ * @implNote
+ * This implementation drives the 27-arg builder directly via the
+ * {@link #build} helper that fills every non-essential argument with
+ * {@code null} or {@code false}; the byte-equality oracle for the same
+ * shape lives in {@link ChatFanoutLiveOracleTest}.
  */
 @DisplayName("ChatFanoutStanza")
 class ChatFanoutStanzaTest {
 
+    /**
+     * A PN-form recipient JID used to drive the addressing-mode null
+     * branch.
+     */
     private static final Jid CHAT_PN = Jid.of("12025550100@s.whatsapp.net");
+
+    /**
+     * A LID-form recipient JID used to drive the LID branch.
+     */
     private static final Jid CHAT_LID = Jid.of("258252122116273@lid");
+
+    /**
+     * A LID-form self JID used by the 479-regression self-send test.
+     */
     private static final Jid SELF_LID = Jid.of("258252122116273@lid");
+
+    /**
+     * A LID device JID for the primary device (device id 0).
+     */
     private static final Jid DEVICE_PRIMARY_LID = Jid.of("258252122116273:0@lid");
+
+    /**
+     * A LID device JID for a companion device (device id 77).
+     */
     private static final Jid DEVICE_77_LID = Jid.of("258252122116273:77@lid");
+
+    /**
+     * A LID device JID for a second companion device (device id 73).
+     */
     private static final Jid DEVICE_73_LID = Jid.of("258252122116273:73@lid");
 
+    /**
+     * Fixture ciphertext used wherever the actual bytes do not matter.
+     */
     private static final byte[] CIPHERTEXT = new byte[]{1, 2, 3, 4};
 
+    /**
+     * Single primary device must place the {@code <enc>} directly under
+     * the outer {@code <message>} (the bot-related-flag short-circuit
+     * path).
+     */
     @Test
-    @DisplayName("single primary device → <enc> as direct child of <message> (no <participants>)")
+    @DisplayName("single primary device -> <enc> as direct child of <message> (no <participants>)")
     void singlePrimaryFlatStructure() {
         var payload = new MessageEncryptedPayload(
                 MessageEncryptionType.MSG, CIPHERTEXT, Jid.of("12025550100:0@s.whatsapp.net"));
@@ -64,8 +89,12 @@ class ChatFanoutStanzaTest {
                 "single-primary fanout must NOT wrap in <participants>");
     }
 
+    /**
+     * Multi-device fanout wraps every {@code <enc>} under
+     * {@code <participants>} with one {@code <to jid=...>} per device.
+     */
     @Test
-    @DisplayName("multi-device fanout → <enc> wrapped in <participants>, one <to jid=…> per device")
+    @DisplayName("multi-device fanout -> <enc> wrapped in <participants>, one <to jid=...> per device")
     void multiDeviceParticipantsStructure() {
         var payloads = List.of(
                 new MessageEncryptedPayload(MessageEncryptionType.MSG, CIPHERTEXT, DEVICE_PRIMARY_LID),
@@ -77,42 +106,48 @@ class ChatFanoutStanzaTest {
                 "multi-device fanout must NOT place a top-level <enc>");
         var participants = stanza.getChild("participants").orElseThrow();
         var toNodes = participants.streamChildren("to").toList();
-        assertEquals(3, toNodes.size(), "one <to jid=…> per encrypted device");
+        assertEquals(3, toNodes.size(), "one <to jid=...> per encrypted device");
     }
 
+    /**
+     * Self-send via LID must label every participant with a LID-form
+     * device JID; pre-fix the server rejected the stanza with error 479.
+     *
+     * @implNote
+     * The pre-fix participant JIDs were PN-form even though the outer
+     * chat JID was LID. The fix is upstream in
+     * {@code DeviceService.getUserFanout}: every payload's
+     * {@code recipientJid} is already LID-projected by the time
+     * {@link ChatFanoutStanza} sees it. This test pins that invariant.
+     */
     @Test
-    @DisplayName("479 regression guard: self-send via LID → every participant <to jid=…> is @lid")
+    @DisplayName("479 regression guard: self-send via LID -> every participant <to jid=...> is @lid")
     void selfSendUsesLidParticipants() {
-        // The bug this whole test suite was created for. Pre-fix, the
-        // participant JIDs came back PN-form even though the outer chat JID
-        // was LID — the server rejected the stanza with error 479
-        // (recipient_addressing_mismatch). Post-fix (DeviceService.
-        // getUserFanout projects device JIDs to chat's addressing mode),
-        // ChatFanoutStanza simply labels participants with payload.recipientJid().
-        // The upstream projection guarantees that JID is already LID-form.
         var payloads = List.of(
                 new MessageEncryptedPayload(MessageEncryptionType.PKMSG, CIPHERTEXT, DEVICE_PRIMARY_LID),
                 new MessageEncryptedPayload(MessageEncryptionType.PKMSG, CIPHERTEXT, DEVICE_73_LID),
                 new MessageEncryptedPayload(MessageEncryptionType.PKMSG, CIPHERTEXT, DEVICE_77_LID));
         var stanza = build(SELF_LID, "text", payloads, null, "lid");
 
-        // Outer to is LID
         assertEquals(SELF_LID.toString(), stanza.getAttributeAsString("to").orElseThrow(),
-                "outer <message to=…> must be LID-form for self-send");
+                "outer <message to=...> must be LID-form for self-send");
 
-        // Every participant <to jid=…> must carry @lid, not @s.whatsapp.net
         var participants = stanza.getChild("participants").orElseThrow();
         var toNodes = participants.streamChildren("to").toList();
         assertEquals(3, toNodes.size());
         for (var to : toNodes) {
             var jidAttr = to.getAttributeAsString("jid").orElseThrow();
             assertTrue(jidAttr.endsWith("@lid"),
-                    "participant <to jid=…> must be LID-form, got: " + jidAttr);
+                    "participant <to jid=...> must be LID-form, got: " + jidAttr);
             assertFalse(jidAttr.endsWith("@s.whatsapp.net"),
-                    "participant <to jid=…> must NOT be PN-form when outer addressing_mode is LID: " + jidAttr);
+                    "participant <to jid=...> must NOT be PN-form when outer addressing_mode is LID: " + jidAttr);
         }
     }
 
+    /**
+     * The {@code addressing_mode} attribute propagates verbatim to the
+     * outer {@code <message>}.
+     */
     @Test
     @DisplayName("addressing_mode attribute propagates to the <message> attrs")
     void addressingModeAttribute() {
@@ -121,6 +156,10 @@ class ChatFanoutStanzaTest {
         assertEquals("lid", stanza.getAttributeAsString("addressing_mode").orElseThrow());
     }
 
+    /**
+     * The {@code edit} attribute propagates verbatim; {@code edit=7} is
+     * the status-revoke marker.
+     */
     @Test
     @DisplayName("edit attribute propagates to the <message> attrs")
     void editAttribute() {
@@ -130,6 +169,10 @@ class ChatFanoutStanzaTest {
                 "edit=7 is the status-revoke marker; must propagate verbatim");
     }
 
+    /**
+     * Every supported stanza {@code type} propagates verbatim to the
+     * outer {@code <message>}.
+     */
     @Test
     @DisplayName("stanza type propagates to the <message> type attribute")
     void typeAttribute() {
@@ -137,10 +180,14 @@ class ChatFanoutStanzaTest {
         for (var type : List.of("text", "media", "reaction", "poll", "event")) {
             var stanza = build(CHAT_PN, type, List.of(payload), null, null);
             assertEquals(type, stanza.getAttributeAsString("type").orElseThrow(),
-                    "stanza type=" + type + " must propagate to outer <message type=…>");
+                    "stanza type=" + type + " must propagate to outer <message type=...>");
         }
     }
 
+    /**
+     * The message id propagates verbatim to the outer {@code <message>}
+     * id attribute.
+     */
     @Test
     @DisplayName("message id propagates to the <message> id attribute")
     void idAttribute() {
@@ -156,15 +203,16 @@ class ChatFanoutStanzaTest {
         assertEquals("3EB0CAFEBABE", stanza.getAttributeAsString("id").orElseThrow());
     }
 
+    /**
+     * Absent optional attributes must remain absent from the attribute
+     * map (not present with an empty string).
+     */
     @Test
     @DisplayName("absent optional attributes are absent on the wire (never empty strings)")
     void optionalAttributesAreNullOnWire() {
         var payload = new MessageEncryptedPayload(MessageEncryptionType.MSG, CIPHERTEXT, DEVICE_77_LID);
         var stanza = build(CHAT_PN, "text", List.of(payload), null, null);
 
-        // Each of these should be absent (not present with an empty string).
-        // NodeBuilder.attribute(key, null) is a no-op so the attribute map
-        // doesn't carry the key.
         assertTrue(stanza.getAttribute("edit").isEmpty(), "edit attribute must be absent when null");
         assertTrue(stanza.getAttribute("addressing_mode").isEmpty(), "addressing_mode must be absent when null");
         assertTrue(stanza.getAttribute("device_fanout").isEmpty(), "device_fanout must be absent when null");
@@ -174,8 +222,13 @@ class ChatFanoutStanzaTest {
         assertTrue(stanza.getAttribute("peer_recipient_username").isEmpty(), "peer_recipient_username must be absent when null");
     }
 
+    /**
+     * Every {@code <enc>} child carries the
+     * {@link com.github.auties00.cobalt.message.send.crypto.MessageEncryption#CIPHERTEXT_VERSION}
+     * value as the {@code v} attribute.
+     */
     @Test
-    @DisplayName("CIPHERTEXT_VERSION is set on every <enc> via attribute v=…")
+    @DisplayName("CIPHERTEXT_VERSION is set on every <enc> via attribute v=...")
     void encVersionAttribute() {
         var payloads = List.of(
                 new MessageEncryptedPayload(MessageEncryptionType.MSG, CIPHERTEXT, DEVICE_PRIMARY_LID),
@@ -185,10 +238,13 @@ class ChatFanoutStanzaTest {
         for (var to : participants.streamChildren("to").toList()) {
             var enc = to.getChild("enc").orElseThrow();
             assertTrue(enc.getAttribute("v").isPresent(),
-                    "every <enc> must carry the v=… (CIPHERTEXT_VERSION) attribute");
+                    "every <enc> must carry the v=... (CIPHERTEXT_VERSION) attribute");
         }
     }
 
+    /**
+     * A null {@code payloads} list throws up front.
+     */
     @Test
     @DisplayName("null payloads list throws NullPointerException")
     void nullPayloadsThrows() {
@@ -202,6 +258,9 @@ class ChatFanoutStanzaTest {
                 ));
     }
 
+    /**
+     * A null {@code messageId} throws up front.
+     */
     @Test
     @DisplayName("null messageId throws NullPointerException")
     void nullMessageIdThrows() {
@@ -216,6 +275,9 @@ class ChatFanoutStanzaTest {
                 ));
     }
 
+    /**
+     * A null {@code chatJid} throws up front.
+     */
     @Test
     @DisplayName("null chatJid throws NullPointerException")
     void nullChatJidThrows() {
@@ -231,7 +293,20 @@ class ChatFanoutStanzaTest {
     }
 
     /**
-     * Helper that calls the 26-arg overload with everything-null defaults.
+     * Invokes the 26-arg {@link ChatFanoutStanza#build} with
+     * everything-null defaults for the optional children and a fixed
+     * message id.
+     *
+     * @apiNote
+     * Centralises the boilerplate so the individual tests need only
+     * supply the attributes they exercise.
+     *
+     * @param chatJid        the recipient chat JID
+     * @param type           the stanza type attribute
+     * @param payloads       the per-device payloads
+     * @param editAttribute  the edit attribute, or null
+     * @param addressingMode the addressing mode attribute, or null
+     * @return the rebuilt outer {@code <message>} node
      */
     private static Node build(
             Jid chatJid,
@@ -247,26 +322,26 @@ class ChatFanoutStanzaTest {
                 payloads,
                 editAttribute,
                 addressingMode,
-                null, // deviceFanout
-                null, // mediaType
-                null, // decryptFail
-                null, // nativeFlowName
-                null, // contentBindings
-                false, // isBotRelated
-                null, // peerRecipientLid
-                null, // peerRecipientPn
-                null, // recipientPn
-                null, // peerRecipientUsername
-                null, // identityNode
-                null, // metaNode
-                null, // bizNode
-                null, // botNode
-                null, // reportingNode
-                null, // senderContentBinding
-                null, // botMetadataNode
-                null, // tctokenNode
-                null, // ctwaNode
-                null  // groupDirectSkmsgNode
+                null,
+                null,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         ).build();
     }
 }

@@ -33,131 +33,204 @@ import java.security.SecureRandom;
 import java.util.*;
 
 /**
- * Drives the mobile phone-number registration flow against WhatsApp's
- * {@code v.whatsapp.net/v2} endpoint.
+ * Drives the native-mobile phone-number registration flow against
+ * WhatsApp's {@code v.whatsapp.net/v2} endpoint.
  *
- * <p>Registering a phone number with WhatsApp as a native Android or iOS
- * client involves three sequential calls against the legacy mobile
- * registration API:
+ * <p>Registering a phone number with WhatsApp as a native Android or
+ * iOS client involves three sequential calls against the legacy
+ * mobile registration API:
  * <ol>
- *   <li>{@code /exist} asks the server whether an account already exists
- *       for the exact Signal identity/noise keys that Cobalt is about to
- *       claim. The Cobalt logic treats a {@code "reason": "incorrect"}
- *       response as confirmation that the keys are free and proceeds,
- *       otherwise it aborts.</li>
- *   <li>{@code /code} asks the server to send a verification code via the
- *       method the user chose (SMS, voice call, or WhatsApp OTP).</li>
- *   <li>{@code /register} submits the verification code the user provided
- *       and completes the claim.</li>
+ *   <li>{@code /exist} asks the server whether an account already
+ *       exists for the exact Signal identity and Noise keys this
+ *       instance is about to claim. A {@code "reason": "incorrect"}
+ *       response confirms the keys are free and the flow proceeds;
+ *       any other response aborts.</li>
+ *   <li>{@code /code} asks the server to deliver a verification code
+ *       through the channel the user picked (SMS, voice call, or
+ *       WhatsApp OTP).</li>
+ *   <li>{@code /register} submits the code the user typed back into
+ *       the verification handler. On success the store is marked as
+ *       registered and its JID is set to the phone-number JID.</li>
  * </ol>
- * The concrete subclasses {@link AndroidClientRegistration} and
- * {@link IosClientRegistration} plug in the platform-specific request
- * parameters, User-Agent, device identifier format, and HTTP headers.
+ * Two CAPTCHA / 2FA branches ({@code /challenge}, {@code /security})
+ * are taken on demand when the server responds with the matching
+ * fields. All request bodies are end-to-end encrypted with AES-GCM
+ * under a Curve25519 shared key derived between a freshly minted
+ * ephemeral keypair and a hardcoded server registration key, then
+ * Base64-URL encoded and wrapped in an {@code ENC=...} form field.
  *
- * <p>All request bodies are end-to-end encrypted with AES-GCM under a
- * Curve25519 shared key derived between a freshly generated ephemeral key
- * pair and a hardcoded server registration key, and then Base64-encoded and
- * wrapped in a {@code ENC=...} form field, mirroring the scheme the native
- * mobile apps use.
+ * @apiNote
+ * The entry point for Cobalt embedders that want a Cobalt instance to
+ * claim a phone number itself rather than pair against an
+ * already-registered phone. Embedders construct an instance through
+ * {@link #newRegistration(WhatsAppStore,
+ * WhatsAppClientVerificationHandler.Mobile, WhatsAppDeviceAttestor,
+ * WhatsAppDevicePushClient)} (which selects
+ * {@link AndroidClientRegistration} or {@link IosClientRegistration}
+ * based on the configured platform), then call {@link #register} once.
+ * The class has no WA Web counterpart: WA Web clients always pair
+ * against an existing phone via the QR or link-code flow, so this
+ * surface exists purely to let Cobalt take the role of a native
+ * Android or iOS client.
  *
- * @apiNote This class has no WA Web counterpart. WA Web clients pair with
- *          an already-registered phone via the QR or link-code flow rather
- *          than driving the mobile registration API themselves, so this
- *          class exists purely to let Cobalt take the role of a native
- *          Android or iOS client.
+ * @implNote
+ * This implementation tracks the native client's full funnel-event
+ * tape (the {@code /v2/pre_pn_client_log} and {@code /v2/client_log}
+ * endpoints WhatsApp uses to capture the screen-by-screen registration
+ * journey) so the server's anti-abuse heuristics see a connected
+ * sequence. Funnel sends are best-effort and intentionally swallow
+ * every throwable so a logging failure can never abort a registration.
+ *
  * @see AndroidClientRegistration
  * @see IosClientRegistration
  */
 public abstract sealed class MobileClientRegistration implements AutoCloseable
         permits AndroidClientRegistration, IosClientRegistration {
     /**
-     * Base URL of the mobile registration API shared by all three
-     * operations ({@code /exist}, {@code /code}, {@code /register}).
+     * Base URL shared by every endpoint used during registration
+     * ({@code /exist}, {@code /code}, {@code /register},
+     * {@code /challenge}, {@code /security}, {@code /client_log},
+     * {@code /pre_pn_client_log}).
+     *
+     * @apiNote
+     * Embedders that need to intercept registration traffic for
+     * testing match against this prefix; the value is intentionally
+     * not overridable because the cryptographic envelope is bound to
+     * WhatsApp's hardcoded server key.
      */
     public static final String MOBILE_REGISTRATION_ENDPOINT = "https://v.whatsapp.net/v2";
 
     /**
-     * WhatsApp's hardcoded Curve25519 public key used as the peer in the
-     * request-encryption ECDH, extracted from the native mobile apps.
+     * Curve25519 public key the WhatsApp registration server
+     * advertises, used as the peer for the per-request ECDH that
+     * derives the AES-GCM body-encryption key.
+     *
+     * @apiNote
+     * The value is hex-decoded once at class load and reused for
+     * every outbound request. It was extracted from the native
+     * mobile apps and is checked against the server's response on
+     * every call by the AES-GCM tag verification: a wrong key would
+     * fail the authentication tag and the server would reject the
+     * request.
      */
     private static final byte[] REGISTRATION_PUBLIC_KEY = HexFormat.of().parseHex("8e8c0f74c3ebc5d7a6865c6c3c843856b06121cce8ea774d22fb6f122512302d");
 
     /**
-     * Single-byte Signal identity key type marker, URL-safe Base64 encoded,
-     * sent as the {@code e_keytype} form field.
+     * URL-safe base64 encoding of the single byte that identifies
+     * Signal identity keys, sent verbatim as the {@code e_keytype}
+     * form field.
+     *
+     * @apiNote
+     * Constant for the lifetime of the class because the Signal
+     * identity public key type marker never changes.
      */
     private static final String SIGNAL_PUBLIC_KEY_TYPE = Base64.getUrlEncoder().encodeToString(new byte[]{SignalIdentityPublicKey.type()});
 
     /**
-     * Shared HTTP client used for every registration request.
+     * HTTP client backing every registration request.
      *
-     * <p>Created once per registration instance and closed together with
-     * the instance via {@link #close()}.
+     * @apiNote
+     * Created once at construction with redirect following enabled
+     * and closed by {@link #close}. Subclasses do not normally need
+     * to reach into the client; they build {@link HttpRequest}
+     * instances via {@link #createRequest(String, String, String)}.
      */
     protected final HttpClient httpClient;
 
     /**
-     * Cobalt store providing the Signal identity keys, Noise keys,
-     * registration ID, FDID, device ID, phone number, and other persistent
-     * credentials that the registration requests rely on.
+     * Store carrying the Signal identity keys, Noise keys,
+     * registration id, FDID, device id, phone number, and other
+     * persistent credentials referenced on every request.
+     *
+     * @apiNote
+     * Mutated in place when registration succeeds (the
+     * {@code registered} flag and the local JID are written via
+     * {@link WhatsAppStore#setRegistered} and
+     * {@link WhatsAppStore#setJid}).
      */
     protected final WhatsAppStore store;
 
     /**
-     * Callback used to ask the calling code which verification method to
-     * request (SMS / voice / WhatsApp OTP) and what verification code the
-     * user entered.
+     * Callback the registration consults to pick the verification
+     * method, retrieve the user-entered code, solve a CAPTCHA, and
+     * supply the 2FA PIN when required.
+     *
+     * @apiNote
+     * Supplied by the embedder at builder time; never {@code null}
+     * once construction has completed.
      */
     protected final WhatsAppClientVerificationHandler.Mobile verification;
 
     /**
-     * One-based attempt counter driven by the {@code /v2/code} retry
-     * loop. Read by subtypes that embed a {@code client_metrics.attempts}
-     * field into the outgoing body.
+     * One-based count of {@code /v2/code} attempts driven by the
+     * retry loop inside {@link #requestVerificationCode(String)}.
+     *
+     * @apiNote
+     * Read by Android's {@code client_metrics.attempts} field so
+     * each retry advertises its position in the loop. Reset to
+     * {@code 1} every time {@link #requestVerificationCode(String)}
+     * starts.
      */
     protected int attempt = 1;
 
     /**
-     * The screen-name string most recently reported to
-     * {@code /v2/client_log}. Carried into subsequent funnel events as
-     * the {@code previous_screen} field so the server sees a connected
-     * sequence.
+     * Screen-name string reported on the most recent funnel event.
      *
-     * <p>Initialised to {@code "enter_number"} because the very first
-     * post-phone-number funnel event in Cobalt's flow happens after the
-     * phone number has already been committed to the store.
+     * @apiNote
+     * Echoed into the {@code previous_screen} field of subsequent
+     * funnel events so the server's anti-abuse pipeline sees a
+     * connected walk through the registration UI screens.
+     *
+     * @implNote
+     * This implementation initialises the value to
+     * {@code "enter_number"} because the very first funnel event
+     * Cobalt emits is the {@code exist_check} attempt, which happens
+     * after the phone number has already been committed to the store.
+     * The native client's pre-phone-number screens (EULA, idle entry
+     * screen) have no Cobalt analogue.
      */
     private String previousFunnelScreen = "enter_number";
 
     /**
-     * The verification method string most recently requested via
-     * {@code /v2/code} (for example {@code "sms"} or {@code "voice"}).
-     * Read by {@link #sendVerificationCode()} and the 2FA handler to
-     * derive the {@code current_screen} value passed to funnel events,
-     * so that events fired after the code exchange correlate to the
-     * same screen name the native client would have reported.
+     * Last verification method string passed to
+     * {@link #requestVerificationCode(String)}.
      *
-     * <p>Remains {@code null} until the first call to
+     * @apiNote
+     * Drives the {@code current_screen} value reported by
+     * {@link #sendVerificationCode} and the 2FA handler so funnel
+     * events fired after the code exchange carry the same
+     * {@code verify_<method>} screen name the native client would
+     * have reported. Remains {@code null} until the first call to
      * {@link #requestVerificationCode(String)}.
      */
     private String lastRequestedMethod;
 
     /**
      * Stable per-registration session identifier sent as the
-     * {@code access_session_id} form field on every attested endpoint
-     * and every funnel event. The native Android client uses a
-     * 22-character base64url-encoded random 16-byte UUID. We mirror that
-     * shape (no padding, URL-safe alphabet). Generated once at
-     * construction and reused for the whole registration ceremony so
-     * the server can correlate {@code /v2/exist}, {@code /v2/code},
-     * {@code /v2/register}, {@code /v2/client_log}, etc. As one
+     * {@code access_session_id} form field on every attested
+     * endpoint and every funnel event.
+     *
+     * @apiNote
+     * Generated once at construction time and reused for the entire
+     * registration ceremony, so the server can stitch
+     * {@code /v2/exist}, {@code /v2/code}, {@code /v2/register},
+     * {@code /v2/client_log}, and every other call together as one
      * session.
+     *
+     * @implNote
+     * This implementation mirrors the 22-character URL-safe base64
+     * encoding of a random 16-byte UUID that the native Android
+     * client emits.
      */
     private final String accessSessionId = newAccessSessionId();
 
     /**
-     * Mints a fresh {@code access_session_id} matching the 22-char
-     * URL-safe base64 shape the native Android client uses.
+     * Mints a fresh {@code access_session_id} matching the
+     * 22-character URL-safe base64 shape the native client uses.
+     *
+     * @apiNote
+     * Internal helper for the field initialiser of
+     * {@link #accessSessionId}; not meant for external use.
      *
      * @return the generated session identifier
      */
@@ -170,13 +243,23 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Constructs a new registration for the given store and verification
-     * callbacks.
+     * Constructs a registration for the given store and verification
+     * handler.
      *
-     * @param store the store carrying identity keys and the phone number
-     * @param verification the verification handler supplying the method
-     *                     and the user-entered code
-     * @throws NullPointerException if either argument is {@code null}
+     * @apiNote
+     * Called only from the concrete subclasses and from
+     * {@link #newRegistration(WhatsAppStore,
+     * WhatsAppClientVerificationHandler.Mobile,
+     * WhatsAppDeviceAttestor, WhatsAppDevicePushClient)}; embedders
+     * never invoke this directly.
+     *
+     * @param store        the store carrying identity keys and the
+     *                     phone number; never {@code null}
+     * @param verification the verification handler supplying the
+     *                     method and the user-entered code; never
+     *                     {@code null}
+     * @throws NullPointerException if either argument is
+     *                              {@code null}
      */
     protected MobileClientRegistration(WhatsAppStore store, WhatsAppClientVerificationHandler.Mobile verification) {
         Objects.requireNonNull(store, "store cannot be null");
@@ -189,37 +272,45 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns the concrete registration implementation that matches the
-     * platform configured on the given store, binding the attestor and
-     * push client the caller attached at the builder.
+     * Returns the concrete registration implementation matching the
+     * platform configured on the given store.
      *
-     * <p>The attestor is delivered as the {@link WhatsAppDeviceAttestor}
-     * sealed parent, and dispatch is done by pattern-matching on the
-     * permitted sub-interface so the correct concrete registration
-     * receives a narrowly-typed attestor. The builder's
-     * {@link com.github.auties00.cobalt.client.WhatsAppClientBuilder.Options.Mobile#deviceAttestor}
-     * setter has already validated at call time that the attestor's
-     * platform matches the device's platform. This factory re-checks
-     * defensively and throws when the two disagree.
-     *
-     * <p>Passing a {@code null} attestor falls back to
+     * @apiNote
+     * The standard entry point for embedders: dispatches to either
+     * {@link AndroidClientRegistration} or
+     * {@link IosClientRegistration} based on
+     * {@link WhatsAppStore#device}'s
+     * {@link ClientPlatformType platform}. A {@code null} attestor
+     * falls back to the platform's
      * {@link WhatsAppDeviceAttestor.Android#NONE} or
-     * {@link WhatsAppDeviceAttestor.Ios#NONE} depending on the device
-     * platform. Passing a {@code null} {@code pushClient} falls back to
-     * {@link WhatsAppDevicePushClient#noop()}. Both are the low-trust-lane
-     * defaults.
+     * {@link WhatsAppDeviceAttestor.Ios#NONE} low-trust default. A
+     * {@code null} push client falls back to
+     * {@link WhatsAppDevicePushClient#noop()}.
      *
-     * @param store the store whose device drives the selection
+     * @implNote
+     * This implementation re-validates that the attestor's platform
+     * matches the device's platform even though the builder already
+     * checks at call site, because the builder's check happens before
+     * construction; a defensive re-check here turns a misconfigured
+     * driver into an immediate
+     * {@link IllegalArgumentException} rather than a confusing
+     * runtime cast error.
+     *
+     * @param store        the store whose device drives the
+     *                     selection
      * @param verification the verification handler passed to the new
      *                     registration
-     * @param attestor the device attestor, or {@code null} to fall back
-     *                 to the platform's {@code NONE} attestor
-     * @param pushClient the device push client, or {@code null} to fall
-     *                   back to {@link WhatsAppDevicePushClient#noop()}
+     * @param attestor     the device attestor, or {@code null} to
+     *                     fall back to the platform's
+     *                     {@code NONE} attestor
+     * @param pushClient   the device push client, or {@code null} to
+     *                     fall back to
+     *                     {@link WhatsAppDevicePushClient#noop()}
      * @return a concrete {@code MobileClientRegistration}
-     * @throws IllegalArgumentException if the store's device platform is
-     *                                  not a supported mobile platform,
-     *                                  or if {@code attestor} does not
+     * @throws IllegalArgumentException if the store's device platform
+     *                                  is not a supported mobile
+     *                                  platform, or if
+     *                                  {@code attestor} does not
      *                                  match that platform
      */
     public static MobileClientRegistration newRegistration(
@@ -253,170 +344,216 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
 
     /**
      * Returns the platform-specific form parameters that accompany a
-     * {@code /code} request in addition to the shared registration
-     * parameters.
+     * {@code /code} request.
      *
-     * @param method the verification method chosen by the user
-     *               (for example {@code "sms"}, {@code "voice"},
+     * @apiNote
+     * Subclasses populate the long Android field list (SIM MCC/MNC,
+     * advertising id, backup token, etc.) or the short iOS field
+     * list (method, SIM MCC/MNC, jailbroken flag, APNS push code,
+     * cellular strength) the native clients emit on a
+     * {@code method=<channel>} run.
+     *
+     * @implSpec
+     * Overriders must return an alternating array of name/value
+     * strings of even length, in the order the native client emits.
+     * The Play Integrity sextuple (Android) and the APNS
+     * {@code push_token} (iOS) must not be included here because
+     * they ship on every attested endpoint via
+     * {@link #attestationFields()}.
+     *
+     * @param method the verification method chosen by the user (for
+     *               example {@code "sms"}, {@code "voice"},
      *               {@code "wa_old"})
-     * @return an alternating name/value array of additional parameters
+     * @return the additional alternating name/value form parameters
      */
     protected abstract String[] getRequestVerificationCodeParameters(String method);
 
     /**
-     * Returns the device family identifier used as the {@code fdid} form
-     * field.
+     * Returns the device family identifier used as the {@code fdid}
+     * form field.
      *
-     * <p>Android uses the lower-case UUID form, iOS uses the upper-case
-     * UUID form, matching the behaviour of the respective native apps.
+     * @apiNote
+     * Subclasses format the same underlying UUID differently:
+     * Android emits the lowercase form, iOS emits the uppercase
+     * form, matching the respective native apps.
+     *
+     * @implSpec
+     * Overriders must read {@link WhatsAppStore#fdid} and return a
+     * non-null UUID string in the per-platform casing.
      *
      * @return the formatted device family identifier
      */
     protected abstract String generateFdid();
 
     /**
-     * Returns the platform-specific device-attestation form fields that
-     * are appended to <em>every</em> attested registration endpoint body
-     * ({@code /exist}, {@code /code}, {@code /register}, {@code /security},
-     * {@code /challenge}, and any future endpoint that uses
-     * {@link #getRegistrationOptions(boolean, String...)}).
+     * Returns the platform-specific device-attestation form fields
+     * appended to every attested registration endpoint.
      *
-     * <p>On Android this returns the Play Integrity sextuple
-     * ({@code gpia}, {@code _gg}, {@code _gi}, {@code _gp},
-     * {@code _ge}, {@code _ga}) produced by the configured
-     * {@link WhatsAppDeviceAttestor.Android Android attestor} plus the
-     * FCM {@code push_token} produced by the configured
-     * {@link WhatsAppDevicePushClient}. On iOS this returns just the APNS
-     * {@code push_token} produced by the configured push client. Each
-     * call triggers both the attestor and the push client. Embedders
-     * that talk to a remote attestation minter should cache the
-     * per-session payload inside their attestor implementation to avoid
-     * one round-trip per registration step.
+     * @apiNote
+     * Android returns the Play Integrity sextuple ({@code gpia},
+     * {@code _gg}, {@code _gi}, {@code _gp}, {@code _ge},
+     * {@code _ga}) produced by the configured
+     * {@link WhatsAppDeviceAttestor.Android} plus the FCM
+     * {@code push_token} produced by the configured
+     * {@link WhatsAppDevicePushClient}. iOS returns just the APNS
+     * {@code push_token}, because its App Attest payloads ride
+     * outside the encrypted body (in the {@code H=} suffix and the
+     * {@code Authorization} header) rather than inside it. The
+     * funnel endpoints {@code /client_log} and
+     * {@code /pre_pn_client_log} build their bodies directly without
+     * going through {@link #getRegistrationOptions(boolean,
+     * String...)} and therefore never reach this method, matching
+     * the native client's per-endpoint
+     * {@code sendAttestationPayload=false} configuration for them.
      *
-     * <p>The funnel endpoints ({@code /client_log},
-     * {@code /pre_pn_client_log}) do <em>not</em> reach this method
-     * because they build their own body without going through
-     * {@link #getRegistrationOptions(boolean, String...)}, matching the
-     * native client's {@code sendAttestationPayload=false} configuration
-     * for those two paths.
+     * @implSpec
+     * Overriders must return an alternating array of name/value
+     * strings of even length. Each invocation may trigger a fresh
+     * call into the attestor and the push client; embedders that
+     * talk to a remote minter should cache the per-session payload
+     * inside their attestor implementation to avoid one round-trip
+     * per registration step.
      *
-     * @return an alternating name/value array of attestation fields
-     *         suitable for direct inclusion in the form body
+     * @return the alternating name/value attestation fields
      */
     protected abstract String[] attestationFields();
 
     /**
-     * Builds an {@link HttpRequest} for the given sub-path of the mobile
-     * registration endpoint with the fully-assembled body and the
-     * correct set of platform-specific headers.
+     * Builds an {@link HttpRequest} for the given sub-path of the
+     * mobile registration endpoint.
      *
-     * <p>The body handed to the subclass is already in its final wire
-     * form: the outer {@code ENC=<base64>} envelope, optionally followed
-     * by {@code &H=<hex>} when an Android keystore signature has been
-     * produced. Subclasses POST the body verbatim and add only the
-     * headers the native client advertises for that platform, plus the
-     * {@code Authorization} header when {@code authorizationHeader} is
-     * non-{@code null}.
+     * @apiNote
+     * Called by {@link #sendRequest(String, String)} after the body
+     * has been assembled in its final {@code ENC=<base64>[&H=<x>]}
+     * form. Subclasses set only the headers the native client
+     * advertises for that platform (User-Agent, Content-Type, plus
+     * platform-specific extras) and attach the
+     * {@code Authorization} header when one is supplied.
      *
-     * @param path the sub-path, starting with a slash (for example
-     *             {@code "/exist"})
-     * @param body the fully-assembled body string to POST
-     * @param authorizationHeader the value for the {@code Authorization}
-     *                            request header, or {@code null} to
-     *                            omit the header
+     * @implSpec
+     * Overriders must POST {@code body} verbatim, set the
+     * {@code User-Agent} matching
+     * {@link WhatsAppStore#device}'s user-agent string, and attach
+     * {@code authorizationHeader} as the {@code Authorization}
+     * header when it is non-{@code null}. Other headers are
+     * platform-specific.
+     *
+     * @param path                the sub-path, starting with a slash
+     *                            (for example {@code "/exist"})
+     * @param body                the fully-assembled body to POST
+     * @param authorizationHeader the value of the
+     *                            {@code Authorization} header, or
+     *                            {@code null} to omit it
      * @return a ready-to-send HTTP request
      */
     protected abstract HttpRequest createRequest(String path, String body, String authorizationHeader);
 
     /**
-     * Signs the outer {@code ENC=<base64>} body bytes with the
-     * platform-specific attestor and returns the resulting signature
-     * hex and {@code Authorization}-header value.
+     * Signs the outer {@code ENC=<base64>} body with the
+     * platform-specific attestor.
      *
-     * <p>Called by {@link #sendRequest(String, String)} on every
-     * outgoing request so subclasses that have a real attestor (not the
-     * empty fallback) can attach the Android Keystore signature or App
-     * Attest proof. Implementations that cannot produce a signature
-     * return {@link BodyAttestation#EMPTY}.
+     * @apiNote
+     * Called by {@link #sendRequest(String, String)} once per
+     * outgoing request. Implementations that have a real attestor
+     * (Android Keystore HMAC, iOS App Attest) return a populated
+     * pair; the {@code NONE} fallbacks and other low-trust attestors
+     * return {@link BodyAttestation#EMPTY} and the base class skips
+     * both the {@code &H=} suffix and the {@code Authorization}
+     * header.
      *
-     * @param encBodyBytes the UTF-8 bytes of the base64 ENC body, i.e.
-     *                     the value that follows the {@code ENC=}
-     *                     prefix on the wire. Never {@code null}
-     * @return the hex-encoded signature and base64-encoded cert chain,
-     *         or {@link BodyAttestation#EMPTY} when no attestor is
-     *         configured or the attestor returned empty output
+     * @implSpec
+     * Overriders must derive the {@code H=} suffix value and the
+     * {@code Authorization} header value from {@code encBodyBytes}
+     * (Android) or from store-derived material (iOS). When no real
+     * signature is available, return {@link BodyAttestation#EMPTY}.
+     *
+     * @param encBodyBytes the UTF-8 bytes of the base64 ENC body,
+     *                     i.e. the value that follows the
+     *                     {@code ENC=} prefix on the wire. Never
+     *                     {@code null}
+     * @return the suffix and header pair, or
+     *         {@link BodyAttestation#EMPTY} when none was produced
      */
     protected abstract BodyAttestation attestBody(byte[] encBodyBytes);
 
     /**
-     * Pair of values produced by {@link #attestBody(byte[])}: the
-     * platform-specific value that becomes the {@code &H=} suffix on
-     * the request body, and the value that becomes the
-     * {@code Authorization} request header.
+     * Pair carrying the body suffix and the {@code Authorization}
+     * header value produced by {@link #attestBody(byte[])}.
      *
-     * <p>The contents of {@link #bodyAttestation} differ per platform:
+     * @apiNote
+     * Internal handshake intermediate; embedders do not see this
+     * type. The semantics of each component are platform-specific:
      * <ul>
-     *   <li>On Android it is the lower-case hex of the HMAC-SHA1 over
-     *       the base64 ENC body produced by the device's
-     *       Keystore-backed key.</li>
-     *   <li>On iOS it is a JSON envelope
+     *   <li>Android: {@link #bodyAttestation} is the lowercase hex
+     *       of the HMAC-SHA1 over the base64 ENC body produced by
+     *       the Keystore-backed key; {@link #authorizationHeader}
+     *       is the base64 certificate chain.</li>
+     *   <li>iOS: {@link #bodyAttestation} is the JSON envelope
      *       {@code {"assertion":"<base64 CBOR>"}} wrapping the
-     *       per-request App Attest assertion, which signs a
-     *       {@code clientDataHash} derived from the noise public key
-     *       rather than the request body.</li>
+     *       per-request App Attest assertion;
+     *       {@link #authorizationHeader} is
+     *       {@code <base64 attestation>|<base64 keyId>}.</li>
      * </ul>
-     * The {@link #authorizationHeader} is similarly platform-specific:
-     * the base64 certificate chain on Android, and
-     * {@code <base64 attestation>|<base64 keyId>} on iOS.
      *
-     * <p>{@link #EMPTY} is used whenever no attestor is configured or
-     * the configured attestor returned empty output. In that case
-     * neither piece is appended and the request goes out without the
-     * {@code H=} field and without the header.
-     *
-     * @param bodyAttestation     the value to append after
-     *                            {@code &H=}, or {@code null} when no
-     *                            attestation was produced
-     * @param authorizationHeader the value of the {@code Authorization}
-     *                            request header, or {@code null} when
-     *                            no header should be sent
+     * @param bodyAttestation     the value appended after
+     *                            {@code &H=}, or {@code null} when
+     *                            no attestation was produced
+     * @param authorizationHeader the value of the
+     *                            {@code Authorization} header, or
+     *                            {@code null} when no header should
+     *                            be sent
      */
     protected record BodyAttestation(String bodyAttestation, String authorizationHeader) {
         /**
-         * Sentinel used when no attestation output is available, either
-         * because no attestor is configured or because the configured
-         * attestor returned empty bytes.
+         * Sentinel returned by {@link #attestBody(byte[])} when no
+         * attestation output is available.
+         *
+         * @apiNote
+         * Used both for the {@code NONE} attestor fallbacks and
+         * for any attestor that returns empty output (for example
+         * a remote minter that is unreachable). The base class
+         * treats this value as a signal to skip both the
+         * {@code &H=} suffix and the {@code Authorization}
+         * header; the registration server accepts the resulting
+         * request as a low-trust downgrade.
          */
         public static final BodyAttestation EMPTY = new BodyAttestation(null, null);
     }
 
     /**
-     * Executes the entire three-step registration flow and saves the
-     * resulting state on success.
+     * Executes the three-step registration flow and persists the
+     * result on success.
      *
-     * <p>The flow short-circuits when the account already exists with the
-     * exact keys being claimed, in which case no verification code is
-     * requested. On success the store is marked as registered and its JID
-     * is set to the phone-number JID.
+     * @apiNote
+     * The single public entry point. On a fresh phone number the
+     * flow visits {@code /exist}, {@code /code}, and
+     * {@code /register} in order, optionally branching into
+     * {@code /challenge} (CAPTCHA) or {@code /security} (2FA) if the
+     * server requests either. On a phone number where the server
+     * recognises the local keys the flow may short-circuit before
+     * requesting a code.
+     *
+     * @implNote
+     * This implementation wraps every {@link IOException} or
+     * {@link InterruptedException} raised by the underlying HTTP
+     * client in a
+     * {@link WhatsAppRegistrationException} so the caller only ever
+     * has one exception type to catch.
      *
      * @throws WhatsAppRegistrationException if any server response
-     *                                       indicates a non-recoverable
-     *                                       failure or if the underlying
+     *                                       indicates a
+     *                                       non-recoverable failure
+     *                                       or if the underlying
      *                                       HTTP exchange fails
      */
     public void register() {
         try {
-            // Emits a session-start funnel event that mirrors the native
-            // client's very first pre-phone-number log entry
             sendPrePnFunnelLog("session_start", "registration_session_start");
 
-            // Checks that the account slot for the local keys is still free
             assertRegistrationKeys();
 
-            // Asks the server to send a verification code unless one was already requested
             requestVerificationCodeIfNecessary();
 
-            // Submits the code the user entered and finalises the registration
             sendVerificationCode();
         } catch (IOException | InterruptedException exception) {
             throw new WhatsAppRegistrationException(exception);
@@ -424,31 +561,35 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Probes {@code /exist} twice to confirm that no account already holds
-     * the exact Signal / Noise keys the store is about to register.
+     * Probes {@code /v2/exist} to confirm that the account slot for
+     * the local keys is still free.
      *
-     * <p>The server answers {@code "reason": "incorrect"} when the keys
-     * differ from whatever the phone number currently has on file, which
-     * paradoxically means the number is free from the perspective of these
-     * specific keys. The probe is retried once to tolerate transient
-     * oddities.
+     * @apiNote
+     * Invoked exactly once at the top of {@link #register}. A
+     * {@code "reason": "incorrect"} response paradoxically means the
+     * number is free from the perspective of these keys (the server
+     * is reporting that whatever keys it has on file for this number
+     * differ from what Cobalt offered), which is the success signal
+     * the rest of the flow needs.
      *
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
-     * @throws WhatsAppRegistrationException if neither attempt returns
+     * @implNote
+     * This implementation retries once to tolerate a transient
+     * non-{@code "incorrect"} response, then aborts if the second
+     * attempt also fails. The retry mirrors the native client's
+     * own one-shot retry inside {@code /v2/exist} processing.
+     *
+     * @throws IOException                if the HTTP call fails
+     * @throws InterruptedException       if the sending thread is
+     *                                    interrupted
+     * @throws WhatsAppRegistrationException if neither attempt
+     *                                       returns
      *                                       {@code "incorrect"}
      */
     private void assertRegistrationKeys() throws IOException, InterruptedException {
-        // Records the first post-phone-number event so the server sees
-        // the enter_number screen transition the native client would
-        // emit at this point
         sendFunnelLog("enter_number", "exist_check", "exist_attempt");
 
-        // Builds the registration parameters without the registration token,
-        // since /exist does not require it
         var attrs = getRegistrationOptions(false);
 
-        // Sends the first probe and accepts the "incorrect" reply
         var result = sendRequest("/exist", attrs);
         var response = JSON.parseObject(result);
         if (Objects.equals(response.getString("reason"), "incorrect")) {
@@ -456,7 +597,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             return;
         }
 
-        // Retries once in case the first response was a transient anomaly
         result = sendRequest("/exist", attrs);
         response = JSON.parseObject(result);
         if (Objects.equals(response.getString("reason"), "incorrect")) {
@@ -464,55 +604,64 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             return;
         }
 
-        // Records a funnel failure before raising so the server sees the
-        // flow terminating at the enter_number screen
         sendFunnelLog("enter_number", "exist_check", "exist_failure");
 
-        // Raises a registration failure carrying the raw server payload for diagnostics
         throw new WhatsAppRegistrationException("Cannot get account data", new String(result));
     }
 
 
     /**
-     * Invokes the verification handler to find out which code method to
-     * request and, if one is chosen, calls {@code /code}.
+     * Invokes the verification handler to find out which channel to
+     * request a code through and, if any, calls {@code /code}.
      *
-     * <p>If the handler returns an empty optional it is understood to mean
-     * that a code has already been requested outside Cobalt, so this step
-     * is skipped and the flow proceeds directly to
-     * {@link #sendVerificationCode()}.
+     * @apiNote
+     * A handler that returns an empty optional from
+     * {@link WhatsAppClientVerificationHandler.Mobile#requestMethod}
+     * is understood to mean that a code has already been requested
+     * outside Cobalt (for example through another device), so this
+     * step is skipped and the flow proceeds directly to
+     * {@link #sendVerificationCode}.
      *
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
+     * @throws IOException          if the HTTP call fails
+     * @throws InterruptedException if the sending thread is
+     *                              interrupted
      */
     private void requestVerificationCodeIfNecessary() throws IOException, InterruptedException {
-        // Asks the user-supplied handler for the desired verification method
         var codeResult = verification.requestMethod();
         if (codeResult.isEmpty()) {
             return;
         }
 
-        // Requests the code from the server and persists an in-progress marker
         requestVerificationCode(codeResult.get());
         saveRegistrationStatus(false);
     }
 
     /**
-     * Calls {@code /code} in a retry loop until the server confirms the
-     * request with a successful status or a definite error.
+     * Calls {@code /v2/code} in a retry loop until the server
+     * confirms or definitively rejects the request.
      *
-     * <p>The loop tracks the last error so that two consecutive identical
-     * errors abort the flow. Transient errors are retried once. Specific
-     * conditions map to user-facing exceptions: {@code too_recent}/{@code
-     * too_many} variants mean the caller is spamming, and {@code no_routes}
-     * means WhatsApp refused to deliver the code to the given number via
-     * the chosen method.
+     * @apiNote
+     * Internal helper for {@link #requestVerificationCodeIfNecessary}.
+     * The retry loop translates server-side rate-limit and
+     * route-block reasons into targeted
+     * {@link WhatsAppRegistrationException} messages so embedders
+     * can present actionable feedback to the user.
+     *
+     * @implNote
+     * This implementation aborts when the same error reason appears
+     * twice in a row (the simplest viable retry policy), captures
+     * the per-method or maximum {@code _wait} hint from the response
+     * and folds it into the rate-limit message, and treats
+     * {@code wa_old} specially when {@code no_routes} comes back
+     * (suggesting a platform change rather than a method change).
      *
      * @param method the verification method the user asked for
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
+     * @throws IOException                   if the HTTP call fails
+     * @throws InterruptedException          if the sending thread is
+     *                                       interrupted
      * @throws WhatsAppRegistrationException if the server reports a
-     *                                       blocking error
+     *                                       blocking error or the
+     *                                       same error twice
      */
     private void requestVerificationCode(String method) throws IOException, InterruptedException {
         String lastError = null;
@@ -521,11 +670,9 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
         var verifyScreen = "verify_" + method;
         sendFunnelLog(verifyScreen, "request_code", "request_code_attempt");
         while (true) {
-            // Rebuilds the parameters each iteration because the registration token depends on state
             var params = getRequestVerificationCodeParameters(method);
             var attrs = getRegistrationOptions(true, params);
 
-            // Sends the /code request and parses its JSON response
             var result = sendRequest("/code", attrs);
             var response = JSON.parseObject(result);
             var status = response.getString("status");
@@ -534,7 +681,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                 return;
             }
 
-            // Rejects the flow if the server signalled rate limiting, surfacing the wait hint it sent
             var reason = response.getString("reason");
             if(isTooRecent(reason)) {
                 throw new WhatsAppRegistrationException(
@@ -543,7 +689,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                         new String(result));
             }
 
-            // Raises a targeted message when the server blocks the method entirely
             if(isRegistrationBlocked(reason)) {
                 var resultJson = new String(result);
                 if(method.equals("wa_old")) {
@@ -553,7 +698,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                 }
             }
 
-            // Aborts if the same error reason appears twice in a row
             if (Objects.equals(reason, lastError)) {
                 throw new WhatsAppRegistrationException("An error occurred while registering: " + reason, new String(result));
             }
@@ -564,19 +708,26 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Formats the {@code *_wait} hint that the server attached to a
-     * rate-limit response, when present, as a trailing
-     * {@code " (retry after N seconds)"} fragment for inclusion in an
-     * error message.
+     * Formats the server's rate-limit {@code _wait} hint as a
+     * trailing parenthesised suffix for an error message.
      *
-     * <p>Reads whichever {@code _wait} field matches the caller's
-     * requested method first, falling back to the most restrictive
-     * non-negative value on the response otherwise.
+     * @apiNote
+     * Internal helper for
+     * {@link #requestVerificationCode(String)}. Returns an empty
+     * string when no usable hint is present so the caller can
+     * concatenate unconditionally.
+     *
+     * @implNote
+     * This implementation reads {@code <method>_wait} first (the
+     * server's per-channel suggestion for the channel the client
+     * asked for) and falls back to {@link #maxWait(JSONObject)} so
+     * the user always sees the most restrictive hint the server
+     * provided.
      *
      * @param response the parsed {@code /v2/code} JSON response
-     * @param method the method string the client requested
-     * @return the formatted suffix, or an empty string if no wait hint
-     *         was supplied
+     * @param method   the method string the client requested
+     * @return the formatted suffix, or an empty string if no
+     *         usable hint was supplied
      */
     private String formatWaitSuffix(JSONObject response, String method) {
         var preferred = response.getLong(method + "_wait");
@@ -588,8 +739,17 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns the largest non-negative {@code *_wait} value present on
-     * the given response, or {@code null} if none is set.
+     * Returns the largest non-negative {@code *_wait} value carried
+     * by the response.
+     *
+     * @apiNote
+     * Internal helper for
+     * {@link #formatWaitSuffix(JSONObject, String)}. The set of
+     * keys scanned ({@code sms_wait}, {@code voice_wait},
+     * {@code wa_old_wait}, {@code flash_wait},
+     * {@code email_otp_wait}, {@code send_sms_wait},
+     * {@code silent_auth_wait}) matches the channels the
+     * registration server is known to advertise.
      *
      * @param response the parsed JSON response
      * @return the maximum wait hint in seconds, or {@code null}
@@ -607,11 +767,20 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns {@code true} when the given {@code reason} string indicates
-     * that the client is being rate limited.
+     * Tests whether a server {@code reason} string means the caller
+     * is being rate limited.
      *
-     * @param reason the reason string from a {@code /code} JSON response
-     * @return {@code true} if the reason is a known rate-limit keyword
+     * @apiNote
+     * Internal helper for
+     * {@link #requestVerificationCode(String)}. The four reason
+     * strings recognised here cover the per-channel rate limit, the
+     * cross-channel limit, the per-IP guess limit, and the
+     * all-methods limit.
+     *
+     * @param reason the reason string from a {@code /code} JSON
+     *               response
+     * @return {@code true} if the reason is a known rate-limit
+     *         keyword
      */
     private boolean isTooRecent(String reason) {
         return reason.equalsIgnoreCase("too_recent")
@@ -621,12 +790,20 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns {@code true} when the given {@code reason} string indicates
-     * that WhatsApp has refused to deliver the verification code to the
-     * number.
+     * Tests whether a server {@code reason} string means WhatsApp
+     * refused to deliver the verification code.
      *
-     * @param reason the reason string from a {@code /code} JSON response
-     * @return {@code true} if the reason means routing is unavailable
+     * @apiNote
+     * Internal helper for
+     * {@link #requestVerificationCode(String)}. The
+     * {@code no_routes} response means the server cannot route the
+     * code through the chosen channel and the client should try a
+     * different channel (or a different platform / proxy).
+     *
+     * @param reason the reason string from a {@code /code} JSON
+     *               response
+     * @return {@code true} if the reason means routing is
+     *         unavailable
      */
     private boolean isRegistrationBlocked(String reason) {
         return reason.equalsIgnoreCase("no_routes");
@@ -634,47 +811,49 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
 
 
     /**
-     * Submits the verification code that the user entered to the
-     * {@code /register} endpoint and marks the store as registered on
+     * Submits the user-entered verification code to
+     * {@code /v2/register} and marks the store as registered on
      * success.
      *
-     * <p>The entered code is normalised to strip whitespace and dashes
-     * before being embedded in the request so that common user formats
-     * (for example {@code "123-456"}) are accepted.
+     * @apiNote
+     * Final step of the flow. May branch into
+     * {@link #handleChallenge} when the server responds with a
+     * CAPTCHA or into {@link #handle2FA} when the account is
+     * protected by a 2FA PIN.
      *
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
-     * @throws WhatsAppRegistrationException if the server refuses the
-     *                                       submitted code
+     * @implNote
+     * This implementation strips whitespace and dashes from the
+     * code via {@link #normalizeCodeResult(String)} so common
+     * user-entered formats (for example {@code "123-456"}) work
+     * without further preprocessing by the embedder.
+     *
+     * @throws IOException                   if the HTTP call fails
+     * @throws InterruptedException          if the sending thread is
+     *                                       interrupted
+     * @throws WhatsAppRegistrationException if the server refuses
+     *                                       the submitted code
      */
     public void sendVerificationCode() throws IOException, InterruptedException {
-        // Reads the code the user entered from the verification handler
         var code = verification.verificationCode();
 
         var verifyScreen = currentVerifyScreen();
         sendFunnelLog(verifyScreen, "submit_code", "submit_code_attempt");
 
-        // Appends the normalised code to the registration parameters and sends the request
         var attrs = getRegistrationOptions(true, "code", normalizeCodeResult(code));
         var result = sendRequest("/register", attrs);
         var response = JSON.parseObject(result);
         var status = response.getString("status");
         if (isSuccessful(status)) {
-            // Persists the successful registration and the derived JID
             sendFunnelLog("account_verification_complete", "submit_code", "submit_code_success");
             saveRegistrationStatus(true);
             return;
         }
 
-        // If the server asks for an image/audio CAPTCHA, dispatch to the
-        // verification handler and resubmit via /v2/challenge.
         if (hasChallenge(response)) {
             handleChallenge(response);
             return;
         }
 
-        // If the server demands the account's 2FA PIN, dispatch to the
-        // verification handler and resubmit via /v2/security.
         if (is2FARequired(response)) {
             handle2FA();
             return;
@@ -684,9 +863,14 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns {@code true} when the server response carries a CAPTCHA
-     * challenge (either an image or an audio blob) that must be solved
-     * before the registration can proceed.
+     * Tests whether a server response carries a CAPTCHA challenge
+     * blob.
+     *
+     * @apiNote
+     * Internal helper for {@link #sendVerificationCode} and
+     * {@link #handleChallenge(JSONObject)}. Returns {@code true}
+     * when either the image or the audio variant is present, so the
+     * caller can route the response into the challenge flow.
      *
      * @param response the parsed JSON response
      * @return {@code true} if a challenge is embedded
@@ -698,9 +882,15 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns {@code true} when the server response indicates that
-     * two-factor authentication is required to finalise the
-     * registration.
+     * Tests whether a server response signals that 2FA is required
+     * to finalise the registration.
+     *
+     * @apiNote
+     * Internal helper for {@link #sendVerificationCode} and
+     * {@link #handleChallenge(JSONObject)}. The three reason
+     * strings cover the canonical {@code 2fa_required}, the legacy
+     * {@code security_code} alias, and the newer
+     * {@code two_factor_required} variant.
      *
      * @param response the parsed JSON response
      * @return {@code true} if the response's reason is a known
@@ -717,20 +907,31 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Decodes the server-supplied CAPTCHA blobs, asks the verification
-     * handler to solve them, and submits the answer to {@code /v2/challenge}.
+     * Decodes the CAPTCHA blobs, asks the verification handler to
+     * solve them, and submits the answer to {@code /v2/challenge}.
      *
-     * <p>The server may respond with another chained challenge. This
-     * method recurses in that case. A handler that returns an empty
-     * optional aborts the registration with a
+     * @apiNote
+     * Internal helper for {@link #sendVerificationCode}. A handler
+     * that returns an empty optional from
+     * {@link WhatsAppClientVerificationHandler.Mobile#solveCaptcha}
+     * aborts the registration with a
      * {@link WhatsAppRegistrationException}.
      *
-     * @param initialResponse the response carrying the initial challenge
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
-     * @throws WhatsAppRegistrationException if the handler refuses to
-     *                                       solve the challenge or the
-     *                                       server refuses the answer
+     * @implNote
+     * This implementation loops because the server may chain
+     * multiple CAPTCHAs (a wrong answer is replied to with another
+     * challenge); the loop exits on success, on 2FA branch, or on a
+     * non-challenge non-success response.
+     *
+     * @param initialResponse the response carrying the initial
+     *                        challenge
+     * @throws IOException                   if the HTTP call fails
+     * @throws InterruptedException          if the sending thread is
+     *                                       interrupted
+     * @throws WhatsAppRegistrationException if the handler refuses
+     *                                       to solve the challenge
+     *                                       or the server refuses
+     *                                       the answer
      */
     private void handleChallenge(JSONObject initialResponse)
             throws IOException, InterruptedException {
@@ -771,14 +972,23 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Asks the verification handler for the 2FA PIN and submits it to
-     * {@code /v2/security}.
+     * Asks the verification handler for the 2FA PIN and submits it
+     * to {@code /v2/security}.
      *
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
-     * @throws WhatsAppRegistrationException if the handler refuses to
-     *                                       supply a PIN or the server
-     *                                       refuses the submitted PIN
+     * @apiNote
+     * Internal helper for {@link #sendVerificationCode} and
+     * {@link #handleChallenge(JSONObject)}. A handler that returns
+     * an empty optional from
+     * {@link WhatsAppClientVerificationHandler.Mobile#twoFactorPin}
+     * aborts the registration.
+     *
+     * @throws IOException                   if the HTTP call fails
+     * @throws InterruptedException          if the sending thread is
+     *                                       interrupted
+     * @throws WhatsAppRegistrationException if the handler refuses
+     *                                       to supply a PIN or the
+     *                                       server refuses the
+     *                                       submitted PIN
      */
     private void handle2FA() throws IOException, InterruptedException {
         sendFunnelLog("verify_twofac", "twofac_shown", "twofac_prompt_shown");
@@ -803,11 +1013,18 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Base64-decodes the given string if it is non-null and non-empty,
-     * otherwise returns {@code null}.
+     * Decodes a base64 string defensively, accepting either the
+     * standard or URL-safe alphabet.
      *
-     * @param base64 the Base64-encoded string, or {@code null}
-     * @return the decoded bytes, or {@code null}
+     * @apiNote
+     * Internal helper for the CAPTCHA branch; the server has been
+     * observed to switch between the two alphabets across releases,
+     * so this method tries the standard decoder first and falls
+     * back to the URL-safe decoder before giving up.
+     *
+     * @param base64 the base64-encoded string, or {@code null}
+     * @return the decoded bytes, or {@code null} if the input is
+     *         absent or undecodable in both alphabets
      */
     private byte[] decodeOrNull(String base64) {
         if (base64 == null || base64.isEmpty()) {
@@ -825,19 +1042,26 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Persists the registration state to the store and, on success, the
-     * JID derived from the phone number.
+     * Persists the registration state and, on success, the derived
+     * JID.
+     *
+     * @apiNote
+     * Internal helper called from
+     * {@link #requestVerificationCodeIfNecessary}, from
+     * {@link #sendVerificationCode}, from {@link #handle2FA}, and
+     * from {@link #handleChallenge(JSONObject)}. Embedders never
+     * call this directly; the store is mutated in place.
      *
      * @param registered whether the flow has completed successfully
-     * @throws IOException if the store save fails
-     * @throws WhatsAppRegistrationException if the phone number is not set
-     *                                       on the store when registration
+     * @throws IOException                   if the store save fails
+     * @throws WhatsAppRegistrationException if the phone number is
+     *                                       missing from the store
+     *                                       when registration
      *                                       succeeds
      */
     private void saveRegistrationStatus(boolean registered) throws IOException {
         store.setRegistered(registered);
         if (registered) {
-            // Derives the phone-number JID and stores it as the local JID
             var phoneNumber = store.phoneNumber()
                     .orElseThrow(() -> new WhatsAppRegistrationException("Phone number wasn't set"));
             var jid = Jid.of(phoneNumber);
@@ -847,8 +1071,13 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Strips dashes and whitespace from the user-entered verification code
-     * so common formats such as {@code "123-456"} are accepted.
+     * Strips dashes and whitespace from a user-entered verification
+     * code.
+     *
+     * @apiNote
+     * Internal helper called from every code-submitting branch so
+     * common user formats ({@code "123-456"}, {@code "123 456"})
+     * are accepted without extra preprocessing in the embedder.
      *
      * @param code the raw code from the verification handler
      * @return the digits-only code
@@ -859,8 +1088,15 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns {@code true} when the registration API status string
+     * Tests whether a registration-API {@code status} string
      * indicates success.
+     *
+     * @apiNote
+     * Internal helper called after every server call. The three
+     * accepted values cover the three success synonyms observed on
+     * different endpoints: {@code ok} for {@code /exist},
+     * {@code sent} for {@code /code}, and {@code verified} for
+     * {@code /register}, {@code /challenge}, and {@code /security}.
      *
      * @param status the {@code status} field from a JSON response
      * @return {@code true} for {@code ok}, {@code sent}, or
@@ -873,30 +1109,42 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Encrypts the given form body with a fresh ephemeral Curve25519 key,
-     * prepends the ephemeral public key, Base64-URL encodes the result, and
-     * sends it as an HTTP request against the given sub-path.
+     * Encrypts the given form body and sends it as an HTTP request
+     * to the given sub-path.
      *
-     * <p>The server decrypts the payload with its own half of the ECDH,
-     * using the hardcoded {@link #REGISTRATION_PUBLIC_KEY} as the other
-     * peer.
+     * @apiNote
+     * Internal helper for every server call. The server decrypts
+     * the payload with its own half of the ECDH, using the
+     * hardcoded {@link #REGISTRATION_PUBLIC_KEY} as the other peer.
      *
-     * @param path the API sub-path ({@code /exist}, {@code /code},
-     *             {@code /register})
+     * @implNote
+     * This implementation mints a fresh ephemeral Curve25519
+     * keypair for every request, runs ECDH against the server key,
+     * and encrypts the body with AES-256-GCM under a zero-byte IV
+     * (matching the native mobile protocol, which relies on the
+     * per-request ephemeral key for freshness). The ENC payload is
+     * the concatenation of the ephemeral public key and the
+     * ciphertext, URL-base64 encoded. The subclass-supplied
+     * attestation suffix and authorization header are attached
+     * after the {@code ENC=} envelope is assembled. A non-200
+     * status code surfaces as a runtime exception so the caller can
+     * see which endpoint failed and with what code.
+     *
+     * @param path   the API sub-path
      * @param params the unencrypted form body
      * @return the raw response bytes
-     * @throws IOException if the HTTP call fails
-     * @throws InterruptedException if the sending thread is interrupted
-     * @throws RuntimeException if encryption fails or the HTTP status is
-     *                          not 200
+     * @throws IOException                   if the HTTP call fails
+     * @throws InterruptedException          if the sending thread is
+     *                                       interrupted
+     * @throws RuntimeException              if encryption fails or
+     *                                       the HTTP status is not
+     *                                       200
      */
     private byte[] sendRequest(String path, String params) throws IOException, InterruptedException {
         try {
-            // Generates a per-request ephemeral key pair for the outgoing ECDH
             var keypair = SignalIdentityKeyPair.random();
             var key = Curve25519.sharedKey(keypair.privateKey().toEncodedPoint(), REGISTRATION_PUBLIC_KEY);
 
-            // Encrypts the body with AES-256-GCM using a zero IV per the mobile protocol
             var cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(
                     Cipher.ENCRYPT_MODE,
@@ -905,22 +1153,16 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             );
             var result = cipher.doFinal(params.getBytes(StandardCharsets.UTF_8));
 
-            // Concatenates the ephemeral public key with the ciphertext and URL-base64 encodes it
             var cipheredParameters = Base64.getUrlEncoder().encodeToString(DataUtils.concatByteArrays(keypair.publicKey().toEncodedPoint(), result));
 
-            // Asks the subclass to sign the base64 ENC body with its attestor.
-            // The native client's HMAC covers exactly the base64 string, not
-            // the "ENC=" prefix and not the trailing "&H=" fragment
             var attestation = attestBody(cipheredParameters.getBytes(StandardCharsets.UTF_8));
 
-            // Assembles the final body: "ENC=<base64>" optionally followed by "&H=<hex>"
             var body = new StringBuilder("ENC=").append(cipheredParameters);
             if (attestation.bodyAttestation() != null && !attestation.bodyAttestation().isEmpty()) {
                 body.append("&H=").append(attestation.bodyAttestation());
             }
             var requestBuilder = createRequest(path, body.toString(), attestation.authorizationHeader());
 
-            // Sends the request via the shared HTTP client and validates the status code
             var response = httpClient.send(requestBuilder, HttpResponse.BodyHandlers.ofByteArray());
             if(response.statusCode() != 200) {
                 throw new RuntimeException("Cannot send request to " + path + ": status code" + response.statusCode());
@@ -932,44 +1174,46 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Assembles the common registration form body, optionally including a
-     * registration token and any extra attributes the caller wants to
-     * append.
+     * Assembles the shared registration form body and appends any
+     * caller-supplied extra fields.
      *
-     * <p>The resulting string contains every shared field the server
-     * expects: country code, national number, release channel, Signal
-     * identity public key, pre-key, signed pre-key and its signature,
-     * noise key, FDID, business verified-name certificate when
-     * applicable, plus the platform-specific attestation and push
-     * fields returned by {@link #attestationFields()}. Fields whose
-     * value is {@code null} are omitted from the output without error.
+     * @apiNote
+     * Internal helper for every attested endpoint
+     * ({@code /exist}, {@code /code}, {@code /register},
+     * {@code /security}, {@code /challenge}). The returned string
+     * carries every shared field the server expects: country code
+     * and national number, locale, release channel, the Signal
+     * identity / pre-key / signed pre-key trio with its signature,
+     * the Noise key, the FDID, the per-session
+     * {@code access_session_id}, the optional registration token,
+     * the business verified-name certificate (only on business
+     * platforms), and the platform-specific attestation and push
+     * fields returned by {@link #attestationFields()}. The funnel
+     * endpoints ({@code /client_log}, {@code /pre_pn_client_log})
+     * build their own body and bypass this method, matching the
+     * native client's {@code sendAttestationPayload=false}
+     * configuration for them.
      *
-     * <p>The attestation fields are appended once per call, so every
-     * attested endpoint that flows through this method ({@code /exist},
-     * {@code /code}, {@code /register}, {@code /security},
-     * {@code /challenge}) carries the same shape the native client
-     * sends. Funnel endpoints build their bodies directly, bypassing
-     * this method, which matches the native client's
-     * {@code sendAttestationPayload=false} configuration for them.
+     * @implNote
+     * This implementation skips {@code null}-valued fields silently
+     * so subclasses can pass conditional values (the registration
+     * token, the business certificate) without sentinel checks at
+     * the call site.
      *
-     * @param useToken whether to compute and include the registration
-     *                 token in the {@code token} field
-     * @param attributes optional additional alternating name/value pairs
-     *                   appended after the shared fields
+     * @param useToken   whether to compute and include the
+     *                   registration token
+     * @param attributes optional additional alternating name/value
+     *                   pairs appended after the shared fields
      * @return the URL-encoded form body
      */
     private String getRegistrationOptions(boolean useToken, String... attributes) {
-        // Parses the store's phone number into a structured object for CC/NN extraction
         var phoneNumber = getPhoneNumber(store);
 
-        // Computes the registration token on demand; null disables the token
         var token = getToken(phoneNumber, useToken);
 
-        // Builds the verified-name certificate only for business platforms
         var certificate = generateBusinessCertificate();
         var fdid = generateFdid();
 
-        // Assembles the set of shared form fields expected by the registration API
         var registrationParams = toFormParams(
                 "cc", String.valueOf(phoneNumber.getCountryCode()),
                 "in", String.valueOf(phoneNumber.getNationalNumber()),
@@ -991,22 +1235,26 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                 "token", useToken ? token : null
         );
 
-        // Appends the platform-specific attestation + push fields produced by
-        // the configured attestor and push client
         var attestationParams = toFormParams(attestationFields());
 
-        // Merges any caller-supplied extra parameters into the final body
         var additionalParams = toFormParams(attributes);
 
         return joinNonEmpty(registrationParams, attestationParams, additionalParams);
     }
 
     /**
-     * Concatenates the given form-parameter fragments with ampersand
-     * separators, skipping any empty or {@code null} fragments.
+     * Concatenates form-parameter fragments with ampersand
+     * separators, skipping empty or {@code null} fragments.
+     *
+     * @apiNote
+     * Internal helper for
+     * {@link #getRegistrationOptions(boolean, String...)}; lets the
+     * caller compose the body out of three groups (shared,
+     * attestation, additional) without worrying about whether any
+     * one of them is empty.
      *
      * @param fragments the fragments to join, each already in
-     *                  {@code "name=value&name=value"} form
+     *                  {@code name=value&name=value} form
      * @return the joined form body, possibly empty
      */
     private static String joinNonEmpty(String... fragments) {
@@ -1024,13 +1272,21 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Computes the registration token for the given phone number via the
-     * platform-specific algorithm, unless the caller requests that the
-     * token be omitted.
+     * Computes the registration token unless the caller asks for it
+     * to be omitted.
+     *
+     * @apiNote
+     * Internal helper for
+     * {@link #getRegistrationOptions(boolean, String...)}. The
+     * token is derived from the national number via the
+     * platform-specific
+     * {@link WhatsAppMobileClientInfo#computeRegistrationToken(long)}
+     * implementation, which adapts the native client's per-platform
+     * obfuscation step.
      *
      * @param phoneNumber the parsed phone number
-     * @param useToken whether a token should be computed
-     * @return the token, or {@code null} if {@code useToken} is
+     * @param useToken    whether a token should be computed
+     * @return the token, or {@code null} when {@code useToken} is
      *         {@code false}
      */
     private String getToken(PhoneNumber phoneNumber, boolean useToken) {
@@ -1038,30 +1294,37 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             return null;
         }
 
-        // Delegates to the platform-specific WhatsAppMobileClientInfo
         var info = WhatsAppMobileClientInfo.of(store.device().platform());
         return info.computeRegistrationToken(phoneNumber.getNationalNumber());
     }
 
     /**
-     * Generates a dummy WhatsApp Business verified-name certificate when
-     * the current platform is a business flavour.
+     * Generates a WhatsApp Business verified-name certificate when
+     * the configured platform is a business flavour.
      *
-     * <p>The certificate carries an empty verified name and a random serial
-     * number, and is signed with the local Signal identity private key.
-     * Consumer platforms return {@code null}.
+     * @apiNote
+     * Internal helper for
+     * {@link #getRegistrationOptions(boolean, String...)}; returns
+     * {@code null} on consumer platforms so the {@code vname} form
+     * field is omitted from the body entirely.
      *
-     * @return the Base64-URL encoded certificate or {@code null} for
-     *         consumer platforms
+     * @implNote
+     * This implementation issues a placeholder certificate with an
+     * empty verified name and a random serial number, signed with
+     * the local Signal identity private key. WhatsApp's business
+     * platforms expect the field to be present even for
+     * unverified merchants; the real verified-name flow runs
+     * post-registration and replaces this placeholder.
+     *
+     * @return the base64-URL encoded certificate, or {@code null}
+     *         on consumer platforms
      */
     protected String generateBusinessCertificate() {
-        // Skips certificate generation for non-business platforms
         var platform = store.device().platform();
         if(platform != ClientPlatformType.ANDROID_BUSINESS && platform != ClientPlatformType.IOS_BUSINESS) {
             return null;
         }
 
-        // Builds the certificate details with an empty name and a random serial
         var details = new BusinessVerifiedNameCertificateDetailsBuilder()
                 .verifiedName("")
                 .issuer(BusinessVerifiedNameCertificate.CertificateIssuer.SMALL_BUSINESS)
@@ -1069,7 +1332,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
                 .build();
         var encodedDetails = BusinessVerifiedNameCertificateDetailsSpec.encode(details);
 
-        // Signs the details with the local identity private key and packages them
         var certificate = new BusinessVerifiedNameCertificateBuilder()
                 .details(encodedDetails)
                 .signature(Curve25519.sign(store.identityKeyPair().privateKey().toEncodedPoint(), encodedDetails))
@@ -1079,18 +1341,33 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
 
     /**
      * Reads the phone number from the store and parses it into a
-     * {@link PhoneNumber} usable for CC/NN extraction.
+     * {@link PhoneNumber}.
+     *
+     * @apiNote
+     * Internal helper for
+     * {@link #getRegistrationOptions(boolean, String...)} and for
+     * the funnel-event senders. The parsed form is needed to split
+     * the country code and the national number into the {@code cc}
+     * and {@code in} form fields.
+     *
+     * @implNote
+     * This implementation feeds the number through
+     * {@link PhoneNumberUtil} after prepending {@code "+"} so
+     * libphonenumber treats it as E.164. A malformed number surfaces
+     * as a
+     * {@link WhatsAppRegistrationException}, never as a raw
+     * {@link NumberParseException}.
      *
      * @param store the store carrying the registered phone number
      * @return the parsed phone number
-     * @throws WhatsAppRegistrationException if the store has no phone
-     *                                       number or it cannot be parsed
+     * @throws WhatsAppRegistrationException if the store has no
+     *                                       phone number or it
+     *                                       cannot be parsed
      */
     protected static PhoneNumber getPhoneNumber(WhatsAppStore store) {
         var phoneNumber = store.phoneNumber()
                 .orElseThrow(() -> new WhatsAppRegistrationException("Phone number wasn't set"));
         try {
-            // Parses the number using libphonenumber with E.164 leading plus
             return PhoneNumberUtil.getInstance()
                     .parse("+" + phoneNumber, null);
         }catch (NumberParseException exception) {
@@ -1099,11 +1376,18 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Percent-encodes every byte of the given buffer as {@code %XX} in
-     * upper case, producing the mobile API's {@code id} field value.
+     * Percent-encodes every byte of a buffer as {@code %XX} in
+     * uppercase.
+     *
+     * @apiNote
+     * Internal helper that produces the value of the mobile API's
+     * {@code id} form field (over the local identity id) and the
+     * Android {@code backup_token} field. The mobile registration
+     * server expects opaque byte blobs to be percent-encoded
+     * regardless of whether each byte is URL-safe on its own.
      *
      * @param buffer the byte buffer to format
-     * @return the percent-encoded upper-case hex string
+     * @return the percent-encoded uppercase hex string
      */
     protected String toUrlHex(byte[] buffer) {
         var id = new StringBuilder();
@@ -1114,13 +1398,19 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Joins the given alternating name/value pairs into a
-     * {@code name1=value1&name2=value2} form body, skipping pairs whose
-     * value is {@code null}.
+     * Joins alternating name / value pairs into a
+     * {@code name1=value1&name2=value2} form body.
      *
-     * @param entries alternating name/value pairs, totalling an even count
+     * @apiNote
+     * Internal helper used by every form-body assembler in this
+     * class. Pairs whose value is {@code null} are dropped silently
+     * so callers can pass conditionals without sentinel checks.
+     *
+     * @param entries alternating name / value pairs, totalling an
+     *                even count
      * @return the joined form body
-     * @throws IllegalArgumentException if {@code entries.length} is odd
+     * @throws IllegalArgumentException if {@code entries.length} is
+     *                                  odd
      */
     private String toFormParams(String... entries) {
         if (entries == null) {
@@ -1132,7 +1422,6 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
             throw new IllegalArgumentException("Odd form patches");
         }
 
-        // Walks every name/value pair, skipping entries whose value is null
         var result = new StringJoiner("&");
         for (var i = 0; i < length; i += 2) {
             if (entries[i + 1] == null) {
@@ -1145,25 +1434,29 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Fires a pre-phone-number funnel event at {@code /v2/pre_pn_client_log}.
+     * Fires a pre-phone-number funnel event against
+     * {@code /v2/pre_pn_client_log}.
      *
-     * <p>The native client uses this endpoint for funnel events that
-     * originate on screens the user sees before entering their phone
-     * number (the EULA screen, the phone-number entry screen before any
-     * digits are typed). Cobalt has no such UI stage, so the only event
-     * this method emits today is a single {@code registration_session_start}
-     * fired at the top of {@link #register()}. The body intentionally
-     * omits the {@code cc}/{@code in} fields even when the store already
-     * has a phone number on file so that it matches the shape the native
-     * client sends.
+     * @apiNote
+     * Internal helper for the registration funnel telemetry. The
+     * native client uses this endpoint for events that originate on
+     * screens the user sees before entering their phone number
+     * (EULA, idle phone-number entry screen). Cobalt has no such UI
+     * stage, so the only event ever sent here is the single
+     * {@code registration_session_start} fired at the top of
+     * {@link #register}.
      *
-     * <p>Failures are swallowed: funnel telemetry is best-effort and must
-     * never abort a registration. The caller receives no indication of
-     * whether the log was accepted.
+     * @implNote
+     * This implementation deliberately omits the {@code cc} and
+     * {@code in} fields even when the store already has a phone
+     * number on file, to match the shape the native client emits.
+     * Every throwable is swallowed because funnel telemetry must
+     * never abort a registration.
      *
-     * @param actionTaken the short action string ({@code "session_start"})
-     * @param eventName the long event identifier the server uses to bucket
-     *                  the event
+     * @param actionTaken the short action string (for example
+     *                    {@code "session_start"})
+     * @param eventName   the long event identifier the server uses
+     *                    to bucket the event
      */
     private void sendPrePnFunnelLog(String actionTaken, String eventName) {
         try {
@@ -1186,28 +1479,33 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Fires a funnel event at {@code /v2/client_log} with the current
-     * phone number, advancing the {@link #previousFunnelScreen} marker.
+     * Fires a funnel event against {@code /v2/client_log}.
      *
-     * <p>Each call carries the full {@code cc}/{@code in}/{@code lg}/
-     * {@code lc}/{@code expid}/{@code fdid}/{@code id} tuple plus the
-     * four event-specific fields ({@code current_screen},
-     * {@code previous_screen}, {@code action_taken}, {@code event_name})
-     * so the server can reconstruct the client's walk through the
-     * registration funnel. The Play Integrity attestation triple is not
-     * included because the native client's per-endpoint configuration
-     * disables attestation for {@code /v2/client_log}.
+     * @apiNote
+     * Internal helper for the registration funnel telemetry,
+     * invoked once per UI transition in the flow
+     * ({@code exist_check}, {@code request_code},
+     * {@code submit_code}, {@code challenge_shown}, etc.). Each
+     * call advances {@link #previousFunnelScreen} so subsequent
+     * events report the correct {@code previous_screen} attribute.
      *
-     * <p>Failures are swallowed so the registration flow cannot fail on
-     * a funnel-log error.
+     * @implNote
+     * This implementation includes the {@code cc}/{@code in} pair
+     * because the phone number has been committed by the time this
+     * runs, but does not include the Play Integrity attestation
+     * triple: the native client's per-endpoint configuration
+     * disables attestation for {@code /v2/client_log}. Every
+     * throwable is swallowed because funnel telemetry must never
+     * abort a registration.
      *
-     * @param currentScreen the screen name this event originates from
-     *                      ({@code "enter_number"}, {@code "verify_sms"},
-     *                      {@code "verify_twofac"}, etc.)
-     * @param actionTaken the short action string describing what the
-     *                    user or client just did
-     * @param eventName the long event identifier the server uses to
-     *                  bucket the event
+     * @param currentScreen the screen name this event originates
+     *                      from (for example {@code "enter_number"},
+     *                      {@code "verify_sms"},
+     *                      {@code "verify_twofac"})
+     * @param actionTaken   the short action string describing what
+     *                      the user or client just did
+     * @param eventName     the long event identifier the server
+     *                      uses to bucket the event
      */
     private void sendFunnelLog(String currentScreen, String actionTaken, String eventName) {
         try {
@@ -1234,14 +1532,15 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Returns the funnel screen name that corresponds to the
-     * verification method last requested through
-     * {@link #requestVerificationCode(String)}.
+     * Returns the funnel screen name that corresponds to the most
+     * recently requested verification method.
      *
-     * <p>Falls back to {@code "enter_number"} when no method has yet
-     * been recorded, which keeps the {@code current_screen} field
-     * populated even in degenerate flows where a funnel event fires
-     * before the first {@code /v2/code} call.
+     * @apiNote
+     * Internal helper used by every post-{@code /v2/code} funnel
+     * sender. Falls back to {@code "enter_number"} when no method
+     * has yet been recorded so the {@code current_screen} attribute
+     * stays populated even on degenerate flows where a funnel event
+     * fires before the first {@code /v2/code} call.
      *
      * @return the funnel screen name
      */
@@ -1253,10 +1552,14 @@ public abstract sealed class MobileClientRegistration implements AutoCloseable
     }
 
     /**
-     * Closes the shared {@link HttpClient} backing this registration.
+     * Closes the shared {@link HttpClient} backing this
+     * registration.
      *
-     * <p>Further calls to {@link #register()} on the same instance will
-     * fail once this has been called.
+     * @apiNote
+     * Embedders that hold a registration instance for the duration
+     * of a single ceremony can call this via try-with-resources.
+     * Once closed, further calls to {@link #register} on the same
+     * instance fail at the first HTTP send.
      */
     @Override
     public void close() {

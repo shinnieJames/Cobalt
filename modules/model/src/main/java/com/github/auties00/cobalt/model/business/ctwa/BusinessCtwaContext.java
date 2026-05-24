@@ -504,7 +504,7 @@ public final class BusinessCtwaContext {
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(sourceUrl, sourceId, sourceType, title, description, thumbnailUrl,
+        var result = Objects.hash(sourceUrl, sourceId, sourceType, title, description, thumbnailUrl,
                 mediaUrl, mediaType, sourceApp, greetingMessageBody,
                 automatedGreetingMessageShown, ctaPayload, originalImageUrl);
         result = 31 * result + Arrays.hashCode(thumbnail);

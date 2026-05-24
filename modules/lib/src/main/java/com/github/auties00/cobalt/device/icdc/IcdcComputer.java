@@ -8,7 +8,7 @@ import com.github.auties00.cobalt.model.device.identity.ADVEncryptionType;
 import com.github.auties00.cobalt.model.device.info.DeviceInfo;
 import com.github.auties00.cobalt.model.device.info.DeviceList;
 import com.github.auties00.cobalt.model.jid.Jid;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 
@@ -19,31 +19,36 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Computes Identity Change Detection Consistency (ICDC) metadata for a user's device
+ * Computes Identity Change Detection Consistency metadata for a user's device
  * list.
  *
- * <p>Every outgoing WhatsApp message embeds a small chunk of ICDC metadata describing
- * the sender's (and, for 1:1 chats, the recipient's) known companion devices and the
- * identity keys used to encrypt to them. Recipients compare this metadata against
- * their own view and, when it disagrees, invalidate cached sessions and trigger a
- * device list refresh, defending against stale device lists that could lead to
- * undelivered or mis-encrypted messages.
+ * @apiNote
+ * The send pipeline calls {@link #compute(Jid)} once per outgoing message that
+ * needs to embed a {@code deviceListMetadata} payload in its
+ * {@code messageContextInfo}. Recipients compare the embedded hash, timestamp,
+ * and key-index set against their own view of the participant's device list and,
+ * when it disagrees, invalidate cached sessions and trigger a USync to refresh
+ * the participant's devices. This defends against stale device lists that would
+ * otherwise lead to undelivered or mis-encrypted messages.
  *
- * <p>The resulting {@link IcdcResult} carries a truncated SHA-256 hash of the
- * identity keys, the device list timestamp, the key indexes of devices whose
- * identity keys were available locally, and the hosted business account type when
- * applicable.
- *
- * <p>Identity-key serialisation and sorting follow
- * {@code WAWebIdentityApiUtils.identityKeysToBinary}.
+ * @implNote
+ * This implementation derives identity-key serialisation and lexicographic
+ * sorting from {@code WAWebIdentityApiUtils.identityKeysToBinary} and the
+ * truncated SHA-256 hash from {@code WAWebIdentityIcdcApi.computeIdentityHash}.
+ * Hash length is taken from the {@code md_icdc_hash_length} AB prop, clamped
+ * to {@link #MIN_HASH_LENGTH} bytes.
  */
 @WhatsAppWebModule(moduleName = "WAWebIdentityIcdcApi")
 @WhatsAppWebModule(moduleName = "WAWebIdentityApiUtils")
 public final class IcdcComputer {
 
     /**
-     * Minimum hash length in bytes. The configured value is clamped at this
-     * floor.
+     * Lower bound for the truncated hash length.
+     *
+     * @apiNote
+     * Floor applied on top of the {@code md_icdc_hash_length} AB prop so a
+     * server-side value smaller than eight bytes still produces a hash with
+     * enough entropy to be useful.
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMetaFromDeviceRecord",
@@ -51,8 +56,13 @@ public final class IcdcComputer {
     private static final int MIN_HASH_LENGTH = 8;
 
     /**
-     * Window during which a device list timestamp is considered recent (720 hours,
-     * matching WA Web).
+     * Window during which a device-list snapshot timestamp is considered recent
+     * (720 hours).
+     *
+     * @apiNote
+     * Used by {@link #isRecent(Instant)} to decide whether the snapshot
+     * timestamp accompanies a primary-only ICDC result; pins the WA Web
+     * constant {@code 720*60*60} seconds.
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMetaFromDeviceRecord",
@@ -65,12 +75,17 @@ public final class IcdcComputer {
     private final WhatsAppStore store;
 
     /**
-     * The AB props service used to read feature flags.
+     * The AB props service used to read feature flags and the hash-length
+     * configuration.
      */
     private final ABPropsService abPropsService;
 
     /**
      * Constructs a new ICDC computer.
+     *
+     * @apiNote
+     * Wired up by the device-service construction graph; embedders do not
+     * usually call this directly.
      *
      * @param store          the store
      * @param abPropsService the AB props service
@@ -85,14 +100,16 @@ public final class IcdcComputer {
     }
 
     /**
-     * Computes ICDC metadata for the given user.
+     * Computes ICDC metadata for the given user from the cached device list.
      *
-     * <p>Looks up the cached device list and delegates to
-     * {@link #computeFromDeviceList(Jid, DeviceList)}.
+     * @apiNote
+     * The entry point the send pipeline calls; returns empty when no device
+     * list is cached for the user or when the cached list is marked as
+     * deleted. Either case is treated by the caller as "do not embed
+     * deviceListMetadata for this participant".
      *
      * @param userJid the user JID
-     * @return the ICDC result, or empty when no device list is cached or the cached
-     *         list is marked as deleted
+     * @return the ICDC result, or empty when no usable device list is cached
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMeta",
@@ -106,9 +123,20 @@ public final class IcdcComputer {
     /**
      * Computes ICDC metadata from an already-resolved device list.
      *
-     * <p>Detects whether the user has companion devices, gathers identity keys for
-     * remote devices, optionally includes the sender's own identity key, computes a
-     * truncated SHA-256 hash, and resolves the hosted account type.
+     * @apiNote
+     * Internal worker called by {@link #compute(Jid)}. Exposed as
+     * package-private so tests can stub the cached-list lookup and exercise the
+     * algorithm directly. Detects whether the user has companion devices,
+     * gathers identity keys for those companions, includes the local
+     * identity-key-pair public key when the user is the local self, computes
+     * the truncated SHA-256 hash, and resolves the hosted account type when
+     * the hosted-devices feature flag is on.
+     *
+     * @implNote
+     * This implementation calls {@link DeviceInfo}'s raw identity key
+     * accessor directly. Cobalt's local identity key pair is always present
+     * (the store cannot exist without one), so the WA Web {@code if (!C) return null}
+     * guard is unreachable here.
      *
      * @param userJid    the user JID
      * @param deviceList the device list
@@ -148,15 +176,12 @@ public final class IcdcComputer {
                 var deviceJid = device.toDeviceJid(userJid.user(), userJid.server());
                 var identityKey = store.findIdentityByAddress(deviceJid.toSignalAddress()).orElse(null);
                 if (identityKey != null) {
-                    // toEncodedPoint returns the raw 32-byte key, matching WA Web's toCurveKeyPubKey
-                    // which strips the 0x05 prefix from 33-byte Signal keys.
                     identityKeys.add(identityKey.toEncodedPoint());
                     includedKeyIndexes.add(device.keyIndex());
                 }
             }
 
             if (isSelf) {
-                // Cobalt always has a valid identity key pair, so the WA Web null guard is unreachable here.
                 identityKeys.add(store.identityKeyPair().publicKey().toEncodedPoint());
                 if (selfKeyIndex != null) {
                     includedKeyIndexes.add(selfKeyIndex);
@@ -172,9 +197,10 @@ public final class IcdcComputer {
 
         var resultTimestamp = (hasCompanionDevices || isRecent(timestamp)) ? timestamp : null;
 
-        // Cobalt uses a single accountType field whereas WA Web reports senderAccountType
-        // and receiverAccountType. The caller decides which role this result represents.
-        // For self, advAccountType is used as a proxy for getIsHostedMeAccount().
+        // Cobalt collapses WA Web's senderAccountType/receiverAccountType pair onto a
+        // single accountType field; the caller decides which role this result
+        // represents. For self, advAccountType is used as the proxy for
+        // getIsHostedMeAccount().
         ADVEncryptionType accountType = null;
         if (isBizHostedDevicesEnabled()) {
             var selfJid = store.jid().orElse(null);
@@ -190,13 +216,22 @@ public final class IcdcComputer {
     }
 
     /**
-     * Computes the truncated SHA-256 hash of sorted, concatenated identity keys.
+     * Computes the truncated SHA-256 hash of the sorted, concatenated identity
+     * keys.
      *
-     * <p>The keys are sorted lexicographically using unsigned byte comparison,
-     * concatenated, hashed with SHA-256, and truncated to the requested length.
+     * @apiNote
+     * Exposed as package-private static so the test class can exercise the
+     * pure-function contract (determinism, order-independence, truncation,
+     * distinctness) without setting up a {@link WhatsAppStore}.
+     *
+     * @implNote
+     * This implementation sorts the keys lexicographically using unsigned-byte
+     * comparison ({@link #compareKeyBytes(byte[], byte[])}), concatenates them,
+     * hashes with SHA-256, and truncates to the smaller of the requested
+     * length and 32 (the SHA-256 output size).
      *
      * @param identityKeys the raw 32-byte identity key points
-     * @param hashLength   the desired output hash length in bytes
+     * @param hashLength   the requested output hash length in bytes
      * @return the truncated hash
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
@@ -225,12 +260,16 @@ public final class IcdcComputer {
     }
 
     /**
-     * Compares two byte arrays lexicographically using unsigned byte ordering.
+     * Compares two byte arrays lexicographically using unsigned-byte ordering.
+     *
+     * @apiNote
+     * Internal helper used by {@link #computeIdentityHash} to order identity
+     * keys deterministically before concatenation.
      *
      * @param a the first array
      * @param b the second array
-     * @return a negative value when {@code a} sorts before {@code b}, zero when
-     *         equal, or a positive value otherwise
+     * @return a negative value when {@code a} sorts before {@code b}, zero
+     *         when equal, or a positive value otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityApiUtils",
             exports = "identityKeysToBinary",
@@ -247,7 +286,13 @@ public final class IcdcComputer {
     }
 
     /**
-     * Returns the configured hash length, clamped to {@value MIN_HASH_LENGTH} bytes.
+     * Returns the effective hash length, clamped to {@value MIN_HASH_LENGTH}
+     * bytes.
+     *
+     * @apiNote
+     * Reads the {@code md_icdc_hash_length} AB prop and clamps it up to the
+     * eight-byte floor so server-side overrides cannot reduce the hash below
+     * the safe minimum.
      *
      * @return the effective hash length in bytes
      */
@@ -262,11 +307,15 @@ public final class IcdcComputer {
     }
 
     /**
-     * Returns whether the given timestamp is within the recent threshold.
+     * Returns whether a timestamp falls within {@link #RECENT_THRESHOLD}.
+     *
+     * @apiNote
+     * Internal predicate used by {@link #computeFromDeviceList} to decide
+     * whether the snapshot timestamp accompanies a primary-only result.
      *
      * @param timestamp the timestamp, or {@code null}
-     * @return {@code true} when {@code timestamp} is non-{@code null} and within
-     *         {@link #RECENT_THRESHOLD}
+     * @return {@code true} when {@code timestamp} is non-{@code null} and
+     *         within {@link #RECENT_THRESHOLD}
      */
     @WhatsAppWebExport(moduleName = "WAWebIdentityIcdcApi",
             exports = "getICDCMetaFromDeviceRecord",
@@ -277,7 +326,11 @@ public final class IcdcComputer {
     }
 
     /**
-     * Returns whether the hosted-devices feature is enabled.
+     * Returns whether the hosted business-coexistence path is enabled.
+     *
+     * @apiNote
+     * Reads the {@code adv_accept_hosted_devices} AB prop; gates the
+     * hosted-account-type computation in {@link #computeFromDeviceList}.
      *
      * @return {@code true} when {@code adv_accept_hosted_devices} is set
      */

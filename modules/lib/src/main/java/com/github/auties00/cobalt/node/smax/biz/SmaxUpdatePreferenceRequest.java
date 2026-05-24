@@ -11,36 +11,41 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the feedback-update payload
- * in the canonical
- * {@code <iq xmlns="w:biz:msg_feedback" type="set" to="s.whatsapp.net">}
- * envelope.
+ * The outbound stanza that records a per-contact biz-feedback
+ * preference on the relay.
+ *
+ * @apiNote
+ * Used by the message-feedback surface in
+ * {@code WAWebBizUpdatePreferenceJob.updateUserPreferenceFeedback},
+ * which writes user reactions to biz-message interactions (block /
+ * unblock / report, plus an optional free-form annotation).
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizMsgUserFeedbackUpdatePreferenceRequest")
 public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request {
     /**
-     * The feedback action. Opaque on the JS side; typical values
-     * are {@code "block"} / {@code "unblock"} / {@code "report"}.
-     * Routed verbatim into the {@code action} attribute of the
-     * {@code <user_feedback>} child.
+     * The feedback action keyword routed into the {@code action}
+     * attribute.
      */
     private final String action;
 
     /**
-     * The contact JID this preference applies to. Routed verbatim
-     * into the {@code jid} attribute of the {@code <user_feedback>}
-     * child.
+     * The contact JID the feedback applies to.
      */
     private final Jid jid;
 
     /**
-     * The optional free-form feedback annotation; routed into the
-     * {@code feedback} attribute when non-{@code null}.
+     * The optional free-form feedback annotation; {@code null}
+     * omits the {@code feedback} attribute.
      */
     private final String feedback;
 
     /**
-     * Constructs a new request with no feedback annotation.
+     * Constructs a new request without a free-form annotation.
+     *
+     * @apiNote
+     * The default form used when the surface only records a
+     * keyword action (block / unblock / report) without a
+     * user-supplied note.
      *
      * @param action the feedback action; never {@code null}
      * @param jid    the target contact JID; never {@code null}
@@ -52,12 +57,18 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Constructs a new request optionally carrying a free-form
+     * Constructs a new request, optionally carrying a free-form
      * feedback annotation.
+     *
+     * @apiNote
+     * Called by {@code updateUserPreferenceFeedback}, which forwards
+     * the user's keyword and free-form note verbatim. The
+     * {@code action} value is opaque on the JS side and is treated
+     * as an arbitrary string by the relay.
      *
      * @param action   the feedback action; never {@code null}
      * @param jid      the target contact JID; never {@code null}
-     * @param feedback the optional feedback annotation; may be
+     * @param feedback the optional free-form annotation; may be
      *                 {@code null}
      * @throws NullPointerException if {@code action} or {@code jid}
      *                              is {@code null}
@@ -69,7 +80,11 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the feedback action.
+     * Returns the feedback action keyword.
+     *
+     * @apiNote
+     * Surfaces as the {@code action} attribute on the outbound
+     * {@code <user_feedback>} child.
      *
      * @return the action; never {@code null}
      */
@@ -80,6 +95,10 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     /**
      * Returns the target contact JID.
      *
+     * @apiNote
+     * Surfaces as the {@code jid} attribute on the outbound
+     * {@code <user_feedback>} child.
+     *
      * @return the JID; never {@code null}
      */
     public Jid jid() {
@@ -87,20 +106,28 @@ public final class SmaxUpdatePreferenceRequest implements SmaxOperation.Request 
     }
 
     /**
-     * Returns the optional feedback annotation.
+     * Returns the optional free-form feedback annotation.
      *
-     * @return an {@link Optional} carrying the annotation, or empty
-     *         when none was supplied
+     * @apiNote
+     * Returns {@link Optional#empty()} when the request was built
+     * via the two-argument constructor.
+     *
+     * @return an {@link Optional} carrying the annotation
      */
     public Optional<String> feedback() {
         return Optional.ofNullable(feedback);
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <user_feedback>} child
+     * @apiNote
+     * Stamps {@code xmlns="w:biz:msg_feedback"}, {@code type="set"},
+     * {@code to="s.whatsapp.net"} and emits a single
+     * {@code <user_feedback>} child carrying the
+     * {@code action} / {@code jid} pair plus the optional
+     * {@code feedback} annotation. The IQ {@code id} is assigned by
+     * the dispatcher.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizMsgUserFeedbackUpdatePreferenceRequest",

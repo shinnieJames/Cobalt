@@ -7,88 +7,116 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Holds the business-related metadata parsed from an incoming message stanza.
+ * The business-side metadata extracted from an incoming {@code <message>} stanza
+ * by {@link MessageReceiveStanzaParser}.
  *
- * <p>Combines data from the {@code <biz>} child node, the {@code verified_name}
- * attribute and child, and the {@code verified_level} attribute. Drives business
- * template rendering, verified-business badging, and privacy-mode behaviour for
- * BSP-hosted conversations.
+ * @apiNote
+ * Surfaces every piece of state needed by the downstream receive pipeline to
+ * render a business message correctly: the {@code verified_name} certificate
+ * and serial used by the verified-business badge, the {@code verified_level}
+ * tier shown on the chat header, the optional native-flow name and campaign
+ * id that drive WhatsApp Business interactive surfaces (Flows, CTWA ads), and
+ * the privacy-mode tuple ({@link #actualActors()},
+ * {@link #hostStorage()}, {@link #privacyModeTs()}) that gates BSP hosted-vs
+ * on-device behaviour. The three envelope booleans
+ * ({@link #verifiedButtonsEnvelope()}, {@link #verifiedListEnvelope()},
+ * {@link #verifiedHsmEnvelope()}) tell the protobuf parser which wrapper to
+ * peel off the inner ciphertext after decryption.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleMsgParser")
 public final class MessageReceiveBizInfo {
     /**
-     * Raw bytes of the {@code <verified_name>} child carrying the serialized verified
-     * name certificate.
+     * The serialized {@code VerifiedNameCertificate} protobuf bytes carried by
+     * the {@code <verified_name>} child of the stanza.
      */
     private final byte[] verifiedNameCert;
 
     /**
-     * Serial number from the stanza's {@code verified_name} attribute, or {@code -1}
-     * when the attribute is absent.
+     * The integer carried by the stanza's {@code verified_name} attribute, or
+     * {@code -1} when the attribute is absent.
+     *
+     * @implNote
+     * This implementation uses the WA Web sentinel {@code -1} rather than
+     * wrapping the value in {@link Optional} so the field can stay primitive.
      */
     private final int verifiedNameSerial;
 
     /**
-     * {@code verified_level} attribute identifying the business verification tier.
+     * The raw {@code verified_level} attribute identifying the business
+     * verification tier (HIGH, LOW, UNKNOWN in WA Web's enum).
      */
     private final String verifiedLevel;
 
     /**
-     * Native flow name identifying the type of business flow (for example
-     * {@code "shops"}, {@code "appointment_booking"}).
+     * The native-flow name extracted from either
+     * {@code <biz><interactive><native_flow name="..."/></interactive></biz>}
+     * or the {@code native_flow_name} attribute on the {@code <biz>} node.
      */
     private final String nativeFlowName;
 
     /**
-     * Business campaign identifier from the {@code campaign_id} attribute.
+     * The {@code campaign_id} attribute identifying the WhatsApp Business
+     * campaign that produced this message.
      */
     private final String campaignId;
 
     /**
-     * Number of actual actors involved in a business-hosted conversation (privacy mode
-     * metadata).
+     * The {@code actual_actors} attribute parsed from the {@code <biz>} node,
+     * one component of the privacy-mode triple.
      */
     private final Integer actualActors;
 
     /**
-     * Host storage indicator for business-hosted conversations (privacy mode metadata).
+     * The {@code host_storage} attribute parsed from the {@code <biz>} node,
+     * one component of the privacy-mode triple.
      */
     private final Integer hostStorage;
 
     /**
-     * Timestamp at which the current privacy mode took effect for the conversation.
+     * The {@code privacy_mode_ts} attribute parsed from the {@code <biz>}
+     * node, the seconds-precision timestamp at which the current privacy mode
+     * took effect.
      */
     private final Integer privacyModeTs;
 
     /**
-     * Whether the message is wrapped in a verified buttons envelope.
+     * {@code true} when the stanza's {@code <biz>} child carries a
+     * {@code <buttons>} envelope.
      */
     private final boolean verifiedButtonsEnvelope;
 
     /**
-     * Whether the message is wrapped in a verified list envelope.
+     * {@code true} when the stanza's {@code <biz>} child carries a
+     * {@code <list>} envelope.
      */
     private final boolean verifiedListEnvelope;
 
     /**
-     * Whether the message is wrapped in a verified highly-structured-message envelope.
+     * {@code true} when the stanza carries an {@code <hsm>} child alongside
+     * a {@code <biz>} child, indicating a verified highly-structured-message
+     * (template) envelope.
      */
     private final boolean verifiedHsmEnvelope;
 
     /**
-     * Constructs a new business information record.
+     * Constructs a populated record from the values extracted by
+     * {@link MessageReceiveStanzaParser}.
      *
-     * @param verifiedNameCert        the verified-name certificate bytes, or {@code null}
-     * @param verifiedNameSerial      the verified-name serial number, or {@code -1} if absent
+     * @apiNote
+     * Not intended for direct use outside the parser; callers consume
+     * existing instances via {@link MessageReceiveStanza#bizInfo()}.
+     *
+     * @param verifiedNameCert        the certificate bytes, or {@code null}
+     * @param verifiedNameSerial      the verified-name serial, or {@code -1}
      * @param verifiedLevel           the verification tier, or {@code null}
-     * @param nativeFlowName          the native flow name, or {@code null}
-     * @param campaignId              the campaign identifier, or {@code null}
-     * @param actualActors            the actor count for privacy mode, or {@code null}
-     * @param hostStorage             the host storage indicator, or {@code null}
-     * @param privacyModeTs           the privacy mode timestamp, or {@code null}
-     * @param verifiedButtonsEnvelope whether the buttons envelope is present
-     * @param verifiedListEnvelope    whether the list envelope is present
-     * @param verifiedHsmEnvelope     whether the HSM envelope is present
+     * @param nativeFlowName          the resolved native-flow name, or {@code null}
+     * @param campaignId              the business campaign id, or {@code null}
+     * @param actualActors            the privacy-mode actors count, or {@code null}
+     * @param hostStorage             the privacy-mode host storage, or {@code null}
+     * @param privacyModeTs           the privacy-mode timestamp, or {@code null}
+     * @param verifiedButtonsEnvelope whether a verified buttons envelope is present
+     * @param verifiedListEnvelope    whether a verified list envelope is present
+     * @param verifiedHsmEnvelope     whether a verified hsm envelope is present
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleMsgParser", exports = "incomingMsgParser",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -119,7 +147,13 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the raw verified-name certificate bytes, when present.
+     * Returns the raw {@code VerifiedNameCertificate} bytes carried by the
+     * stanza's {@code <verified_name>} child.
+     *
+     * @apiNote
+     * Used by the chat-header rendering path to display the verified-business
+     * badge and the BSP-signed display name; verify the embedded signature
+     * before trusting the name.
      *
      * @return an {@link Optional} wrapping the certificate bytes
      */
@@ -128,17 +162,25 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the verified-name serial number, or {@code -1} if the
-     * {@code verified_name} attribute was absent.
+     * Returns the value of the stanza's {@code verified_name} attribute.
      *
-     * @return the serial number
+     * @apiNote
+     * Pairs with {@link #verifiedNameCert()} to identify a specific issued
+     * certificate; the {@code -1} sentinel marks absence so the field can be
+     * primitive.
+     *
+     * @return the serial number, or {@code -1} when the attribute was absent
      */
     public int verifiedNameSerial() {
         return verifiedNameSerial;
     }
 
     /**
-     * Returns the business verification tier, when present.
+     * Returns the {@code verified_level} attribute, when present.
+     *
+     * @apiNote
+     * Drives the badge tier shown on chat headers and business cards; values
+     * mirror WA Web's {@code MSG_VERIFIED_LEVEL} enum.
      *
      * @return an {@link Optional} wrapping the level identifier
      */
@@ -147,7 +189,12 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the business native flow name, when present.
+     * Returns the resolved native-flow name for WhatsApp Business
+     * interactive content, when present.
+     *
+     * @apiNote
+     * Tells the interactive-message renderer which Flow surface to launch
+     * (for example {@code "shops"}, {@code "appointment_booking"}).
      *
      * @return an {@link Optional} wrapping the native flow name
      */
@@ -156,7 +203,12 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the business campaign identifier, when present.
+     * Returns the WhatsApp Business {@code campaign_id} attribute, when
+     * present.
+     *
+     * @apiNote
+     * Threaded into outgoing analytics so replies to a CTWA-driven
+     * conversation can be attributed back to the originating ad campaign.
      *
      * @return an {@link Optional} wrapping the campaign identifier
      */
@@ -165,7 +217,12 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the number of actors for business-hosted privacy mode.
+     * Returns the {@code actual_actors} component of the privacy-mode triple,
+     * when present.
+     *
+     * @apiNote
+     * Use {@link #hasPrivacyMode()} to decide whether the triple is complete
+     * before consuming any individual component.
      *
      * @return an {@link Optional} wrapping the actor count
      */
@@ -174,7 +231,12 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the host storage indicator for business-hosted privacy mode.
+     * Returns the {@code host_storage} component of the privacy-mode triple,
+     * when present.
+     *
+     * @apiNote
+     * Identifies whether the BSP is storing the conversation host-side or on
+     * device; mirrors WA Web's {@code HostStorageEnumType}.
      *
      * @return an {@link Optional} wrapping the host storage value
      */
@@ -183,47 +245,72 @@ public final class MessageReceiveBizInfo {
     }
 
     /**
-     * Returns the timestamp at which the current privacy mode took effect.
+     * Returns the {@code privacy_mode_ts} component of the privacy-mode
+     * triple, when present.
      *
-     * @return an {@link Optional} wrapping the privacy mode timestamp
+     * @apiNote
+     * The seconds-precision timestamp at which the current privacy-mode
+     * configuration took effect; used by the privacy-mode banner to date the
+     * change.
+     *
+     * @return an {@link Optional} wrapping the privacy-mode timestamp
      */
     public Optional<Integer> privacyModeTs() {
         return Optional.ofNullable(privacyModeTs);
     }
 
     /**
-     * Returns whether the message carries a verified buttons envelope.
+     * Returns whether the {@code <biz>} child contained a {@code <buttons>}
+     * envelope.
      *
-     * @return {@code true} if present
+     * @apiNote
+     * Signals to the protobuf parser that the inner ciphertext is a verified
+     * buttons payload and must be unwrapped before display.
+     *
+     * @return {@code true} if a verified buttons envelope is present
      */
     public boolean verifiedButtonsEnvelope() {
         return verifiedButtonsEnvelope;
     }
 
     /**
-     * Returns whether the message carries a verified list envelope.
+     * Returns whether the {@code <biz>} child contained a {@code <list>}
+     * envelope.
      *
-     * @return {@code true} if present
+     * @apiNote
+     * Signals to the protobuf parser that the inner ciphertext is a verified
+     * list payload.
+     *
+     * @return {@code true} if a verified list envelope is present
      */
     public boolean verifiedListEnvelope() {
         return verifiedListEnvelope;
     }
 
     /**
-     * Returns whether the message carries a verified highly-structured message envelope.
+     * Returns whether an {@code <hsm>} child accompanied the {@code <biz>}
+     * child.
      *
-     * @return {@code true} if present
+     * @apiNote
+     * Signals that the message is a verified highly-structured-message
+     * template; pair with {@link MessageReceiveStanza#hsmTag()} to identify
+     * the template.
+     *
+     * @return {@code true} if a verified hsm envelope is present
      */
     public boolean verifiedHsmEnvelope() {
         return verifiedHsmEnvelope;
     }
 
     /**
-     * Returns whether all three privacy mode fields are present, indicating that the
-     * message participates in business-hosted privacy mode.
+     * Returns whether every component of the privacy-mode triple is present.
      *
-     * @return {@code true} if this is a business-hosted message with privacy mode
-     *         metadata
+     * @apiNote
+     * Use this before reading {@link #actualActors()}, {@link #hostStorage()},
+     * and {@link #privacyModeTs()} together; WA Web treats privacy mode as
+     * defined only when all three attributes are present.
+     *
+     * @return {@code true} if the triple is fully populated
      */
     public boolean hasPrivacyMode() {
         return actualActors != null && hostStorage != null && privacyModeTs != null;

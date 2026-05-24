@@ -11,5 +11,6 @@ public enum WsuaProductType {
     @WamEnumConstant(1) NOVA,
     @WamEnumConstant(2) WA_PLUS,
     @WamEnumConstant(3) META_AI,
-    @WamEnumConstant(4) META_ONE
+    @WamEnumConstant(4) META_ONE,
+    @WamEnumConstant(5) META_ONE_CONSUMER
 }

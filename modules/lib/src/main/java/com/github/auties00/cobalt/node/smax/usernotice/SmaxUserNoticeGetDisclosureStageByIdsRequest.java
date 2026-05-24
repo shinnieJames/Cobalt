@@ -15,24 +15,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps zero or more
- * {@code <get_disclosure_stage_by_id id="…" t="…"/>} children in the
- * canonical {@code <iq xmlns="tos" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound {@code <iq xmlns="tos" type="get">} stanza that polls the
+ * relay for the current acceptance stage of a specific set of
+ * disclosures.
+ *
+ * @apiNote
+ * Built by Cobalt's targeted TOS-poll path, the counterpart of WA Web's
+ * use in {@code WAWebBizBroadcastTos} where the soft-opt-in sync hits the
+ * relay with the single biz-broadcast disclosure id. Unlike
+ * {@link SmaxUserNoticeGetDisclosuresRequest}, which returns every
+ * outstanding disclosure, this RPC narrows the query to a known id set
+ * and is used by background jobs that only care about one particular
+ * disclosure's progression.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeGetDisclosureStageByIdsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutUserNoticeBaseIQGetRequestMixin")
 public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxOperation.Request {
     /**
-     * The list of (disclosure id, timestamp) pairs to query.
+     * The per-disclosure queries that will appear as
+     * {@code <get_disclosure_stage_by_id>} children.
      */
     private final List<DisclosureStageQuery> queries;
 
     /**
      * Constructs a request.
      *
-     * @param queries the list of per-disclosure queries. Never
-     *                {@code null}, may be empty
+     * @apiNote
+     * Pass one {@link DisclosureStageQuery} per disclosure id to poll;
+     * the relay returns a parallel list of stage entries in the reply.
+     *
+     * @param queries the per-disclosure queries; defaults to an empty
+     *                list when {@code null}
      * @throws NullPointerException if {@code queries} is {@code null}
      */
     public SmaxUserNoticeGetDisclosureStageByIdsRequest(List<DisclosureStageQuery> queries) {
@@ -43,17 +56,24 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
     /**
      * Returns the per-disclosure queries.
      *
-     * @return an unmodifiable list. Never {@code null}
+     * @apiNote
+     * Exposed for test and audit code; the list is unmodifiable.
+     *
+     * @return an unmodifiable {@link List} of {@link DisclosureStageQuery}
      */
     public List<DisclosureStageQuery> queries() {
         return queries;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <get_disclosure_stage_by_id/>} children
+     * @implNote
+     * This implementation hard-codes {@code xmlns="tos"},
+     * {@code type="get"}, and {@code to=s.whatsapp.net} per the
+     * {@code WASmaxOutUserNoticeGetDisclosureStageByIdsRequest.makeGetDisclosureStageByIdsRequest}
+     * fixture, then nests one
+     * {@code <get_disclosure_stage_by_id id t/>} child per query.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutUserNoticeGetDisclosureStageByIdsRequest",
@@ -76,6 +96,12 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
         return iqBuilder;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation compares the queries list.
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -88,20 +114,37 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
         return Objects.equals(this.queries, that.queries);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation hashes the queries list.
+     */
     @Override
     public int hashCode() {
         return Objects.hash(queries);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation mirrors the record-like rendering used across
+     * the {@code Smax*} stanza family.
+     */
     @Override
     public String toString() {
         return "SmaxUserNoticeGetDisclosureStageByIdsRequest[queries=" + queries + ']';
     }
 
     /**
-     * One {@code <get_disclosure_stage_by_id id="…" t="…"/>} child.
-     * A (disclosure id, timestamp) pair routed verbatim into the
-     * outbound stanza.
+     * One {@code <get_disclosure_stage_by_id id t/>} child.
+     *
+     * @apiNote
+     * Pairs a disclosure id (the value of
+     * {@code WAWebBizBroadcastTos}'s {@code "20250915"}-style date code,
+     * for example) with the client-side timestamp the relay uses to
+     * decide whether the cached stage is still fresh.
      */
     public static final class DisclosureStageQuery {
         /**
@@ -110,16 +153,20 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
         private final long disclosureId;
 
         /**
-         * The client-side timestamp in seconds.
+         * The client-side timestamp in seconds since the UNIX epoch.
          */
         private final long timestampSeconds;
 
         /**
-         * Constructs a new query.
+         * Constructs a per-disclosure query.
+         *
+         * @apiNote
+         * Pass the current wall-clock time in seconds for
+         * {@code timestampSeconds}; the relay uses it as a freshness
+         * input.
          *
          * @param disclosureId     the disclosure id
-         * @param timestampSeconds the client-side timestamp in
-         *                         seconds
+         * @param timestampSeconds the client-side timestamp
          */
         public DisclosureStageQuery(long disclosureId, long timestampSeconds) {
             this.disclosureId = disclosureId;
@@ -129,7 +176,12 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
         /**
          * Returns the disclosure id.
          *
-         * @return the disclosure id
+         * @apiNote
+         * Used by
+         * {@link SmaxUserNoticeGetDisclosureStageByIdsRequest#toNode()}
+         * to populate the {@code id} attribute.
+         *
+         * @return the id
          */
         public long disclosureId() {
             return disclosureId;
@@ -138,12 +190,23 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
         /**
          * Returns the client-side timestamp.
          *
+         * @apiNote
+         * Used by
+         * {@link SmaxUserNoticeGetDisclosureStageByIdsRequest#toNode()}
+         * to populate the {@code t} attribute.
+         *
          * @return the timestamp in seconds
          */
         public long timestampSeconds() {
             return timestampSeconds;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation compares both fields.
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -157,11 +220,25 @@ public final class SmaxUserNoticeGetDisclosureStageByIdsRequest implements SmaxO
                     && this.timestampSeconds == that.timestampSeconds;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation hashes both fields via
+         * {@link Objects#hash(Object...)}.
+         */
         @Override
         public int hashCode() {
             return Objects.hash(disclosureId, timestampSeconds);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation mirrors the record-like rendering used
+         * across the {@code Smax*} stanza family.
+         */
         @Override
         public String toString() {
             return "SmaxUserNoticeGetDisclosureStageByIdsRequest.DisclosureStageQuery[disclosureId="

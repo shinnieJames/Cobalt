@@ -12,16 +12,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Wire-shape oracle for newsletter plaintext (SMAX) sends, anchored to
  * {@code fixtures/message/send/newsletter-text.jsonl}.
  *
- * <p>Newsletter messages have a distinct wire form: a single
- * {@code <plaintext>} payload child under
- * {@code <message to="…@newsletter">}, with no Signal envelope and no
- * {@code <participants>} list.
+ * @apiNote
+ * Pins the distinct wire form newsletter messages take when emitted by
+ * WA Web's SMAX publish pipeline: a single {@code <plaintext>} payload
+ * child under {@code <message to="...@newsletter">} with no Signal
+ * envelope and no {@code <participants>} list. Cross-references
+ * {@link NewsletterStanza}.
+ *
+ * @implNote
+ * This implementation skips the assertion block when the fixture topic
+ * is not available locally; the capture script under
+ * {@code src/test/resources/fixtures/message/} regenerates the file
+ * against a live WA Web session when needed.
  */
 @DisplayName("Newsletter stanza live wire oracle")
 class NewsletterStanzaLiveOracleTest {
 
+    /**
+     * A newsletter text send is wire-typed {@code "text"}, targets a
+     * {@code @newsletter} JID, and carries its payload inside a single
+     * {@code <plaintext>} child with no encrypted siblings.
+     */
     @Test
-    @DisplayName("newsletter text send: <message to=\"…@newsletter\" type=\"text\"> with <plaintext> body")
+    @DisplayName("newsletter text send: <message to=\"...@newsletter\" type=\"text\"> with <plaintext> body")
     void newsletterTextPlaintext() {
         var topic = "send/newsletter-text";
         if (!MessageFixtures.isAvailable(topic)) return;
@@ -47,7 +60,6 @@ class NewsletterStanzaLiveOracleTest {
         assertTrue(plaintext.toContentBytes().orElseThrow().length > 0,
                 "<plaintext> payload must be non-empty");
 
-        // The SMAX path uses NO Signal envelope.
         assertFalse(message.getChild("participants").isPresent(),
                 "newsletter sends must not carry <participants>");
         assertFalse(message.getChild("enc").isPresent(),

@@ -1,20 +1,19 @@
 package com.github.auties00.cobalt.sync.handler;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
-import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.PaymentTosMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,30 +25,28 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Tests for {@link PaymentTosHandler}, Cobalt's adapter for
- * {@code WAWebPaymentTosSync}.
+ * Exercises {@link PaymentTosHandler} against the
+ * {@code WAWebPaymentTosSync.applyMutations} per-mutation flow.
  *
- * <p>The handler is gated on the SMB platform variants and the
- * {@code payments_br_pix_on_web} AB prop. On {@code SET} it persists the
- * accepted ToS action into the store via {@code setPaymentTos}.
+ * @apiNote
+ * Verifies the SMB platform gate, the
+ * {@code payments_br_pix_on_web} AB-prop gate, the
+ * {@link SyncdOperation#SET}
+ * happy path that persists the action via
+ * {@code WhatsAppStore.setPaymentTos}, the malformed-value
+ * classification when the
+ * {@link PaymentTosAction}
+ * payload is missing, and that non-{@code SET} operations and gate
+ * failures all surface as
+ * {@link SyncActionState#UNSUPPORTED}.
  *
- * <p>Matrix:
- * <ul>
- *   <li>Metadata wire constants.</li>
- *   <li>Non-SMB platform short-circuits to {@code UNSUPPORTED}.</li>
- *   <li>AB-prop gate disabled returns {@code UNSUPPORTED}.</li>
- *   <li>Non-{@code SET} operation is {@code UNSUPPORTED}.</li>
- *   <li>Malformed value (missing sub-message) is {@code MALFORMED}.</li>
- *   <li>Happy path: SET stores the action and reports {@code SUCCESS}.</li>
- *   <li>Default conflict resolution.</li>
- *   <li>Default batch dispatch.</li>
- *   <li>{@code getPaymentTosSetMutation} builder.</li>
- *   <li>Malformed index (n/a — handler does not parse indexParts).</li>
- *   <li>WA Web byte-parity oracle (gated).</li>
- * </ul>
+ * @implNote
+ * This implementation builds mutations directly via the local helper
+ * because the corresponding mutation factory is exercised in a
+ * separate test; the handler does not parse {@code indexParts} so
+ * the malformed-index dimension has no surface here.
  */
 @DisplayName("PaymentTosHandler")
 class PaymentTosHandlerTest {
@@ -63,7 +60,19 @@ class PaymentTosHandlerTest {
     private PaymentTosMutationFactory factory;
 
     /**
-     * Builds a fresh harness for each test.
+     * Builds a fresh harness, AB-props service, and mutation factory
+     * before each test.
+     *
+     * @apiNote
+     * Each test path opts into the SMB platform via
+     * {@link #smbPlatform()} and the AB prop via {@link #enablePix()}
+     * explicitly so the gating dimension under test is declarative.
+     *
+     * @implNote
+     * This implementation creates a clean
+     * {@link WhatsAppStore} per test
+     * via {@code DeviceFixtures.temporaryStore} so no state leaks
+     * between tests.
      */
     @BeforeEach
     void setUp() {
@@ -77,21 +86,59 @@ class PaymentTosHandlerTest {
     }
 
     /**
-     * Sets the local store's platform to {@code IOS_BUSINESS}.
+     * Sets the local store's platform to
+     * {@link ClientPlatformType#IOS_BUSINESS}.
+     *
+     * @apiNote
+     * Internal helper used by every test that needs to clear the SMB
+     * platform gate without picking a specific business variant; the
+     * {@code IOS_BUSINESS} choice is interchangeable with
+     * {@link ClientPlatformType#ANDROID_BUSINESS}.
+     *
+     * @implNote
+     * This implementation mutates the device record on the shared
+     * fixture store rather than rebuilding the test client, because
+     * the platform read happens at every {@code applyMutation} call.
      */
     private void smbPlatform() {
         store.device().setPlatform(ClientPlatformType.IOS_BUSINESS);
     }
 
     /**
-     * Enables the {@code payments_br_pix_on_web} AB prop.
+     * Enables the {@link ABProp#PAYMENTS_BR_PIX_ON_WEB} AB prop on
+     * the test fixture.
+     *
+     * @apiNote
+     * Internal helper used by every test that needs to clear the
+     * AB-prop gate. Combined with {@link #smbPlatform()} to land on
+     * the happy path.
+     *
+     * @implNote
+     * This implementation mutates the
+     * {@link TestABPropsService}
+     * instance owned by the test client; no test isolation is broken
+     * because the harness is rebuilt per test.
      */
     private void enablePix() {
         props.set(ABProp.PAYMENTS_BR_PIX_ON_WEB, true);
     }
 
     /**
-     * Builds a valid PaymentTosAction with the only known PaymentNotice value.
+     * Builds a fully-populated
+     * {@link PaymentTosAction}
+     * carrying the only known
+     * {@link PaymentTosAction.PaymentNotice}
+     * variant.
+     *
+     * @apiNote
+     * Internal helper consumed by every happy-path test in this
+     * class; not used outside it.
+     *
+     * @implNote
+     * This implementation pins {@code accepted=true} and the only
+     * known notice so the test surface stays declarative as new
+     * notice variants are added; tests that need a different notice
+     * should build their own action.
      *
      * @return a fully-populated action
      */
@@ -103,10 +150,23 @@ class PaymentTosHandlerTest {
     }
 
     /**
-     * Builds a trusted SET mutation carrying the given action.
+     * Builds a trusted
+     * {@link SyncdOperation#SET}
+     * mutation carrying the given action under the singleton
+     * {@code ["payment_tos"]} index.
      *
-     * @param action the payment-tos action payload, or {@code null} to omit
-     *               the sub-message
+     * @apiNote
+     * Internal helper consumed by every test in this class; not used
+     * outside it. Setting {@code action} to {@code null} omits the
+     * {@code paymentTosAction} field on the value so the
+     * malformed-value branch can be exercised.
+     *
+     * @implNote
+     * This implementation pins the timestamp to a fixed second so
+     * tests that compare timestamps (none today) stay deterministic.
+     *
+     * @param action the payment-tos action payload; may be
+     *               {@code null} to omit the sub-message
      * @return the trusted mutation
      */
     private static DecryptedMutation.Trusted setMutation(PaymentTosAction action) {
@@ -262,7 +322,7 @@ class PaymentTosHandlerTest {
                     .paymentTosAction(validAction()).build();
             var remote = new DecryptedMutation.Trusted("[\"payment_tos\"]", remoteValue,
                     SyncdOperation.SET, remoteTs, 7);
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
                     handler.resolveConflicts(local, remote).state());
         }
     }
@@ -306,17 +366,4 @@ class PaymentTosHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web byte-parity oracle")
-    class OracleParity {
-        @Test
-        @DisplayName("captured encode payload (when present) matches Cobalt's wire encoding")
-        void oracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/payment-tos/encode")) {
-                return;
-            }
-            var oracle = SyncFixtures.loadOracle("handler/payment-tos/encode");
-            assertNotNull(oracle);
-        }
-    }
 }

@@ -14,24 +14,36 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqDigestKeyRequest}.
+ * Closed family of reply variants observable on the {@code <iq xmlns="encrypt" type="get"/>}
+ * digest-key roundtrip.
+ *
+ * @apiNote
+ * Callers feed each inbound {@code <iq>} that echoes an {@link IqDigestKeyRequest} through
+ * {@link #of(Node, Node)} and match on the resulting sealed sub-type. {@link Success} exposes the
+ * relay's reported registration id, key-bundle type, identity key, signed pre-key, one-time pre-key
+ * identifier list and SHA-1 digest so the caller can recompute the same hash locally and decide
+ * whether to skip a {@link IqUploadPreKeysRequest pre-key re-upload}. {@link ClientError} surfaces
+ * the relay's rejection envelope (notably {@code 404} "no record for this user", {@code 406}
+ * "malformed request", or any other {@code 4xx}). {@link ServerError} carries {@code 5xx}
+ * envelopes such as {@code 503} "service unavailable".
  */
 @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
 public sealed interface IqDigestKeyResponse extends IqOperation.Response
         permits IqDigestKeyResponse.Success, IqDigestKeyResponse.ClientError, IqDigestKeyResponse.ServerError {
 
     /**
-     * Tries each {@link IqDigestKeyResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Parses the inbound stanza into the first matching {@link IqDigestKeyResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}. The {@code request} parameter is forwarded to each
+     * variant parser so {@link SmaxIqResultResponseMixin}/{@link SmaxBaseServerErrorMixin} can
+     * validate that the echoed envelope identifiers line up with the outbound stanza.
+     *
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound stanza
+     * @return the parsed variant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+     *         the stanza shape matched none of the three documented schemas
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
@@ -51,60 +63,65 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay returned the
-     * remote-side digest of the user's Signal key bundle.
+     * Successful echo from the relay carrying the full set of digest-key inputs.
+     *
+     * @apiNote
+     * The fields together let the caller recompute the relay-side SHA-1 over
+     * {@code identityPublicKey || signedPreKey.publicKey() || signedPreKey.signature() ||
+     * concat(preKey.publicKey for each entry of preKeyIds)} and compare it against {@link #hash()}.
+     * A mismatch signals that the local key bundle has drifted out of sync with the server.
      */
     @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
     final class Success implements IqDigestKeyResponse {
         /**
-         * The remote-side registration id.
+         * The relay's record of the local device's registration id, decoded from the four-byte
+         * big-endian content of {@code <registration/>}.
          */
         private final int registrationId;
 
         /**
-         * The remote-side single-byte Signal key-bundle type marker.
+         * The single-byte Signal key-bundle type marker, read from the first byte of
+         * {@code <type/>}.
          */
         private final byte keyBundleType;
 
         /**
-         * The remote-side long-term identity public key — thirty-two
-         * bytes.
+         * The thirty-two-byte long-term identity public key, taken verbatim from
+         * {@code <identity/>}.
          */
         private final byte[] identityPublicKey;
 
         /**
-         * The remote-side current signed pre-key — id, public key,
-         * signature.
+         * The currently advertised signed pre-key, parsed from the {@code <skey/>} subtree.
          */
         private final IqUploadPreKeysSignedPreKey signedPreKey;
 
         /**
-         * The remote-side one-time pre-key identifier list — each
-         * entry carries a three-byte big-endian unsigned integer.
+         * The list of one-time pre-key identifiers, each decoded from a three-byte big-endian
+         * {@code <list><key/>...} entry.
          */
         private final List<Integer> preKeyIds;
 
         /**
-         * The relay's SHA-1 digest of the concatenated key material —
-         * twenty bytes.
+         * The relay-computed SHA-1 over the concatenated key material; twenty bytes read from
+         * {@code <hash/>}.
          */
         private final byte[] hash;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a populated success envelope.
          *
-         * @param registrationId    the remote-side registration id
-         * @param keyBundleType     the remote-side type marker
-         * @param identityPublicKey the remote-side identity key bytes;
-         *                          never {@code null}
-         * @param signedPreKey      the remote-side signed pre-key;
-         *                          never {@code null}
-         * @param preKeyIds         the remote-side pre-key identifier
-         *                          list; never {@code null}
-         * @param hash              the SHA-1 digest bytes; never
-         *                          {@code null}
-         * @throws NullPointerException if any reference argument is
-         *                              {@code null}
+         * @apiNote
+         * The {@code preKeyIds} list is defensively copied; mutating the passed-in list after
+         * construction does not affect this instance.
+         *
+         * @param registrationId    the relay-side registration id
+         * @param keyBundleType     the Signal key-bundle type marker
+         * @param identityPublicKey the thirty-two-byte identity public key
+         * @param signedPreKey      the parsed signed pre-key
+         * @param preKeyIds         the one-time pre-key identifiers
+         * @param hash              the twenty-byte SHA-1 digest
+         * @throws NullPointerException if any reference argument is {@code null}
          */
         public Success(int registrationId, byte keyBundleType,
                        byte[] identityPublicKey, IqUploadPreKeysSignedPreKey signedPreKey,
@@ -119,7 +136,11 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the remote-side registration id.
+         * Returns the relay-side registration id.
+         *
+         * @apiNote
+         * Compared against {@code waSignalStore.getRegistrationInfo().registrationId} to detect a
+         * device-identity drift before recomputing the hash.
          *
          * @return the registration id
          */
@@ -128,7 +149,7 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the remote-side key-bundle type marker.
+         * Returns the relay-side key-bundle type marker.
          *
          * @return the type marker
          */
@@ -137,51 +158,71 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the remote-side identity public key bytes.
+         * Returns the relay-side identity public key.
          *
-         * @return the bytes; never {@code null}
+         * @apiNote
+         * Used as the first thirty-two-byte slice when recomputing the digest locally.
+         *
+         * @return the identity public key bytes
          */
         public byte[] identityPublicKey() {
             return identityPublicKey;
         }
 
         /**
-         * Returns the remote-side signed pre-key.
+         * Returns the relay-side signed pre-key.
          *
-         * @return the signed pre-key; never {@code null}
+         * @apiNote
+         * Provides the second thirty-two-byte slice ({@link IqUploadPreKeysSignedPreKey#publicKey()})
+         * and the sixty-four-byte signature slice when recomputing the digest locally.
+         *
+         * @return the signed pre-key
          */
         public IqUploadPreKeysSignedPreKey signedPreKey() {
             return signedPreKey;
         }
 
         /**
-         * Returns the unmodifiable list of remote-side pre-key
-         * identifiers.
+         * Returns the unmodifiable list of one-time pre-key identifiers the relay is advertising.
          *
-         * @return the identifiers; never {@code null}
+         * @apiNote
+         * For each identifier the caller looks up the local {@code waSignalStore} entry and feeds
+         * its thirty-two-byte public key into the digest computation in list order.
+         *
+         * @return the identifiers
          */
         public List<Integer> preKeyIds() {
             return preKeyIds;
         }
 
         /**
-         * Returns the relay-supplied SHA-1 digest bytes.
+         * Returns the relay-computed SHA-1 digest bytes.
          *
-         * @return the digest; never {@code null}
+         * @return the twenty-byte digest
          */
         public byte[] hash() {
             return hash;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses a {@link Success} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check, when
+         * the {@code <digest>} subtree is missing or short of any required child, or when any
+         * content slot fails to decode. Parse failure is recoverable; the caller falls through to
+         * the error variants.
+         *
+         * @implNote
+         * This implementation drives a manual structural walk via {@link Node#getChild(String)}
+         * and {@link Node#toContentBytes()} so that each variant returns
+         * {@link Optional#empty()} rather than throwing. WA Web's
+         * {@code WADeprecatedWapParser} would have thrown on the same inputs; Cobalt's typed
+         * sealed-hierarchy contract requires a falsy parse instead.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return the parsed {@link Success}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
                 exports = "digestResponseParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -240,10 +281,14 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         }
 
         /**
-         * Decodes the supplied byte array as a big-endian unsigned
-         * integer.
+         * Decodes the supplied byte array as a big-endian unsigned integer.
          *
-         * @param bytes the source bytes; may be one to four bytes long
+         * @apiNote
+         * Accepts one-to-four-byte inputs because the digest schema mixes a four-byte
+         * {@code <registration/>} content with three-byte {@code <id/>} contents inside the
+         * {@code <list/>} and {@code <skey/>} subtrees.
+         *
+         * @param bytes the source bytes
          * @return the decoded value
          */
         private static int bigEndianUnsignedInt(byte[] bytes) {
@@ -254,6 +299,12 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
             return result;
         }
 
+        /**
+         * Compares this success envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code Success} carrying identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -271,6 +322,11 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
                     && Arrays.equals(this.hash, that.hash);
         }
 
+        /**
+         * Returns a hash code derived from every carried field.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             var result = Objects.hash(registrationId, keyBundleType, signedPreKey, preKeyIds);
@@ -279,6 +335,11 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
             return result;
         }
 
+        /**
+         * Returns the record-style rendering for this success envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqDigestKeyResponse.Success[registrationId=" + registrationId
@@ -291,28 +352,30 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * digest query as malformed (code {@code 406}) or has no record
-     * for the user (code {@code 404}, "no record found").
+     * Client-error variant; the relay rejected the digest probe with a {@code 4xx} envelope.
+     *
+     * @apiNote
+     * The two documented relay codes are {@code 404} ("no record for this user", which WA Web
+     * treats as a hint to upload pre-keys from scratch) and {@code 406} ("malformed request",
+     * which is logged and ignored).
      */
     @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
     final class ClientError implements IqDigestKeyResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 4xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a populated client-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -331,22 +394,23 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ClientError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}, which checks
+         * the envelope echo, the {@code type="error"} attribute and the {@code <error/>} subtree
+         * before returning the code/text envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return the parsed {@link ClientError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
                 exports = "digestKey", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -358,6 +422,12 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this client-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -371,11 +441,21 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this client-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqDigestKeyResponse.ClientError[errorCode=" + errorCode
@@ -384,29 +464,29 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure (codes {@code >= 500}, including
-     * {@code 503} "service unavailable") while processing the
-     * digest query.
+     * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope.
+     *
+     * @apiNote
+     * The most common observed code is {@code 503} "service unavailable"; WA Web logs the digest
+     * query as failed and lets the periodic re-check retry on the next push.
      */
     @WhatsAppWebModule(moduleName = "WAWebDigestKeyJob")
     final class ServerError implements IqDigestKeyResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 5xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a populated server-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -425,22 +505,22 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ServerError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}, which is the
+         * {@code 5xx} counterpart of {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return the parsed {@link ServerError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebDigestKeyJob",
                 exports = "digestKey", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -452,6 +532,12 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this server-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -465,11 +551,21 @@ public sealed interface IqDigestKeyResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this server-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqDigestKeyResponse.ServerError[errorCode=" + errorCode

@@ -12,38 +12,48 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Wire-shape oracle for inbound MSMSG (multi-side encrypted message)
- * streams from the Meta AI bot, anchored to
- * {@code fixtures/message/receive/template-or-buttons-from-biz.jsonl}.
+ * Wire-shape oracle for inbound MSMSG bot reply streams, anchored to the
+ * captured {@code fixtures/message/receive/template-or-buttons-from-biz.jsonl}
+ * corpus.
  *
- * <p>The captured stream models a complete bot reply: a single user
- * question dispatched via {@code send/bot-text} is answered by the bot
- * with a multi-chunk MSMSG stream. Each chunk is a separate inbound
- * {@code <message from="…@bot">} stanza with:
+ * @apiNote
+ * Asserts the structural invariants the receive pipeline relies on for Meta
+ * AI bot replies: every chunk carries the {@code <bot>} streaming marker,
+ * the {@code <meta target_id="...">} pointer back at the user's question,
+ * and an {@code <enc type="msmsg">} ciphertext. Together the tests pin down
+ * what {@link MessageReceiveStanzaParser} must accept before
+ * {@link MessageReceiveBotInfo} and {@link MessageReceiveEncryptedPayload}
+ * can be fed to the MSMSG decryption path.
  *
- * <ul>
- *   <li>{@code type="text"}</li>
- *   <li>a {@code <bot>} child with one of {@code edit="first"},
- *       {@code edit="inner"}, or {@code edit="last"} — the streaming
- *       marker, equivalent to SSE-style segmentation;</li>
- *   <li>a {@code <meta target_id="…">} child binding every chunk back to
- *       the user's original outgoing question;</li>
- *   <li>an {@code <enc v="2" type="msmsg">} child carrying the bot's
- *       AES-GCM ciphertext under the WAWebBotMessageSecret HKDF key.</li>
- * </ul>
- *
- * <p>This is the receive-side counterpart to {@code send/bot-text}: the
- * outgoing user question (an {@code msmsg}-wrapped peer fanout) gets
- * answered with this stream, and Cobalt's {@code ChatMessageReceiver}
- * is responsible for stitching the {@code first}/{@code inner}/{@code last}
- * chunks back into a single {@code AIRichResponseMessage}.
+ * @implNote
+ * This implementation reads the captured JSONL fixture through
+ * {@link MessageFixtures} and guards each test on
+ * {@link MessageFixtures#isAvailable} so the suite stays green when the
+ * fixture is not checked out locally; the captured stream models a single
+ * user question answered by a multi-chunk MSMSG bot response.
  */
 @DisplayName("Bot MSMSG receive live wire oracle")
 class BotMsmsgReceiveLiveOracleTest {
 
+    /**
+     * Topic key under {@code fixtures/message/receive/} that resolves to the
+     * captured Meta AI bot reply stream.
+     */
     private static final String TOPIC = "receive/template-or-buttons-from-biz";
+
+    /**
+     * The Meta AI bot's JID as it appears in the captured stanzas.
+     *
+     * @implNote
+     * Captured from the live business session; the literal value is part of
+     * the fixture and cannot be derived at runtime.
+     */
     private static final String BOT_JID = "867051314767696@bot";
 
+    /**
+     * The captured stream contains at least one {@code first} and one
+     * {@code last} chunk.
+     */
     @Test
     @DisplayName("captured bot stream contains at least one first + one last chunk")
     void streamHasFirstAndLastMarkers() {
@@ -66,8 +76,12 @@ class BotMsmsgReceiveLiveOracleTest {
                 "bot stream must contain an edit=\"last\" chunk to mark the stream end, got " + editValues);
     }
 
+    /**
+     * Every chunk carries the bot streaming marker, the meta target id, and
+     * a v2 MSMSG ciphertext.
+     */
     @Test
-    @DisplayName("every bot chunk carries <bot> + <meta target_id=…> + <enc type=msmsg>")
+    @DisplayName("every bot chunk carries <bot> + <meta target_id=...> + <enc type=msmsg>")
     void everyChunkShape() {
         if (!MessageFixtures.isAvailable(TOPIC)) return;
 
@@ -89,29 +103,29 @@ class BotMsmsgReceiveLiveOracleTest {
                     () -> new AssertionError("every bot chunk has a <bot> marker"));
             var edit = bot.getAttributeAsString("edit").orElseThrow();
             assertTrue(List.of("first", "inner", "last").contains(edit),
-                    "<bot edit=…> must be first/inner/last, got " + edit);
-            // edit_target_id is the outgoing user-question id; inner/last must point
-            // at the same chunk that started the stream (the first stanza's id).
-            // The "first" chunk itself has an empty edit_target_id.
+                    "<bot edit=...> must be first/inner/last, got " + edit);
             bot.getAttributeAsString("edit_target_id").orElseThrow();
 
             var meta = chunk.getChild("meta").orElseThrow(
                     () -> new AssertionError("every bot chunk has a <meta> child"));
             assertTrue(meta.getAttributeAsString("target_id").isPresent(),
-                    "<meta target_id=…> must bind chunk to user's question");
+                    "<meta target_id=...> must bind chunk to user's question");
 
             var enc = chunk.getChild("enc").orElseThrow();
             assertEquals("2", enc.getAttributeAsString("v").orElseThrow(),
                     "<enc> must be v=2");
             assertEquals("msmsg", enc.getAttributeAsString("type").orElseThrow(),
-                    "<enc type=…> must be msmsg for bot replies");
+                    "<enc type=...> must be msmsg for bot replies");
             assertTrue(enc.hasContent(),
                     "<enc> must carry MSMSG ciphertext bytes");
         }
     }
 
+    /**
+     * Every chunk in a single reply binds to the same {@code target_id}.
+     */
     @Test
-    @DisplayName("every chunk's <meta target_id=…> points back at the same user question")
+    @DisplayName("every chunk's <meta target_id=...> points back at the same user question")
     void everyChunkBindsToSameUserQuestion() {
         if (!MessageFixtures.isAvailable(TOPIC)) return;
 
@@ -131,6 +145,15 @@ class BotMsmsgReceiveLiveOracleTest {
                 "every chunk in a single bot reply must bind to the same target_id; got " + targetIds);
     }
 
+    /**
+     * {@code inner} and {@code last} chunks reference the first chunk's id
+     * via {@code edit_target_id}.
+     *
+     * @apiNote
+     * The {@code first} chunk itself carries an empty {@code edit_target_id};
+     * this asymmetry is what the stitcher uses to detect the head of the
+     * reply stream.
+     */
     @Test
     @DisplayName("inner/last chunks carry edit_target_id pointing at the first chunk's id")
     void innerAndLastReferenceFirstChunk() {

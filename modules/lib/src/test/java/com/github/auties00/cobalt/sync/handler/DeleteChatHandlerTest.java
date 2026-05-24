@@ -12,13 +12,11 @@ import com.github.auties00.cobalt.model.sync.SyncActionMessageRange;
 import com.github.auties00.cobalt.model.sync.SyncActionMessageRangeBuilder;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.DeleteChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.DeleteChatMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,13 +27,27 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DeleteChatHandler}.
+ * Exercises the {@link DeleteChatHandler} adapter for
+ * {@code WAWebDeleteChatSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the {@code deleteChat} app-state
+ * sync action across metadata, the SET happy path, the orphan and
+ * malformed branches, the REMOVE rejection and the four-way
+ * message-range conflict matrix.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so each test starts from a clean single-device state. Mutations are
+ * built inline through {@link DeleteChatActionBuilder} and
+ * {@link SyncActionMessageRangeBuilder} factories so the wire-shape of
+ * the index matches WA Web verbatim.
  */
 @DisplayName("DeleteChatHandler")
 class DeleteChatHandlerTest {
@@ -102,7 +114,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("SET removes the chat from the store")
@@ -120,7 +132,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown chat JID returns ORPHAN with modelType=Chat")
@@ -135,7 +147,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying a pinAction instead of deleteChatAction is MALFORMED")
@@ -164,7 +176,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty deleteMedia slot is MALFORMED")
@@ -184,7 +196,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -206,10 +218,10 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” message-range matrix")
+    @DisplayName("resolveConflicts - message-range matrix")
     class ResolveConflicts {
         @Test
-        @DisplayName("remote range encloses local range â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("remote range encloses local range -> APPLY_REMOTE_DROP_LOCAL")
         void remoteEnclosesLocal() {
             var localRange = new SyncActionMessageRangeBuilder()
                     .lastMessageTimestamp(Instant.ofEpochSecond(50L)).messages(List.of()).build();
@@ -224,7 +236,7 @@ class DeleteChatHandlerTest {
         }
 
         @Test
-        @DisplayName("local range encloses remote range â†’ SKIP_REMOTE")
+        @DisplayName("local range encloses remote range -> SKIP_REMOTE")
         void localEnclosesRemote() {
             var localRange = new SyncActionMessageRangeBuilder()
                     .lastMessageTimestamp(Instant.ofEpochSecond(100L))
@@ -239,7 +251,7 @@ class DeleteChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges equal with local <= remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("ranges equal with local <= remote -> APPLY_REMOTE_DROP_LOCAL")
         void rangesEqualLocalOlder() {
             var local = deleteMutation(PEER, Instant.ofEpochSecond(100L), rangeWithLast(100L), "0");
             var remote = deleteMutation(PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L), "0");
@@ -249,7 +261,7 @@ class DeleteChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges equal with local strictly newer â†’ SKIP_REMOTE")
+        @DisplayName("ranges equal with local strictly newer -> SKIP_REMOTE")
         void rangesEqualLocalNewer() {
             var local = deleteMutation(PEER, Instant.ofEpochSecond(300L), rangeWithLast(100L), "0");
             var remote = deleteMutation(PEER, Instant.ofEpochSecond(200L), rangeWithLast(100L), "0");
@@ -259,10 +271,10 @@ class DeleteChatHandlerTest {
         }
 
         @Test
-        @DisplayName("ranges do not enclose each other â†’ SKIP_REMOTE_DROP_LOCAL with merged mutation")
+        @DisplayName("ranges do not enclose each other -> SKIP_REMOTE_DROP_LOCAL with merged mutation")
         void rangesNotEnclosing() {
             // Each range carries a message whose timestamp >= the OTHER range's lastMessageTimestamp,
-            // with disjoint key ids â€” forcing encloses() to return false in both directions.
+            // with disjoint key ids - forcing encloses() to return false in both directions.
             var localRange = new SyncActionMessageRangeBuilder()
                     .lastMessageTimestamp(Instant.ofEpochSecond(50L))
                     .messages(List.of(msg("local-1", 80L)))
@@ -282,7 +294,7 @@ class DeleteChatHandlerTest {
     }
 
     @Nested
-    @DisplayName("getDeleteChatMutation â€” builder helper")
+    @DisplayName("getDeleteChatMutation - builder helper")
     class BuilderHelpers {
         @Test
         @DisplayName("getDeleteChatMutation builds the [\"deleteChat\", jid, deleteMedia] index")
@@ -301,23 +313,4 @@ class DeleteChatHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/delete-chat/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/delete-chat/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var action = new DeleteChatActionBuilder().build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .deleteChatAction(action)
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

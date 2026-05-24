@@ -11,11 +11,23 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant. Wraps the disjunctive
- * {@link SmaxAccountSetPaymentsTOSv3ConsumerVariant} children inside an
- * {@code <iq xmlns="urn:xmpp:whatsapp:account" type="set"
- * to="s.whatsapp.net"><accept_pay version="3"
- * tos_version=INT(t)>...</accept_pay></iq>} envelope.
+ * The outbound {@code <iq xmlns="urn:xmpp:whatsapp:account">} stanza
+ * builder for a v3 payments ToS acceptance.
+ *
+ * @apiNote
+ * Used by callers driving the WA Web {@code WAWebPaymentsTosJob}
+ * {@code acceptBRPayTos} surface (and its UPI sibling) to record the
+ * user's acceptance of a specific Brazilian-FBPAY or Indian-UPI
+ * payment-terms version. The relay pairs the request with one of the
+ * documented {@link SmaxAccountSetPaymentsTOSv3Response} variants;
+ * the success reply persists the acceptance server-side, the error
+ * reply signals one of six rejection reasons.
+ *
+ * @implNote
+ * This implementation flattens the WA Web smax mixin chain (set-IQ +
+ * base-IQ-set + the BR/UPI consumer mixin group) into a single
+ * {@link #toNode()} call that emits the full nested stanza in one
+ * pass.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetPaymentsTOSv3Request")
 @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetIQMixin")
@@ -23,24 +35,38 @@ import java.util.Objects;
 @WhatsAppWebModule(moduleName = "WASmaxOutAccountSetPaymentsTOSv3BRConsumerOrSetPaymentsTOSv3UPIConsumerPaymentsTOSv3MixinGroup")
 public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.Request {
     /**
-     * The integer ToS version being accepted (routed into the
-     * {@code tos_version} attribute on {@code <accept_pay/>}).
+     * The integer ToS version the user is accepting.
+     *
+     * @apiNote
+     * Routed verbatim into {@code <accept_pay tos_version=...>}; WA
+     * Web's caller passes the version it bumps to after each
+     * server-side terms refresh.
      */
     private final int acceptPayTosVersion;
 
     /**
-     * The consumer-variant payload selecting between BR and UPI.
+     * The Brazilian-FBPAY or Indian-UPI consumer-variant payload.
+     *
+     * @apiNote
+     * Selected by the caller depending on the user's payment
+     * jurisdiction; drives the {@code service} attribute and the
+     * {@code <additional_notice/>} list emitted by {@link #toNode()}.
      */
     private final SmaxAccountSetPaymentsTOSv3ConsumerVariant variant;
 
     /**
-     * Constructs a new request.
+     * Constructs a payments-ToS-v3 acceptance request.
      *
-     * @param acceptPayTosVersion the ToS version
-     * @param variant             the consumer-variant payload;
-     *                            never {@code null}
-     * @throws NullPointerException if {@code variant} is
-     *                              {@code null}
+     * @apiNote
+     * Use this when assembling an
+     * {@link SmaxAccountSetPaymentsTOSv3Request} to be dispatched
+     * through the smax send pipeline.
+     *
+     * @param acceptPayTosVersion the integer ToS version being
+     *                            accepted
+     * @param variant             the BR or UPI consumer variant
+     *                            payload; never {@code null}
+     * @throws NullPointerException if {@code variant} is {@code null}
      */
     public SmaxAccountSetPaymentsTOSv3Request(int acceptPayTosVersion, SmaxAccountSetPaymentsTOSv3ConsumerVariant variant) {
         this.acceptPayTosVersion = acceptPayTosVersion;
@@ -48,7 +74,12 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
     }
 
     /**
-     * Returns the ToS version being accepted.
+     * Returns the integer ToS version this request is accepting.
+     *
+     * @apiNote
+     * Read by {@link #toNode()} and exposed for symmetry with
+     * {@link SmaxAccountSetPaymentsTOSv3Response.Success} consumers
+     * that need to correlate a reply with its originating version.
      *
      * @return the version
      */
@@ -57,7 +88,12 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
     }
 
     /**
-     * Returns the consumer-variant payload.
+     * Returns the consumer-variant payload selecting between
+     * Brazilian-FBPAY and Indian-UPI terms.
+     *
+     * @apiNote
+     * Read by {@link #toNode()} to decide which service literal and
+     * notice list to emit.
      *
      * @return the variant; never {@code null}
      */
@@ -66,9 +102,32 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <accept_pay/>} payload
+     * Builds the outbound {@code <iq>} stanza ready for dispatch
+     * through {@code WAComms.sendSmaxStanza}.
+     *
+     * @apiNote
+     * Invoked by the smax send pipeline; the returned
+     * {@link NodeBuilder} carries an unfinalised IQ envelope so the
+     * dispatch layer can stamp the {@code id} attribute. The stanza
+     * has shape
+     * {@snippet lang=xml :
+     * <iq xmlns="urn:xmpp:whatsapp:account" type="set" to="s.whatsapp.net">
+     *   <accept_pay version="3" tos_version="N" service="FBPAY|UPI">
+     *     <additional_notice notice="..."/>
+     *     ...
+     *   </accept_pay>
+     * </iq>
+     * }
+     *
+     * @implNote
+     * This implementation inlines the BR vs UPI dispatch as a Java
+     * pattern-matching switch on {@link SmaxAccountSetPaymentsTOSv3ConsumerVariant};
+     * the {@code 1..10} bound on {@code <additional_notice/>} is
+     * enforced upstream by the consumer-variant constructor and not
+     * re-checked here.
+     *
+     * @return a {@link NodeBuilder} carrying the partially-built IQ
+     *         envelope
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutAccountSetPaymentsTOSv3Request",
@@ -100,16 +159,14 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
         List<String> notices;
         switch (variant) {
             case SmaxAccountSetPaymentsTOSv3ConsumerVariant.BrConsumer brConsumer -> {
-                service = "FBPAY"; // WASmaxOutAccountSetPaymentsTOSv3BRConsumerPaymentsTOSv3Mixin: smax("accept_pay", {service: "FBPAY"}, ...)
+                service = "FBPAY";
                 notices = brConsumer.additionalNotices();
             }
             case SmaxAccountSetPaymentsTOSv3ConsumerVariant.UpiConsumer upiConsumer -> {
-                service = "UPI"; // WASmaxOutAccountSetPaymentsTOSv3UPIConsumerPaymentsTOSv3Mixin: smax("accept_pay", {service: "UPI"}, ...)
+                service = "UPI";
                 notices = upiConsumer.additionalNotices();
             }
         }
-        // WASmaxOutAccountSetPaymentsTOSv3BRConsumerPaymentsTOSv3Mixin.makeSetPaymentsTOSv3BRConsumerPaymentsTOSv3AdditionalNotice:
-        // smax("additional_notice", {notice: WAWap.CUSTOM_STRING(t)}); REPEATED_CHILD enforces 1..10 (validated in BrConsumer/UpiConsumer constructor).
         var noticeNodes = new Node[notices.size()];
         for (var i = 0; i < notices.size(); i++) {
             noticeNodes[i] = new NodeBuilder()
@@ -117,8 +174,6 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
                     .attribute("notice", notices.get(i))
                     .build();
         }
-        // WASmaxOutAccountSetPaymentsTOSv3BRConsumerPaymentsTOSv3Mixin (and UPI sibling): smax("accept_pay", {service}, REPEATED_CHILD(...))
-        // mergeSetPaymentsTOSv3{BR|UPI}ConsumerPaymentsTOSv3Mixin: ADAPTED — instead of a separate mergeStanzas step, the accept_pay is composed directly as the IQ's content.
         var acceptPay = new NodeBuilder()
                 .description("accept_pay")
                 .attribute("version", "3")
@@ -128,12 +183,25 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
                 .build();
         return new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "urn:xmpp:whatsapp:account") // WASmaxOutAccountSetIQMixin.mergeSetIQMixin: stamps xmlns="urn:xmpp:whatsapp:account"
-                .attribute("to", JidServer.user()) // WASmaxOutAccountSetIQMixin.mergeSetIQMixin: stamps to=WAWap.S_WHATSAPP_NET ("s.whatsapp.net")
-                .attribute("type", "set") // WASmaxOutAccountBaseIQSetRequestMixin.mergeBaseIQSetRequestMixin: stamps type="set" via WASmaxMixins.mergeStanzas; id is added by the central IQ dispatch pipeline (WAWap.generateId())
+                .attribute("xmlns", "urn:xmpp:whatsapp:account")
+                .attribute("to", JidServer.user())
+                .attribute("type", "set")
                 .content(acceptPay);
     }
 
+    /**
+     * Compares this request to another for value equality on the
+     * ToS version and consumer variant.
+     *
+     * @apiNote
+     * Two requests are equal iff they carry the same version and
+     * the same {@link SmaxAccountSetPaymentsTOSv3ConsumerVariant}.
+     *
+     * @param obj the object to compare against
+     * @return {@code true} when {@code obj} is a
+     *         {@link SmaxAccountSetPaymentsTOSv3Request} with equal
+     *         components
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -147,11 +215,26 @@ public final class SmaxAccountSetPaymentsTOSv3Request implements SmaxOperation.R
                 && Objects.equals(this.variant, that.variant);
     }
 
+    /**
+     * Returns a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(acceptPayTosVersion, variant);
     }
 
+    /**
+     * Returns a debug-friendly representation listing the ToS
+     * version and consumer variant.
+     *
+     * @apiNote
+     * Intended for logging; the format is not part of the public
+     * contract.
+     *
+     * @return the string form
+     */
     @Override
     public String toString() {
         return "SmaxAccountSetPaymentsTOSv3Request[acceptPayTosVersion=" + acceptPayTosVersion

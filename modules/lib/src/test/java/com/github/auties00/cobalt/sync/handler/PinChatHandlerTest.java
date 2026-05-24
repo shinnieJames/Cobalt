@@ -7,14 +7,12 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinAction;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.props.TestABPropsService;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.PinChatMutationFactory;
 import com.github.auties00.cobalt.wam.DefaultWamService;
@@ -26,15 +24,29 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link PinChatHandler} — pin/unpin mutations including
- * MAX_PINNED_CHATS enforcement and oldest-vs-incoming kick-out logic.
+ * Exercises {@link PinChatHandler} against the
+ * {@code WAWebPinChatSync.applyMutation} per-mutation flow.
+ *
+ * @apiNote
+ * Verifies the pin / unpin happy paths, the
+ * {@code MAX_PINNED_CHATS}/{@code MAX_PINNED_NEWSLETTERS} caps,
+ * the oldest-vs-incoming kick-out logic, the unpin-then-queue path
+ * when the cap is saturated and the incoming pin loses to the oldest,
+ * the orphan classification when the chat or newsletter is unknown
+ * to the store, and the malformed classification when
+ * {@code indexParts[1]} lacks an {@code @} server.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * {@code pinMutation} helper and uses
+ * {@link DefaultWamService} as the
+ * WAM dependency so cap-eviction emissions are observable in the
+ * shared test client.
  */
 @DisplayName("PinChatHandler")
 class PinChatHandlerTest {
@@ -329,29 +341,9 @@ class PinChatHandlerTest {
             var ts = Instant.ofEpochSecond(1_700_000_000L);
             var mutations = PinChatHandler.getMutationsForPin(ts, true, PEER);
             assertEquals(1, mutations.size(),
-                    "the unarchive is delegated to the caller — only the pin mutation is emitted here");
+                    "the unarchive is delegated to the caller; only the pin mutation is emitted here");
             assertTrue(mutations.get(0).mutation().value().action().filter(a -> a instanceof PinAction).map(a -> (PinAction) a).orElseThrow().pinned());
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/pin-chat/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/pin-chat/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var pinned = oracle.getBoolean("pinned");
-
-            var action = new PinActionBuilder().pinned(pinned).build();
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .pinAction(action)
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

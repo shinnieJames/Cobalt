@@ -4,15 +4,18 @@ package com.github.auties00.cobalt.exception;
  * Thrown when Cobalt cannot establish the initial connection to the
  * WhatsApp servers.
  *
- * <p>The connection attempt covers DNS resolution, TCP, TLS, the
- * WebSocket upgrade, and the Noise XX handshake that authenticates the
- * client. Any failure along that path raises this exception. It is
- * distinct from {@link WhatsAppReconnectionException}, which is raised
- * by retries after a previously successful session was lost.
+ * @apiNote
+ * Covers DNS resolution, TCP, TLS, the WebSocket upgrade, and the Noise
+ * XX handshake that authenticates the client. Any failure along that
+ * path raises this exception, distinct from {@link WhatsAppReconnectionException}
+ * which fires when a retry after a previously successful session was
+ * lost cannot complete. Embedders typically respond by surfacing the
+ * failure to the user or scheduling another connection attempt under the
+ * configurable error handler's verdict.
  *
- * <p>Connection failures are fatal because there is no live session to
- * recover. The configurable error handler decides whether the caller
- * should give up or schedule another connection attempt.
+ * @implNote
+ * This implementation always reports the failure as fatal because there
+ * is no live session to recover.
  *
  * @see WhatsAppReconnectionException
  * @see WhatsAppSessionException.Closed
@@ -39,12 +42,11 @@ public final class WhatsAppConnectionException extends WhatsAppException {
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>Connection exceptions are always fatal because no session has
-     * been established at the point they are thrown.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: no session has
+     * been established at the point a connection exception is thrown.
      */
     @Override
     public boolean isFatal() {

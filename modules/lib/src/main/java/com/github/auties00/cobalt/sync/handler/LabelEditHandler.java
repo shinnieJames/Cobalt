@@ -14,41 +14,41 @@ import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 
 /**
- * Handles the {@code label_edit} sync action by creating, editing, or deleting
- * chat labels.
+ * Applies the {@code label_edit} app-state sync action that creates, edits or
+ * deletes a chat label.
  *
- * <p>This handler processes mutations that target a single label by id. The
- * label identifier is extracted from {@code indexParts[1]} and used as the
- * primary key in the store's label map. Only {@link SyncdOperation#SET}
- * operations are supported; any other operation is reported back as
- * {@code UNSUPPORTED}.
+ * @apiNote
+ * Drives the SMB/Business "manage labels" sheet: when the primary device
+ * adds, renames, recolours or removes a label the corresponding
+ * mutation fans out across the {@link SyncPatchType#REGULAR} collection
+ * so companion devices show the same set of labels. The mutation index
+ * keys each entry by the server-assigned label id, formatted as
+ * {@snippet :
+ *     ["label_edit", labelId]
+ * }
  *
- * <p>Per {@code WAWebLabelSync.default.applyMutations}, the handler:
- * <ol>
- *   <li>Validates the index and rejects missing {@code labelId}.</li>
- *   <li>Validates the action value and rejects a missing
- *       {@code labelEditAction}.</li>
- *   <li>On {@code deleted === true}, removes the label from the store.</li>
- *   <li>Otherwise builds an update record with {@code name}, {@code colorIndex},
- *       {@code predefinedId}, {@code orderIndex}, {@code type}, {@code isActive},
- *       and {@code isImmutable}, then:
- *     <ul>
- *       <li>If {@code type === SERVER_ASSIGNED}, registers the mapping in the
- *           server-assigned label id map without adding the label to the main
- *           collection.</li>
- *       <li>Otherwise merges the update into any existing label (preserving
- *           existing fields such as chat-jid assignments) or inserts a new one.</li>
- *     </ul>
- *   </li>
- * </ol>
- *
- * <p>Index format: {@code ["label_edit", "labelId"]}
+ * @implNote
+ * This implementation merges incoming edits into the existing
+ * {@link Label} in place rather than rebuilding the row from scratch,
+ * matching WA Web's
+ * {@code LabelCollection.add(R, {merge: true})} semantics so that the
+ * assignments populated by {@link LabelAssociationHandler} survive the
+ * edit. Server-assigned labels (type
+ * {@link LabelEditAction.ListType#SERVER_ASSIGNED}) are intentionally
+ * not added to the main label collection because WA Web's
+ * {@code WAWebLabelCollection.initializeFromCache} filters them out;
+ * Cobalt has no equivalent server-assigned id map yet, so the
+ * {@code predefinedId} mapping is currently dropped. The
+ * {@code WAWebWamLabelSyncTrackingReporter} telemetry, the
+ * AI-handoff/AI-responding deduplication paths and the IndexedDB
+ * {@code lock("label", "label-association", "chat")} are not modelled
+ * because Cobalt's store is a flat in-memory map.
  */
 @WhatsAppWebModule(moduleName = "WAWebLabelSync")
 public final class LabelEditHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs the singleton handler.
+     * Constructs a new singleton {@link LabelEditHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public LabelEditHandler() {
@@ -56,8 +56,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for label edit sync.
-     * @return the action name string
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -66,8 +65,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection this handler's action belongs to.
-     * @return the regular sync collection
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -76,8 +74,7 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for this handler.
-     * @return the version number {@code 3}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -86,33 +83,24 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single label edit mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Rejects non-{@code SET} operations, malformed index values (missing
-     * {@code labelId}), and malformed action values (missing
-     * {@code labelEditAction}). On a valid delete, removes the label from the
-     * store. On a valid upsert, constructs the merged label record and either
-     * registers it in the server-assigned id map (when
-     * {@code type === SERVER_ASSIGNED}) or merges it into the main label
-     * collection, preserving any existing chat-jid assignments.
-     *
-     * <p>WAM telemetry ({@code WAWebWamLabelSyncTrackingReporter}) and the SMB
-     * platform warning counters ({@code isSMB() && h == null}) are intentionally
-     * omitted in Cobalt. The malformed-name warning ({@code S === ""}) and the
-     * unknown-type warning are also omitted because they do not affect state.
-     * The asynchronous IndexedDB lock
-     * ({@code WAWebModelStorageUtils.getStorage().lock(["label", "label-association", "chat"], ...)})
-     * collapses to direct in-memory operations because Cobalt's store is a
-     * single flat map.
-     *
-     * <p>Per {@code WAWebLabelSync.default.applyMutations}, a label that already
-     * exists is merged into (not replaced), so fields absent from the action
-     * (such as the existing chat-jid assignment set) are preserved. Cobalt
-     * mirrors this by mutating the existing {@link Label} in place via its
-     * setters instead of rebuilding it from scratch.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @implNote
+     * This implementation classifies a missing label-id slot as
+     * {@link MutationApplicationResult#malformed()} explicitly to avoid
+     * an out-of-bounds exception on
+     * {@code JSON.parseArray}. On a delete the label is removed via a
+     * single {@link com.github.auties00.cobalt.store.WhatsAppStore#removeLabel(String)}
+     * call that collapses WA Web's
+     * {@code getLabelTable().remove + LabelCollection.remove} into one
+     * operation. On an upsert the existing
+     * {@link Label#assignments()} set survives because the merge path
+     * mutates the existing row in place. The
+     * {@code isActive} and {@code isImmutable} flags coalesce
+     * {@code null} to {@code false} per the project's
+     * "no Optional&lt;Boolean&gt;" rule, so a {@code true} reading is
+     * persisted but a {@code false} reading does not clobber a
+     * previously-set {@code true}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebLabelSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -122,8 +110,6 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         }
 
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebLabelSync.applyMutations: var n=t.indexParts[1]; if(!n) return malformedActionIndex().
-        // n[1] is `undefined` when the slot is missing; mirror that via an explicit size check.
         if (indexArray.size() <= 1) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
@@ -137,46 +123,24 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
         }
 
         if (action.deleted()) {
-            // ADAPTED: WAWebLabelSync.default.applyMutations, yield o("WAWebSchemaLabel").getLabelTable().remove(c); o("WAWebLabelCollection").LabelCollection.remove(c);
-            // Cobalt's single removeLabel call replaces both the IndexedDB table remove and the in-memory collection remove because the store is flat.
             client.store().removeLabel(labelId);
             return MutationApplicationResult.success();
         }
 
-        // Extract edit fields. WA Web uses `S = d.name ?? ""`, then allows nullable
-        // colorIndex/predefinedId/isActive/isImmutable/type/orderIndex to pass through
-        // unchanged (each guarded by `!= null`). Cobalt mirrors the optional-field
-        // guards via Optional / OptionalInt accessors.
         var name = action.name().orElse("");
-        // NOTE: WAWebLabelSync emits a WALogger WARN for S === "" and (when
-        // isSMB() && h == null) another WARN; Cobalt omits WAM/logging counters.
-        // ADAPTED: WA Web's Label.colorIndex is nullable; Cobalt's Label.color is a
-        // primitive int with default 0. Null/absent color is mapped to 0 because the
-        // underlying model cannot express absence for this field.
         var color = action.color().orElse(0);
 
         var type = action.type().orElse(null);
         if (type == LabelEditAction.ListType.SERVER_ASSIGNED) {
-            // ADAPTED: Cobalt's store has no dedicated server-assigned label id map
-            // (reported as a missing store operation in the validation report).
-            // SERVER_ASSIGNED labels are intentionally NOT added to the main label
-            // collection by WA Web (WAWebLabelCollection.initializeFromCache filters
-            // them out), so Cobalt skips the addLabel call here to preserve that
-            // invariant. The predefinedId mapping is currently dropped; the missing
-            // store field is reported for follow-up.
+            // TODO: persist the server-assigned label id to predefined id mapping. WA Web
+            //       calls LabelCollection.addToServerAssignedLabelIdMap(c, S); Cobalt has
+            //       no equivalent store field yet, so the predefinedId association is
+            //       currently dropped on the floor.
             return MutationApplicationResult.success();
         }
 
-        // Backbone-style {merge: true}: update attributes on an existing model if
-        // present, otherwise insert a new one. Cobalt mirrors this by mutating the
-        // existing Label in place or building a fresh one when none exists.
         var existing = client.store().findLabel(labelId).orElse(null);
         if (existing != null) {
-            // Merge path: update mutable fields on the existing label so that
-            // unaffected fields (e.g. the assignments set maintained by
-            // LabelAssociationHandler) are preserved. WA Web's `{merge: true}`
-            // semantics assigns each key from R onto the existing model, which is
-            // what the setters below do.
             existing.setName(name);
             existing.setColor(color);
             existing.setPredefinedId(action.predefinedId().isPresent() ? action.predefinedId().getAsInt() : null);
@@ -186,13 +150,6 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
             if (type != null) {
                 existing.setType(type);
             }
-            // ADAPTED: WA Web distinguishes null/true/false for isActive/isImmutable
-            // (`if (y != null) R.isActive = y`). Cobalt's LabelEditAction.isActive()
-            // and isImmutable() coalesce null -> false per project convention, so the
-            // null-vs-false distinction is lost at the action layer. When the action
-            // reports true, Cobalt sets true; when the action reports false, Cobalt
-            // sets null to avoid clobbering a previously-set true with a spurious
-            // "false" coming from an absent field.
             if (action.isActive()) {
                 existing.setActive(Boolean.TRUE);
             }
@@ -200,8 +157,6 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
                 existing.setImmutable(Boolean.TRUE);
             }
         } else {
-            // Insert path: build a new Label from the action fields. Assignments
-            // default to an empty set via the generated builder.
             var label = new LabelBuilder()
                     .id(labelId)
                     .name(name)
@@ -209,24 +164,12 @@ public final class LabelEditHandler implements WebAppStateActionHandler {
                     .predefinedId(action.predefinedId().isPresent() ? action.predefinedId().getAsInt() : null)
                     .orderIndex(action.orderIndex().isPresent() ? action.orderIndex().getAsInt() : null)
                     .type(type)
-                    // ADAPTED: see comment on the merge path above for isActive/isImmutable
                     .isActive(action.isActive() ? Boolean.TRUE : null)
                     .isImmutable(action.isImmutable() ? Boolean.TRUE : null)
                     .build();
             client.store().addLabel(label);
         }
 
-        // ADAPTED: WAWebLabelSync.default.applyMutations --
-        //   E = yield queryLabelAssociationsForLabelIds([c]);
-        //   k = LabelCollection.get(c);
-        //   if (k != null && E.length > 0) { ... initializeAssociationsFromCache(...) }
-        // This block rehydrates chat-jid associations from the IndexedDB
-        // label-association table into the in-memory LabelCollection's
-        // labelItemCollection. In Cobalt, label-jid associations are stored
-        // directly inside the Label's assignments set by LabelAssociationHandler
-        // and never leave memory, so there is no cache to rehydrate. The block
-        // is therefore intentionally omitted.
-        // SKIPPED: WAM telemetry is intentionally omitted in Cobalt.
         return MutationApplicationResult.success();
     }
 

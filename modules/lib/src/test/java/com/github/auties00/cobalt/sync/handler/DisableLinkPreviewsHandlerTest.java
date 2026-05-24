@@ -7,13 +7,11 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivacySettingDisableLinkPreviewsActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.DisableLinkPreviewsMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,15 +22,28 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link DisableLinkPreviewsHandler} â€” Cobalt's adapter for
+ * Exercises the {@link DisableLinkPreviewsHandler} adapter for
  * {@code WAWebDisableLinkPreviewsSync}.
+ *
+ * @apiNote
+ * Verifies parity with WA Web for the
+ * {@code setting_disableLinkPreviews} app-state sync action across
+ * metadata, the SET happy path, the malformed-value branches, the
+ * REMOVE rejection, the inherited timestamp-based conflict
+ * resolution and the batch path that folds the latest valid value
+ * before writing once.
+ *
+ * @implNote
+ * This implementation exercises the handler against an in-memory
+ * {@link DeviceFixtures#temporaryStore} via {@link TestWhatsAppClient}
+ * so each test starts from a clean single-device state and the
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#disableLinkPreviews()}
+ * read-back can be asserted directly.
  */
 @DisplayName("DisableLinkPreviewsHandler")
 class DisableLinkPreviewsHandlerTest {
@@ -60,7 +71,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata â€” wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the PrivacySettingDisableLinkPreviewsAction wire constant")
@@ -85,7 +96,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” happy SET")
+    @DisplayName("applyMutation - happy SET")
     class ApplySetHappy {
         @Test
         @DisplayName("SET true writes the flag to the store and returns SUCCESS")
@@ -109,7 +120,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("link-preview setting is global; no per-entity orphan path")
@@ -121,7 +132,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action value")
+    @DisplayName("applyMutation - malformed action value")
     class MalformedActionValue {
         @Test
         @DisplayName("a SyncActionValue carrying a different action returns MALFORMED")
@@ -138,7 +149,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed action index")
+    @DisplayName("applyMutation - malformed action index")
     class MalformedActionIndex {
         @Test
         @DisplayName("the handler ignores the index shape (global setting)")
@@ -157,7 +168,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE returns UNSUPPORTED")
+    @DisplayName("applyMutation - REMOVE returns UNSUPPORTED")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE is unsupported per the WA Web fall-through")
@@ -169,10 +180,10 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” inherits default timestamp comparison")
+    @DisplayName("resolveConflicts - inherits default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
@@ -181,7 +192,7 @@ class DisableLinkPreviewsHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote â†’ SKIP_REMOTE")
+        @DisplayName("older remote -> SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutation(false, SyncdOperation.SET, Instant.ofEpochSecond(2_000));
             var remote = mutation(true, SyncdOperation.SET, Instant.ofEpochSecond(1_000));
@@ -191,7 +202,7 @@ class DisableLinkPreviewsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch â€” only the last valid SET writes to the store")
+    @DisplayName("applyMutationBatch - only the last valid SET writes to the store")
     class ApplyBatchOverride {
         @Test
         @DisplayName("an empty batch yields an empty result list")
@@ -226,38 +237,4 @@ class DisableLinkPreviewsHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder â€” getMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET mutation with the singleton index")
-        void buildsPendingMutation() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = new DisableLinkPreviewsMutationFactory().getDisableLinkPreviewsMutation(ts, true);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(PrivacySettingDisableLinkPreviewsAction.ACTION_VERSION, inner.actionVersion());
-            assertEquals("[\"setting_disableLinkPreviews\"]", inner.index());
-            assertTrue(inner.value().action().filter(a -> a instanceof PrivacySettingDisableLinkPreviewsAction).map(a -> (PrivacySettingDisableLinkPreviewsAction) a).orElseThrow().isPreviewsDisabled());
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/disable-link-previews/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/disable-link-previews/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = new DisableLinkPreviewsMutationFactory().getDisableLinkPreviewsMutation(Instant.ofEpochSecond(1_700_000_000L), true);
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

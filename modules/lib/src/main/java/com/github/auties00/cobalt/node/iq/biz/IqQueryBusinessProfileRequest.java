@@ -12,33 +12,34 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="w:biz" type="get">} stanza that fetches
- * one or more typed business profiles. Each entry materialises one
- * {@code <profile jid tag/>} child; the optional version tag lets the
- * relay short-circuit when the cached profile matches.
+ * The typed outbound {@code <iq xmlns="w:biz" type="get">} stanza that fetches one or more typed business profiles.
+ *
+ * @apiNote
+ * Use this request to populate the business-profile collection from a list of merchant JIDs; chat openers, post-search profile sheets and the merchant directory all consume the matching response to render the merchant's banner, description, categories, contact details and hours. Each entry materialises one {@code <profile jid tag/>} child, and the optional version tag lets the relay short-circuit when the cached profile matches the supplied tag so the relay can return a header-only acknowledgement instead of the full body.
+ *
+ * @implNote
+ * This implementation matches {@code WAWebQueryBusinessProfileJob}, which is invoked by {@code WAWebQueryBusinessProfile.queryBusinessProfile} with a version derived from {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}; Cobalt routes the version verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryBusinessProfileJob")
 public final class IqQueryBusinessProfileRequest implements IqOperation.Request {
     /**
-     * The list of {@code (businessJid, tag)} entries to query — at least
-     * one entry is required.
+     * The list of {@code (businessJid, tag)} entries fanned out as {@code <profile jid tag/>} children of the {@code <business_profile/>} envelope.
      */
     private final List<IqQueryBusinessProfileRequestEntry> entries;
 
     /**
-     * The protocol version emitted as the {@code <business_profile v=V/>}
-     * attribute (currently {@code "1"} or {@code "116"} depending on
-     * gating).
+     * The protocol version routed verbatim into the {@code v} attribute of the {@code <business_profile/>} envelope.
      */
     private final int version;
 
     /**
-     * Constructs a request.
+     * Constructs a typed request.
      *
-     * @param entries the list of entries; never {@code null} and must be
-     *                non-empty
-     * @param version the protocol version; routed verbatim into the
-     *                {@code v} attribute
+     * @apiNote
+     * Call this constructor with the list of merchants to query and the protocol version derived from {@code WAWebBusinessProfileVersioningBridge.getBusinessProfileQueryVersion}; the list must contain at least one entry because the relay rejects an empty fan-out.
+     *
+     * @param entries the list of entries; never {@code null} and must be non-empty
+     * @param version the protocol version; routed verbatim into the {@code v} attribute
      * @throws NullPointerException     if {@code entries} is {@code null}
      * @throws IllegalArgumentException when {@code entries} is empty
      */
@@ -54,6 +55,9 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
     /**
      * Returns the requested entries.
      *
+     * @apiNote
+     * Use this getter to read back the merchant entries that the fan-out will name; the list preserves the caller-supplied order.
+     *
      * @return an unmodifiable list; never {@code null}
      */
     public List<IqQueryBusinessProfileRequestEntry> entries() {
@@ -63,6 +67,9 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
     /**
      * Returns the protocol version.
      *
+     * @apiNote
+     * Use this getter to read back the protocol version that the stanza will stamp into the {@code v} attribute; the value is taken verbatim from the caller and must match what the relay expects for the current snapshot.
+     *
      * @return the protocol version
      */
     public int version() {
@@ -70,9 +77,10 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @implNote
+     * This implementation materialises the WAP envelope produced by the {@code WAWebQueryBusinessProfileJob} default export: one {@code <profile jid/>} child per queried entry, with the {@code tag} attribute stamped when the entry carries one, wrapped in a {@code <business_profile v/>} envelope routed to the WhatsApp service.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebQueryBusinessProfileJob",
@@ -101,6 +109,9 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
                 .content(businessProfileNode);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -114,11 +125,17 @@ public final class IqQueryBusinessProfileRequest implements IqOperation.Request 
                 && Objects.equals(this.entries, that.entries);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(entries, version);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqQueryBusinessProfileRequest[entries=" + entries

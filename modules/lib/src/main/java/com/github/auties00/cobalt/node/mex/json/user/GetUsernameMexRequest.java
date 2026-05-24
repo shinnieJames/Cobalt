@@ -19,39 +19,56 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the authenticated user's currently assigned WhatsApp username together with its verification state and
- * recovery PIN hash.
+ * Builds the MEX IQ stanza that fetches the authenticated user's username
+ * record.
  *
- * <p>Usernames are an alternative identifier to phone numbers introduced as part of WhatsApp's privacy roadmap. This
- * query returns the username associated with the caller's account, the state of the registration (pending, active and
- * similar) and the PIN hash used for recovery.
+ * @apiNote Powers the username pane of the Settings screen. WA Web's
+ * {@code WAWebMexGetUsernameJob.mexGetUsernameQueryJob} treats an HTTP 404
+ * reply as the absence of a registered username and synthesises a
+ * {@code (null, null, null)} record; Cobalt does not collapse that case at
+ * this layer, so callers should treat an empty
+ * {@link GetUsernameMexResponse#usernameInfo()} as the no-username
+ * outcome. Pair the dispatched stanza with {@link GetUsernameMexResponse}
+ * to consume the reply.
+ *
+ * @see GetUsernameMexResponse
  */
 @WhatsAppWebModule(moduleName = "WAWebMexGetUsernameJob")
 public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled GraphQL operation.
+     * The compiled-document id the relay maps to the persisted query.
+     *
+     * @apiNote Used as the {@code query_id} attribute of the outbound
+     * {@code <query>} node. Matches the {@code params.id} field of
+     * {@code WAWebMexGetUsernameJobQuery.graphql} for the snapshot this
+     * file was generated against.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "25347099718279209";
 
     /**
-     * The GraphQL operation name reported to {@code MexPerfTracker} when this query is dispatched.
+     * The GraphQL operation name reported alongside this request.
+     *
+     * @apiNote Mirrors {@code params.name} on
+     * {@code WAWebMexGetUsernameJobQuery.graphql}; WA Web tags the value to
+     * {@code MexPerfTracker} for per-operation telemetry bucketing.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJobQuery.graphql", exports = "params.name",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String OPERATION_NAME = "mexGetUsernameQueryJob";
 
     /**
-     * Constructs a new request. The query takes no variables.
+     * Constructs a get-username request.
+     *
+     * @apiNote The compiled GraphQL document declares no variables; the
+     * dispatched stanza carries an empty {@code variables} object.
      */
     public GetUsernameMexRequest() {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -59,9 +76,7 @@ public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -69,9 +84,11 @@ public final class GetUsernameMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Serialises an empty GraphQL variables envelope and wraps it in a {@code w:mex} IQ stanza.
+     * {@inheritDoc}
      *
-     * @return the IQ {@link NodeBuilder} ready to be built and dispatched
+     * @implNote This implementation emits {@code {"variables": {}}} and
+     * defers envelope construction to
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexGetUsernameJob", exports = "mexGetUsernameQueryJob",
             adaptation = WhatsAppAdaptation.ADAPTED)

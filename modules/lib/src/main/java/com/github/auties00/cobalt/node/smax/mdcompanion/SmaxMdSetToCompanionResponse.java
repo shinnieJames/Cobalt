@@ -13,37 +13,81 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The inbound projection of the {@code <iq><pair-device/></iq>}
- * stanza.
+ * The typed projection of the inbound
+ * {@code <iq xmlns="md" type="set"><pair-device><ref/>...<ref/></pair-device></iq>}
+ * stanza pushed to a companion at the start of a QR-code pair-device
+ * handshake.
+ *
+ * @apiNote
+ * Companions consume this to receive the six rotating
+ * {@code <ref/>} byte payloads that WA Web's
+ * {@code WAWebHandlePairDevice} feeds into a 60-second
+ * {@code Conn.ref} rotation timer (then a 20-second tail once five
+ * refs have been consumed); the first ref is rendered as a QR code on
+ * the companion's pairing screen, and each rotation marks the
+ * companion's socket as
+ * {@code SOCKET_STATE.UNPAIRED}.
+ *
+ * @implNote
+ * This implementation enforces the same shape as WA Web's
+ * {@code parseSetToCompanionRequest}: the outer tag is {@code iq},
+ * the {@code xmlns} is {@code md}, the {@code type} is {@code set},
+ * the {@code from} is the {@code s.whatsapp.net} domain, the
+ * {@code <pair-device/>} child is present, and the number of
+ * {@code <ref/>} children whose {@code contentBytes} resolves is
+ * exactly six (upstream uses
+ * {@code mapChildrenWithTag("ref", 6, 6, ...)}). Empty-content
+ * children are dropped before the size check, matching the JS
+ * filter behaviour.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInMdSetToCompanionRequest")
 @WhatsAppWebModule(moduleName = "WASmaxInMdBaseIQSetRequestMixin")
 public final class SmaxMdSetToCompanionResponse implements SmaxOperation.Response {
     /**
-     * The {@code id} attribute of the inbound IQ stanza, needed to
-     * echo back into the {@link SmaxMdSetToCompanionAcknowledgement} ack.
+     * The {@code id} attribute of the inbound IQ stanza.
+     *
+     * @apiNote
+     * Echoed back into the
+     * {@link SmaxMdSetToCompanionAcknowledgement} stanza's {@code id}
+     * attribute by
+     * {@link SmaxMdSetToCompanionAcknowledgement#from(SmaxMdSetToCompanionResponse)}.
      */
     private final String iqId;
 
     /**
-     * The {@code from} attribute of the inbound IQ stanza, needed
-     * to echo back into the {@link SmaxMdSetToCompanionAcknowledgement} ack as the ack's
-     * {@code to} attribute.
+     * The {@code from} JID of the inbound IQ stanza, always the
+     * {@code s.whatsapp.net} server domain.
+     *
+     * @apiNote
+     * Echoed back into the ack's {@code to} attribute by
+     * {@link SmaxMdSetToCompanionAcknowledgement#from(SmaxMdSetToCompanionResponse)}.
      */
     private final Jid iqFrom;
 
     /**
-     * The list of pair-device reference byte payloads (always six
-     * entries per WA Web).
+     * The six rotating pair-device reference byte payloads carried in
+     * the inner {@code <pair-device><ref/>...<ref/></pair-device>}.
+     *
+     * @apiNote
+     * Driven through WA Web's {@code ShiftTimer} so each ref is
+     * surfaced as the active QR-code for 60 seconds (20 seconds once
+     * five have rotated). The companion serialises each ref as a
+     * length-prefixed string before rendering.
      */
     private final List<byte[]> pairDeviceRefs;
 
     /**
-     * Constructs a new {@code SmaxMdSetToCompanionResponse} projection.
+     * Constructs the typed projection from already-validated component
+     * fields.
+     *
+     * @apiNote
+     * Library code does not normally call this constructor; it is the
+     * target of {@link #of(Node)} after parsing has succeeded. Public
+     * visibility is preserved so unit tests can construct fixtures.
      *
      * @param iqId           the IQ id; never {@code null}
-     * @param iqFrom         the IQ from JID; never {@code null}
-     * @param pairDeviceRefs the list of ref byte payloads; never {@code null}
+     * @param iqFrom         the IQ sender JID; never {@code null}
+     * @param pairDeviceRefs the six pair-device ref payloads; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxMdSetToCompanionResponse(String iqId, Jid iqFrom, List<byte[]> pairDeviceRefs) {
@@ -55,6 +99,9 @@ public final class SmaxMdSetToCompanionResponse implements SmaxOperation.Respons
     /**
      * Returns the IQ id.
      *
+     * @apiNote
+     * Echoed back as the matching ack's {@code id} attribute.
+     *
      * @return the id; never {@code null}
      */
     public String iqId() {
@@ -62,7 +109,12 @@ public final class SmaxMdSetToCompanionResponse implements SmaxOperation.Respons
     }
 
     /**
-     * Returns the IQ from JID.
+     * Returns the IQ sender JID.
+     *
+     * @apiNote
+     * Always the {@code s.whatsapp.net} server domain; validated by
+     * {@link #of(Node)} during parsing. Echoed back as the ack's
+     * {@code to} attribute.
      *
      * @return the JID; never {@code null}
      */
@@ -73,6 +125,11 @@ public final class SmaxMdSetToCompanionResponse implements SmaxOperation.Respons
     /**
      * Returns the list of pair-device reference byte payloads.
      *
+     * @apiNote
+     * Always contains exactly six entries when the projection was
+     * parsed by {@link #of(Node)}; embedders that construct fixtures
+     * directly may supply a different number for testing.
+     *
      * @return an unmodifiable list of byte arrays; never {@code null}
      */
     public List<byte[]> pairDeviceRefs() {
@@ -80,11 +137,29 @@ public final class SmaxMdSetToCompanionResponse implements SmaxOperation.Respons
     }
 
     /**
-     * Tries to parse an {@link SmaxMdSetToCompanionResponse} projection.
+     * Parses an inbound {@code <iq><pair-device/></iq>} stanza into
+     * the typed projection.
      *
-     * @param node the inbound IQ stanza; never {@code null}
+     * @apiNote
+     * Companions call this on every inbound IQ-set whose first child
+     * is {@code <pair-device/>}; the returned {@link Optional} is
+     * empty when the stanza shape diverges from the documented
+     * schema, mirroring WA Web's {@code SmaxParsingFailure} swallowing
+     * in {@code WAWebHandlePairDevice}.
+     *
+     * @implNote
+     * This implementation enforces tag equality on {@code iq},
+     * attribute literals on {@code xmlns="md"} and {@code type="set"},
+     * domain-JID literal on {@code from}, presence of an {@code id}
+     * attribute, presence of a {@code <pair-device/>} child, and an
+     * exact-count of six {@code <ref/>} children with non-empty
+     * content bytes (upstream {@code mapChildrenWithTag} with min=6
+     * and max=6). Empty-content children are dropped before the size
+     * check.
+     *
+     * @param node the inbound IQ stanza
      * @return an {@link Optional} carrying the projection, or empty
-     *         when the stanza does not match the documented shape
+     *         when the stanza shape diverges from the schema
      * @throws NullPointerException if {@code node} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInMdSetToCompanionRequest",

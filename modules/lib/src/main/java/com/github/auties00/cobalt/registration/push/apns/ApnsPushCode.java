@@ -5,70 +5,93 @@ import com.github.auties00.cobalt.registration.push.apns.courier.ApnsPayloadTag;
 import java.io.IOException;
 
 /**
- * Single-value, set-once synchronisation primitive used to hand the
- * verification code received over the APNS courier stream to the
- * caller of {@link ApnsClient#getPushCode()}.
+ * A single-value, set-once synchronisation primitive used to hand
+ * the WhatsApp verification code received over the APNS courier
+ * stream to the caller of {@link ApnsClient#getPushCode()}.
  *
- * <p>The producer ({@link ApnsCourierConnection}) calls
- * {@link #deliver} once a {@code regcode} entry is observed in the
- * JSON payload of an incoming {@link ApnsPayloadTag#NOTIFICATION}.
- * the consumer ({@link ApnsClient}) blocks in {@link #waitForCode()}
- * until either the value is delivered or {@link #close()} is invoked.
+ * @apiNote
+ * The producer ({@link ApnsCourierConnection}) calls
+ * {@link #deliver(String)} once a {@code regcode} entry is observed
+ * in the JSON payload of an incoming
+ * {@link ApnsPayloadTag#NOTIFICATION}. The consumer
+ * ({@link ApnsClient}) blocks in {@link #waitForCode()} until either
+ * the value is delivered or {@link #close()} is invoked. Replay-safe:
+ * the first delivery wins so a code arriving before
+ * {@link #waitForCode()} is called is not lost, and subsequent
+ * deliveries (e.g. on courier reconnect) do not overwrite the
+ * original.
  *
- * <p>The implementation uses plain {@code synchronized} +
- * {@code wait} / {@code notifyAll} rather than
+ * @implNote
+ * This implementation uses plain {@code synchronized} plus
+ * {@code wait}/{@code notifyAll} on a dedicated monitor rather than
  * {@link java.util.concurrent.CompletableFuture} or
- * {@link java.util.concurrent.locks.ReentrantLock}: JEP 491 (JDK 24)
- * removed carrier-thread pinning on {@code synchronized}, which makes
- * wait/notify fully virtual-thread friendly and cheaper than the
- * lock-based alternatives.
+ * {@link java.util.concurrent.locks.ReentrantLock} because JEP 491
+ * (JDK 24) removed carrier-thread pinning on {@code synchronized},
+ * making wait/notify fully virtual-thread friendly and cheaper than
+ * the lock-based alternatives.
  */
 final class ApnsPushCode {
     /**
-     * Lock guarding {@link #code} and {@link #closed}. A dedicated
-     * monitor (rather than {@code synchronized (this)}) hides the
-     * locking strategy from callers that may inadvertently
-     * synchronise on the holder.
+     * The monitor guarding {@link #code} and {@link #closed}.
+     *
+     * @apiNote
+     * Dedicated rather than {@code synchronized (this)} so external
+     * callers that inadvertently synchronise on the holder cannot
+     * deadlock the producer or consumer paths.
      */
     private final Object lock;
 
     /**
-     * The verification code value once delivered. {@code null} until
-     * the first {@link #deliver(String)} call lands. Stays set for
-     * the lifetime of the holder so a code arriving before
-     * {@link #waitForCode()} is called is not lost.
+     * The verification code value once delivered.
+     *
+     * @apiNote
+     * {@code null} until the first {@link #deliver(String)} call
+     * lands; stays set for the lifetime of the holder so a code
+     * arriving before {@link #waitForCode()} is called is not lost.
      */
     private String code;
 
     /**
-     * Set by {@link #close()} so any thread parked in
-     * {@link #waitForCode()} unblocks and surfaces an
-     * {@link IOException} rather than waiting forever.
+     * Whether {@link #close()} has been invoked.
+     *
+     * @apiNote
+     * Once set, any thread parked in {@link #waitForCode()} unblocks
+     * and surfaces an {@link IOException} rather than waiting
+     * forever.
      */
     private boolean closed;
 
     /**
-     * Constructs an empty holder. The caller is expected to publish
-     * the instance to its single producer and one or more consumers
-     * via a happens-before edge (typically by storing it in a
-     * {@code final} field on a containing object).
+     * Constructs an empty holder.
+     *
+     * @apiNote
+     * The caller is expected to publish the instance to its single
+     * producer and one or more consumers via a happens-before edge
+     * (typically by storing it in a {@code final} field on a
+     * containing object).
      */
     ApnsPushCode() {
         this.lock = new Object();
     }
 
     /**
-     * Blocks the calling thread until either {@link #deliver(String)}
-     * stores a value or {@link #close()} releases the waiters.
-     * Returns immediately if a value was already delivered before the
-     * call.
+     * Blocks the calling thread until either a code is delivered or
+     * the holder is closed.
      *
-     * <p>Safe to call from multiple threads concurrently. Every
-     * caller observes the same delivered value.
+     * @apiNote
+     * Returns immediately if a value was already delivered before
+     * the call. Safe to call from multiple threads concurrently;
+     * every caller observes the same delivered value.
+     *
+     * @implNote
+     * This implementation loops on {@link Object#wait()} until one
+     * of the two predicates ({@code code != null} or
+     * {@code closed}) becomes true, surfacing spurious wakeups
+     * transparently.
      *
      * @return the delivered verification code
-     * @throws InterruptedException if the caller is interrupted while
-     *                              waiting
+     * @throws InterruptedException if the caller is interrupted
+     *                              while waiting
      * @throws IOException          if the holder was closed before
      *                              any code arrived
      */
@@ -85,15 +108,19 @@ final class ApnsPushCode {
     }
 
     /**
-     * Stores the first verification code seen and wakes every waiter
-     * blocked in {@link #waitForCode()}. Subsequent invocations are
-     * no-ops because WhatsApp's registration flow only ever sends one
-     * code per session, and replays after a courier reconnect must
-     * surface the original value rather than overwrite it.
+     * Stores the first verification code seen and wakes every
+     * waiter blocked in {@link #waitForCode()}.
      *
-     * @param code the verification code value, or {@code null} if the
-     *             JSON payload had no {@code regcode} field (in which
-     *             case the call is silently dropped)
+     * @apiNote
+     * Subsequent invocations are no-ops; WhatsApp's registration
+     * flow only ever sends one code per session, and replays after
+     * a courier reconnect must surface the original value rather
+     * than overwrite it. A {@code null} input is silently dropped
+     * so the producer can call this even when the notification
+     * JSON has no {@code regcode} field.
+     *
+     * @param code the verification code value, or {@code null} when
+     *             the source JSON had no {@code regcode}
      */
     void deliver(String code) {
         if (code == null) {
@@ -108,8 +135,12 @@ final class ApnsPushCode {
     }
 
     /**
-     * Marks the holder closed and wakes every pending waiter so they
-     * can observe the close and throw. Idempotent.
+     * Marks the holder closed and wakes every pending waiter.
+     *
+     * @apiNote
+     * Idempotent; called by {@link ApnsClient#close()} so any
+     * thread parked in {@link #waitForCode()} surfaces an
+     * {@link IOException} instead of waiting forever.
      */
     void close() {
         synchronized (lock) {

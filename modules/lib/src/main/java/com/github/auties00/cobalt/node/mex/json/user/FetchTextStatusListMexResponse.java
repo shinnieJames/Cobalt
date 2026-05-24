@@ -20,30 +20,41 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parsed response for the text-status list query. Carries the per-user text-status entries projected from
- * {@code data.xwa2_text_status_list}.
+ * Decoded reply to the text-status batch query.
+ *
+ * @apiNote Consume after dispatching {@link FetchTextStatusListMexRequest}.
+ * Each {@link Item} mirrors one element of WA Web's
+ * {@code parseTextStatusServerResponse} output (id, text, emoji,
+ * last-update timestamp, ephemeral duration). Empty {@link #items()}
+ * indicates the relay returned no rows for the queried batch.
+ *
+ * @see FetchTextStatusListMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchTextStatusListJob")
 public final class FetchTextStatusListMexResponse implements MexOperation.Response.Json {
     /**
-     * The text-status entries returned by the relay, one per requested user.
+     * The decoded {@code xwa2_text_status_list} array, one entry per user.
      */
     private final List<Item> items;
 
     /**
-     * Constructs a new response carrying the given items.
+     * Wraps a pre-parsed list of per-user records.
      *
-     * @param items the per-user text-status entries
+     * @param items the per-user records produced by {@link #of(byte[])}
      */
     private FetchTextStatusListMexResponse(List<Item> items) {
         this.items = items;
     }
 
     /**
-     * Parses the MEX response carried by an inbound IQ stanza.
+     * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
+     * @apiNote Pass the IQ node received in reply to a stanza dispatched
+     * with {@link FetchTextStatusListMexRequest#toNode()}.
+     *
+     * @param node the IQ reply stanza
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchTextStatusListJob", exports = "mexGetTextStatusList",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -54,52 +65,61 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
     }
 
     /**
-     * Returns the per-user text-status entries carried by this response.
+     * Returns the decoded {@code xwa2_text_status_list} entries.
      *
-     * @return the list of items, empty if absent
+     * @apiNote The list mirrors the order the relay returned. WA Web keys
+     * the response back to the request batch by {@link Item#jid()}.
+     *
+     * @return the per-user records; may be empty, never {@code null}
      */
     public List<Item> items() {
         return items;
     }
 
     /**
-     * Single text-status entry. Mirrors the {@code parseTextStatusServerResponse} record produced by WA Web from each
-     * {@code xwa2_text_status_list[i]} element.
+     * A decoded text-status record for one user.
+     *
+     * @apiNote Mirrors WA Web's {@code parseTextStatusServerResponse} per-row
+     * projection. {@link #lastUpdateTime()} and {@link #ephemeralDurationSec()}
+     * drive the expiry countdown rendered by the Status tab UI.
      */
     public static final class Item {
         /**
-         * The author JID of the text status.
+         * The {@code jid} field identifying the status author.
          */
         private final String jid;
 
         /**
-         * The body of the text status.
+         * The {@code text} field carrying the status body.
          */
         private final String text;
 
         /**
-         * The epoch-second timestamp at which the status was last updated.
+         * The {@code last_update_time} field, in epoch seconds.
          */
         private final Long lastUpdateTime;
 
         /**
-         * The ephemeral duration in seconds after which the status expires.
+         * The {@code ephemeral_duration_sec} field, in seconds.
          */
         private final Long ephemeralDurationSec;
 
         /**
-         * The optional emoji decoration shown next to the status text.
+         * The decoded {@code emoji} sub-object, possibly {@code null}.
          */
         private final Emoji emoji;
 
         /**
-         * Constructs a new entry with the given fields.
+         * Wraps the decoded fields of a single text-status row.
          *
-         * @param jid the author JID
-         * @param text the body of the text status
-         * @param lastUpdateTime the last-update epoch-second timestamp
-         * @param ephemeralDurationSec the ephemeral duration in seconds
-         * @param emoji the optional emoji decoration
+         * @param jid the {@code jid} field
+         * @param text the {@code text} field
+         * @param lastUpdateTime the {@code last_update_time} field, in
+         *                       epoch seconds
+         * @param ephemeralDurationSec the {@code ephemeral_duration_sec}
+         *                             field, in seconds
+         * @param emoji the decoded {@code emoji} sub-object, or
+         *              {@code null} when the relay omitted it
          */
         private Item(String jid, String text, Long lastUpdateTime, Long ephemeralDurationSec, Emoji emoji) {
             this.jid = jid;
@@ -110,82 +130,107 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
         }
 
         /**
-         * Returns the author JID of the text status.
+         * Returns the status author identifier.
          *
-         * @return an {@link Optional} containing the JID, or empty if absent
+         * @apiNote Mirrors WA Web's {@code id} projection, derived from the
+         * raw {@code jid} string via {@code WAWebWidFactory.createWid}.
+         *
+         * @return the author JID wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the relay omitted the field
          */
         public Optional<String> jid() {
             return Optional.ofNullable(jid);
         }
 
         /**
-         * Returns the body of the text status.
+         * Returns the status text body.
          *
-         * @return an {@link Optional} containing the text, or empty if absent
+         * @return the body wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the relay omitted the field
          */
         public Optional<String> text() {
             return Optional.ofNullable(text);
         }
 
         /**
-         * Returns the last-update timestamp of the text status.
+         * Returns the timestamp the status was last updated at.
          *
-         * @return an {@link Optional} containing the {@link Instant}, or empty if absent
+         * @apiNote Used together with {@link #ephemeralDurationSec()} to
+         * compute the expiry instant rendered in the Status tab.
+         *
+         * @return the timestamp wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the relay omitted the field
          */
         public Optional<Instant> lastUpdateTime() {
             return Optional.ofNullable(lastUpdateTime).map(Instant::ofEpochSecond);
         }
 
         /**
-         * Returns the ephemeral duration after which the text status expires.
+         * Returns the duration after which the status expires.
          *
-         * @return an {@link Optional} containing the {@link Duration}, or empty if absent
+         * @apiNote A status with {@link #lastUpdateTime()} {@code + this}
+         * in the past has already expired and should be elided from the UI.
+         *
+         * @return the duration wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the relay omitted the field
          */
         public Optional<Duration> ephemeralDurationSec() {
             return Optional.ofNullable(ephemeralDurationSec).map(Duration::ofSeconds);
         }
 
         /**
-         * Returns the optional emoji decoration shown next to the status text.
+         * Returns the decoded emoji decoration accompanying the status.
          *
-         * @return an {@link Optional} containing the emoji, or empty if absent
+         * @return the emoji wrapped in an {@link Optional}, or
+         *         {@link Optional#empty()} when the relay omitted the field
          */
         public Optional<Emoji> emoji() {
             return Optional.ofNullable(emoji);
         }
 
         /**
-         * Single emoji decoration attached to a text status.
+         * Decoded {@code emoji} sub-object of a text-status row.
+         *
+         * @apiNote Mirrors the {@code textStatusEmoji} field that WA Web
+         * projects via {@code emoji.content} in
+         * {@code parseTextStatusServerResponse}.
          */
         public static final class Emoji {
             /**
-             * The unicode content of the emoji.
+             * The {@code content} field carrying the emoji codepoints.
              */
             private final String content;
 
             /**
-             * Constructs a new emoji decoration with the given content.
+             * Wraps the decoded emoji content string.
              *
-             * @param content the unicode content of the emoji
+             * @param content the {@code content} field, possibly
+             *                {@code null}
              */
             private Emoji(String content) {
                 this.content = content;
             }
 
             /**
-             * Returns the unicode content of the emoji.
+             * Returns the emoji codepoints.
              *
-             * @return an {@link Optional} containing the content, or empty if absent
+             * @return the content wrapped in an {@link Optional}, or
+             *         {@link Optional#empty()} when the relay omitted the
+             *         field
              */
             public Optional<String> content() {
                 return Optional.ofNullable(content);
             }
 
             /**
-             * Parses an emoji entry from the given JSON object.
+             * Decodes a single emoji entry from a {@link JSONObject}.
              *
-             * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed entry, or empty if {@code obj} is {@code null}
+             * @apiNote Used by {@link Item#of(JSONObject)} when projecting
+             * the {@code emoji} sub-object; not part of the public API.
+             *
+             * @param obj the JSON object to decode, possibly {@code null}
+             * @return the decoded emoji, or {@link Optional#empty()} when
+             *         {@code obj} is {@code null}
              */
             static Optional<Emoji> of(JSONObject obj) {
                 if (obj == null) {
@@ -197,10 +242,16 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
             }
 
             /**
-             * Parses a list of emoji entries from the given JSON array.
+             * Decodes a list of emoji entries from a {@link JSONArray}.
              *
-             * @param arr the JSON array to parse
-             * @return the list of parsed entries, empty if {@code arr} is {@code null}
+             * @apiNote Provided for parity with the other {@code ofArray}
+             * helpers in this file; not invoked by the response decoder
+             * because the wire schema carries {@code emoji} as a single
+             * sub-object, not an array.
+             *
+             * @param arr the JSON array to decode, possibly {@code null}
+             * @return the decoded emojis in source order; empty when
+             *         {@code arr} is {@code null}
              */
             static List<Emoji> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -216,10 +267,14 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
         }
 
         /**
-         * Parses a single item from the given JSON object.
+         * Decodes a single text-status row from a {@link JSONObject}.
          *
-         * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed item, or empty if {@code obj} is {@code null}
+         * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
+         * {@code xwa2_text_status_list} array; not part of the public API.
+         *
+         * @param obj the JSON object to decode, possibly {@code null}
+         * @return the decoded row, or {@link Optional#empty()} when
+         *         {@code obj} is {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -235,10 +290,15 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
         }
 
         /**
-         * Parses a list of items from the given JSON array.
+         * Decodes the {@code xwa2_text_status_list} array of the MEX payload.
          *
-         * @param arr the JSON array to parse
-         * @return the list of parsed items, empty if {@code arr} is {@code null}
+         * @apiNote Used by the package-level decoder to project the array
+         * nested under {@code data} of the {@code <result>} payload; not
+         * part of the public API.
+         *
+         * @param arr the JSON array to decode, possibly {@code null}
+         * @return the decoded rows in source order; empty when {@code arr}
+         *         is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -254,10 +314,17 @@ public final class FetchTextStatusListMexResponse implements MexOperation.Respon
     }
 
     /**
-     * Parses the response from the raw JSON payload bytes.
+     * Decodes the {@code <result>} payload bytes into a {@link FetchTextStatusListMexResponse}.
      *
-     * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty if the envelope is missing
+     * @implNote This implementation projects {@code data.xwa2_text_status_list};
+     * a missing {@code data} envelope yields {@link Optional#empty()}, while
+     * a present-but-empty array yields a response with an empty
+     * {@link #items()} list.
+     *
+     * @param json the raw {@code <result>} payload bytes
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload does not parse as a JSON object or lacks the
+     *         {@code data} envelope
      */
     private static Optional<FetchTextStatusListMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

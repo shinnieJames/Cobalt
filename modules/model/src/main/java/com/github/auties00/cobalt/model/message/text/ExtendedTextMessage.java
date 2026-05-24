@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.model.message.text;
 
+import com.github.auties00.cobalt.model.media.MediaPath;
+import com.github.auties00.cobalt.model.media.MediaProvider;
 import com.github.auties00.cobalt.model.message.context.ContextInfo;
 import com.github.auties00.cobalt.model.message.context.ContextualMessage;
 import com.github.auties00.cobalt.model.message.media.EmbeddedMusic;
@@ -18,6 +20,7 @@ import it.auties.protobuf.annotation.*;
 import it.auties.protobuf.model.*;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 
 /**
  * A text message enriched with additional rendering or metadata features
@@ -40,7 +43,7 @@ import java.util.OptionalInt;
  * a quoted message, forwarding score, mentions, and related metadata.
  */
 @ProtobufMessage(name = "Message.ExtendedTextMessage")
-public final class ExtendedTextMessage implements ContextualMessage {
+public final class ExtendedTextMessage implements ContextualMessage, MediaProvider {
     /**
      * The raw text content shown in the message bubble.
      */
@@ -512,6 +515,134 @@ public final class ExtendedTextMessage implements ContextualMessage {
      */
     public OptionalInt thumbnailWidth() {
         return thumbnailWidth == null ? OptionalInt.empty() : OptionalInt.of(thumbnailWidth);
+    }
+
+    /**
+     * Returns {@link Optional#empty()}; link previews do not carry a CDN
+     * URL on the wire, only the direct path.
+     *
+     * @return always {@link Optional#empty()}
+     */
+    @Override
+    public Optional<String> mediaUrl() {
+        return Optional.empty();
+    }
+
+    /**
+     * No-op; link previews do not carry a CDN URL on the wire.
+     *
+     * @param mediaUrl ignored
+     */
+    @Override
+    public void setMediaUrl(String mediaUrl) {
+        // link previews carry no media URL on the wire
+    }
+
+    /**
+     * Returns the CDN direct path of the encrypted HQ thumbnail, bridging
+     * to {@link #thumbnailDirectPath()} for the {@link MediaProvider}
+     * contract.
+     *
+     * @return an {@link Optional} containing the direct path,
+     *         or {@link Optional#empty()} if unset
+     */
+    @Override
+    public Optional<String> mediaDirectPath() {
+        return Optional.ofNullable(thumbnailDirectPath);
+    }
+
+    /**
+     * Sets the CDN direct path of the encrypted HQ thumbnail, bridging to
+     * {@link #setThumbnailDirectPath(String)} for the
+     * {@link MediaProvider} contract.
+     *
+     * @param mediaDirectPath the direct path, or {@code null} to clear
+     */
+    @Override
+    public void setMediaDirectPath(String mediaDirectPath) {
+        this.thumbnailDirectPath = mediaDirectPath;
+    }
+
+    /**
+     * Returns the SHA-256 digest of the plaintext HQ thumbnail, bridging
+     * to {@link #thumbnailSha256()} for the {@link MediaProvider}
+     * contract.
+     *
+     * @return an {@link Optional} containing the digest,
+     *         or {@link Optional#empty()} if unset
+     */
+    @Override
+    public Optional<byte[]> mediaSha256() {
+        return Optional.ofNullable(thumbnailSha256);
+    }
+
+    /**
+     * Sets the SHA-256 digest of the plaintext HQ thumbnail, bridging to
+     * {@link #setThumbnailSha256(byte[])} for the {@link MediaProvider}
+     * contract.
+     *
+     * @param bytes the digest, or {@code null} to clear
+     */
+    @Override
+    public void setMediaSha256(byte[] bytes) {
+        this.thumbnailSha256 = bytes;
+    }
+
+    /**
+     * Returns the SHA-256 digest of the encrypted HQ thumbnail, bridging
+     * to {@link #thumbnailEncSha256()} for the {@link MediaProvider}
+     * contract.
+     *
+     * @return an {@link Optional} containing the digest,
+     *         or {@link Optional#empty()} if unset
+     */
+    @Override
+    public Optional<byte[]> mediaEncryptedSha256() {
+        return Optional.ofNullable(thumbnailEncSha256);
+    }
+
+    /**
+     * Sets the SHA-256 digest of the encrypted HQ thumbnail, bridging to
+     * {@link #setThumbnailEncSha256(byte[])} for the
+     * {@link MediaProvider} contract.
+     *
+     * @param bytes the digest, or {@code null} to clear
+     */
+    @Override
+    public void setMediaEncryptedSha256(byte[] bytes) {
+        this.thumbnailEncSha256 = bytes;
+    }
+
+    /**
+     * Returns {@link OptionalLong#empty()}; link previews do not carry a
+     * media-size field on the wire.
+     *
+     * @return always {@link OptionalLong#empty()}
+     */
+    @Override
+    public OptionalLong mediaSize() {
+        return OptionalLong.empty();
+    }
+
+    /**
+     * No-op; link previews do not carry a media-size field on the wire.
+     *
+     * @param mediaSize ignored
+     */
+    @Override
+    public void setMediaSize(long mediaSize) {
+        // link previews carry no media size on the wire
+    }
+
+    /**
+     * Returns the media-path category used to route the HQ thumbnail
+     * upload to the link-thumbnail CDN bucket.
+     *
+     * @return {@link MediaPath#THUMBNAIL_LINK}
+     */
+    @Override
+    public MediaPath mediaPath() {
+        return MediaPath.THUMBNAIL_LINK;
     }
 
     /**

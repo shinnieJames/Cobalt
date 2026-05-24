@@ -3,7 +3,9 @@ package com.github.auties00.cobalt.message;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState;
 import com.github.auties00.cobalt.client.WhatsAppClientType;
+import com.github.auties00.cobalt.model.device.identity.ADVSignedDeviceIdentityBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
@@ -26,46 +28,47 @@ import java.util.Optional;
  * Loads message-package fixtures captured from a live WhatsApp Web session and
  * exposes them to JUnit tests.
  *
- * <p>Fixture provenance:
- * <ul>
- *   <li>JSONL stanza captures are written by the MCP tool
- *       {@code web_live_stanza_dump_to_file} and re-hydrate into Cobalt
- *       {@link Node} instances through {@link #loadEvents(String)} and
- *       {@link #buildNode(JSONObject)}.</li>
- *   <li>{@code .expected.json} oracle outputs are written by
- *       {@code web_live_debug_eval_to_file} and exposed as raw
- *       {@link JSONObject} so individual tests can assert against the
- *       fields they care about.</li>
- * </ul>
+ * @apiNote The fixtures come in two flavours: JSONL stanza captures written
+ * by the MCP tool {@code web_live_stanza_dump_to_file} (re-hydrated into
+ * Cobalt {@link Node} instances by {@link #loadEvents(String)} and
+ * {@link #buildNodeFromEvent(JSONObject)}), and {@code .expected.json}
+ * oracle outputs written by {@code web_live_debug_eval_to_file} (returned as
+ * raw {@link JSONObject} so individual tests can pull only the fields they
+ * care about). Both live under {@code src/test/resources/fixtures/message/}.
  *
- * <p>Both fixture families live under
- * {@code src/test/resources/fixtures/message/} and are discovered through
- * the classpath. The class is a direct mirror of
- * {@code com.github.auties00.cobalt.device.DeviceFixtures} — the
- * JSON-tree-walking decoder is generic across packages, only the
- * {@link #FIXTURE_ROOT} differs.
+ * @implNote This implementation mirrors {@code DeviceFixtures} from the
+ * sibling device package; the only difference is {@link #FIXTURE_ROOT}.
  */
 public final class MessageFixtures {
     /**
-     * The classpath prefix every message-fixture path lives under.
+     * Classpath prefix every message-package fixture path is rooted at.
      */
     private static final String FIXTURE_ROOT = "fixtures/message";
 
     /**
      * Hidden constructor; this is a static-helper class.
+     *
+     * @throws AssertionError always
      */
     private MessageFixtures() {
         throw new AssertionError("MessageFixtures is not instantiable");
     }
 
     /**
-     * Returns every captured stanza event in the given JSONL fixture, in
+     * Returns every captured stanza event in the given JSONL fixture in
      * capture order.
      *
-     * @param topic the fixture topic (e.g. {@code "send/stanza/chat-fanout-self-lid"}),
-     *              without the {@code .jsonl} extension
-     * @return the list of {@code event} sub-objects, each shaped like the
-     *         output of the MCP stanza logger
+     * @apiNote Reads the {@code <topic>.jsonl} file from the classpath under
+     * {@link #FIXTURE_ROOT}; each line is parsed as a JSON record and the
+     * {@code event} sub-object is extracted. Use as the entry point for any
+     * test that wants to replay every captured stanza in order.
+     *
+     * @param topic the fixture topic (for example
+     *              {@code "send/stanza/chat-fanout-self-lid"}), without the
+     *              {@code .jsonl} extension
+     * @return the {@code event} sub-objects, each shaped like the output of
+     *         the MCP stanza logger
+     * @throws NullPointerException if {@code topic} is {@code null}
      * @throws UncheckedIOException if the fixture is missing or malformed
      */
     public static List<JSONObject> loadEvents(String topic) {
@@ -94,8 +97,11 @@ public final class MessageFixtures {
      * Returns the first event in the given fixture whose {@code tag} matches
      * and whose attributes contain every key/value pair in {@code attrs}.
      *
+     * @apiNote Use to pluck a single named stanza out of a multi-stanza
+     * fixture without re-walking the JSONL by hand.
+     *
      * @param topic the fixture topic
-     * @param tag   the required stanza tag, or {@code null} to match any
+     * @param tag   the required stanza tag, or {@code null} to accept any
      * @param attrs the required attribute key/value pairs, or {@code null}
      *              to skip attribute filtering
      * @return the matching event
@@ -126,14 +132,14 @@ public final class MessageFixtures {
      * Reconstructs a Cobalt {@link Node} from the {@code node} sub-tree of a
      * captured event.
      *
-     * <p>The node tree is the recursive plain-JSON shape emitted by
-     * {@code script-sources.ts}: each level carries {@code tag},
-     * {@code attrs}, and {@code content}. Binary leaves are objects with
-     * {@code kind: "binary"} and a {@code base64} payload; nested children
-     * are arrays of the same shape.
+     * @apiNote The node tree is the recursive plain-JSON shape emitted by
+     * the MCP stanza-logger script; binary leaves are {@code {"kind":
+     * "binary", "base64": "..."}} objects and child arrays are arrays of the
+     * same shape.
      *
      * @param event the event object from {@link #loadEvents(String)}
      * @return the reconstructed {@link Node}
+     * @throws NullPointerException     if {@code event} is {@code null}
      * @throws IllegalArgumentException if the tree is malformed
      */
     public static Node buildNodeFromEvent(JSONObject event) {
@@ -149,6 +155,9 @@ public final class MessageFixtures {
      * Recursively reconstructs a {@link Node} from a captured plain-JSON
      * tree.
      *
+     * @apiNote Use when the caller already holds the {@code {tag, attrs,
+     * content}} sub-object directly rather than the outer event wrapper.
+     *
      * @param tree the {@code {tag, attrs, content}} object
      * @return the reconstructed node
      * @throws IllegalArgumentException if {@code tree} has no tag
@@ -159,11 +168,16 @@ public final class MessageFixtures {
 
     /**
      * Returns the expected-output JSON document paired with the given
-     * fixture topic, loaded from {@code <topic>.expected.json} alongside the
-     * stanza capture.
+     * fixture topic.
+     *
+     * @apiNote Loads {@code <topic>.expected.json} alongside the JSONL
+     * capture. Use for oracle-style assertions where the test compares
+     * Cobalt's output against the bytes captured from a live WhatsApp Web
+     * session.
      *
      * @param topic the fixture topic
      * @return the parsed expected document
+     * @throws NullPointerException if {@code topic} is {@code null}
      * @throws UncheckedIOException if the fixture is missing or malformed
      */
     public static JSONObject loadExpected(String topic) {
@@ -181,9 +195,11 @@ public final class MessageFixtures {
      * fixture, unwrapping the {@code result.value} field and re-parsing it
      * as JSON.
      *
-     * <p>{@code web_live_debug_eval_to_file} captures wrap the evaluation
-     * outcome as
-     * {@code {schema, expression, result: {resultType: "string", value: "<json-string>"}}}.
+     * @apiNote The {@code web_live_debug_eval_to_file} MCP capture wraps the
+     * evaluation outcome as
+     * {@snippet :
+     *     // {"schema": ..., "expression": ..., "result": {"resultType": "string", "value": "<json-string>"}}
+     * }
      * The vast majority of oracle invocations stringify their result before
      * returning so the live runtime can deliver it through CDP without
      * structured-clone hazards; this helper undoes that stringification.
@@ -210,7 +226,7 @@ public final class MessageFixtures {
     /**
      * Returns whether the given fixture topic exists on the classpath.
      *
-     * <p>Allows tests to skip cleanly when a corpus has not yet been
+     * @apiNote Lets tests skip cleanly when a corpus has not yet been
      * captured, instead of hard-failing on {@code getResourceAsStream}
      * returning {@code null}.
      *
@@ -222,7 +238,12 @@ public final class MessageFixtures {
     }
 
     /**
-     * Returns the parsed expected document for the given topic if available.
+     * Returns the parsed expected document for the given topic if it
+     * exists.
+     *
+     * @apiNote Use as a soft variant of {@link #loadExpected(String)} when
+     * the caller wants to fall back to a default rather than abort the test
+     * on a missing oracle.
      *
      * @param topic the fixture topic
      * @return the document, or {@link Optional#empty()} when no expected
@@ -239,14 +260,22 @@ public final class MessageFixtures {
     }
 
     /**
-     * Creates an in-memory temporary store pre-configured with the given
-     * self-PN and self-LID. Use as the {@code store} dependency for any
-     * message-package class that takes a {@link WhatsAppStore}.
+     * Creates an in-memory temporary store seeded with the given self-PN and
+     * self-LID and a stub signed-device-identity.
+     *
+     * @apiNote Use as the {@code store} dependency for any message-package
+     * class that takes a {@link WhatsAppStore}. The store is preconfigured
+     * with {@code OfflineResumeState.COMPLETE} so tests that block on
+     * {@code waitForOfflineDeliveryEnd()} do not stall on the 5-minute
+     * latch, and with a stub {@code ADVSignedDeviceIdentity} so PKMSG-bearing
+     * fanouts ship a {@code <device-identity>} child node (signature bytes
+     * are dummies because tests only assert presence/shape).
      *
      * @param selfPn  the local user's PN-form bare JID
-     * @param selfLid the local user's LID-form bare JID, or {@code null}
-     *                when the test wants a pre-LID-migration store
+     * @param selfLid the local user's LID-form bare JID, or {@code null} for
+     *                a pre-LID-migration store
      * @return the configured temporary store
+     * @throws NullPointerException if {@code selfPn} is {@code null}
      * @throws UncheckedIOException if the underlying factory cannot create
      *                              the store
      */
@@ -259,9 +288,13 @@ public final class MessageFixtures {
             if (selfLid != null) {
                 store.setLid(selfLid);
             }
-            // Mark offline delivery COMPLETE so tests that call waitForOfflineDeliveryEnd()
-            // (every per-sender path) don't block 5 minutes on the latch.
-            store.setOfflineResumeState(com.github.auties00.cobalt.client.WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setOfflineResumeState(WhatsAppClientOfflineResumeState.COMPLETE);
+            store.setSignedDeviceIdentity(new ADVSignedDeviceIdentityBuilder()
+                    .details(new byte[]{0})
+                    .accountSignatureKey(new byte[32])
+                    .accountSignature(new byte[64])
+                    .deviceSignature(new byte[64])
+                    .build());
             return store;
         } catch (IOException e) {
             throw new UncheckedIOException("failed to create temporary store", e);
@@ -271,7 +304,8 @@ public final class MessageFixtures {
     /**
      * Opens the named classpath resource.
      *
-     * @param resourcePath the resource path under {@code src/test/resources/}
+     * @param resourcePath the resource path under
+     *                     {@code src/test/resources/}
      * @return an input stream over the resource bytes
      * @throws IOException if the resource is missing
      */
@@ -284,27 +318,26 @@ public final class MessageFixtures {
     }
 
     /**
-     * Flattens a captured attribute value into the string form the Cobalt
-     * {@code NodeBuilder.attribute(String, String)} setter expects.
+     * Flattens a captured attribute value into the string form Cobalt's
+     * {@link NodeBuilder#attribute(String, String)} expects.
      *
-     * <p>The MCP stanza logger captures WAWap's internal Jid wrappers in two
-     * shapes:
+     * @apiNote The MCP stanza logger captures WAWap's internal Jid wrappers
+     * in two shapes:
      * <ul>
-     *   <li><b>Server JID</b> —
-     *       {@code {"$1": {"type": <int>, "user": <string|null>, "server": <string>}}},
-     *       used for outer {@code <message to="…">} and other contexts where the
-     *       JID carries an explicit server label.</li>
-     *   <li><b>Device JID</b> —
-     *       {@code {"$1": {"type": <int>, "user": <string>, "device": <int>, "domainType": <int>}}},
-     *       used inside {@code <participants><to jid="…">} where WAP packs the
-     *       device index in-band. {@code domainType=0} maps to
-     *       {@code @s.whatsapp.net}, {@code domainType=1} maps to {@code @lid}.
-     *       A non-zero {@code device} prepends {@code :<device>} to the user
-     *       (e.g. {@code "83116928594056:1@lid"}); device {@code 0} omits the
-     *       suffix.</li>
+     *   <li>Server JID:
+     *       {@code {"$1": {"type": &lt;int&gt;, "user": &lt;string|null&gt;, "server": &lt;string&gt;}}},
+     *       used for outer {@code <message to="...">} and other contexts
+     *       where the JID carries an explicit server label.</li>
+     *   <li>Device JID:
+     *       {@code {"$1": {"type": &lt;int&gt;, "user": &lt;string&gt;, "device": &lt;int&gt;, "domainType": &lt;int&gt;}}},
+     *       used inside {@code <participants><to jid="...">} where WAP packs
+     *       the device index in-band. {@code domainType=0} maps to
+     *       {@code @s.whatsapp.net}, {@code domainType=1} maps to
+     *       {@code @lid}. A non-zero {@code device} prepends
+     *       {@code :<device>} to the user (for example
+     *       {@code 83116928594056:1@lid}); device 0 omits the suffix.</li>
      * </ul>
-     *
-     * <p>Cobalt's {@link Node} carries those same JIDs as bare strings of the
+     * Cobalt's {@link Node} carries those same JIDs as bare strings of the
      * form {@code user@server} or {@code user:device@server}. Any other shape
      * is delegated to {@link String#valueOf(Object)}.
      *
@@ -319,7 +352,6 @@ public final class MessageFixtures {
             if (server != null) {
                 return (user == null ? "" : user) + "@" + server;
             }
-            // Device-JID shape: {type, user, device, domainType}.
             var domainType = inner.getInteger("domainType");
             if (domainType != null) {
                 var serverForDomain = switch (domainType) {
@@ -341,7 +373,7 @@ public final class MessageFixtures {
     /**
      * Decodes a binary leaf object into raw bytes.
      *
-     * @param binary the {@code {kind: "binary", base64: "..."}} object
+     * @param binary the {@code {"kind": "binary", "base64": "..."}} object
      * @return the decoded bytes
      * @throws IllegalArgumentException if the object is not a binary leaf
      */
@@ -396,8 +428,6 @@ public final class MessageFixtures {
                 builder.content(decodeBinary(leaf));
                 return;
             }
-            // Single embedded child node (rare path: the logger sometimes emits a
-            // single child object rather than a one-element array).
             builder.content(buildNode(leaf));
             return;
         }
@@ -413,8 +443,6 @@ public final class MessageFixtures {
                     }
                     built.add(buildNode(obj));
                 } else if (entry != null) {
-                    // Stringified leaf — treated as a text child node. This is rare
-                    // for message-package fixtures.
                     built.add(new NodeBuilder().description("__text").content(String.valueOf(entry)).build());
                 }
             }

@@ -11,9 +11,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound acknowledgement stanza. Emitted by the client back
- * through the socket pipeline after consuming the {@link SmaxQpQpNotificationResponse}
- * notification.
+ * The outbound {@code <ack class="notification">} stanza emitted to
+ * acknowledge a server-pushed {@link SmaxQpQpNotificationResponse}.
+ *
+ * @apiNote
+ * Sent by the client back through the socket pipeline after consuming
+ * a quick-promotion (QP) surfaces notification; WA Web's
+ * {@code WAWebParseQPSurfacesNotification} invokes
+ * {@code WASmaxQpSurfacesQPNotificationRPC.receiveQPNotificationRPC}
+ * which returns the parsed request paired with a deferred
+ * {@code makeQPNotificationResponseAck} factory, and the caller is
+ * expected to flush the ack so the relay does not re-push the same
+ * notification on the next reconnect.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesQPNotificationResponseAck")
 @WhatsAppWebModule(moduleName = "WASmaxOutQpSurfacesNotificationClientAckMixin")
@@ -24,25 +33,32 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     private final String notificationId;
 
     /**
-     * The {@code from} of the notification (becomes the ack's
-     * {@code to}).
+     * The {@code from} of the notification, which becomes the ack's
+     * {@code to}.
      */
     private final Jid notificationFrom;
 
     /**
-     * The {@code type} of the notification (echoed back into the
-     * ack).
+     * The {@code type} of the notification, echoed verbatim into the
+     * ack.
      */
     private final String notificationType;
 
     /**
-     * Constructs an acknowledgement.
+     * Constructs an acknowledgement for the given notification
+     * attributes.
      *
-     * @param notificationId   the notification id. Never {@code null}
-     * @param notificationFrom the notification's sender JID. Never
+     * @apiNote
+     * Embedders that have a typed
+     * {@link SmaxQpQpNotificationResponse} should prefer
+     * {@link #from(SmaxQpQpNotificationResponse)}; this raw constructor
+     * exists so the ack can also be built from a captured stanza
+     * without round-tripping through the parser.
+     *
+     * @param notificationId the notification id; never {@code null}
+     * @param notificationFrom the notification's sender JID; never
      *                         {@code null}
-     * @param notificationType the notification type. Never
-     *                         {@code null}
+     * @param notificationType the notification type; never {@code null}
      * @throws NullPointerException if any argument is {@code null}
      */
     public SmaxQpQpNotificationAcknowledgement(String notificationId, Jid notificationFrom, String notificationType) {
@@ -52,10 +68,15 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Constructs an acknowledgement from a parsed {@link SmaxQpQpNotificationResponse}
-     * notification.
+     * Lifts the three echoed attributes off the given typed
+     * notification into a fresh acknowledgement.
      *
-     * @param inbound the inbound notification. Never {@code null}
+     * @apiNote
+     * Use after consuming a {@link SmaxQpQpNotificationResponse} so
+     * the ack carries the same {@code id}/{@code from}/{@code type}
+     * triple the relay expects.
+     *
+     * @param inbound the inbound notification; never {@code null}
      * @return a new acknowledgement
      * @throws NullPointerException if {@code inbound} is {@code null}
      */
@@ -66,15 +87,21 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     }
 
     /**
-     * Constructs an acknowledgement from a raw inbound notification
-     * stanza, lifting the {@code id}/{@code from}/{@code type}
-     * attributes verbatim.
+     * Lifts the three echoed attributes off the given raw
+     * notification stanza into a fresh acknowledgement.
      *
-     * @param notification the inbound notification stanza. Never
+     * @apiNote
+     * Use when the consumer holds a raw {@link Node} but not a typed
+     * {@link SmaxQpQpNotificationResponse}; the three required
+     * attributes are read verbatim and a missing one is reported as
+     * {@link IllegalArgumentException} rather than silently absorbed
+     * (the relay expects every ack to round-trip the full triple).
+     *
+     * @param notification the inbound notification stanza; never
      *                     {@code null}
      * @return a new acknowledgement
-     * @throws NullPointerException     if {@code notification} is
-     *                                  {@code null}
+     * @throws NullPointerException if {@code notification} is
+     *                              {@code null}
      * @throws IllegalArgumentException if the notification is missing
      *                                  one of the required echoed
      *                                  attributes
@@ -93,7 +120,7 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     /**
      * Returns the notification id being acknowledged.
      *
-     * @return the id. Never {@code null}
+     * @return the id; never {@code null}
      */
     public String notificationId() {
         return notificationId;
@@ -102,7 +129,7 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     /**
      * Returns the notification sender JID.
      *
-     * @return the sender JID. Never {@code null}
+     * @return the sender JID; never {@code null}
      */
     public Jid notificationFrom() {
         return notificationFrom;
@@ -111,14 +138,19 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
     /**
      * Returns the notification type.
      *
-     * @return the type. Never {@code null}
+     * @return the type; never {@code null}
      */
     public String notificationType() {
         return notificationType;
     }
 
     /**
-     * Builds the outbound ack stanza.
+     * Builds the outbound ack stanza ready for dispatch.
+     *
+     * @apiNote
+     * Produces {@code <ack id to class="notification" type/>}; the
+     * stanza is fire-and-forget so no reply is expected and the
+     * envelope carries no body.
      *
      * @return a {@link NodeBuilder} carrying the ack envelope
      */
@@ -135,6 +167,14 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
                 .attribute("type", notificationType);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxQpQpNotificationAcknowledgement} with equal echoed
+     * attributes.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when all three fields match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -149,11 +189,22 @@ public final class SmaxQpQpNotificationAcknowledgement implements SmaxOperation.
                 && Objects.equals(this.notificationType, that.notificationType);
     }
 
+    /**
+     * Returns a hash code derived from the three echoed attributes.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(notificationId, notificationFrom, notificationType);
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this
+     * acknowledgement.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxQpQpNotificationAcknowledgement[notificationId=" + notificationId

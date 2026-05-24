@@ -1,14 +1,17 @@
 package com.github.auties00.cobalt.call;
 
-import com.github.auties00.cobalt.call.io.*;
-import com.github.auties00.cobalt.call.session.VoiceCallSession;
-import com.github.auties00.cobalt.call.signaling.CallEndReason;
-import com.github.auties00.cobalt.call.signaling.CallInteraction;
+import com.github.auties00.cobalt.call.frame.audio.*;
+import com.github.auties00.cobalt.call.frame.video.*;
+import com.github.auties00.cobalt.call.internal.session.VoiceCallSession;
+import com.github.auties00.cobalt.call.CallEndReason;
+import com.github.auties00.cobalt.call.CallInteraction;
+import com.github.auties00.cobalt.call.internal.transport.ActiveCallTransport;
 import com.github.auties00.cobalt.model.jid.Jid;
 
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingDeque;
+import com.github.auties00.cobalt.call.internal.CallService;
 
 /**
  * A single in-progress or recently-ended call (post-accept on the
@@ -194,6 +197,15 @@ public final class ActiveCall implements AutoCloseable {
     private final VideoSource remoteVideoSource = new RemoteVideoSource();
 
     /**
+     * Transport-layer state for this call: ICE agent + DTLS-SRTP
+     * endpoint + SCTP/DCEP transport. Created at construction in the
+     * {@link ActiveCallTransport.State#IDLE}
+     * state and {@link ActiveCallTransport#close()
+     * closed} on {@link #hangup()}.
+     */
+    private final ActiveCallTransport transport;
+
+    /**
      * Constructs a new live session.
      *
      * @param engine   owning engine
@@ -214,6 +226,16 @@ public final class ActiveCall implements AutoCloseable {
         this.outgoing = outgoing;
         this.options = Objects.requireNonNull(options, "options cannot be null");
         this.videoMuted = !options.videoEnabled();
+        this.transport = new ActiveCallTransport();
+    }
+
+    /**
+     * Returns the transport-layer state machine for this call.
+     *
+     * @return the transport
+     */
+    public ActiveCallTransport transport() {
+        return transport;
     }
 
     /**
@@ -434,7 +456,7 @@ public final class ActiveCall implements AutoCloseable {
      */
     public void requestPeerMute(String target) {
         sendInteraction(new CallInteraction.PeerMuteRequest(target,
-                java.util.Optional.empty()));
+                Optional.empty()));
     }
 
     /**
@@ -493,7 +515,7 @@ public final class ActiveCall implements AutoCloseable {
      * {@link CallState#ACTIVE} transition is added by tasks #76–#78
      * + #61–#62 once media is flowing.
      */
-    void onPeerAccept() {
+    public void onPeerAccept() {
     }
 
     /**
@@ -504,7 +526,7 @@ public final class ActiveCall implements AutoCloseable {
      * @param wireReason the {@code reason} attribute the peer sent,
      *                   or {@code null}
      */
-    void onPeerEnded(String wireReason) {
+    public void onPeerEnded(String wireReason) {
         end(CallEndReason.fromWireValue(wireReason), wireReason);
     }
 
@@ -530,6 +552,7 @@ public final class ActiveCall implements AutoCloseable {
         outboundVideo.offer(SENTINEL_VIDEO);
         inboundAudio.offer(SENTINEL_AUDIO);
         inboundVideo.offer(SENTINEL_VIDEO);
+        try { transport.close(); } catch (RuntimeException _) { /* swallow */ }
         engine.unregister(callId);
         engine.notifyEnded(callId, peer, wireReason);
     }

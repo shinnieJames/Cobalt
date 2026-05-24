@@ -28,52 +28,71 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link EncMessageFactory}, mirroring the WA Web wrappers
- * {@code WAWebAddonEncryption.encryptAddOn} (for comment / reaction) and
+ * Exercises {@link EncMessageFactory}, mirroring WA Web's
+ * {@code WAWebAddonEncryption.encryptAddOn} (for comment and reaction) and
  * {@code WAWebPollsVoteEncryption.encryptVote}.
  *
- * <p>The unit under test sits one level above {@link MessageAddonEncryption}
- * and is responsible for:
+ * @apiNote The class under test sits one level above
+ * {@link MessageAddonEncryption} and is responsible for: resolving the
+ * {@code originalSender} from the parent message key (prefer
+ * {@code senderJid}; fall back to the self JID when {@code fromMe};
+ * otherwise use the parent {@code parentJid}); selecting the right HKDF
+ * context label ({@link MessageAddonType#ENC_REACTION},
+ * {@link MessageAddonType#ENC_COMMENT},
+ * {@link MessageAddonType#POLL_VOTE}); wrapping the ciphertext and IV into
+ * the matching protobuf model ({@link EncReactionMessage},
+ * {@link EncCommentMessage}, {@link PollEncValue}); SHA-256-hashing each
+ * selected poll option to its canonical 32-byte digest before encryption;
+ * and failing loudly when the parent message lacks a {@code messageSecret},
+ * when the parent key is missing an id or parent JID, or when a comment has
+ * no inner {@link MessageContainer}.
  *
- * <ul>
- *   <li>Resolving the {@code originalSender} from the parent message key:
- *       prefer {@code senderJid}; fall back to the self JID when
- *       {@code fromMe}; otherwise use the parent {@code parentJid}.</li>
- *   <li>Selecting the right HKDF context label
- *       ({@link MessageAddonType#ENC_REACTION},
- *       {@link MessageAddonType#ENC_COMMENT},
- *       {@link MessageAddonType#POLL_VOTE}).</li>
- *   <li>Wrapping the ciphertext + IV into the matching protobuf model
- *       ({@link EncReactionMessage}, {@link EncCommentMessage},
- *       {@link PollEncValue}).</li>
- *   <li>For poll votes, SHA-256-hashing each selected option to its
- *       canonical 32-byte digest before encryption.</li>
- *   <li>Failing loudly when the parent message lacks
- *       {@code messageSecret}, when the parent key is missing
- *       {@code id} / {@code parentJid}, or when the comment has no
- *       inner {@link com.github.auties00.cobalt.model.message.MessageContainer}.</li>
- * </ul>
- *
- * <p>The lower-level encrypt/decrypt round-trip is covered by
- * {@link MessageAddonEncryptionTest}; this class focuses on the wrapping,
- * sender-resolution, and option-hashing logic.
+ * @implNote The lower-level encrypt/decrypt round-trip is covered by
+ * {@link MessageAddonEncryptionTest}; this class focuses on wrapping,
+ * sender resolution, and option-hashing logic.
  */
 @DisplayName("EncMessageFactory")
 class EncMessageFactoryTest {
 
+    /**
+     * 32-byte parent secret used as the HKDF input keying material.
+     */
     private static final byte[] PARENT_SECRET = repeatedByte(32, (byte) 0x42);
+
+    /**
+     * Alternate 32-byte secret used by the key-isolation test.
+     */
     private static final byte[] OTHER_SECRET = repeatedByte(32, (byte) 0x55);
+
+    /**
+     * Parent stanza id used as the HKDF info component.
+     */
     private static final String PARENT_KEY_ID = "3EB0CAFEBABE0123456789";
+
+    /**
+     * Chat JID used as the parent key's {@code parentJid}.
+     */
     private static final Jid CHAT_JID = Jid.of("12025550100@s.whatsapp.net");
+
+    /**
+     * Foreign sender JID used when the parent is authored by another user.
+     */
     private static final Jid OTHER_SENDER = Jid.of("12025550200@s.whatsapp.net");
+
+    /**
+     * Self JID used as the addon sender and as the {@code originalSender}
+     * fallback when {@code fromMe} is set.
+     */
     private static final Jid SELF_JID = Jid.of("12025550999@s.whatsapp.net");
 
-    // -------- encryptReaction --------
-
+    /**
+     * Verifies the encrypted-reaction wrapper shape: ciphertext present,
+     * 12-byte IV, target message key propagated.
+     */
     @Test
     @DisplayName("encryptReaction: result has ciphertext, 12-byte IV, and propagates target key")
     void encryptReactionShape() {
-        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, /*fromMe*/ false, OTHER_SENDER);
+        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, false, OTHER_SENDER);
         var reactionTarget = new MessageKeyBuilder()
                 .id("3EB0TARGET")
                 .fromMe(false)
@@ -96,6 +115,9 @@ class EncMessageFactoryTest {
                 "target message key must propagate to the encrypted wrapper");
     }
 
+    /**
+     * Verifies that each encrypt call samples a fresh IV.
+     */
     @Test
     @DisplayName("encryptReaction: each call samples a fresh IV (different output per call)")
     void encryptReactionFreshIv() {
@@ -110,16 +132,24 @@ class EncMessageFactoryTest {
         assertNotEquals(toHex(first.encPayload().orElseThrow()), toHex(second.encPayload().orElseThrow()));
     }
 
+    /**
+     * Verifies that a missing parent secret throws
+     * {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("encryptReaction: missing parent secret throws IllegalArgumentException")
     void encryptReactionMissingSecret() {
-        var parent = parent(/*secret*/ null, PARENT_KEY_ID, false, OTHER_SENDER);
+        var parent = parent(null, PARENT_KEY_ID, false, OTHER_SENDER);
         var reaction = new ReactionMessageBuilder().text("👍").build();
         var ex = assertThrows(IllegalArgumentException.class,
                 () -> EncMessageFactory.encryptReaction(reaction, parent, SELF_JID));
         assertTrue(ex.getMessage().contains("messageSecret"));
     }
 
+    /**
+     * Verifies that {@code null} reaction, parent, or self throws
+     * {@link NullPointerException}.
+     */
     @Test
     @DisplayName("encryptReaction: null reaction / parent / self all throw NullPointerException")
     void encryptReactionNullArgs() {
@@ -133,8 +163,10 @@ class EncMessageFactoryTest {
                 () -> EncMessageFactory.encryptReaction(reaction, parent, null));
     }
 
-    // -------- encryptComment --------
-
+    /**
+     * Verifies the encrypted-comment wrapper shape: ciphertext present,
+     * 12-byte IV, target message key propagated.
+     */
     @Test
     @DisplayName("encryptComment: result wraps ciphertext + IV and propagates target message key")
     void encryptCommentShape() {
@@ -157,6 +189,10 @@ class EncMessageFactoryTest {
         assertEquals(12, enc.encIv().orElseThrow().length);
     }
 
+    /**
+     * Verifies that encrypting a comment with no inner message throws
+     * {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("encryptComment: missing inner message throws IllegalArgumentException")
     void encryptCommentMissingInner() {
@@ -167,10 +203,14 @@ class EncMessageFactoryTest {
         assertTrue(ex.getMessage().toLowerCase().contains("message"));
     }
 
+    /**
+     * Verifies that encrypting a comment against a parent missing
+     * {@code messageSecret} throws {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("encryptComment: missing parent secret throws IllegalArgumentException")
     void encryptCommentMissingSecret() {
-        var parent = parent(/*secret*/ null, PARENT_KEY_ID, false, OTHER_SENDER);
+        var parent = parent(null, PARENT_KEY_ID, false, OTHER_SENDER);
         var comment = new CommentMessageBuilder()
                 .messageContainer(MessageContainer.of("hi"))
                 .build();
@@ -178,8 +218,12 @@ class EncMessageFactoryTest {
                 () -> EncMessageFactory.encryptComment(comment, parent, SELF_JID));
     }
 
+    /**
+     * Verifies key isolation: a ciphertext bound to one parent secret
+     * cannot be decrypted under a different secret.
+     */
     @Test
-    @DisplayName("encryptComment: ciphertext is bound to the parent secret — different secret breaks decrypt")
+    @DisplayName("encryptComment: ciphertext is bound to the parent secret; different secret breaks decrypt")
     void encryptCommentKeyIsolation() {
         var parent = parent(PARENT_SECRET, PARENT_KEY_ID, false, OTHER_SENDER);
         var comment = new CommentMessageBuilder()
@@ -193,6 +237,10 @@ class EncMessageFactoryTest {
                 MessageAddonType.ENC_COMMENT));
     }
 
+    /**
+     * Verifies that {@code null} comment, parent, or self throws
+     * {@link NullPointerException}.
+     */
     @Test
     @DisplayName("encryptComment: null arguments throw NullPointerException")
     void encryptCommentNullArgs() {
@@ -208,8 +256,10 @@ class EncMessageFactoryTest {
                 () -> EncMessageFactory.encryptComment(comment, parent, null));
     }
 
-    // -------- encryptPollVote --------
-
+    /**
+     * Verifies the encrypted poll-vote wrapper shape: ciphertext present,
+     * 12-byte IV.
+     */
     @Test
     @DisplayName("encryptPollVote: result has ciphertext + 12-byte IV")
     void encryptPollVoteShape() {
@@ -220,28 +270,39 @@ class EncMessageFactoryTest {
         assertEquals(12, encValue.encIv().orElseThrow().length);
     }
 
+    /**
+     * Verifies that the poll-vote ciphertext is AAD-bound to the voter JID:
+     * decrypt under a different voter is rejected.
+     */
     @Test
-    @DisplayName("encryptPollVote: encryption is AAD-bound — decrypt with a different voter is rejected")
+    @DisplayName("encryptPollVote: encryption is AAD-bound; decrypt with a different voter is rejected")
     void encryptPollVoteAadBindsVoter() {
         var poll = parent(PARENT_SECRET, PARENT_KEY_ID, false, OTHER_SENDER);
         var encValue = EncMessageFactory.encryptPollVote(List.of("Option A"), poll, SELF_JID);
 
         var encryptedAddon = new MessageEncryptedAddon(encValue.encPayload().orElseThrow(), encValue.encIv().orElseThrow());
-        // Decrypt with a different voter — AAD-bound, must fail.
         var otherVoter = Jid.of("12025550900@s.whatsapp.net");
         assertThrows(RuntimeException.class, () -> MessageAddonEncryption.decrypt(
                 encryptedAddon, PARENT_SECRET, PARENT_KEY_ID, OTHER_SENDER, otherVoter,
                 MessageAddonType.POLL_VOTE));
     }
 
+    /**
+     * Verifies that encrypting a vote with a missing parent secret throws
+     * {@link IllegalArgumentException}.
+     */
     @Test
     @DisplayName("encryptPollVote: missing parent secret throws IllegalArgumentException")
     void encryptPollVoteMissingSecret() {
-        var poll = parent(/*secret*/ null, PARENT_KEY_ID, false, OTHER_SENDER);
+        var poll = parent(null, PARENT_KEY_ID, false, OTHER_SENDER);
         assertThrows(IllegalArgumentException.class,
                 () -> EncMessageFactory.encryptPollVote(List.of("Option A"), poll, SELF_JID));
     }
 
+    /**
+     * Verifies that a {@code null} entry inside {@code selectedOptions}
+     * throws {@link NullPointerException}.
+     */
     @Test
     @DisplayName("encryptPollVote: null selected entry throws NullPointerException")
     void encryptPollVoteNullEntry() {
@@ -251,18 +312,28 @@ class EncMessageFactoryTest {
                 () -> EncMessageFactory.encryptPollVote(withNull, poll, SELF_JID));
     }
 
+    /**
+     * Verifies that encrypting with an empty option list still produces a
+     * valid envelope (zero votes).
+     *
+     * @implNote An empty {@code PollVoteMessage} encodes to a very small
+     * protobuf body, but the AES-GCM tag adds 16 bytes, so the resulting
+     * ciphertext is never empty.
+     */
     @Test
     @DisplayName("encryptPollVote: empty option list still produces a valid envelope (zero votes)")
     void encryptPollVoteEmptyOptions() {
         var poll = parent(PARENT_SECRET, PARENT_KEY_ID, false, OTHER_SENDER);
         var encValue = EncMessageFactory.encryptPollVote(List.of(), poll, SELF_JID);
         assertNotNull(encValue.encPayload().orElseThrow());
-        // Empty PollVoteMessage encodes to a (very small) protobuf body — but
-        // never zero, since AES-GCM tags add 16 bytes.
         assertTrue(encValue.encPayload().orElseThrow().length >= 16,
                 "ciphertext must include the 16-byte GCM tag even for empty input");
     }
 
+    /**
+     * Verifies that {@code null} selected options, poll, or voter throws
+     * {@link NullPointerException}.
+     */
     @Test
     @DisplayName("encryptPollVote: null arguments throw NullPointerException")
     void encryptPollVoteNullArgs() {
@@ -275,38 +346,39 @@ class EncMessageFactoryTest {
                 () -> EncMessageFactory.encryptPollVote(List.of("A"), poll, null));
     }
 
-    // -------- sender resolution --------
-
+    /**
+     * Verifies sender resolution under {@code fromMe == true}: the addon
+     * encrypts under {@code selfJid}.
+     *
+     * @apiNote Mirrors {@code WAWebMsgGetters.getOriginalSender}, which
+     * prefers the {@code fromMe} branch.
+     */
     @Test
     @DisplayName("sender resolution: fromMe=true parent encrypts under selfJid (mirrors WAWebMsgGetters.getOriginalSender)")
     void senderResolutionFromMeUsesSelf() {
-        // WA Web's WAWebMsgGetters.getOriginalSender uses
-        // originalSelfAuthorUserJidString first (set when the user authored
-        // the parent) and falls back to the resolved sender. Cobalt mirrors
-        // that semantics in EncMessageFactory.resolveOriginalSender by
-        // taking the fromMe branch first: fromMe=true → selfJid.
-        var parentFromMe = parent(PARENT_SECRET, PARENT_KEY_ID, true, /*senderJid*/ null);
+        var parentFromMe = parent(PARENT_SECRET, PARENT_KEY_ID, true, null);
         var reaction = new ReactionMessageBuilder().text("✓").build();
         var enc = EncMessageFactory.encryptReaction(reaction, parentFromMe, SELF_JID);
         var addon = new MessageEncryptedAddon(enc.encPayload().orElseThrow(), enc.encIv().orElseThrow());
 
-        // Decrypt succeeds with originalSender = SELF_JID.
         var recovered = MessageAddonEncryption.decrypt(
                 addon, PARENT_SECRET, PARENT_KEY_ID, SELF_JID, SELF_JID,
                 MessageAddonType.ENC_REACTION);
         assertTrue(recovered.length > 0);
 
-        // Decrypt with originalSender = CHAT_JID (the parentJid fallback) is
-        // rejected — the fromMe branch wins.
         assertThrows(RuntimeException.class, () -> MessageAddonEncryption.decrypt(
                 addon, PARENT_SECRET, PARENT_KEY_ID, CHAT_JID, SELF_JID,
                 MessageAddonType.ENC_REACTION));
     }
 
+    /**
+     * Verifies sender resolution under {@code fromMe == false} with an
+     * explicit {@code senderJid}: the addon encrypts under that sender.
+     */
     @Test
     @DisplayName("sender resolution: fromMe=false with explicit senderJid encrypts under senderJid")
     void senderResolutionUsesExplicitSender() {
-        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, /*fromMe*/ false, OTHER_SENDER);
+        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, false, OTHER_SENDER);
         var reaction = new ReactionMessageBuilder().text("✓").build();
         var enc = EncMessageFactory.encryptReaction(reaction, parent, SELF_JID);
         var addon = new MessageEncryptedAddon(enc.encPayload().orElseThrow(), enc.encIv().orElseThrow());
@@ -316,21 +388,24 @@ class EncMessageFactoryTest {
                 MessageAddonType.ENC_REACTION);
         assertTrue(recovered.length > 0);
 
-        // Decrypting under selfJid (the fromMe branch) must fail — fromMe=false.
         assertThrows(RuntimeException.class, () -> MessageAddonEncryption.decrypt(
                 addon, PARENT_SECRET, PARENT_KEY_ID, SELF_JID, SELF_JID,
                 MessageAddonType.ENC_REACTION));
     }
 
+    /**
+     * Verifies sender resolution under {@code fromMe == false} with no
+     * explicit {@code senderJid}: the addon falls back to the
+     * {@code parentJid}.
+     */
     @Test
     @DisplayName("sender resolution: fromMe=false with no senderJid falls back to parentJid")
     void senderResolutionFallsBackToParentJid() {
-        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, /*fromMe*/ false, /*senderJid*/ null);
+        var parent = parent(PARENT_SECRET, PARENT_KEY_ID, false, null);
         var reaction = new ReactionMessageBuilder().text("✓").build();
         var enc = EncMessageFactory.encryptReaction(reaction, parent, SELF_JID);
         var addon = new MessageEncryptedAddon(enc.encPayload().orElseThrow(), enc.encIv().orElseThrow());
 
-        // Decrypt succeeds with originalSender = CHAT_JID (the parentJid fallback).
         var recovered = MessageAddonEncryption.decrypt(
                 addon, PARENT_SECRET, PARENT_KEY_ID, CHAT_JID, SELF_JID,
                 MessageAddonType.ENC_REACTION);
@@ -338,12 +413,14 @@ class EncMessageFactoryTest {
     }
 
     /**
-     * Builds a {@link ChatMessageInfo} configured as the parent for an addon.
+     * Builds a {@link ChatMessageInfo} configured as the parent for an
+     * addon.
      *
-     * @param secret      the message secret, or {@code null} to leave unset
-     * @param keyId       the parent key id
-     * @param fromMe      whether the parent was authored by the current user
-     * @param senderJid   the parent key's senderJid, or {@code null} to leave unset
+     * @param secret    the message secret, or {@code null} to leave unset
+     * @param keyId     the parent key id
+     * @param fromMe    whether the parent was authored by the current user
+     * @param senderJid the parent key's {@code senderJid}, or {@code null}
+     *                  to leave unset
      * @return the configured parent message
      */
     private static ChatMessageInfo parent(byte[] secret, String keyId, boolean fromMe, Jid senderJid) {

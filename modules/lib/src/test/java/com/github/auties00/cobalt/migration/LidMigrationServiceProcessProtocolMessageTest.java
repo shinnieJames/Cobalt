@@ -3,15 +3,17 @@ package com.github.auties00.cobalt.migration;
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
 import com.github.auties00.cobalt.exception.WhatsAppLidMigrationException;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingBuilder;
 import com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayloadBuilder;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.wam.DefaultWamService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,11 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for {@link LidMigrationService#processProtocolMessage(com.github.auties00.cobalt.model.jid.migration.LIDMigrationMappingSyncPayload)}.
  *
- * <p>The handler receives the decoded primary-device mapping sync, gates
- * on the state machine, populates the primary caches, cancels the
- * mapping-sync timeout, mirrors per-contact LIDs, and finally
- * auto-starts the executor. Every observable side effect is pinned by
- * one of these tests.
+ * @apiNote
+ * Pins every observable side effect of the primary-device
+ * mapping-sync ingestion: state-machine gating, primary cache
+ * population, mapping-sync timeout cancellation, per-contact LID
+ * mirroring, and the auto-start of
+ * {@link LidMigrationService#executeMigration()}.
+ *
+ * @implNote
+ * This implementation uses isolated harnesses through
+ * {@link MigrationFixtures#temporaryStore(Jid, Jid)} with an
+ * AB-prop seed that disables the peer-sync timeout so the tests
+ * are not racey.
  */
 @DisplayName("LidMigrationService.processProtocolMessage")
 class LidMigrationServiceProcessProtocolMessageTest {
@@ -37,8 +46,20 @@ class LidMigrationServiceProcessProtocolMessageTest {
     private static final Jid PEER_LID = Jid.of("258252122116273@lid");
     private static final Jid PEER_LID_LATEST = Jid.of("999999999999999@lid");
 
+    /**
+     * Bundles the test client and the service under test.
+     *
+     * @param client  the test client harness
+     * @param service the service under test
+     */
     private record Harness(TestWhatsAppClient client, LidMigrationService service) {}
 
+    /**
+     * Builds a fresh harness wired with the supplied AB props.
+     *
+     * @param props the AB-props seed driving the service
+     * @return a fresh {@link Harness}
+     */
     private static Harness build(TestABPropsService props) {
         var store = MigrationFixtures.temporaryStore(SELF_PN, SELF_LID);
         var client = TestWhatsAppClient.create().withStore(store);
@@ -47,21 +68,44 @@ class LidMigrationServiceProcessProtocolMessageTest {
         return new Harness(client, service);
     }
 
+    /**
+     * Returns the AB-prop seed shared by the happy-path tests, with
+     * the peer-sync timeout disabled and compatibility enabled.
+     *
+     * @apiNote
+     * A non-zero peer-sync timeout would arm a scheduled task whose
+     * firing time races the test thread; setting it to zero
+     * disables scheduling entirely (matches WA Web's
+     * {@code shouldScheduleTimeoutForMissingPeerMessage} early
+     * return).
+     *
+     * @return the default {@link TestABPropsService}
+     */
     private static TestABPropsService defaultProps() {
-        // Timeout=0 disables the pending-timeout future so processProtocolMessage tests don't race.
         return TestABPropsService.builder()
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_PEER_SYNC_TIMEOUT_IN_SECONDS, 0L)
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_COMPATIBLE, true)
                 .build();
     }
 
+    /**
+     * Drives the service from
+     * {@link LidMigrationState#NOT_STARTED} to
+     * {@link LidMigrationState#WAITING_MAPPINGS} so a subsequent
+     * {@code processProtocolMessage} can advance further.
+     *
+     * @param service the service to advance
+     */
     private static void advanceToWaitingMappings(LidMigrationService service) {
         service.initialize();
         service.enableMigration();
     }
 
+    /**
+     * Verifies that null payload -> state=FAILED + FailedToParseMappings surfaced through handleFailure.
+     */
     @Test
-    @DisplayName("null payload → state=FAILED + FailedToParseMappings surfaced through handleFailure")
+    @DisplayName("null payload -> state=FAILED + FailedToParseMappings surfaced through handleFailure")
     void nullPayload() {
         var h = build(defaultProps());
         advanceToWaitingMappings(h.service);
@@ -74,6 +118,9 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertInstanceOf(WhatsAppLidMigrationException.FailedToParseMappings.class, failures.getFirst());
     }
 
+    /**
+     * Verifies that payload while in NOT_STARTED is ignored.
+     */
     @Test
     @DisplayName("payload while in NOT_STARTED is ignored")
     void ignoredFromNotStarted() {
@@ -87,13 +134,16 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
+    /**
+     * Verifies that payload while in READY is ignored.
+     */
     @Test
     @DisplayName("payload while in READY is ignored")
     void ignoredFromReady() {
         var h = build(defaultProps());
         advanceToWaitingMappings(h.service);
 
-        // First delivery moves the state to READY → IN_PROGRESS → COMPLETE.
+        // First delivery moves the state to READY -> IN_PROGRESS -> COMPLETE.
         h.service.processProtocolMessage(new LIDMigrationMappingSyncPayloadBuilder()
                 .pnToLidMappings(List.of())
                 .build());
@@ -109,8 +159,11 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 "post-terminal delivery does not surface any new failure");
     }
 
+    /**
+     * Verifies that empty mappings -> state advances to COMPLETE via auto-start, chatDbMigrationTimestamp cleared.
+     */
     @Test
-    @DisplayName("empty mappings → state advances to COMPLETE via auto-start, chatDbMigrationTimestamp cleared")
+    @DisplayName("empty mappings -> state advances to COMPLETE via auto-start, chatDbMigrationTimestamp cleared")
     void emptyMappings() {
         var h = build(defaultProps());
         advanceToWaitingMappings(h.service);
@@ -125,8 +178,11 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
+    /**
+     * Verifies that typical mappings -> caches populated, contact LID mirrored, mapping registered.
+     */
     @Test
-    @DisplayName("typical mappings → caches populated, contact LID mirrored, mapping registered")
+    @DisplayName("typical mappings -> caches populated, contact LID mirrored, mapping registered")
     void typicalMappings() {
         var h = build(defaultProps());
         h.client.store().addNewContact(PEER_PN);
@@ -142,7 +198,7 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 .build();
         h.service.processProtocolMessage(payload);
 
-        // Primary cache holds the assigned LID — observable via lookupLid (cache before store).
+        // Primary cache holds the assigned LID; observable via lookupLid (cache before store).
         assertEquals(PEER_LID, h.service.lookupLid(PEER_PN).orElseThrow());
 
         // Contact LID mirrored (set by processSingleMapping).
@@ -153,6 +209,9 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(PEER_LID, h.client.store().findLidByPhone(PEER_PN).orElseThrow());
     }
 
+    /**
+     * Verifies that mapping without latestLid: only the assigned LID is cached, no latest entry.
+     */
     @Test
     @DisplayName("mapping without latestLid: only the assigned LID is cached, no latest entry")
     void mappingWithoutLatestLid() {
@@ -183,8 +242,11 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 "without latestLid, the ctwa promotion path does not fire");
     }
 
+    /**
+     * Verifies that payload.chatDbMigrationTimestamp present -> recorded as effective sync timestamp.
+     */
     @Test
-    @DisplayName("payload.chatDbMigrationTimestamp present → recorded as effective sync timestamp")
+    @DisplayName("payload.chatDbMigrationTimestamp present -> recorded as effective sync timestamp")
     void chatDbTimestampPresent() {
         var h = build(defaultProps());
         advanceToWaitingMappings(h.service);
@@ -208,6 +270,9 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(LidMigrationState.COMPLETE, h.service.state());
     }
 
+    /**
+     * Verifies that after successful delivery, processProtocolMessage in COMPLETE is a no-op.
+     */
     @Test
     @DisplayName("after successful delivery, processProtocolMessage in COMPLETE is a no-op")
     void deliveryAfterCompleteIsNoOp() {
@@ -226,6 +291,9 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(LidMigrationState.COMPLETE, h.service.state());
     }
 
+    /**
+     * Verifies that mappings list containing a null entry is tolerated (processSingleMapping no-ops on null).
+     */
     @Test
     @DisplayName("mappings list containing a null entry is tolerated (processSingleMapping no-ops on null)")
     void mappingsListWithNullEntry() {
@@ -237,7 +305,7 @@ class LidMigrationServiceProcessProtocolMessageTest {
                 .assignedLid(Long.parseLong(PEER_LID.user()))
                 .build();
         // Mutable ArrayList allows a null entry; the loop in processProtocolMessage must skip it.
-        var mappings = new java.util.ArrayList<com.github.auties00.cobalt.model.jid.migration.LIDMigrationMapping>();
+        var mappings = new ArrayList<LIDMigrationMapping>();
         mappings.add(validMapping);
         mappings.add(null);
 
@@ -252,12 +320,15 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertEquals(PEER_LID, h.service.lookupLid(PEER_PN).orElseThrow());
     }
 
+    /**
+     * Verifies that processProtocolMessage's outer catch surfaces unexpected Throwables as FailedToParseMappings.
+     */
     @Test
     @DisplayName("processProtocolMessage's outer catch surfaces unexpected Throwables as FailedToParseMappings")
     void throwableInProcessingSurfacesAsFailedToParse() {
         // processSingleMapping is structurally robust against legitimate inputs (Contact.setLid is a
         // simple field setter, ConcurrentHashMap.put cannot fail on non-null keys). The outer
-        // try/catch(Throwable) in processProtocolMessage exists for unforeseen runtime errors —
+        // try/catch(Throwable) in processProtocolMessage exists for unforeseen runtime errors; 
         // e.g. mappings being a non-iterable due to a generated builder bug. We document the
         // contract here: any Throwable escaping the mappings loop is wrapped as FailedToParseMappings.
         // Direct construction in unit tests is not feasible; the catch is covered indirectly by the
@@ -276,8 +347,11 @@ class LidMigrationServiceProcessProtocolMessageTest {
         assertTrue(h.client.failures().isEmpty());
     }
 
+    /**
+     * Verifies that LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false at executeMigration -> IncompatibleClient surfaces.
+     */
     @Test
-    @DisplayName("LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false at executeMigration → IncompatibleClient surfaces")
+    @DisplayName("LID_ONE_ON_ONE_MIGRATION_COMPATIBLE=false at executeMigration -> IncompatibleClient surfaces")
     void incompatibleClient() {
         var props = TestABPropsService.builder()
                 .with(ABProp.LID_ONE_ON_ONE_MIGRATION_PEER_SYNC_TIMEOUT_IN_SECONDS, 0L)

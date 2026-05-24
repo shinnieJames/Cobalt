@@ -1,22 +1,26 @@
 package com.github.auties00.cobalt.exception;
 
 /**
- * Thrown for failures that invalidate the active WhatsApp session as a
- * whole.
+ * Sealed root for failures that invalidate the active WhatsApp session
+ * as a whole.
  *
- * <p>A session in Cobalt is the encrypted Noise protocol channel that
- * sits on top of the WebSocket connection: it carries the registration
+ * @apiNote
+ * A session in Cobalt is the encrypted Noise protocol channel that sits
+ * on top of the WebSocket connection: it carries the registration
  * identity, the cipher state used for every frame, and the
- * authentication of the current device with the server. Any failure
- * that compromises that channel (a MAC mismatch on the wire, a
- * deliberate close from either side, the server signaling that the
- * account was banned or logged out, a take-over by another instance, or
- * a server-driven request to reconnect) raises one of the nested
- * subtypes.
+ * authentication of the current device with the server. The nested
+ * subtypes correspond to the distinct ways WA Web's
+ * {@code WAWebHandleStreamError} aborts a logged-in stream (the parser
+ * for {@code stream:error} stanzas dispatches on {@code conflict} type
+ * {@code replaced} vs {@code device_removed}, on numeric error codes
+ * 515 ({@link Reconnect}) and 516 ({@link LoggedOut}), and on
+ * {@code xml-not-well-formed}). The configurable error handler decides
+ * whether to reconnect, treat the account as locked out, or notify the
+ * user.
  *
- * <p>All session exceptions are fatal because they leave the channel in
- * an unusable state. The configurable error handler decides whether to
- * reconnect, treat the account as locked out, or notify the user.
+ * @implNote
+ * This implementation always reports the failure as fatal: every
+ * session-level subtype leaves the Noise channel in an unusable state.
  *
  * @see BadMac
  * @see Closed
@@ -54,12 +58,11 @@ public sealed abstract class WhatsAppSessionException
     }
 
     /**
-     * Returns whether the failure invalidates the current session.
+     * {@inheritDoc}
      *
-     * <p>Every concrete session exception terminates the active
-     * channel, so the answer is always {@code true}.
-     *
-     * @return {@code true}
+     * @implNote
+     * This implementation always returns {@code true}: every concrete
+     * session exception terminates the active channel.
      */
     @Override
     public boolean isFatal() {
@@ -67,12 +70,13 @@ public sealed abstract class WhatsAppSessionException
     }
 
     /**
-     * Thrown when the server reports that the authentication code on a
-     * Noise frame did not validate.
+     * Thrown when the authentication code on a Noise frame did not
+     * validate.
      *
-     * <p>Each Noise frame carries an AEAD authentication tag computed
-     * over the ciphertext. A mismatch typically means the keys at the
-     * two ends of the channel drifted out of sync (often after a brief
+     * @apiNote
+     * Each Noise frame carries an AEAD authentication tag computed over
+     * the ciphertext. A mismatch typically means the keys at the two
+     * ends of the channel drifted out of sync (often after a brief
      * interruption that prevented a key rotation from completing) or
      * that the bytes were modified in transit.
      */
@@ -108,7 +112,8 @@ public sealed abstract class WhatsAppSessionException
      * Thrown when an operation is attempted on a session whose
      * underlying connection has already been closed.
      *
-     * <p>The closure may have been initiated by the application, by the
+     * @apiNote
+     * The closure may have been initiated by the application, by the
      * server (typically for maintenance or load balancing), or by the
      * keep-alive watchdog after the socket stopped responding.
      */
@@ -144,11 +149,13 @@ public sealed abstract class WhatsAppSessionException
      * Thrown when the server signals that another instance has taken
      * over the slot for this device kind.
      *
-     * <p>WhatsApp allows only one active web client (or one active
-     * mobile client) at a time. When a second one logs in, the server
-     * sends a {@code conflict} stream error to the existing session and
-     * Cobalt raises this exception. The local credentials cannot be
-     * reused without re-pairing.
+     * @apiNote
+     * Maps to WA Web's {@code stream:error} {@code <conflict
+     * type="replaced">} child handled by {@code WAWebHandleStreamError}.
+     * WhatsApp allows only one active web client (or one active mobile
+     * client) at a time. When a second one logs in, the server sends a
+     * conflict stream error to the existing session and the local
+     * credentials cannot be reused without re-pairing.
      */
     public static final class Conflict extends WhatsAppSessionException {
         /**
@@ -182,10 +189,16 @@ public sealed abstract class WhatsAppSessionException
      * Thrown when the server reports that the account has been logged
      * out of this device.
      *
-     * <p>The server pushes this notification when the user logs out
-     * from another device or when WhatsApp itself revokes the session
-     * as part of an enforcement flow. The credentials must be cleared
-     * before the user can pair the device again.
+     * @apiNote
+     * Maps to WA Web's {@code stream:error} {@code <conflict
+     * type="device_removed">} child and to the numeric 516 path inside
+     * {@code WAWebHandleStreamError} (which calls
+     * {@code clearCredentialsAndStoredData} and triggers
+     * {@code BackendEventBus.triggerLogout}). The server pushes this
+     * notification when the user logs out from another device or when
+     * WhatsApp itself revokes the session as part of an enforcement
+     * flow. Credentials must be cleared before the user can pair the
+     * device again.
      */
     public static final class LoggedOut extends WhatsAppSessionException {
         /**
@@ -220,9 +233,9 @@ public sealed abstract class WhatsAppSessionException
      * Thrown when the server refuses traffic for the account because it
      * has been banned.
      *
-     * <p>A ban is a terminal state. The client cannot reconnect until
-     * the ban is lifted or appealed through WhatsApp's support
-     * channels.
+     * @apiNote
+     * A ban is a terminal state. The client cannot reconnect until the
+     * ban is lifted or appealed through WhatsApp's support channels.
      */
     public static final class Banned extends WhatsAppSessionException {
         /**
@@ -256,10 +269,13 @@ public sealed abstract class WhatsAppSessionException
      * Thrown when the server requests that the client drop the current
      * connection and immediately re-establish it.
      *
-     * <p>This is typically used during load balancing, configuration
-     * rollouts, or scheduled maintenance. The credentials remain valid
-     * and the next connection attempt should succeed once the previous
-     * channel has been torn down.
+     * @apiNote
+     * Maps to the numeric 515 path inside
+     * {@code WAWebHandleStreamError} which calls
+     * {@code WAComms.stopComms()} and {@code startLogin()}. Used during
+     * load balancing, configuration rollouts, or scheduled maintenance.
+     * Credentials remain valid and the next connection attempt should
+     * succeed once the previous channel has been torn down.
      */
     public static final class Reconnect extends WhatsAppSessionException {
         /**

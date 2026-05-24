@@ -12,29 +12,43 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches every subgroup belonging to a WhatsApp community, including the
- * announcement (default) subgroup and all regular subgroups together with
- * their membership approval state.
+ * Outbound MEX request that fetches every subgroup belonging to a WhatsApp
+ * community.
  *
- * <p>This is the primary query issued when loading a community. The response
- * carries the default subgroup (always a single announcement group) and the
- * full edge list of regular subgroups, each with its id, subject, properties
- * (general chat flag, membership approval mode, hidden flag) and the total
- * count of pending membership approval requests scoped to the current user.
+ * @apiNote Primary query issued when loading a community. The response
+ * carries the default announcement subgroup (always a single group) and the
+ * full edge list of regular subgroups, each tagged with id, subject,
+ * properties (general-chat flag, membership-approval mode, hidden flag) and
+ * the pending membership-approval-request counter scoped to the current
+ * user. Surfaced from {@code WAWebQuerySubGroupAction} via
+ * {@code WAWebMexFetchAllSubgroupsJob.mexFetchAllSubgroups}, called with
+ * {@code query_context="INTERACTIVE"} when the user opens the community
+ * panel.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAllSubgroupsJob")
 public final class FetchAllSubgroupsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebMexFetchAllSubgroupsJobQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexFetchAllSubgroupsJobQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexFetchAllSubgroupsJobQuery.graphql}. The relay maps this
+     * id to its persisted operation; the GraphQL text is never sent on the
+     * wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAllSubgroupsJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9935467776504344";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface. The WA Web operation function is
+     * called {@code mexFetchAllSubgroups} but the GraphQL document name is
+     * {@code mexCommunityGetSubgroups}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAllSubgroupsJob", exports = "mexFetchAllSubgroups",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -46,6 +60,12 @@ public final class FetchAllSubgroupsMexRequest implements MexOperation.Request.J
 
     /**
      * Constructs a new request with the three GraphQL variables.
+     *
+     * @apiNote The {@code queryContext} tag mirrors the WA Web
+     * {@code "INTERACTIVE"} marker used when the user is browsing the
+     * community panel; pass {@code null} to omit it. {@code subGroupHintId}
+     * lets the relay prioritise edges around a known subgroup; both
+     * optional fields are dropped from the wire payload when {@code null}.
      *
      * @param groupId        the community parent group id, may be
      *                       {@code null} to omit
@@ -61,9 +81,7 @@ public final class FetchAllSubgroupsMexRequest implements MexOperation.Request.J
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -71,9 +89,7 @@ public final class FetchAllSubgroupsMexRequest implements MexOperation.Request.J
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -81,8 +97,15 @@ public final class FetchAllSubgroupsMexRequest implements MexOperation.Request.J
     }
 
     /**
-     * Serialises the GraphQL variables and wraps them in a {@code w:mex} IQ
-     * stanza.
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter} and only emits the optional
+     * {@code group_id}, {@code query_context} and {@code sub_group_hint_id}
+     * fields when their corresponding constructor argument is non-null,
+     * matching the WA Web {@code t == null ? void 0 : t.toString()} pattern
+     * that omits undefined GraphQL variables. The wrapped envelope is built
+     * through {@link MexOperation.Request.Json#createMexNode(String, String)}.
      *
      * @return the IQ {@link NodeBuilder} ready to be built and dispatched
      */

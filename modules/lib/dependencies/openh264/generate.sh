@@ -20,16 +20,16 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DIR/../.." && pwd)"
+ROOT="$(cd "$DIR/../../../.." && pwd)"
 if [ -n "${JEXTRACT_HOME:-}" ]; then
   JEXTRACT="$JEXTRACT_HOME/bin/jextract"
 else
   JEXTRACT="$(command -v jextract || true)"
 fi
-[ -n "$JEXTRACT" ] && [ -x "$JEXTRACT" ] || { echo "jextract not found; set JEXTRACT_HOME or add to PATH" >&2; exit 1; }
+[ -n "$JEXTRACT" ] && [ -f "$JEXTRACT" ] || { echo "jextract not found; set JEXTRACT_HOME or add to PATH" >&2; exit 1; }
 
 OUT="$ROOT/modules/lib/src/main/java"
-PKG="com.github.auties00.cobalt.call.video.h264.bindings"
+PKG="com.github.auties00.cobalt.call.internal.video.h264.bindings"
 
 rm -f "$OUT/${PKG//.//}/OpenH264.java" "$OUT/${PKG//.//}/OpenH264\$shared.java"
 

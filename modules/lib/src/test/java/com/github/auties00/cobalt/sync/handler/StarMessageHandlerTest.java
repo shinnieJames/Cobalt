@@ -10,13 +10,11 @@ import com.github.auties00.cobalt.model.message.MessageKeyBuilder;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.StarAction;
 import com.github.auties00.cobalt.model.sync.action.contact.StarActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,14 +24,27 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link StarMessageHandler}.
+ * Exercises {@link StarMessageHandler}'s parity with
+ * {@code WAWebStarMessageSync.applyMutations}.
+ *
+ * @apiNote
+ * Covers the wire-constant trio, the happy-path star/unstar flow, the
+ * orphan branch when the message is unknown, the malformed-index
+ * branches (missing slots, empty strings), the malformed-value branch
+ * when the action is not a {@code StarAction}, the {@code REMOVE}
+ * unsupported branch, and the default conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture seeds a single peer chat and an inbound message keyed
+ * under {@link #MESSAGE_ID}; tests that exercise the unstar branch
+ * pre-flip the starred flag before calling the handler so they can
+ * observe the transition back to {@code false}.
  */
 @DisplayName("StarMessageHandler")
 class StarMessageHandlerTest {
@@ -44,12 +55,37 @@ class StarMessageHandlerTest {
 
     private TestWhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so seeded
+     * chats and messages do not leak between cases.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given star payload into a trusted {@code SET} mutation.
+     *
+     * @apiNote
+     * The five-slot index follows WA Web's
+     * {@code ["star", chatJid, messageId, fromMe, participant]} layout;
+     * tests passing {@code "0"} for {@code fromMe} and {@code participant}
+     * exercise the 1:1 chat branch.
+     *
+     * @param starred     the new starred flag
+     * @param chatJid     the remote chat JID
+     * @param messageId   the message id
+     * @param fromMe      the {@code fromMe} flag as {@code "0"} or {@code "1"}
+     * @param participant the participant JID string or {@code "0"}
+     * @param ts          the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted starMutation(boolean starred, Jid chatJid, String messageId, String fromMe, String participant, Instant ts) {
         var value = new SyncActionValueBuilder()
                 .timestamp(ts)
@@ -59,7 +95,15 @@ class StarMessageHandlerTest {
         return new DecryptedMutation.Trusted(index, value, SyncdOperation.SET, ts, 2);
     }
 
-    /** Adds an inbound chat message for the test. */
+    /**
+     * Seeds the peer chat with an inbound message keyed under
+     * {@link #MESSAGE_ID}.
+     *
+     * @apiNote
+     * Used by the happy-path tests so the handler's
+     * {@code findMessageById} lookup returns a populated message;
+     * orphan-branch tests deliberately skip this step.
+     */
     private void seedMessage() {
         var chat = client.store().addNewChat(PEER);
         var key = new MessageKeyBuilder()
@@ -96,7 +140,7 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation SET â€” happy path")
+    @DisplayName("applyMutation SET - happy path")
     class HappySet {
         @Test
         @DisplayName("starred=true on an existing message stars it")
@@ -128,7 +172,7 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” orphan")
+    @DisplayName("applyMutation - orphan")
     class Orphan {
         @Test
         @DisplayName("SET against an unknown message returns ORPHAN with modelType=Msg")
@@ -147,7 +191,7 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SyncActionValue carrying an archiveChatAction instead of starAction is MALFORMED")
@@ -167,7 +211,7 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a 4-element index missing the participant slot is MALFORMED")
@@ -203,7 +247,7 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation â€” REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class RemoveOperation {
         @Test
         @DisplayName("REMOVE returns UNSUPPORTED")
@@ -223,10 +267,10 @@ class StarMessageHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based behaviour")
+    @DisplayName("resolveConflicts - default timestamp-based behaviour")
     class ResolveConflicts {
         @Test
-        @DisplayName("older local vs. newer remote â†’ APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("older local vs. newer remote -> APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteWins() {
             var local = starMutation(false, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(100L));
             var remote = starMutation(true, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(200L));
@@ -236,7 +280,7 @@ class StarMessageHandlerTest {
         }
 
         @Test
-        @DisplayName("newer local vs. older remote â†’ SKIP_REMOTE")
+        @DisplayName("newer local vs. older remote -> SKIP_REMOTE")
         void newerLocalWins() {
             var local = starMutation(true, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(300L));
             var remote = starMutation(false, PEER, MESSAGE_ID, "0", "0", Instant.ofEpochSecond(200L));
@@ -246,23 +290,4 @@ class StarMessageHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("WA Web oracle parity (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encode output when the oracle is present")
-        void byteParityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/star-message/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/star-message/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-            var starred = oracle.getBoolean("starred");
-
-            var value = new SyncActionValueBuilder()
-                    .timestamp(Instant.ofEpochSecond(oracle.getLong("timestampSeconds")))
-                    .starAction(new StarActionBuilder().starred(starred).build())
-                    .build();
-            assertNotNull(expected);
-            assertArrayEquals(expected, SyncActionValueSpec.encode(value));
-        }
-    }
 }

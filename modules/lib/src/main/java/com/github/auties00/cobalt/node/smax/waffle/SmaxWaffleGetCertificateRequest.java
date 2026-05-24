@@ -15,42 +15,61 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="waffle" smax_id="51" type="get"/>}
+ * Waffle get-certificate request.
+ *
+ * @apiNote
+ * Powers {@code WAWebAccountLinkingAPI.fetchValidCertificate}, which
+ * fetches the Waffle backend's public certificate set before any
+ * encrypted Waffle RPC runs (the certificates' public keys feed
+ * {@code wrapPayloadWithRSAAESEncryption} when wrapping outbound
+ * action payloads, and the password PEM feeds
+ * {@code WAWebAccountLinkingCryptoUtils.encryptPassword} when
+ * bootstrapping a new linked account). The two boolean flags toggle
+ * the optional {@code <payload_enc_certificates/>} and
+ * {@code <password_pem/>} markers in the body, telling the relay
+ * which PEM subset to return. The reply is parsed by
+ * {@link SmaxWaffleGetCertificateResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleGetCertificateRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
 public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Request {
     /**
-     * The client's wall-clock at request time, in seconds since the
-     * UNIX epoch.
+     * The client wall-clock at request time, in seconds since the
+     * Unix epoch.
      */
     private final long timestamp;
 
     /**
-     * Whether to include the
-     * {@code <payload_enc_certificates/>} marker in the request,
-     * triggering inclusion of the
-     * {@code <encryption_pem/>}/{@code <signature_pem/>} pair in the
-     * reply.
+     * Whether to include the {@code <payload_enc_certificates/>}
+     * marker; when set, the relay also returns the encryption PEM and
+     * signature PEM children.
      */
     private final boolean hasPayloadEncCertificates;
 
     /**
-     * Whether to include the {@code <password_pem/>} marker in the
-     * request, triggering inclusion of the {@code <password_pem/>}
-     * child in the reply.
+     * Whether to include the {@code <password_pem/>} marker; when
+     * set, the relay also returns the password PEM child.
      */
     private final boolean hasPasswordPem;
 
     /**
-     * Constructs a request.
+     * Constructs a get-certificate request.
      *
-     * @param timestamp                 the UNIX epoch seconds
-     * @param hasPayloadEncCertificates whether to request the
-     *                                  encryption + signature PEM
-     *                                  pair
-     * @param hasPasswordPem            whether to request the
-     *                                  password PEM
+     * @apiNote
+     * The two flags are not mutually exclusive: WA Web's
+     * {@code fetchValidCertificate} call site sets both to
+     * {@code true} so the reply carries the full PEM trio (encryption,
+     * signature, password). A request with both flags clear is legal
+     * but only fetches the bare timestamp envelope.
+     *
+     * @param timestamp                 the request timestamp
+     * @param hasPayloadEncCertificates whether the
+     *                                  {@code <payload_enc_certificates/>}
+     *                                  marker is present
+     * @param hasPasswordPem            whether the
+     *                                  {@code <password_pem/>} marker is
+     *                                  present
      */
     public SmaxWaffleGetCertificateRequest(long timestamp, boolean hasPayloadEncCertificates, boolean hasPasswordPem) {
         this.timestamp = timestamp;
@@ -61,15 +80,15 @@ public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Requ
     /**
      * Returns the request timestamp.
      *
-     * @return the UNIX epoch seconds
+     * @return the timestamp as supplied at construction time
      */
     public long timestamp() {
         return timestamp;
     }
 
     /**
-     * Reports whether the encryption + signature PEM pair is
-     * requested.
+     * Reports whether the {@code <payload_enc_certificates/>} marker
+     * is present.
      *
      * @return {@code true} when the marker is present
      */
@@ -78,7 +97,7 @@ public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Requ
     }
 
     /**
-     * Reports whether the password PEM is requested.
+     * Reports whether the {@code <password_pem/>} marker is present.
      *
      * @return {@code true} when the marker is present
      */
@@ -89,7 +108,17 @@ public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Requ
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope
+     * @apiNote
+     * Produces
+     * {@code <iq xmlns="waffle" smax_id="51" type="get" to="s.whatsapp.net">
+     * <timestamp.../> [<payload_enc_certificates/>] [<password_pem/>]</iq>};
+     * the dispatch path stamps a fresh {@code id} attribute on every
+     * outbound stanza so the reply parser can match it back to this
+     * request. The two optional markers are appended only when their
+     * corresponding flags are {@code true}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope; never
+     *         {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleGetCertificateRequest",
@@ -119,6 +148,14 @@ public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Requ
                 .content(children);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxWaffleGetCertificateRequest} with equal payload
+     * fields.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when timestamp and both flags match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -133,11 +170,23 @@ public final class SmaxWaffleGetCertificateRequest implements SmaxOperation.Requ
                 && this.hasPasswordPem == that.hasPasswordPem;
     }
 
+    /**
+     * Returns a hash code derived from the timestamp and the two
+     * flags.
+     *
+     * @return a content-based hash consistent with
+     *         {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(timestamp, hasPayloadEncCertificates, hasPasswordPem);
     }
 
+    /**
+     * Returns a debug rendering of this request.
+     *
+     * @return a human-readable summary; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxWaffleGetCertificateRequest[timestamp=" + timestamp

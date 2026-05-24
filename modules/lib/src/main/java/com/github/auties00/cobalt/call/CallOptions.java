@@ -3,7 +3,7 @@ package com.github.auties00.cobalt.call;
 /**
  * Configuration for a placed or accepted call. Audio is always on
  * (16 kHz mono — fixed by WhatsApp's wire profile, see
- * {@link com.github.auties00.cobalt.call.io.AudioFrame}); video is
+ * {@link com.github.auties00.cobalt.call.frame.audio.AudioFrame}); video is
  * optional and, when on, carries the negotiated picture size.
  *
  * <p>Use the static factories rather than the canonical constructor:

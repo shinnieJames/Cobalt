@@ -3,37 +3,18 @@ package com.github.auties00.cobalt.client.info;
 import com.github.auties00.cobalt.model.device.pairing.ClientPlatformType;
 
 /**
- * Represents the public identity of a native mobile WhatsApp client (Android
- * or iOS) that Cobalt impersonates while running the mobile registration
- * protocol.
+ * Sealed sub root of {@link WhatsAppClientInfo} for the native mobile clients (Android consumer, Android business, iOS
+ * consumer, iOS business) that participate in the mobile registration protocol.
  *
- * <p>The mobile registration protocol exposed at
- * {@code https://v.whatsapp.net/v2} is the channel by which a real Android
- * or iOS app claims ownership of a phone number, requests an SMS or voice
- * verification code, and finally submits the received code to obtain a
- * registered Signal identity. Every call in that protocol is authenticated
- * by a registration token computed from the app's signing material, the
- * phone number, and the advertised client version.
+ * <p>Every request in the mobile registration flow carries a {@link #computeRegistrationToken(long) registration token}
+ * derived from the app's signing material and the national phone number. Web and desktop clients pair by QR code or device
+ * link and never exercise this protocol, so they are not part of this sub hierarchy.
  *
- * <p>This interface captures the two pieces of metadata Cobalt needs in
- * order to faithfully impersonate such a mobile client. It first records
- * whether the client is the consumer ({@code WhatsApp}) or business
- * ({@code WhatsApp Business}) edition, which changes server side feature
- * gating and a few protocol constants. It also defines how the per phone
- * number registration token is computed: Android derives an HMAC over the
- * APK signing certificates with a PBKDF2 derived key, while iOS computes
- * an MD5 of a static secret concatenated with the build hash.
- *
- * <p>Concrete implementations are downloaded and cached lazily through
- * {@link WhatsAppAndroidClientInfo#ofPersonal()} and
- * {@link WhatsAppAndroidClientInfo#ofBusiness()}, and through the matching
- * iOS factories on {@link WhatsAppIosClientInfo}.
- *
- * @apiNote The mobile registration protocol is implemented by the native
- *          Android and iOS WhatsApp applications, not by WhatsApp Web. There
- *          is therefore no WhatsApp Web module that this interface adapts;
- *          it exists solely so that Cobalt can drive the mobile registration
- *          flow from Java without embedding the proprietary binaries.
+ * @apiNote Pick a variant through this interface, or directly through {@link WhatsAppAndroidClientInfo} or
+ *          {@link WhatsAppIosClientInfo}, when driving the mobile registration flow.
+ * @implNote This implementation has no WA Web counterpart because the mobile registration protocol lives inside the native
+ *           Android and iOS WhatsApp binaries rather than the JS bundle. Each token algorithm is reverse engineered from
+ *           the respective binary.
  * @see WhatsAppAndroidClientInfo
  * @see WhatsAppIosClientInfo
  */
@@ -41,18 +22,16 @@ public sealed interface WhatsAppMobileClientInfo
         extends WhatsAppClientInfo
         permits WhatsAppAndroidClientInfo, WhatsAppIosClientInfo {
     /**
-     * Returns the {@code WhatsAppMobileClientInfo} implementation that matches
-     * the given mobile platform.
+     * Returns the {@link WhatsAppMobileClientInfo} variant matching the requested mobile {@link ClientPlatformType}.
      *
-     * <p>Unlike {@link WhatsAppClientInfo#of(ClientPlatformType)}, this
-     * accessor is restricted to the four mobile platforms because web and
-     * desktop clients do not participate in the native registration protocol.
+     * <p>Only the four mobile platforms are accepted; web and desktop platforms are rejected because they do not
+     * participate in the native registration protocol. The chosen variant is resolved lazily on the first call and the
+     * cached instance is returned thereafter.
      *
+     * @apiNote For a dispatcher that accepts every platform see {@link WhatsAppClientInfo#of(ClientPlatformType)}.
      * @param platform the target mobile platform
-     * @return a cached {@code WhatsAppMobileClientInfo} for the requested
-     *         platform and flavour
-     * @throws IllegalStateException if {@code platform} is not one of the
-     *                               four supported mobile platforms
+     * @return the cached {@link WhatsAppMobileClientInfo} for {@code platform}
+     * @throws IllegalStateException if {@code platform} is not one of the four supported mobile platforms
      */
     static WhatsAppMobileClientInfo of(ClientPlatformType platform) {
         return switch (platform) {
@@ -65,36 +44,30 @@ public sealed interface WhatsAppMobileClientInfo
     }
 
     /**
-     * Returns whether this client info represents a WhatsApp Business build
-     * rather than the consumer WhatsApp build.
+     * Returns whether this variant represents the WhatsApp Business build rather than the consumer WhatsApp build.
      *
-     * <p>Business flavours use a different package identifier, different
-     * signing certificates, and on iOS a different static secret in the
-     * registration token derivation. The mobile registration and pairing
-     * layers inspect this flag to branch on business specific fields such
-     * as the verified name certificate.
+     * <p>Business and consumer builds use different package or bundle identifiers, different signing material, and (on iOS)
+     * different static secrets in the registration token derivation.
      *
-     * @return {@code true} for a business flavour, {@code false} for the
-     *         consumer flavour
+     * @apiNote Higher level pairing and registration layers branch on this flag for business specific fields such as the
+     *          verified name certificate.
+     * @return {@code true} for a business variant, {@code false} for the consumer variant
      */
     boolean business();
 
     /**
-     * Computes the per phone number registration token expected by the
-     * mobile {@code /exist}, {@code /code} and {@code /register} endpoints.
+     * Computes the URL encoded, per phone number registration token expected by the mobile registration endpoints.
      *
-     * <p>The algorithm differs by platform. On Android an HMAC-SHA1 is
-     * computed over the APK signing certificates, the MD5 hash of
-     * {@code classes.dex} and the national phone number, keyed by a PBKDF2
-     * derived key from the package name plus the {@code about_logo.png}
-     * asset. On iOS an MD5 hash is computed over a static secret (which
-     * differs between consumer and business builds) concatenated with the
-     * hex encoded build hash and the national phone number. The resulting
-     * bytes are URL encoded so callers can drop them directly into the
-     * form encoded registration request body.
+     * <p>The token authenticates the caller as a real signed app instance to the server. The returned string is already
+     * URL encoded, so it can be inlined into a form encoded request body without further escaping.
      *
-     * @param nationalPhoneNumber the phone number in its national form,
-     *                            without the country code
+     * @apiNote Pass the returned value as the registration token field of the registration request.
+     * @implSpec Android implementations HMAC-SHA1 the concatenation of the APK signing certificates, the MD5 of
+     *           {@code classes.dex}, and the decimal national phone number, keyed by a PBKDF2-HMAC-SHA1 derived key seeded
+     *           from the package name plus the {@code about_logo.png} asset. iOS implementations MD5 the concatenation of a
+     *           variant specific static secret, the hex encoded build hash, and the decimal national phone number.
+     *           Implementations must URL encode the digest before returning it.
+     * @param nationalPhoneNumber the phone number in its national form, without the country code
      * @return the URL encoded registration token
      */
     String computeRegistrationToken(long nationalPhoneNumber);

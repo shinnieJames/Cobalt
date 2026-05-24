@@ -11,15 +11,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqUpdateCartEnabledRequest}.
+ * Sealed family of inbound reply variants the relay produces in response
+ * to an {@link IqUpdateCartEnabledRequest}.
+ *
+ * @apiNote
+ * Pattern-match the returned variant to drive the commerce-settings
+ * edit surface: {@link Success} echoes the post-mutation cart-enabled
+ * flag, {@link ClientError} surfaces a rejected mutation and
+ * {@link ServerError} surfaces a transient internal failure.
  */
 @WhatsAppWebModule(moduleName = "WAWebBusinessProfileJob")
 public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
         permits IqUpdateCartEnabledResponse.Success, IqUpdateCartEnabledResponse.ClientError, IqUpdateCartEnabledResponse.ServerError {
 
     /**
-     * Tries each {@link IqUpdateCartEnabledResponse} variant in priority order.
+     * Tries each variant in priority order until one matches.
+     *
+     * @apiNote
+     * Use this entry point on every IQ stanza ack-ing a cart-enabled
+     * mutation; the order is {@link Success}, then {@link ClientError},
+     * then {@link ServerError}.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -41,27 +52,40 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — projects the post-update
-     * cart-enabled flag, which the relay echoes inside
+     * The {@code Success} variant carrying the post-mutation
+     * cart-enabled flag the relay echoes inside
      * {@code <commerce_settings><cart enabled/>}.
+     *
+     * @apiNote
+     * Use {@link #cartEnabled()} to refresh the cached
+     * commerce-settings projection so the catalog-grid affordance
+     * reflects the new state immediately.
      */
     final class Success implements IqUpdateCartEnabledResponse {
         /**
-         * The post-update cart-enabled flag.
+         * The post-mutation cart-enabled flag echoed by the relay.
          */
         private final boolean cartEnabled;
 
         /**
          * Constructs a successful reply.
          *
-         * @param cartEnabled the post-update flag
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}.
+         *
+         * @param cartEnabled the post-mutation flag
          */
         public Success(boolean cartEnabled) {
             this.cartEnabled = cartEnabled;
         }
 
         /**
-         * Returns the post-update flag.
+         * Returns the post-mutation flag.
+         *
+         * @apiNote
+         * Use this getter to refresh the cached commerce-settings
+         * projection; the value should match the requested state in
+         * the absence of relay-side coercion.
          *
          * @return the flag
          */
@@ -71,6 +95,17 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
 
         /**
          * Tries to parse a {@link Success} variant.
+         *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method validates
+         * the {@code <iq type="result">} envelope and reads the
+         * post-mutation flag from
+         * {@code <commerce_settings><cart enabled/>}.
+         *
+         * @implNote
+         * This implementation decodes the {@code enabled} attribute as
+         * a literal {@code "true"} match, mirroring WA Web's
+         * {@code commerceSettingsResponse} parser.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
@@ -92,6 +127,9 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return Optional.of(new Success(enabled));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -104,11 +142,17 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return this.cartEnabled == that.cartEnabled;
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Boolean.hashCode(cartEnabled);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqUpdateCartEnabledResponse.Success[cartEnabled=" + cartEnabled + ']';
@@ -116,21 +160,32 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The {@code ClientError} variant emitted when the relay rejects
+     * the mutation as malformed or unauthorised.
+     *
+     * @apiNote
+     * Use this variant to surface a user-facing 4xx-class error to the
+     * commerce-settings edit surface.
      */
     final class ClientError implements IqUpdateCartEnabledResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a client-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -144,6 +199,11 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to dispatch on the relay-side error code
+         * when surfacing a localised message to the commerce-settings
+         * edit surface.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -152,6 +212,10 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
 
         /**
          * Returns the human-readable error text, when supplied.
+         *
+         * @apiNote
+         * Use this getter for logging; the text is server-localised
+         * and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -162,11 +226,16 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ClientError} variant.
          *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}
+         * to extract the (code, text) envelope.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         *         empty when the stanza does not match the client-error
+         *         schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -176,6 +245,9 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -188,11 +260,17 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqUpdateCartEnabledResponse.ClientError[errorCode=" + errorCode
@@ -201,21 +279,33 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The {@code ServerError} variant emitted when the relay returns a
+     * transient internal-failure status while processing the mutation.
+     *
+     * @apiNote
+     * Use this variant to drive a backoff-and-retry path in the
+     * commerce-settings edit surface; the relay returns this shape
+     * when the commerce-settings backend is temporarily unavailable.
      */
     final class ServerError implements IqUpdateCartEnabledResponse {
         /**
-         * The numeric error code.
+         * The numeric error code echoed by the {@code <error/>} child.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text echoed by the
+         * {@code <error/>} child.
          */
         private final String errorText;
 
         /**
          * Constructs a server-error reply.
+         *
+         * @apiNote
+         * Use this constructor only from {@link #of(Node, Node)}; the
+         * (code, text) pair comes from the relay's {@code <error/>}
+         * envelope.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -229,6 +319,10 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
         /**
          * Returns the numeric error code.
          *
+         * @apiNote
+         * Use this getter to log the relay-side error code; a 5xx-class
+         * value is the canonical retry trigger.
+         *
          * @return the error code
          */
         public int errorCode() {
@@ -237,6 +331,10 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
 
         /**
          * Returns the human-readable error text, when supplied.
+         *
+         * @apiNote
+         * Use this getter for logging only; the text is server-localised
+         * and not stable across snapshots.
          *
          * @return an {@link Optional} carrying the error text
          */
@@ -247,11 +345,16 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
         /**
          * Tries to parse a {@link ServerError} variant.
          *
+         * @apiNote
+         * Call this from {@link #of(Node, Node)}; the method delegates
+         * to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}
+         * to extract the (code, text) envelope.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         *         empty when the stanza does not match the server-error
+         *         schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);
@@ -261,6 +364,9 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -273,11 +379,17 @@ public sealed interface IqUpdateCartEnabledResponse extends IqOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "IqUpdateCartEnabledResponse.ServerError[errorCode=" + errorCode

@@ -13,5 +13,6 @@ public enum EnforcementType {
     @WamEnumConstant(2) CH_GS,
     @WamEnumConstant(3) CH_GSI,
     @WamEnumConstant(4) CH_HCH,
-    @WamEnumConstant(5) CH_PPD
+    @WamEnumConstant(5) CH_PPD,
+    @WamEnumConstant(6) CH_HAP
 }

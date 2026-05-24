@@ -20,51 +20,63 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Handles business broadcast campaign sync actions.
+ * Maintains the business-broadcast-campaign roster from {@code business_broadcast_campaign} sync mutations.
  *
- * <p>This handler processes mutations for business broadcast campaigns,
- * supporting both SET (upsert) and REMOVE operations. On SET, the handler
- * validates that the action value contains non-null {@code broadcastJid},
- * {@code deviceId}, and {@code status} fields before persisting.
+ * @apiNote
+ * Drives the Business Manager broadcast-campaign surface (a campaign
+ * groups a marketing message, a target broadcast list, an ad
+ * association, and a scheduled or pending status). When the user
+ * creates, edits, or deletes a campaign on another device, the server
+ * replays the change here as a SET (upsert) or REMOVE; Cobalt
+ * embedders observe the result through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#findBusinessBroadcastCampaign(String)}.
  *
- * <p>Index format: {@code ["business_broadcast_campaign", campaignId]}
+ * @implNote
+ * This implementation drops two WA Web side effects: the
+ * {@code isBizBroadcastSendWebEnabledNoExposure()} AB-prop gate that
+ * short-circuits the entire batch (Cobalt does not gate on AB-prop
+ * exposure here) and the post-batch
+ * {@code refreshBroadcastCampaignState} fire-and-forget event (Cobalt
+ * has no browser frontend bridge). The malformed-mutation count is
+ * still logged from {@link #applyMutationBatch(WhatsAppClient, List)}
+ * to match WA Web's per-batch warning.
  */
 @WhatsAppWebModule(moduleName = "WAWebBroadcastCampaignSync")
 public final class BusinessBroadcastCampaignHandler implements WebAppStateActionHandler {
     /**
-     * Logger for broadcast campaign sync operations.
+     * The handler-scoped {@link Logger} used to emit the per-batch malformed-mutation summary.
+     *
+     * @apiNote
+     * Records the line equivalent to WA Web's
+     * {@code broadcast campaign sync: <n> malformed mutations} after
+     * each batch.
      */
     private static final Logger LOGGER = Logger.getLogger(BusinessBroadcastCampaignHandler.class.getName());
 
     /**
-     * Private constructor to enforce singleton pattern.
+     * Constructs the singleton broadcast-campaign handler.
+     *
+     * @apiNote
+     * Instantiated once by the sync handler registry. Embedders do not
+     * normally construct this directly.
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public BusinessBroadcastCampaignHandler() {
 
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
     public String actionName() {
         return BusinessBroadcastCampaignAction.ACTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPatchType collectionName() {
         return BusinessBroadcastCampaignAction.COLLECTION_NAME;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
     public int version() {
@@ -72,46 +84,27 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     }
 
     /**
-     * Applies a business broadcast campaign mutation.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.applyMutations}),
-     * on SET the handler validates that the action value is present and that
-     * {@code broadcastJid}, {@code deviceId}, and {@code status} are all
-     * non-null. If any are missing, the mutation is classified as malformed
-     * via {@code WAWebSyncdIndexUtils.malformedActionValue}. On REMOVE, the
-     * campaign is removed from storage. The {@code campaignId} from
-     * {@code indexParts[1]} must be present or the mutation is classified as
-     * malformed via {@code malformedActionIndex}.
-     *
-     * <p>Per WhatsApp Web, each individual mutation is wrapped in a try/catch;
-     * any unhandled error yields {@code SyncActionState.Failed}.
-    /**
-     * Applies a business broadcast campaign mutation and returns a detailed result.
-     *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.applyMutations}),
-     * the per-mutation logic:
-     * <ol>
-     *   <li>Extracts {@code campaignId} from {@code indexParts[1]}; returns
-     *       {@code malformedActionIndex()} if missing</li>
-     *   <li>For SET operations: validates the {@code businessBroadcastCampaignAction}
-     *       value has non-null {@code broadcastJid}, {@code deviceId}, and {@code status};
-     *       returns {@code malformedActionValue(collectionName)} if invalid; otherwise
-     *       calls {@code upsertCampaignStorage(campaignId, action, timestamp)}</li>
-     *   <li>For REMOVE operations: calls
-     *       {@code removeCampaignStorage(campaignId)}</li>
-     *   <li>Wraps the entire logic in try/catch, returning {@code Failed} on error</li>
-     * </ol>
-     * @param client   the WhatsApp client
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * @apiNote
+     * For SET mutations, validates that the
+     * {@link BusinessBroadcastCampaignAction} value carries a
+     * {@code broadcastJid}, {@code deviceId}, and {@code status}, then
+     * upserts the campaign keyed by {@code campaignId} from
+     * {@code indexParts[1]}. For REMOVE mutations, drops the campaign
+     * by id. Returns
+     * {@link SyncdIndexUtils#malformedActionIndex(String, String)} when
+     * the index slot is empty,
+     * {@link SyncdIndexUtils#malformedActionValue(String)} when the
+     * required fields are missing, and
+     * {@link MutationApplicationResult#failed()} for unknown operations
+     * or any thrown exception.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public MutationApplicationResult applyMutation(WhatsAppClient client, DecryptedMutation.Trusted mutation) {
         try {
-            var indexArray = JSON.parseArray(mutation.index()); // ADAPTED: WAWebBroadcastCampaignSync uses e.indexParts (pre-parsed); Cobalt parses from JSON string
-            // WAWebBroadcastCampaignSync.applyMutations: var t=e.indexParts, n=t[1]; if(!n) return r.malformedActionIndex().
-            // The slot-missing case must yield MALFORMED, not FAILED via the outer catch.
+            var indexArray = JSON.parseArray(mutation.index());
             if (indexArray.size() <= 1) {
                 return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
             }
@@ -140,12 +133,12 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
                         .scheduledAt(action.scheduledTimestamp().isPresent() ? Instant.ofEpochMilli(action.scheduledTimestamp().getAsLong()) : null)
                         .createdAt(action.createTimestamp().isPresent() ? Instant.ofEpochMilli(action.createTimestamp().getAsLong()) : null)
                         .status(action.status().orElse(null))
-                        .build()); // ADAPTED: WAWebBroadcastCampaignSync.applyMutations: yield o("WAWebBizBroadcastCampaignStorageUtils").upsertCampaignStorage(n, c, u)
+                        .build());
                 return MutationApplicationResult.success();
             }
 
             if (mutation.operation() == SyncdOperation.REMOVE) {
-                client.store().removeBusinessBroadcastCampaign(campaignId); // ADAPTED: WAWebBroadcastCampaignSync.applyMutations: yield o("WAWebBizBroadcastCampaignStorageUtils").removeCampaignStorage(n)
+                client.store().removeBusinessBroadcastCampaign(campaignId);
                 return MutationApplicationResult.success();
             }
 
@@ -156,30 +149,26 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
     }
 
     /**
-     * Applies a batch of business broadcast campaign mutations.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastCampaignSync.applyMutations}), the batch
-     * handler first checks the {@code isBizBroadcastSendWebEnabledNoExposure()} gating flag.
-     * If the feature is not enabled, all mutations are returned as {@code Unsupported}.
-     * Otherwise, each mutation is processed individually and a malformed count is logged
-     * after the batch. Additionally, any affected {@code broadcastJid}s are collected and
-     * a {@code refreshBroadcastCampaignState} event is fired.
+     * @apiNote
+     * Iterates the batch, applying each mutation via
+     * {@link #applyMutation(WhatsAppClient, DecryptedMutation.Trusted)}
+     * and aggregating a malformed-mutation count for the warning log.
      *
-     * <p>In Cobalt, the AB prop gating check and the frontend fire-and-forget call are
-     * intentionally omitted (AB props and frontend API are not replicated). The malformed
-     * count warning is preserved via logging.
-     * @param client    the WhatsAppClient instance linked to the mutations
-     * @param mutations the batch of mutations to apply
-     * @return a list of results parallel to the input
+     * @implNote
+     * This implementation omits WA Web's
+     * {@code isBizBroadcastSendWebEnabledNoExposure()} short-circuit
+     * (Cobalt does not gate on AB-prop exposure here) and the
+     * post-batch {@code refreshBroadcastCampaignState} fire-and-forget
+     * event because Cobalt has no browser frontend bridge.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebBroadcastCampaignSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<MutationApplicationResult> applyMutationBatch(WhatsAppClient client, List<DecryptedMutation.Trusted> mutations) {
-        // ADAPTED: WAWebBroadcastCampaignSync.applyMutations checks isBizBroadcastSendWebEnabledNoExposure()
-        // and returns all Unsupported if false — Cobalt omits AB prop gating
         var malformedCount = 0;
         var results = new ArrayList<MutationApplicationResult>(mutations.size());
-        for (var mutation : mutations) { // ADAPTED: WAWebBroadcastCampaignSync.applyMutations uses Promise.all(t.map(...))
+        for (var mutation : mutations) {
             var result = applyMutation(client, mutation);
             if (result.actionState() == SyncActionState.MALFORMED) {
                 malformedCount++;
@@ -189,8 +178,6 @@ public final class BusinessBroadcastCampaignHandler implements WebAppStateAction
         if (malformedCount > 0) {
             LOGGER.warning("broadcast campaign sync: " + malformedCount + " malformed mutations");
         }
-        // ADAPTED: WAWebBroadcastCampaignSync.applyMutations: i.size > 0 && o("WAWebBackendApi").frontendFireAndForget("refreshBroadcastCampaignState", ...)
-        // — frontend UI refresh omitted, no Cobalt equivalent
         return results;
     }
 

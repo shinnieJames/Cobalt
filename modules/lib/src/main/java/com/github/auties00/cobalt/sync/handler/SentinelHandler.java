@@ -12,28 +12,30 @@ import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import java.util.logging.Logger;
 
 /**
- * Handles sentinel actions for sync key expiration.
+ * Expires retired app-state-sync keys when the primary device announces a
+ * new key epoch via the {@code "sentinel"} mutation.
  *
- * <p>The sentinel is a special sync action used as a keepalive/liveness check
- * for the app state sync key subsystem. It creates SET mutations with the
- * current key ID and timestamp, used to verify that sync keys are working
- * correctly. The handler's apply method expires sync keys matching the
- * sentinel's expired key epoch. The set method creates sentinel mutations
- * for all collections with the active key's fingerprint data.
- *
- * <p>Per WhatsApp Web, the sentinel handler extends {@code AccountSyncdActionBase}
- * with collection name {@code RegularLow}, version {@code 3}, and action
- * {@code "sentinel"}.
+ * @apiNote
+ * Cobalt embedders never call this directly; the sync dispatcher hands an
+ * incoming sentinel mutation here after the primary device rotates its
+ * sync key (typical trigger: a primary-device key-rotation tick) so the
+ * companion drops the matching local app-state-sync key from
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore} and forces a
+ * re-keyed patch to be requested on the next sync.
  */
 @WhatsAppWebModule(moduleName = "WAWebSentinelMutationSync")
 public final class SentinelHandler implements WebAppStateActionHandler {
     /**
-     * Logger for sentinel mutation sync operations.
+     * The logger used for diagnostic output from sentinel handling.
      */
     private static final Logger LOGGER = Logger.getLogger(SentinelHandler.class.getName());
 
     /**
-     * Constructs the singleton sentinel handler.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public SentinelHandler() {
@@ -41,11 +43,7 @@ public final class SentinelHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for sentinel mutations.
-     *
-     * <p>Per WhatsApp Web {@code WAWebSentinelMutationSync.getAction()}: returns
-     * {@code WASyncdConst.Actions.Sentinel} which resolves to {@code "sentinel"}.
-     * @return the sentinel action name {@code "sentinel"}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "getAction", adaptation = WhatsAppAdaptation.DIRECT)
@@ -54,12 +52,7 @@ public final class SentinelHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the collection name for sentinel mutations.
-     *
-     * <p>Per WhatsApp Web {@code WAWebSentinelMutationSync}: the constructor sets
-     * {@code this.collectionName = CollectionName.RegularLow} which resolves to
-     * {@code "regular_low"}.
-     * @return the sync patch type {@link SyncPatchType#REGULAR_LOW}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "collectionName", adaptation = WhatsAppAdaptation.DIRECT)
@@ -68,10 +61,7 @@ public final class SentinelHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for sentinel mutations.
-     *
-     * <p>Per WhatsApp Web {@code WAWebSentinelMutationSync.getVersion()}: returns {@code 3}.
-     * @return the version number {@code 3}
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "getVersion", adaptation = WhatsAppAdaptation.DIRECT)
@@ -80,23 +70,22 @@ public final class SentinelHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single sentinel mutation and returns a detailed result.
+     * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebSentinelMutationSync.applyMutations}: for each
-     * mutation in the batch:
-     * <ul>
-     *   <li>If operation is {@code "set"}: extracts {@code value.keyExpiration.expiredKeyEpoch}.
-     *       If the epoch is {@code null}, increments a malformed counter and returns
-     *       {@code malformedActionValue(collectionName)}. Otherwise, calls
-     *       {@code WAWebGetSyncKey.expireSyncKeyInTransaction(epoch)} and returns
-     *       {@code {actionState: Success}}.</li>
-     *   <li>For any other operation: increments an unsupported counter and returns
-     *       {@code {actionState: Unsupported}}.</li>
-     *   <li>On exception: returns {@code {actionState: Failed}}.</li>
-     * </ul>
-     * @param client   the WhatsApp client instance
-     * @param mutation the sentinel mutation to apply
-     * @return the mutation application result
+     * @implNote
+     * This implementation mirrors WA Web's per-mutation closure inside
+     * {@code WAWebSentinelMutationSync.applyMutations}: non-{@code SET}
+     * operations are unsupported; a {@code SET} whose decoded action is
+     * not a {@link KeyExpirationAction} or whose {@code expiredKeyEpoch}
+     * is empty is malformed; otherwise the named epoch is expired on the
+     * local store via
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#expireAppStateKeysByEpoch(int)}.
+     * The WA Web {@code WALogger.ERROR}/{@code WARN} aggregation of the
+     * malformed and unsupported counters is omitted as telemetry, and the
+     * outer {@code try/catch} that maps any throw to
+     * {@link MutationApplicationResult#failed()} is dropped per the Cobalt
+     * error model: thrown exceptions surface to the configured
+     * {@link com.github.auties00.cobalt.exception.WhatsAppClientErrorHandler}.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebSentinelMutationSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.DIRECT)

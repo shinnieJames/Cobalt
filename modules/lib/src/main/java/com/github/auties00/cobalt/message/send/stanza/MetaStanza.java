@@ -24,34 +24,49 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 import java.util.Objects;
 
 /**
- * Builds the {@code <meta>} stanza child node carrying auxiliary metadata about the
- * message being sent.
+ * Builds the optional {@code <meta>} child of an outgoing {@code <message>}
+ * stanza carrying routing and classification attributes the server uses
+ * for analytics, comment threading, AI thread bookkeeping, hosted-business
+ * routing, status privacy, and view-once handling.
  *
- * <p>The node may include any of the following attributes depending on the message type
- * and recipient: {@code origin} (LID origin type or bot entry-point origin),
- * {@code destination_id} (bot metrics destination identifier), {@code sender_intent}
- * ({@code "hosted"} for hosted business accounts), {@code polltype}
- * ({@code "creation"}, {@code "vote"}, {@code "result_snapshot"}), {@code event_type}
- * ({@code "creation"}, {@code "response"}, {@code "edit"}), {@code view_once}
- * ({@code "true"} for view-once media), {@code appdata} ({@code "member_tag"},
- * {@code "default"}, {@code "group_history"}), {@code tag_reason}
- * ({@code "user_delete"}, {@code "user_update"}), {@code thread_msg_id} and
- * {@code thread_msg_sender_jid} (comment thread identifiers),
- * {@code conversation_thread_id} (hashed AI conversation thread identifier), and
- * {@code status_setting} (status privacy setting for status messages).
+ * @apiNote
+ * Composed by {@link ChatFanoutStanza} and {@link GroupSkmsgFanoutStanza}
+ * once per outgoing message. The set of attributes the node may carry is
+ * the union of every signal the WA Web sender writes onto {@code <meta>}:
+ * {@code origin} (LID-origin code or bot-entry-point name when the
+ * recipient is Meta AI), {@code destination_id} (the bot metrics
+ * destination id), {@code sender_intent="hosted"} (when the recipient is a
+ * hosted business), {@code polltype} ({@code "creation"} /
+ * {@code "vote"} / {@code "result_snapshot"}), {@code event_type}
+ * ({@code "creation"} / {@code "response"} / {@code "edit"}),
+ * {@code thread_msg_id} and {@code thread_msg_sender_jid} (comment-thread
+ * reply target), {@code appdata} ({@code "member_tag"} /
+ * {@code "default"} / {@code "group_history"}),
+ * {@code view_once="true"} for view-once media, {@code conversation_thread_id}
+ * for AI threads, {@code tag_reason} ({@code "user_delete"} /
+ * {@code "user_update"}) for member-label changes, and {@code status_setting}
+ * for status messages. When none of the signals applies the build method
+ * returns {@code null} and the caller suppresses the empty child entirely.
+ * The newsletter helpers ({@link #buildNewsletterQuestion},
+ * {@link #buildNewsletterQuestionReply},
+ * {@link #buildNewsletterQuestionResponse}) build a specialised
+ * {@code <meta questiontype="...">} child for SMAX newsletter publishes.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgMetaNode")
 public final class MetaStanza {
     /**
-     * Store used for resolving chat metadata such as LID origin type and verified
-     * business names.
+     * The {@link WhatsAppStore} consulted for chat LID origin and verified
+     * business name lookup.
      */
     private final WhatsAppStore store;
 
     /**
-     * Creates a new meta stanza builder.
+     * Constructs a builder backed by the given store.
      *
-     * @param store the WhatsApp store for resolving chat metadata
+     * @apiNote
+     * Constructed once per client; the builder is stateless and reusable.
+     *
+     * @param store the {@link WhatsAppStore}
      * @throws NullPointerException if {@code store} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
@@ -61,18 +76,32 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds the {@code <meta>} node for an E2E-encrypted message.
+     * Builds the {@code <meta>} child for an E2E-encrypted message.
      *
-     * @param chatJid          the recipient chat JID, used to resolve {@code origin} and
-     *                         {@code sender_intent}
-     * @param container        the message container
-     * @param statusSetting    the status privacy setting ({@code "contacts"},
-     *                         {@code "allowlist"}, {@code "denylist"}), or {@code null}
+     * @apiNote
+     * Returns {@code null} when every gating signal is absent so the
+     * caller can suppress the {@code <meta>} child entirely. Inputs:
+     * {@code statusSetting} is non-null only for status messages
+     * (typically one of {@code "contacts"}, {@code "allowlist"},
+     * {@code "denylist"}); {@code hashedAiThreadId} is the HMAC of the AI
+     * conversation thread id and is non-null only inside an AI thread.
+     *
+     * @implNote
+     * This implementation extracts the thread-message target by scanning
+     * {@link ChatMessageContextInfo#threadId()} for the first non-AI
+     * entry; that matches WA Web's
+     * {@code extractCommentTargetIdAndSenderLid}. The view-once flag is
+     * read from {@link MessageContainer#futureProofContentType()} rather
+     * than the WA Web {@code mediaData.isViewOnce} field; the two are
+     * semantically equivalent in the wrappers that reach this builder.
+     *
+     * @param chatJid          the recipient chat {@link Jid}
+     * @param container        the outgoing {@link MessageContainer}
+     * @param statusSetting    the status-privacy label, or {@code null}
      *                         for non-status messages
-     * @param hashedAiThreadId the HMAC-hashed AI thread identifier for the
-     *                         {@code conversation_thread_id} attribute, or {@code null}
-     *                         when this is not an AI thread
-     * @return the meta node, or {@code null} if no metadata attributes are applicable
+     * @param hashedAiThreadId the HMAC-hashed AI thread id, or
+     *                         {@code null} when not in an AI thread
+     * @return the {@code <meta>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -84,8 +113,6 @@ public final class MetaStanza {
         var appdata = resolveAppdata(message);
         var tagReason = resolveTagReason(message);
 
-        // ADAPTED: WA Web checks n.data.mediaData?.isViewOnce; Cobalt checks the
-        // protobuf wrapper type, which is semantically equivalent.
         var viewOnce = container.futureProofContentType() == FutureProofMessageType.VIEW_ONCE ? "true" : null;
 
         var botMetrics = container.messageContextInfo()
@@ -97,8 +124,6 @@ public final class MetaStanza {
                 ? botMetrics.destinationId().orElse(null)
                 : null;
 
-        // Bot origin from destinationEntryPoint takes precedence, but only when the
-        // recipient is a Meta AI bot; otherwise the LID origin attribute applies.
         var botOrigin = botMetrics != null
                 ? botMetrics.destinationEntryPoint()
                         .map(MetaStanza::resolveBotOrigin)
@@ -110,8 +135,6 @@ public final class MetaStanza {
 
         var senderIntent = isHostedRecipient(chatJid) ? "hosted" : null;
 
-        // Cobalt extracts thread_msg_id and thread_msg_sender_jid from the first
-        // non-AI thread entry, mirroring the JS extractCommentTargetIdAndSenderLid.
         String threadMsgId = null;
         Jid threadMsgSenderJid = null;
         var deviceInfo = container.messageContextInfo().orElse(null);
@@ -159,13 +182,18 @@ public final class MetaStanza {
     }
 
     /**
-     * Convenience overload for callers that do not have a pre-computed hashed AI thread
-     * identifier.
+     * Builds the {@code <meta>} child without a pre-computed AI thread id
+     * hash.
      *
-     * @param chatJid       the recipient chat JID
-     * @param container     the message container
-     * @param statusSetting the status privacy setting, or {@code null}
-     * @return the meta node, or {@code null} if no metadata attributes are applicable
+     * @apiNote
+     * Convenience overload for the non-AI-thread send path; delegates to
+     * {@link #buildChat(Jid, MessageContainer, String, String)} with
+     * {@code null} for the AI thread id.
+     *
+     * @param chatJid       the recipient chat {@link Jid}
+     * @param container     the outgoing {@link MessageContainer}
+     * @param statusSetting the status-privacy label, or {@code null}
+     * @return the {@code <meta>} {@link Node}, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -174,13 +202,16 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code polltype} attribute from the message content.
+     * Resolves the {@code polltype} attribute from the unwrapped message.
      *
-     * <p>Poll creations map to {@code "creation"}, poll updates with a vote map to
-     * {@code "vote"}, and poll result snapshots map to {@code "result_snapshot"}.
+     * @apiNote
+     * Returns one of {@code "creation"}, {@code "vote"},
+     * {@code "result_snapshot"}, or {@code null} for non-poll content.
+     * Poll-update messages are tagged only when they carry a
+     * {@link PollUpdateMessage#vote()}.
      *
-     * @param message the unwrapped message
-     * @return the poll type string, or {@code null} for non-poll messages
+     * @param message the unwrapped {@link Message}, possibly {@code null}
+     * @return the poll-type label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -194,14 +225,17 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code event_type} attribute from the message content.
+     * Resolves the {@code event_type} attribute from the unwrapped
+     * message.
      *
-     * <p>Event messages map to {@code "creation"}, encrypted event responses map to
-     * {@code "response"}, and event-edit secret-encrypted messages map to
-     * {@code "edit"}.
+     * @apiNote
+     * Returns one of {@code "creation"}, {@code "response"},
+     * {@code "edit"}, or {@code null} for non-event content. The edit
+     * value applies only to {@link SecretEncMessage} payloads of subtype
+     * {@link SecretEncMessage.SecretEncType#EVENT_EDIT}.
      *
-     * @param message the unwrapped message
-     * @return the event type string, or {@code null} for non-event messages
+     * @param message the unwrapped {@link Message}, possibly {@code null}
+     * @return the event-type label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -216,16 +250,18 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code appdata} attribute from the message content.
+     * Resolves the {@code appdata} attribute from the unwrapped message.
      *
-     * <p>Returns {@code "member_tag"} for group member label change protocol messages,
-     * {@code "default"} for ephemeral sync response protocol messages,
-     * {@code "group_history"} for message history notices, or {@code null} otherwise.
-     * The {@code "default"} value for peer messages is handled separately by
-     * {@code PeerMessageSender}, which builds its own meta node.
+     * @apiNote
+     * Returns {@code "member_tag"} for the group member-label change
+     * protocol message, {@code "default"} for the ephemeral-sync response
+     * protocol message, {@code "group_history"} for the
+     * {@link MessageHistoryNotice}, and {@code null} otherwise. The
+     * {@code "default"} value for peer-routed protocol messages is handled
+     * by {@code PeerMessageSender} (which builds its own {@code <meta>}).
      *
-     * @param message the unwrapped message
-     * @return the appdata string, or {@code null}
+     * @param message the unwrapped {@link Message}, possibly {@code null}
+     * @return the appdata label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -245,14 +281,18 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code tag_reason} attribute from the message content.
+     * Resolves the {@code tag_reason} attribute for group-member label
+     * change protocol messages.
      *
-     * <p>For group member label change protocol messages, returns {@code "user_delete"}
-     * when the label is empty or absent, or {@code "user_update"} when the label has a
-     * value.
+     * @apiNote
+     * The label-change message carries a label payload whose presence
+     * distinguishes an addition/update from a deletion: an empty or absent
+     * label maps to {@code "user_delete"}, a non-empty label maps to
+     * {@code "user_update"}. Returns {@code null} for every other message
+     * type.
      *
-     * @param message the unwrapped message
-     * @return the tag reason string, or {@code null} for non-label messages
+     * @param message the unwrapped {@link Message}, possibly {@code null}
+     * @return the tag-reason label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -268,14 +308,17 @@ public final class MetaStanza {
     }
 
     /**
-     * Resolves the {@code origin} meta attribute for LID chats.
+     * Resolves the {@code origin} attribute for LID chats whose chat
+     * record carries a LID-origin tag.
      *
-     * <p>Returns the LID origin type string (e.g. {@code "ctwa"}) when the chat JID is
-     * a LID and the chat's origin type is {@code PNH_CTWA}; returns {@code null}
-     * otherwise.
+     * @apiNote
+     * Currently only the {@code "ctwa"} LID-origin survives onto the
+     * {@code <meta>}; other LID origins (e.g. {@code "pn_share"}) are
+     * dropped to match WA Web's filter inside
+     * {@code WAWebSendMsgMetaNode.getOriginAttribute}.
      *
-     * @param chatJid the recipient chat JID
-     * @return the origin string, or {@code null}
+     * @param chatJid the recipient chat {@link Jid}
+     * @return the origin label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "getOriginAttribute",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -291,13 +334,16 @@ public final class MetaStanza {
     }
 
     /**
-     * Returns whether the given JID identifies a Meta AI bot account.
+     * Returns whether the given {@link Jid} identifies the Meta AI bot
+     * account.
      *
-     * <p>Compares against both known Meta AI JIDs: the FBID bot WID and the PN bot WID
-     * ({@code 13135550002@c.us}).
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebBotUtils.isMetaAiBot}: matches both
+     * the FBID Meta AI bot ({@link Jid#metaAiBotAccount()}) and the
+     * legacy PN-form bot user {@code 13135550002@c.us}.
      *
-     * @param jid the JID to check
-     * @return {@code true} if the JID is a Meta AI bot
+     * @param jid the {@link Jid} to test
+     * @return {@code true} when the JID is a Meta AI bot
      */
     @WhatsAppWebExport(moduleName = "WAWebBotUtils", exports = "isMetaAiBot",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -307,12 +353,25 @@ public final class MetaStanza {
     }
 
     /**
-     * Maps a {@link BotMetricsEntryPoint} to the corresponding origin string for the
-     * {@code <meta>} node.
+     * Maps a {@link BotMetricsEntryPoint} to its {@code origin} attribute
+     * label.
      *
-     * @param entryPoint the bot metrics entry point
-     * @return the origin string, or {@code null} if the entry point has no
-     *         corresponding origin value
+     * @apiNote
+     * Used only when the message targets the Meta AI bot. Entry points
+     * with no canonical label (e.g. unmapped surface codes) return
+     * {@code null} so the {@link #resolveOrigin(Jid)} LID fallback can
+     * apply.
+     *
+     * @implNote
+     * This implementation enumerates the subset of entry points WA Web's
+     * {@code WAWebBotLoggingUtils.getBotOriginFromBotMetricsEntryPoint}
+     * maps to a non-null label and falls through to {@code null} for
+     * unrecognised codes (e.g. {@code WEB_INTRO_PANEL},
+     * {@code WEB_NAVIGATION_BAR}); the unmapped codes match WA Web's own
+     * {@code null} returns for the surfaces Cobalt does not expose.
+     *
+     * @param entryPoint the {@link BotMetricsEntryPoint}
+     * @return the origin label, or {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebBotLoggingUtils", exports = "getBotOriginFromBotMetricsEntryPoint",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -336,8 +395,14 @@ public final class MetaStanza {
     /**
      * Returns whether the recipient is a hosted business account.
      *
-     * @param chatJid the recipient chat JID
-     * @return {@code true} if the recipient has hosted business storage
+     * @apiNote
+     * Drives the {@code sender_intent="hosted"} attribute. A hosted
+     * business has a verified-business-name record whose
+     * {@link com.github.auties00.cobalt.model.business.BusinessVerifiedName#hostStorage()}
+     * is present.
+     *
+     * @param chatJid the recipient chat {@link Jid}
+     * @return {@code true} when the recipient has a hosted-storage record
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgMetaNode", exports = "genMetaNode",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -348,10 +413,15 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds a {@code <meta questiontype="question">} node for newsletter question
-     * messages.
+     * Builds the SMAX {@code <meta questiontype="question">} child for a
+     * newsletter question publish.
      *
-     * @return the meta node
+     * @apiNote
+     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeQuestionMixin.applyMixin};
+     * used by the newsletter publish pipeline alongside
+     * {@link NewsletterStanza#buildPlaintext(byte[])}.
+     *
+     * @return the {@code <meta>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeQuestionMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -363,10 +433,15 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds a {@code <meta questiontype="reply">} node for newsletter question reply
-     * messages.
+     * Builds the SMAX {@code <meta questiontype="reply">} child for a
+     * newsletter question reply publish.
      *
-     * @return the meta node
+     * @apiNote
+     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeReplyMixin.applyMixin};
+     * used by the newsletter publish pipeline for the reply-to-question
+     * subflow.
+     *
+     * @return the {@code <meta>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeReplyMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -378,10 +453,15 @@ public final class MetaStanza {
     }
 
     /**
-     * Builds a {@code <meta questiontype="response">} node for newsletter question
-     * response messages.
+     * Builds the SMAX {@code <meta questiontype="response">} child for a
+     * newsletter question response publish.
      *
-     * @return the meta node
+     * @apiNote
+     * Mirrors {@code WASmaxOutMessagePublishQuestionTypeResponseMixin.applyMixin};
+     * used by the newsletter publish pipeline for the response-to-question
+     * subflow.
+     *
+     * @return the {@code <meta>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WASmaxOutMessagePublishQuestionTypeResponseMixin", exports = "applyMixin",
             adaptation = WhatsAppAdaptation.DIRECT)

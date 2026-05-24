@@ -14,9 +14,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps the encryption metadata,
- * timestamp, and fbid into the {@code <iq xmlns="waffle"
- * smax_id="83">} envelope.
+ * The outbound {@code <iq xmlns="waffle" smax_id="83" type="get"/>}
+ * Waffle keep-alive ping for a linked Facebook account.
+ *
+ * @apiNote
+ * Powers {@code WAWebAccountLinkingAPI.ping}, which keeps the linked
+ * account session alive on the Waffle backend and learns the
+ * relay-chosen next-ping cadence from the reply. The body carries the
+ * encrypted-payload mixin plus the timestamp and {@code fbid}; the
+ * embedder is expected to encrypt the payload locally via
+ * {@code WAWebAccountLinkingCryptoUtils.wrapPayloadWithRSAAESEncryption}
+ * before constructing the request. The reply is parsed by
+ * {@link SmaxWaffleWFPingResponse}.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleWFPingRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutWaffleBaseIQGetRequestMixin")
@@ -27,26 +36,33 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
     private final SmaxWaffleRsaEncryptionMetadata encryptionMetadata;
 
     /**
-     * The client's wall-clock at request time, in seconds since the
-     * UNIX epoch.
+     * The client wall-clock at request time.
      */
     private final long timestamp;
 
     /**
-     * The linked Facebook account id, as opaque bytes.
+     * The linked Facebook account id as opaque bytes.
      */
     private final byte[] fbid;
 
     /**
-     * Constructs a request.
+     * Constructs a Waffle ping request.
+     *
+     * @apiNote
+     * The encrypted payload sealed inside
+     * {@link SmaxWaffleRsaEncryptionMetadata} typically carries
+     * additional client-side ping context (the WA Web crypto helper
+     * accepts an arbitrary application-defined payload); embedders
+     * mirror WA Web by encrypting the ping marker with the current
+     * Waffle encryption key before constructing this request.
      *
      * @param encryptionMetadata the RSA encryption metadata; never
      *                           {@code null}
-     * @param timestamp          the UNIX epoch seconds at request time
-     * @param fbid               the linked FB id bytes; never
+     * @param timestamp          the request timestamp
+     * @param fbid               the linked Facebook account id; never
      *                           {@code null}
-     * @throws NullPointerException if any object argument is
-     *                              {@code null}
+     * @throws NullPointerException if {@code encryptionMetadata} or
+     *                              {@code fbid} is {@code null}
      */
     public SmaxWaffleWFPingRequest(SmaxWaffleRsaEncryptionMetadata encryptionMetadata, long timestamp, byte[] fbid) {
         this.encryptionMetadata = Objects.requireNonNull(encryptionMetadata, "encryptionMetadata cannot be null");
@@ -57,7 +73,8 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
     /**
      * Returns the RSA encryption metadata.
      *
-     * @return the metadata; never {@code null}
+     * @return the metadata as supplied at construction time; never
+     *         {@code null}
      */
     public SmaxWaffleRsaEncryptionMetadata encryptionMetadata() {
         return encryptionMetadata;
@@ -66,16 +83,17 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
     /**
      * Returns the request timestamp.
      *
-     * @return the UNIX epoch seconds
+     * @return the timestamp as supplied at construction time
      */
     public long timestamp() {
         return timestamp;
     }
 
     /**
-     * Returns the linked FB id bytes.
+     * Returns the linked Facebook account id.
      *
-     * @return the fbid bytes; never {@code null}
+     * @return the id bytes as supplied at construction time; never
+     *         {@code null}
      */
     public byte[] fbid() {
         return fbid;
@@ -84,8 +102,16 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
+     * @apiNote
+     * Produces
+     * {@code <iq xmlns="waffle" smax_id="83" type="get" to="s.whatsapp.net">
+     * <encryption_metadata.../> <timestamp.../> <fbid.../></iq>}; the
+     * dispatch path stamps a fresh {@code id} attribute on every
+     * outbound stanza so the reply parser can match it back to this
+     * request.
+     *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         encrypted payload
+     *         encrypted ping payload; never {@code null}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutWaffleWFPingRequest",
@@ -109,6 +135,14 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
                 .content(encryptionMetadataNode, timestampNode, fbidNode);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxWaffleWFPingRequest} with equal payload fields.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when metadata, timestamp, and fbid all
+     *         match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -123,6 +157,12 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
                 && Arrays.equals(this.fbid, that.fbid);
     }
 
+    /**
+     * Returns a hash code derived from the three payload fields.
+     *
+     * @return a content-based hash consistent with
+     *         {@link #equals(Object)}
+     */
     @Override
     public int hashCode() {
         var result = Objects.hash(encryptionMetadata, timestamp);
@@ -130,6 +170,12 @@ public final class SmaxWaffleWFPingRequest implements SmaxOperation.Request {
         return result;
     }
 
+    /**
+     * Returns a debug rendering that summarises the fbid as a length
+     * rather than as raw bytes.
+     *
+     * @return a human-readable summary; never {@code null}
+     */
     @Override
     public String toString() {
         return "SmaxWaffleWFPingRequest[encryptionMetadata=" + encryptionMetadata

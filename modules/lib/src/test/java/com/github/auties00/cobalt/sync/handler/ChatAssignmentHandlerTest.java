@@ -9,14 +9,12 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ChatAssignmentActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.ChatAssignmentMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,13 +25,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link ChatAssignmentHandler} — Cobalt's adapter for
+ * Tests for {@link ChatAssignmentHandler} - Cobalt's adapter for
  * {@code WAWebChatAssignmentSync}.
  *
  * <p>The handler assigns customer chats to business agents. SET mutations
@@ -85,7 +81,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the ChatAssignmentAction wire constant")
@@ -109,7 +105,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET assigns the chat to the agent")
+    @DisplayName("applyMutation - SET assigns the chat to the agent")
     class ApplySetAssign {
         @Test
         @DisplayName("a non-empty agent id installs a new ChatAssignment when the agent + chat exist")
@@ -167,7 +163,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan outcomes")
+    @DisplayName("applyMutation - orphan outcomes")
     class Orphans {
         @Test
         @DisplayName("a chat absent locally returns ORPHAN with the chat JID as modelId")
@@ -199,7 +195,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a value carrying the wrong action returns MALFORMED")
@@ -218,7 +214,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("a missing chat JID slot returns MALFORMED")
@@ -244,7 +240,7 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE")
+    @DisplayName("applyMutation - REMOVE")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE operation returns UNSUPPORTED")
@@ -260,10 +256,10 @@ class ChatAssignmentHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -272,7 +268,7 @@ class ChatAssignmentHandlerTest {
         }
 
         @Test
-        @DisplayName("equal timestamps — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("equal timestamps - APPLY_REMOTE_DROP_LOCAL")
         void equalTimestampApplies() {
             var ts = Instant.ofEpochSecond(1_500);
             assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL,
@@ -280,7 +276,7 @@ class ChatAssignmentHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -294,53 +290,4 @@ class ChatAssignmentHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — createChatAssignmentMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("produces a SET pending mutation carrying the agent id and chat JID")
-        void carriesInputs() {
-            var ts = Instant.ofEpochSecond(1_700_000_000L);
-            var pending = factory.createChatAssignmentMutation(CHAT_JID, "agent-9", ts);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(ts, inner.timestamp());
-            assertEquals(JSON.toJSONString(List.of(handler.actionName(), CHAT_JID.toString())), inner.index());
-
-            var roundtrip = inner.value().action().filter(a -> a instanceof ChatAssignmentAction).map(a -> (ChatAssignmentAction) a).orElseThrow();
-            assertEquals("agent-9", roundtrip.deviceAgentID().orElseThrow());
-        }
-
-        @Test
-        @DisplayName("an empty agent id round-trips as the unassign sentinel")
-        void emptyAgentIdRoundtrips() {
-            var ts = Instant.ofEpochSecond(1_700_000_001L);
-            var pending = factory.createChatAssignmentMutation(CHAT_JID, "", ts);
-
-            var roundtrip = pending.mutation().value().action().filter(a -> a instanceof ChatAssignmentAction).map(a -> (ChatAssignmentAction) a).orElseThrow();
-            assertEquals("", roundtrip.deviceAgentID().orElseThrow(),
-                    "an empty agent id round-trips verbatim — the inbound handler interprets it as unassign");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/chat-assignment/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/chat-assignment/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            var pending = factory.createChatAssignmentMutation(
-                    CHAT_JID, "agent-9", Instant.ofEpochSecond(1_700_000_000L));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

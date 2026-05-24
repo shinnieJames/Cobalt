@@ -12,26 +12,42 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="tos" type="set">} stanza variant.
- * Wraps a {@code <request type="session_update">} child carrying one
- * {@code <notice id="…"/>} per accepted notice id.
+ * Outbound {@code <iq xmlns="tos" type="set">} stanza that pushes a batch of
+ * locally-accepted TOS / disclosure notices to the relay.
+ *
+ * @apiNote
+ * Use this to back WA Web's {@code WAWebTos.TosManager.maybeUpdateServer} path: the
+ * caller filters the locally-accepted notice ids against the set of ids the relay
+ * has not yet seen and pushes them in a single batch. The relay's role is to record
+ * acceptance, not to gate, so the caller can pre-mark notices as accepted before the
+ * server roundtrip completes. The reply is parsed by {@link IqUpdateTosResponse}.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's {@code WAWebTosJob.updateTosState} verbatim:
+ * the outbound payload is a single {@code <request type="session_update">} child
+ * carrying one {@code <notice id="..."/>} grandchild per accepted id; WA Web also
+ * uses {@code WAExponentialBackoff} to retry the 500 arm, which Cobalt callers
+ * apply at the dispatch layer rather than here.
  */
 @WhatsAppWebModule(moduleName = "WAWebTosJob")
 public final class IqUpdateTosRequest implements IqOperation.Request {
     /**
-     * The list of notice ids being accepted. Each entry is routed
-     * verbatim into the {@code id} attribute of one {@code <notice/>}
-     * child of the {@code <request type="session_update">} payload.
+     * Holds the notice ids being acknowledged; routed verbatim into one
+     * {@code <notice/>} child per entry.
      */
     private final List<String> noticeIds;
 
     /**
-     * Constructs a new update-tos request.
+     * Constructs a new update-tos request bound to the given notice ids.
      *
-     * @param noticeIds the list of notice ids being accepted. Never
-     *                  {@code null}, may be empty
-     * @throws NullPointerException if {@code noticeIds} is
-     *                              {@code null}
+     * @apiNote
+     * An empty list produces a {@code <request type="session_update">} child with
+     * no grandchildren; WA Web's {@code TosManager.maybeUpdateServer} skips the
+     * dispatch entirely in that case rather than emitting an empty batch.
+     *
+     * @param noticeIds the notice ids being acknowledged; never {@code null}, may
+     *                  be empty
+     * @throws NullPointerException if {@code noticeIds} is {@code null}
      */
     public IqUpdateTosRequest(List<String> noticeIds) {
         Objects.requireNonNull(noticeIds, "noticeIds cannot be null");
@@ -39,25 +55,29 @@ public final class IqUpdateTosRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the unmodifiable list of notice ids being accepted.
+     * Returns the unmodifiable list of bound notice ids.
      *
-     * @return the notice ids. Never {@code null}
+     * @return the notice ids; never {@code null}
      */
     public List<String> noticeIds() {
         return noticeIds;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza wrapping the
+     * {@code <request type="session_update">} payload.
+     *
+     * @apiNote
+     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
+     * attribute, which the dispatch layer assigns.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         {@code <request type="session_update">} payload
+     *         {@code <request>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "updateTosState", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebTosJob: e.map(id => wap("notice", {id: CUSTOM_STRING(id)}))
         var noticeNodes = new ArrayList<Node>(noticeIds.size());
         for (var id : noticeIds) {
             var noticeNode = new NodeBuilder()
@@ -66,13 +86,11 @@ public final class IqUpdateTosRequest implements IqOperation.Request {
                     .build();
             noticeNodes.add(noticeNode);
         }
-        // WAWebTosJob: wap("request", {type:"session_update"}, [...])
         var requestNode = new NodeBuilder()
                 .description("request")
                 .attribute("type", "session_update")
                 .content(noticeNodes)
                 .build();
-        // WAWebTosJob: wap("iq", {xmlns:"tos", id, type:"set", to:S_WHATSAPP_NET}, request)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "tos")

@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link BusinessBroadcastInsightsHandler} — Cobalt's adapter
+ * Tests for {@link BusinessBroadcastInsightsHandler} - Cobalt's adapter
  * for {@code WAWebBusinessBroadcastInsightsSync}.
  *
  * <p>The handler upserts post-send delivery statistics keyed by the
@@ -85,7 +85,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("metadata — wire identity")
+    @DisplayName("metadata - wire identity")
     class Metadata {
         @Test
         @DisplayName("actionName() returns the wire constant")
@@ -109,7 +109,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — SET upsert")
+    @DisplayName("applyMutation - SET upsert")
     class ApplySet {
         @Test
         @DisplayName("SET upserts the per-campaign insights record")
@@ -125,7 +125,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — orphan dimension is n/a")
+    @DisplayName("applyMutation - orphan dimension is n/a")
     class OrphanDimension {
         @Test
         @DisplayName("SET on an unknown campaign id is the upsert path, not an orphan")
@@ -137,7 +137,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed value")
+    @DisplayName("applyMutation - malformed value")
     class MalformedValue {
         @Test
         @DisplayName("a SET whose value carries the wrong action returns MALFORMED")
@@ -155,7 +155,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — malformed index")
+    @DisplayName("applyMutation - malformed index")
     class MalformedIndex {
         @Test
         @DisplayName("an empty campaign id returns MALFORMED")
@@ -175,7 +175,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutation — REMOVE drops the insights record")
+    @DisplayName("applyMutation - REMOVE drops the insights record")
     class ApplyRemove {
         @Test
         @DisplayName("REMOVE drops the insights record and returns SUCCESS")
@@ -194,10 +194,10 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts — default timestamp comparison")
+    @DisplayName("resolveConflicts - default timestamp comparison")
     class ResolveConflicts {
         @Test
-        @DisplayName("newer remote — APPLY_REMOTE_DROP_LOCAL")
+        @DisplayName("newer remote - APPLY_REMOTE_DROP_LOCAL")
         void newerRemoteApplies() {
             var local = mutationAt(Instant.ofEpochSecond(1_000));
             var remote = mutationAt(Instant.ofEpochSecond(2_000));
@@ -206,7 +206,7 @@ class BusinessBroadcastInsightsHandlerTest {
         }
 
         @Test
-        @DisplayName("older remote — SKIP_REMOTE")
+        @DisplayName("older remote - SKIP_REMOTE")
         void olderRemoteSkipped() {
             var local = mutationAt(Instant.ofEpochSecond(2_000));
             var remote = mutationAt(Instant.ofEpochSecond(1_000));
@@ -220,7 +220,7 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("applyMutationBatch — per-mutation fan-out + counter tracking")
+    @DisplayName("applyMutationBatch - per-mutation fan-out + counter tracking")
     class BatchOverride {
         @Test
         @DisplayName("mixed batch preserves each per-mutation result")
@@ -241,12 +241,12 @@ class BusinessBroadcastInsightsHandlerTest {
     }
 
     @Nested
-    @DisplayName("static builders — n/a")
+    @DisplayName("static builders - n/a")
     class StaticBuilders {
         @Test
-        @DisplayName("BusinessBroadcastInsightsHandler exposes no outbound mutation builder — dimension is n/a")
+        @DisplayName("BusinessBroadcastInsightsHandler exposes no outbound mutation builder - dimension is n/a")
         void noBuilder() {
-            // Insights are server-published only — Cobalt has no outbound mutation path for this
+            // Insights are server-published only - Cobalt has no outbound mutation path for this
             // action. The handler has no builder surface.
             assertNotNull(new BusinessBroadcastInsightsHandler(),
                     "BusinessBroadcastInsightsHandler instantiates with a no-arg constructor and exposes no builder method");

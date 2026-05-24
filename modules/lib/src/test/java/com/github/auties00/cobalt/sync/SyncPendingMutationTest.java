@@ -17,17 +17,35 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link SyncPendingMutation} — Cobalt's adapter for WA Web's
- * {@code WAWebPendingMutationStore} entry shape.
+ * Pins the construction, immutability, and equality contract of
+ * {@link SyncPendingMutation} against the WhatsApp Web
+ * {@code WAWebPendingMutationStore} row shape.
  *
- * <p>The class wraps a {@link DecryptedMutation.Trusted} with a stable
- * {@code mutationId} and an {@code attemptCount}. These tests pin the
- * record-style invariants (equality by every field, functional
- * {@code incrementAttempt}, deterministic {@code toString}).
+ * @apiNote Cobalt-internal exercise of the
+ * {@link SyncPendingMutation} record-style class. WA Web has no
+ * directly comparable test surface; the equivalent fields live in
+ * IndexedDB rows produced by
+ * {@code WAWebSchemaPendingMutations.convertToPendingMutationFromRow}.
+ *
+ * @implNote The fixture {@link DecryptedMutation.Trusted} is built
+ * directly through the model builder with deterministic timestamps;
+ * only the equality identity matters for these assertions.
  */
 @DisplayName("SyncPendingMutation")
 class SyncPendingMutationTest {
 
+    /**
+     * Builds a deterministic {@link DecryptedMutation.Trusted} keyed
+     * on the supplied index.
+     *
+     * @apiNote Helper used by every nested test that needs a concrete
+     * mutation; the index is parameterised so tests can vary the
+     * payload while keeping the timestamps stable.
+     *
+     * @param index the index string baked into the
+     *              {@link DecryptedMutation.Trusted}
+     * @return a freshly built fixture
+     */
     private static DecryptedMutation.Trusted sampleTrusted(String index) {
         var value = new SyncActionValueBuilder()
                 .timestamp(Instant.ofEpochSecond(1700000000L))
@@ -36,9 +54,16 @@ class SyncPendingMutationTest {
                 Instant.ofEpochSecond(1700000000L), 3);
     }
 
+    /**
+     * Pins the two-arg and three-arg constructor contracts.
+     */
     @Nested
     @DisplayName("construction")
     class Construction {
+        /**
+         * The auto-id constructor mints a fresh
+         * {@code mutationId} per instance.
+         */
         @Test
         @DisplayName("auto-id constructor generates a unique mutationId")
         void autoIdGenerated() {
@@ -49,6 +74,9 @@ class SyncPendingMutationTest {
                     "auto-id should be unique per instance (random UUID)");
         }
 
+        /**
+         * The explicit-id constructor stores the supplied id verbatim.
+         */
         @Test
         @DisplayName("explicit-id constructor preserves the supplied id")
         void explicitIdPreserved() {
@@ -56,6 +84,10 @@ class SyncPendingMutationTest {
             assertEquals("custom-id", mutation.mutationId());
         }
 
+        /**
+         * The {@code attemptCount} accessor returns the value passed
+         * at construction time.
+         */
         @Test
         @DisplayName("attemptCount is preserved verbatim")
         void attemptCountPreserved() {
@@ -63,6 +95,10 @@ class SyncPendingMutationTest {
             assertEquals(7, mutation.attemptCount());
         }
 
+        /**
+         * The {@code mutation} accessor returns the supplied
+         * {@link DecryptedMutation.Trusted} by reference.
+         */
         @Test
         @DisplayName("mutation accessor returns the supplied Trusted by reference")
         void mutationReferenceStable() {
@@ -72,9 +108,17 @@ class SyncPendingMutationTest {
         }
     }
 
+    /**
+     * Pins the immutable functional-update behaviour of
+     * {@link SyncPendingMutation#incrementAttempt()}.
+     */
     @Nested
-    @DisplayName("incrementAttempt — functional update")
+    @DisplayName("incrementAttempt -- functional update")
     class IncrementAttempt {
+        /**
+         * The increment produces a fresh instance with
+         * {@code attemptCount + 1}.
+         */
         @Test
         @DisplayName("incrementAttempt returns a new instance with attemptCount + 1")
         void incrementsAndCopies() {
@@ -85,6 +129,10 @@ class SyncPendingMutationTest {
             assertEquals(3, original.attemptCount(), "original is immutable");
         }
 
+        /**
+         * The increment preserves both the original
+         * {@code mutationId} and the underlying mutation reference.
+         */
         @Test
         @DisplayName("incrementAttempt preserves mutationId and underlying mutation")
         void preservesIdAndMutation() {
@@ -95,6 +143,9 @@ class SyncPendingMutationTest {
             assertSame(trusted, bumped.mutation());
         }
 
+        /**
+         * Repeated increments compose as a simple numeric counter.
+         */
         @Test
         @DisplayName("incrementAttempt is repeatable")
         void incrementRepeatable() {
@@ -106,11 +157,20 @@ class SyncPendingMutationTest {
         }
     }
 
+    /**
+     * Pins the {@link SyncPendingMutation#equals(Object)} and
+     * {@link SyncPendingMutation#hashCode()} contract over every
+     * field.
+     */
     @Nested
     @DisplayName("equality and hashCode")
     class Equality {
+        /**
+         * Equal-id, equal-mutation, equal-attempt instances compare
+         * equal and hash equal.
+         */
         @Test
-        @DisplayName("same id, same mutation, same attempt → equal")
+        @DisplayName("same id, same mutation, same attempt are equal")
         void equalsByEveryField() {
             var trusted = sampleTrusted("a");
             var a = new SyncPendingMutation("id", trusted, 1);
@@ -119,8 +179,12 @@ class SyncPendingMutationTest {
             assertEquals(a.hashCode(), b.hashCode());
         }
 
+        /**
+         * Different ids compare unequal even when the underlying
+         * mutation and attempt count match.
+         */
         @Test
-        @DisplayName("different mutationId → unequal")
+        @DisplayName("different mutationId is unequal")
         void differingIdUnequal() {
             var trusted = sampleTrusted("a");
             assertNotEquals(
@@ -128,8 +192,12 @@ class SyncPendingMutationTest {
                     new SyncPendingMutation("id-2", trusted, 0));
         }
 
+        /**
+         * Different attempt counts compare unequal even when the id
+         * and underlying mutation match.
+         */
         @Test
-        @DisplayName("different attemptCount → unequal")
+        @DisplayName("different attemptCount is unequal")
         void differingAttemptUnequal() {
             var trusted = sampleTrusted("a");
             assertNotEquals(
@@ -138,9 +206,16 @@ class SyncPendingMutationTest {
         }
     }
 
+    /**
+     * Pins the diagnostic {@link SyncPendingMutation#toString()}
+     * format.
+     */
     @Nested
-    @DisplayName("toString — diagnostic format")
+    @DisplayName("toString -- diagnostic format")
     class ToString {
+        /**
+         * The string carries every record field with its label.
+         */
         @Test
         @DisplayName("toString lists every field with its label")
         void toStringHasAllFields() {

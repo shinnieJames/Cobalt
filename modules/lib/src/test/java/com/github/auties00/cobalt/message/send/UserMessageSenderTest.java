@@ -12,6 +12,8 @@ import com.github.auties00.cobalt.message.send.stanza.MetaStanza;
 import com.github.auties00.cobalt.message.send.stanza.ReportingStanza;
 import com.github.auties00.cobalt.message.send.stanza.TcTokenStanza;
 import com.github.auties00.cobalt.message.send.bot.BotProtobufTransform;
+import com.github.auties00.cobalt.migration.LidMigrationService;
+import com.github.auties00.cobalt.model.chat.ChatMessageInfo;
 import com.github.auties00.cobalt.model.chat.ChatMessageInfoBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
@@ -26,6 +28,8 @@ import com.github.auties00.libsignal.groups.SignalGroupCipher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,15 +39,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link UserMessageSender}, mirroring
- * {@code WAWebSendUserMsgJob.encryptAndSendUserMsg}.
+ * Exercises {@link UserMessageSender}'s wire-stanza shape against the
+ * {@code WAWebSendUserMsgJob.encryptAndSendUserMsg} contract.
  *
- * <p>Each test feeds a stubbed multi-device fanout into the sender,
+ * @apiNote
+ * Each cell feeds a stubbed multi-device fanout into the sender,
  * pre-establishes libsignal sessions to the recipient devices, and
- * verifies the captured {@code <message>} stanza. The most important
- * assertion is the 479 invariant: when the chat addressing-mode is LID,
- * every participant under {@code <participants>} must carry a LID-form
- * {@code <to jid="…@lid">} entry.
+ * verifies the captured {@code <message>} stanza. The load-bearing cell
+ * is the 479 invariant: when the chat is LID-addressed, every
+ * {@code <to jid="...">} entry under {@code <participants>} must carry an
+ * LID-form recipient, and emitting a PN entry would trip the server's 479
+ * recipient-addressing-mismatch nack.
+ *
+ * @implNote
+ * This implementation drives the sender through a captured
+ * {@link TestWhatsAppClient} and uses
+ * separate per-device recipient stores to approximate the production
+ * setup where each linked device has its own identity.
  */
 @DisplayName("UserMessageSender")
 class UserMessageSenderTest {
@@ -54,6 +66,11 @@ class UserMessageSenderTest {
     private static final Jid PEER_DEVICE_PRIMARY = Jid.of("83116928594056:0@lid");
     private static final Jid PEER_DEVICE_COMPANION = Jid.of("83116928594056:1@lid");
 
+    /**
+     * Asserts the 1:1 LID multi-device fanout stanza shape: an outer
+     * LID {@code to}, and {@code <participants>} wrapping per-device
+     * {@code <enc>} children.
+     */
     @Test
     @DisplayName("send: 1:1 LID fanout produces <message to=lid> with <participants> wrapping per-device <enc> nodes")
     void lidFanoutShape() {
@@ -87,7 +104,7 @@ class UserMessageSenderTest {
                 () -> new AssertionError("multi-device fanout must wrap in <participants>"));
         var participantTos = participants.streamChildren("to").toList();
         assertEquals(2, participantTos.size(),
-                "exactly one <to jid=…> per fanout device");
+                "exactly one <to jid=...> per fanout device");
         for (var to : participantTos) {
             var enc = to.getChild("enc").orElseThrow();
             assertEquals("2", enc.getAttributeAsString("v").orElseThrow());
@@ -96,8 +113,16 @@ class UserMessageSenderTest {
         }
     }
 
+    /**
+     * Asserts the 479 invariant: every participant {@code <to jid=...>}
+     * is LID-form when the outer chat is LID-addressed.
+     *
+     * @apiNote
+     * Emitting a PN entry inside a LID-addressed fanout triggers the
+     * server's 479 recipient-addressing-mismatch nack.
+     */
     @Test
-    @DisplayName("479 invariant: every participant <to jid=…> carries @lid when chat is @lid")
+    @DisplayName("479 invariant: every participant <to jid=...> carries @lid when chat is @lid")
     void participantsAreLidWhenChatIsLid() {
         var senderStore = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         var recipientPrimary = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
@@ -118,12 +143,16 @@ class UserMessageSenderTest {
         for (var to : participants.streamChildren("to").toList()) {
             var jid = to.getAttributeAsString("jid").orElseThrow();
             assertTrue(jid.endsWith("@lid"),
-                    "479 invariant: every participant <to jid=…> must be @lid for an @lid chat, got " + jid);
+                    "479 invariant: every participant <to jid=...> must be @lid for an @lid chat, got " + jid);
             assertFalse(jid.endsWith("@s.whatsapp.net"),
                     "479 invariant: NO participant may be @s.whatsapp.net when outer is @lid: " + jid);
         }
     }
 
+    /**
+     * Asserts that a PKMSG fanout emits a sibling
+     * {@code <device-identity>}.
+     */
     @Test
     @DisplayName("send: <device-identity> sibling is emitted when any payload is PKMSG")
     void identityNodeOnPkmsg() {
@@ -143,6 +172,10 @@ class UserMessageSenderTest {
                 "PKMSG fanout must carry <device-identity> for recipient identity-key verification");
     }
 
+    /**
+     * Asserts that {@code deviceService.ensureSessions} is invoked exactly
+     * once and receives the resolved fanout device list.
+     */
     @Test
     @DisplayName("send: deviceService.ensureSessions is invoked with the fanout devices")
     void ensureSessionsReceivesFanout() {
@@ -150,7 +183,7 @@ class UserMessageSenderTest {
         var recipientPrimary = MessageFixtures.temporaryStore(SELF_PN, SELF_LID);
         TestSignalSession.establishSession(senderStore, PEER_DEVICE_PRIMARY, recipientPrimary);
 
-        var ensureCalls = new java.util.ArrayList<java.util.Collection<Jid>>();
+        var ensureCalls = new ArrayList<Collection<Jid>>();
         var client = clientWithCapture(senderStore, new AtomicReference<>());
         var sender = userMessageSender(client, senderStore,
                 StubDeviceService.create()
@@ -168,12 +201,18 @@ class UserMessageSenderTest {
     }
 
     /**
-     * Builds a TestWhatsAppClient that captures the first emitted node and
-     * returns a default-success ack.
+     * Builds a {@link TestWhatsAppClient} that captures the first emitted
+     * stanza into {@code capturedStanza} and returns a default-success
+     * ack.
      *
-     * @param store          the sender store
+     * @apiNote
+     * The synthetic ack carries only the {@code t} attribute so
+     * {@link com.github.auties00.cobalt.ack.AckParser} parses
+     * it as a success result.
+     *
+     * @param store          the sender {@link WhatsAppStore}
      * @param capturedStanza the slot to capture the emitted stanza into
-     * @return the configured test client
+     * @return the configured {@link TestWhatsAppClient}
      */
     private static TestWhatsAppClient clientWithCapture(WhatsAppStore store, AtomicReference<Node> capturedStanza) {
         return TestWhatsAppClient.create()
@@ -189,12 +228,18 @@ class UserMessageSenderTest {
     }
 
     /**
-     * Builds a fully-wired UserMessageSender for the supplied client + store.
+     * Builds a fully-wired {@link UserMessageSender} for the supplied
+     * dependencies.
      *
-     * @param client        the test client
-     * @param store         the sender store
-     * @param deviceService the stubbed device service
-     * @return the configured sender
+     * @apiNote
+     * Wires every dependency the sender needs (encryption, WAM, bot, biz,
+     * meta, reporting, CTWA, trusted-contact token) so the per-test setup
+     * only has to swap the store and the {@link StubDeviceService}.
+     *
+     * @param client        the {@link TestWhatsAppClient}
+     * @param store         the sender {@link WhatsAppStore}
+     * @param deviceService the stubbed {@link StubDeviceService}
+     * @return the configured {@link UserMessageSender}
      */
     private static UserMessageSender userMessageSender(TestWhatsAppClient client, WhatsAppStore store, StubDeviceService deviceService) {
         var ab = client.abPropsService();
@@ -202,26 +247,32 @@ class UserMessageSenderTest {
                 new SignalSessionCipher(store),
                 new SignalGroupCipher(store));
         var wamService = new DefaultWamService(client, ab);
+        var lidMigrationService = new LidMigrationService(client, ab, wamService);
         var bot = new BotStanza(encryption, new BotProtobufTransform(store));
         var biz = new BizStanza(store);
         var meta = new MetaStanza(store);
         var reporting = new ReportingStanza(ab);
         var ctwa = new CtwaAttributionStanza(store, ab);
         var tcToken = new TcTokenStanza(store, ab);
-        return new UserMessageSender(client, encryption, deviceService, ab,
+        return new UserMessageSender(client, encryption, deviceService, lidMigrationService, ab,
                 bot, biz, meta, reporting, ctwa, tcToken, wamService);
     }
 
     /**
-     * Builds a {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo}
-     * for the supplied chat + container.
+     * Builds a {@link ChatMessageInfo}
+     * for the supplied chat and container.
+     *
+     * @apiNote
+     * Helper used by every cell; carries a zeroed {@code messageSecret}
+     * and a fixed sender JID, leaving the wire id and payload up to the
+     * caller.
      *
      * @param id        the wire id
-     * @param chatJid   the chat JID
-     * @param container the message payload
+     * @param chatJid   the chat {@link Jid}
+     * @param container the {@link MessageContainer} payload
      * @return the configured message info
      */
-    private static com.github.auties00.cobalt.model.chat.ChatMessageInfo chatMessage(
+    private static ChatMessageInfo chatMessage(
             String id, Jid chatJid, MessageContainer container) {
         var key = new MessageKeyBuilder()
                 .id(id)

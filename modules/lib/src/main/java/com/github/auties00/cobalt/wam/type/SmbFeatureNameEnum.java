@@ -25,5 +25,9 @@ public enum SmbFeatureNameEnum {
     @WamEnumConstant(14) QUICK_REPLY,
     @WamEnumConstant(15) AUTOMATED_MESSAGE,
     @WamEnumConstant(16) CONSUMER_DOWNGRADE,
-    @WamEnumConstant(17) CUSTOMER_MANAGER
+    @WamEnumConstant(17) CUSTOMER_MANAGER,
+    @WamEnumConstant(18) AUTHORIZED_AGENT,
+    @WamEnumConstant(19) BUSINESS_TOOLS_REC_CARD,
+    @WamEnumConstant(20) LISTS_CREATION,
+    @WamEnumConstant(21) LIST_APPLICATION
 }

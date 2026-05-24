@@ -20,5 +20,6 @@ public enum DisclosureSuppressionReason {
     @WamEnumConstant(9) BODY_LINK_DISCLOSURE_AB_PROP_DISABLED,
     @WamEnumConstant(10) ANOTHER_DIALOG_DISPLAYED,
     @WamEnumConstant(11) EVENT_TYPE_AB_PROP_DISABLED,
-    @WamEnumConstant(12) BLOCKED
+    @WamEnumConstant(12) BLOCKED,
+    @WamEnumConstant(13) ACCOUNT_LINKED
 }

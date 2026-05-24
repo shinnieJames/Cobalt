@@ -31,124 +31,128 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
- * Package-private LMDB facade that backs {@link PersistentStore}'s message
- * storage.
+ * The package-private LMDB facade that backs every message accessor on {@link PersistentStore}.
  *
- * <p>Owns one {@link Env} rooted at {@code <sessionDirectory>/messages.lmdb}
- * and exposes three logical databases:
+ * <p>The env rooted at {@code <sessionDirectory>/messages.lmdb} hosts three named databases:
  * <ul>
- *   <li>{@code chat_messages} keyed by {@code chatJid + 0x00 + msgId} —
- *       per-chat range scans use a half-open cursor range from
- *       {@code chatJid + 0x00} to {@code chatJid + 0x01}.
- *   <li>{@code newsletter_messages} keyed by {@code newsletterJid + 0x00 +
- *       serverId(BE)} — serverId is monotonic and unique per newsletter, so
- *       cursor first/last directly yields oldest/newest. Lookup by key-id
- *       falls back to a per-newsletter scan.
- *   <li>{@code status_messages} flat, keyed by {@code msgId} — used for the
- *       global status feed.
+ *   <li>{@code chat_messages} keyed by {@code chatJid + 0x00 + msgId}, scanned per chat through
+ *       the half-open range {@code [chatJid + 0x00, chatJid + 0x01)};</li>
+ *   <li>{@code newsletter_messages} keyed by {@code newsletterJid + 0x00 + serverId(BE)}, with
+ *       cursor first/last yielding oldest/newest directly because {@code serverId} is monotonic
+ *       per newsletter;</li>
+ *   <li>{@code status_messages} flat, keyed by {@code msgId}, holding the global status feed.</li>
  * </ul>
  *
- * <p>Read operations decode the protobuf payload eagerly into a heap copy
- * before the transaction closes, so callers never hold references to
- * mmap'd memory that may be invalidated by a concurrent writer.
+ * @apiNote
+ * Only {@link PersistentStore} and its {@link PersistentChat} / {@link PersistentNewsletter}
+ * subtypes consume this facade. The instance is owned by the parent store and shut down through
+ * {@link PersistentStore#close()} or {@link PersistentStore#delete()}.
  *
- * <p>Write operations open a single short-lived write transaction and
- * commit immediately. On {@link Env.MapFullException} the env is grown
- * (doubled) under {@link #growLock} and the write is retried once.
- *
- * <p>Stream-returning methods open a read transaction whose lifetime is
- * tied to the returned stream's {@link Stream#close()} hook; callers MUST
- * consume the stream inside a try-with-resources block, otherwise the
- * underlying read transaction occupies a slot in LMDB's reader table
- * until the stream is garbage collected.
+ * @implNote
+ * This implementation eagerly decodes each LMDB value into heap-resident objects before the read
+ * transaction closes (see {@link CopyingProtobufInputStream}) so callers never hold references to
+ * mmap'd memory that may be invalidated by a concurrent writer. Write transactions are short-lived
+ * and retry once on {@link Env.MapFullException} after a {@link #growMap() doubling resize} guarded
+ * by {@link #growLock}. Stream-returning methods open a long-lived read transaction tied to the
+ * returned {@link Stream#close()} hook; callers MUST consume the stream inside a try-with-resources
+ * block to avoid leaking a slot in LMDB's reader table.
  *
  * @see PersistentStore
  */
 final class PersistentMessageStore implements AutoCloseable {
     /**
-     * Key separator between the JID prefix and the message-id suffix.
-     * {@code 0x00} is safe because JID string forms never contain a NUL
-     * and message-id strings are base64-shaped.
+     * The byte separating the JID prefix from the message-id suffix in composite keys.
+     *
+     * @implNote
+     * This implementation relies on {@code 0x00} being absent from both JID string forms and
+     * base64-shaped message ids, so the separator is unambiguous.
      */
     private static final byte KEY_SEPARATOR = 0x00;
 
     /**
-     * Sentinel byte that terminates a per-JID cursor range. One greater
-     * than {@link #KEY_SEPARATOR}, so a half-open range
-     * {@code [jid + 0x00, jid + 0x01)} captures every key whose prefix
-     * matches the JID exactly.
+     * The sentinel byte that terminates a per-JID cursor range.
+     *
+     * @implNote
+     * This implementation uses {@code 0x01} (one greater than {@link #KEY_SEPARATOR}) so the
+     * half-open range {@code [jid + 0x00, jid + 0x01)} captures every key whose prefix matches the
+     * JID exactly without spilling into the next JID's keyspace.
      */
     private static final byte KEY_RANGE_END = 0x01;
 
     /**
-     * Maximum number of LMDB reader slots. Realistic concurrent ceiling
-     * under virtual threads is in the dozens; 512 is comfortable
-     * headroom without bloating the lock table.
+     * The maximum number of LMDB reader slots provisioned on the env.
+     *
+     * @implNote
+     * This implementation provisions 512 slots, comfortably above the realistic concurrent ceiling
+     * under virtual threads (dozens) without bloating the lock table.
      */
     private static final int MAX_READERS = 512;
 
     /**
-     * Number of named databases opened inside the env.
+     * The number of named databases opened inside the env.
      */
     private static final int MAX_DBS = 3;
 
     /**
-     * Name of the chat-message database.
+     * The name of the chat-message database.
      */
     private static final String CHAT_MESSAGES_DBI = "chat_messages";
 
     /**
-     * Name of the newsletter-message database.
+     * The name of the newsletter-message database.
      */
     private static final String NEWSLETTER_MESSAGES_DBI = "newsletter_messages";
 
     /**
-     * Name of the status-feed database.
+     * The name of the status-feed database.
      */
     private static final String STATUS_MESSAGES_DBI = "status_messages";
 
     /**
-     * Underlying LMDB environment.
+     * The underlying LMDB environment.
      */
     private final Env<ByteBuffer> env;
 
     /**
-     * Chat-message database handle.
+     * The handle to the {@value #CHAT_MESSAGES_DBI} database.
      */
     private final Dbi<ByteBuffer> chatMessages;
 
     /**
-     * Newsletter-message database handle.
+     * The handle to the {@value #NEWSLETTER_MESSAGES_DBI} database.
      */
     private final Dbi<ByteBuffer> newsletterMessages;
 
     /**
-     * Status-feed database handle.
+     * The handle to the {@value #STATUS_MESSAGES_DBI} database.
      */
     private final Dbi<ByteBuffer> statusMessages;
 
     /**
-     * Current configured map size in bytes; doubled on
-     * {@link Env.MapFullException}.
+     * The current configured map size in bytes.
+     *
+     * @implNote
+     * This implementation marks the field {@code volatile} so concurrent writers observe the most
+     * recent resize before retrying. Mutations happen only under {@link #growLock}.
      */
     private volatile long mapSize;
 
     /**
-     * Mutex guarding {@link #growMap()} so concurrent writers do not
-     * race when resizing the env.
+     * The mutex guarding {@link #growMap()} so concurrent writers serialise on the resize.
      */
     private final Object growLock;
 
     /**
-     * Constructs a {@code MessageStore} around an already-opened env and
-     * its three database handles.
+     * Constructs a facade around an already-opened env and its three database handles.
      *
-     * @param env                 the LMDB environment
-     * @param chatMessages        the chat-message dbi
-     * @param newsletterMessages  the newsletter-message dbi
-     * @param statusMessages      the status-feed dbi
-     * @param initialMapSize      the initial map size, retained for
-     *                            grow-on-full bookkeeping
+     * @apiNote
+     * This constructor is private; instances are produced through {@link #open(Path, long)}.
+     *
+     * @param env                the LMDB environment
+     * @param chatMessages       the chat-message dbi
+     * @param newsletterMessages the newsletter-message dbi
+     * @param statusMessages     the status-feed dbi
+     * @param initialMapSize     the initial map size in bytes, retained for grow-on-full bookkeeping
      */
     private PersistentMessageStore(Env<ByteBuffer> env, Dbi<ByteBuffer> chatMessages, Dbi<ByteBuffer> newsletterMessages, Dbi<ByteBuffer> statusMessages, long initialMapSize) {
         this.env = env;
@@ -160,17 +164,23 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Opens or creates an LMDB environment under {@code envDirectory} and
-     * the three named databases backing chat, newsletter and status
-     * messages.
+     * Opens or creates the LMDB env under {@code envDirectory} and returns a facade ready to serve
+     * chat, newsletter and status reads and writes.
      *
-     * @param envDirectory   the directory that will host {@code data.mdb}
-     *                       and {@code lock.mdb}; created if it does not
-     *                       exist
-     * @param initialMapSize the maximum size (bytes) the env file may
-     *                       grow to before {@link Env.MapFullException}
-     *                       triggers a doubling resize
-     * @return a fully initialised {@code MessageStore}
+     * @apiNote
+     * Invoked by {@link PersistentStoreFactory} after the metadata snapshot is loaded or a fresh
+     * store is built. The directory is created if it does not already exist.
+     *
+     * @implNote
+     * This implementation provisions {@value #MAX_READERS} reader slots and {@value #MAX_DBS}
+     * named databases on the env. The three dbis are opened with {@link DbiFlags#MDB_CREATE} so
+     * cold starts succeed without a separate bootstrap step.
+     *
+     * @param envDirectory   the directory that will host {@code data.mdb} and {@code lock.mdb};
+     *                       created if it does not exist
+     * @param initialMapSize the maximum size in bytes the env file may grow to before
+     *                       {@link Env.MapFullException} triggers a doubling resize
+     * @return a fully initialised facade
      * @throws IOException if the directory cannot be created
      */
     static PersistentMessageStore open(Path envDirectory, long initialMapSize) throws IOException {
@@ -187,12 +197,18 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Inserts or replaces a chat message in the {@code chat_messages}
-     * dbi.
+     * Inserts or replaces a chat message in the {@code chat_messages} dbi.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#addMessage(ChatMessageInfo)}. A message with no key id is
+     * silently dropped because the dbi key requires one.
+     *
+     * @implNote
+     * This implementation uses {@link Dbi#reserve(Txn, Object, int)} to write the protobuf
+     * payload directly into LMDB-allocated space, avoiding an intermediate heap buffer.
      *
      * @param chatJid the JID identifying the owning chat
-     * @param info    the message to persist; ignored if it carries no
-     *                key id
+     * @param info    the message to persist
      */
     void putChatMessage(Jid chatJid, ChatMessageInfo info) {
         var msgId = info.key().id().orElse(null);
@@ -209,7 +225,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Looks up a chat message by its key id within the given chat.
+     * Returns the chat message under the composite key {@code chatJid + 0x00 + msgId}, or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#getMessageById(String)}.
+     *
+     * @implNote
+     * This implementation decodes the value via {@link CopyingProtobufInputStream} so the result
+     * outlives the surrounding read transaction safely.
      *
      * @param chatJid the JID identifying the owning chat
      * @param msgId   the message key id
@@ -226,12 +249,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Removes a chat message by its key id within the given chat.
+     * Removes the chat message under the composite key {@code chatJid + 0x00 + msgId}.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#removeMessage(String)}.
      *
      * @param chatJid the JID identifying the owning chat
      * @param msgId   the message key id
-     * @return {@code true} if an entry was removed, {@code false} if no
-     *         such entry existed
+     * @return {@code true} if an entry was removed, {@code false} if no such entry existed
      */
     boolean removeChatMessage(Jid chatJid, String msgId) {
         var key = encodePrefixedKey(chatJid, msgId.getBytes(StandardCharsets.UTF_8));
@@ -239,7 +264,16 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Removes every chat message belonging to the given chat.
+     * Removes every chat message stored for the given chat.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#removeMessages()} and from
+     * {@link PersistentStore#removeChat} so that a removed chat's body history does not outlive
+     * its metadata.
+     *
+     * @implNote
+     * This implementation walks the per-JID range under a single write transaction; see
+     * {@link #deleteRange(Dbi, Txn, KeyRange)}.
      *
      * @param chatJid the JID identifying the owning chat
      * @return the number of entries removed
@@ -250,22 +284,26 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the oldest chat message of the given chat, or empty if the
-     * chat is empty.
+     * Returns the oldest chat message stored for the given chat in cursor order, or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#oldestMessage()}.
      *
      * @param chatJid the JID identifying the owning chat
-     * @return the oldest message in cursor order, or empty
+     * @return the first message in the per-JID range, or empty
      */
     Optional<ChatMessageInfo> oldestChatMessage(Jid chatJid) {
         return firstInRange(chatMessages, jidRange(chatJid), PersistentMessageStore::decodeChatMessage);
     }
 
     /**
-     * Returns the newest chat message of the given chat, or empty if
-     * the chat is empty.
+     * Returns the newest chat message stored for the given chat in cursor order, or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentChat#newestMessage()}.
      *
      * @param chatJid the JID identifying the owning chat
-     * @return the newest message in cursor order, or empty
+     * @return the last message in the per-JID range, or empty
      */
     Optional<ChatMessageInfo> newestChatMessage(Jid chatJid) {
         return lastInRange(chatMessages, jidRange(chatJid), PersistentMessageStore::decodeChatMessage);
@@ -274,9 +312,13 @@ final class PersistentMessageStore implements AutoCloseable {
     /**
      * Returns the number of chat messages stored for the given chat.
      *
-     * <p>Performed by walking the cursor range — {@code O(n)} in the
-     * chat size. Callers that need this value frequently must cache it
-     * client-side.
+     * @apiNote
+     * Called once by {@link PersistentChat#attach(PersistentMessageStore)} to seed the per-chat
+     * cached counter; subsequent {@link PersistentChat#messageCount()} calls answer from the cache.
+     *
+     * @implNote
+     * This implementation walks the cursor range and is {@code O(n)} in the chat size; callers
+     * that need the value frequently must cache it client-side.
      *
      * @param chatJid the JID identifying the owning chat
      * @return the number of stored messages
@@ -286,13 +328,12 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns a lazy stream of every chat message belonging to the
-     * given chat, in cursor order.
+     * Returns a lazy stream of every chat message stored for the given chat, in cursor order.
      *
-     * <p>The returned stream owns a read transaction and a cursor that
-     * remain open until the stream is closed. Callers MUST consume the
-     * stream inside a try-with-resources block; otherwise the underlying
-     * resources are leaked.
+     * @apiNote
+     * The returned stream owns a read transaction and a cursor that remain open until the stream
+     * is closed. Callers MUST consume it inside a try-with-resources block; otherwise the
+     * underlying read transaction stays in LMDB's reader table until garbage collection.
      *
      * @param chatJid the JID identifying the owning chat
      * @return a closeable stream of decoded chat messages
@@ -302,8 +343,16 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Inserts or replaces a newsletter message in the
-     * {@code newsletter_messages} dbi.
+     * Inserts or replaces a newsletter message in the {@code newsletter_messages} dbi.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#addMessage(NewsletterMessageInfo)}. The key is
+     * {@code newsletterJid + 0x00 + serverId(BE)} so cursor first/last yields oldest/newest with
+     * no extra index.
+     *
+     * @implNote
+     * This implementation uses {@link Dbi#reserve(Txn, Object, int)} to encode the payload
+     * directly into LMDB-allocated space.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @param info          the message to persist
@@ -319,7 +368,13 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Looks up a newsletter message by its server id.
+     * Returns the newsletter message under the composite key
+     * {@code newsletterJid + 0x00 + serverId(BE)}, or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#getMessageById(String)} and from
+     * {@link PersistentStore#findMessageById(com.github.auties00.cobalt.model.newsletter.Newsletter, String)}
+     * as the fast path before the per-newsletter scan fallback.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @param serverId      the server-assigned monotonic identifier
@@ -336,7 +391,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Removes a newsletter message by its server id.
+     * Removes the newsletter message identified by its server id.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#removeMessage(String)} after the caller parses the
+     * message-id string into a numeric server id.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @param serverId      the server-assigned monotonic identifier
@@ -348,8 +407,12 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Removes every newsletter message belonging to the given
-     * newsletter.
+     * Removes every newsletter message stored for the given newsletter.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#removeMessages()} and from
+     * {@link PersistentStore#removeNewsletter} so a removed newsletter's body history does not
+     * outlive its metadata.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @return the number of entries removed
@@ -360,8 +423,15 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the oldest newsletter message (lowest server id) for the
-     * given newsletter, or empty if the newsletter is empty.
+     * Returns the oldest newsletter message (lowest {@code serverId}) for the given newsletter,
+     * or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#oldestMessage()}.
+     *
+     * @implNote
+     * This implementation relies on the big-endian {@code serverId} encoding so memcmp-ordered
+     * LMDB cursor traversal aligns with the natural numeric order.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @return the oldest message, or empty
@@ -371,8 +441,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the newest newsletter message (highest server id) for the
-     * given newsletter, or empty if the newsletter is empty.
+     * Returns the newest newsletter message (highest {@code serverId}) for the given newsletter,
+     * or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentNewsletter#newestMessage()}.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @return the newest message, or empty
@@ -382,8 +455,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the number of newsletter messages stored for the given
-     * newsletter.
+     * Returns the number of newsletter messages stored for the given newsletter.
+     *
+     * @apiNote
+     * Called once by {@link PersistentNewsletter#attach(PersistentMessageStore)} to seed the
+     * cached counter.
+     *
+     * @implNote
+     * This implementation walks the cursor range; it is {@code O(n)} in the newsletter size.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @return the number of stored messages
@@ -393,12 +472,12 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns a lazy stream of every newsletter message belonging to the
-     * given newsletter, in cursor order.
+     * Returns a lazy stream of every newsletter message stored for the given newsletter, in
+     * cursor order.
      *
-     * <p>The returned stream owns a read transaction and a cursor that
-     * remain open until the stream is closed. Callers MUST consume the
-     * stream inside a try-with-resources block.
+     * @apiNote
+     * The returned stream owns a read transaction and a cursor that remain open until the stream
+     * is closed; consume inside a try-with-resources block.
      *
      * @param newsletterJid the JID identifying the owning newsletter
      * @return a closeable stream of decoded newsletter messages
@@ -410,8 +489,11 @@ final class PersistentMessageStore implements AutoCloseable {
     /**
      * Inserts or replaces a status-feed message keyed by message id.
      *
-     * @param info the message to persist; ignored if it carries no key
-     *             id
+     * @apiNote
+     * Called from {@link PersistentStore#addStatus(ChatMessageInfo)}. A message with no key id
+     * is silently dropped because the dbi key requires one.
+     *
+     * @param info the message to persist
      */
     void putStatusMessage(ChatMessageInfo info) {
         var msgId = info.key().id().orElse(null);
@@ -428,7 +510,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Looks up a status-feed message by id.
+     * Returns the status-feed message under the flat key {@code msgId}, or empty.
+     *
+     * @apiNote
+     * Called from {@link PersistentStore#findStatusById(String)} and as a status-broadcast branch
+     * of {@link PersistentStore#findMessageById}.
      *
      * @param msgId the message key id
      * @return the decoded message, or empty
@@ -444,7 +530,15 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Removes a status-feed message by id.
+     * Removes the status-feed message under {@code msgId} and returns its previous value.
+     *
+     * @apiNote
+     * Called from {@link PersistentStore#removeStatus(String)}.
+     *
+     * @implNote
+     * This implementation reads the value first inside the write transaction so the caller can
+     * observe what was removed; LMDB's {@link Dbi#delete(Txn, Object)} does not return the prior
+     * value.
      *
      * @param msgId the message key id
      * @return the previously stored message, or empty if absent
@@ -465,6 +559,15 @@ final class PersistentMessageStore implements AutoCloseable {
     /**
      * Returns the number of status-feed messages stored.
      *
+     * @apiNote
+     * No caller currently consumes this directly; retained for parity with the chat and
+     * newsletter accessors.
+     *
+     * @implNote
+     * This implementation queries {@link Dbi#stat(Txn)} which returns the entry count in
+     * {@code O(1)} from LMDB's internal counter, unlike the per-JID counts that need a cursor
+     * walk.
+     *
      * @return the entry count
      */
     int countStatusMessages() {
@@ -472,11 +575,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns a lazy stream of every status-feed message in cursor
-     * order.
+     * Returns a lazy stream of every status-feed message in cursor order.
      *
-     * <p>The returned stream owns a read transaction and a cursor that
-     * remain open until the stream is closed.
+     * @apiNote
+     * Called from {@link PersistentStore#status()}; the stream is consumed inside a
+     * try-with-resources block and collected into a list.
      *
      * @return a closeable stream of decoded status messages
      */
@@ -485,10 +588,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the set of distinct chat JIDs that currently have at
-     * least one message stored. Used by {@link PersistentStore} on boot
-     * to recover orphan chats whose metadata was lost between the LMDB
-     * commit and the next metadata snapshot.
+     * Returns the set of distinct chat JIDs that currently have at least one message stored.
+     *
+     * @apiNote
+     * Called by {@link PersistentStoreFactory} on boot to recover orphan chats whose messages
+     * landed in LMDB but whose metadata never reached the next {@code store.proto} snapshot.
      *
      * @return a freshly allocated set of chat JIDs, never {@code null}
      */
@@ -497,12 +601,13 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the set of distinct newsletter JIDs that currently have
-     * at least one message stored. Used by {@link PersistentStore} on
-     * boot to recover orphan newsletters.
+     * Returns the set of distinct newsletter JIDs that currently have at least one message stored.
      *
-     * @return a freshly allocated set of newsletter JIDs, never
-     *         {@code null}
+     * @apiNote
+     * Called by {@link PersistentStoreFactory} on boot to recover orphan newsletters whose
+     * messages landed in LMDB but whose metadata never reached the next snapshot.
+     *
+     * @return a freshly allocated set of newsletter JIDs, never {@code null}
      */
     Set<Jid> distinctNewsletterJids() {
         return distinctJids(newsletterMessages);
@@ -510,6 +615,11 @@ final class PersistentMessageStore implements AutoCloseable {
 
     /**
      * Closes the underlying env, releasing all native resources.
+     *
+     * @apiNote
+     * Called from {@link PersistentStore#close()} and {@link PersistentStore#delete()}. After
+     * this call every accessor will fail; the parent store nulls its reference so a second
+     * close is a no-op.
      */
     @Override
     public void close() {
@@ -517,8 +627,16 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Walks {@code dbi} once and collects the set of distinct JID
-     * prefixes (the bytes preceding the {@link #KEY_SEPARATOR}).
+     * Walks {@code dbi} once and collects the distinct JID prefixes that precede the first
+     * {@link #KEY_SEPARATOR} in each key.
+     *
+     * @apiNote
+     * Internal helper for the orphan-recovery accessors {@link #distinctChatJids()} and
+     * {@link #distinctNewsletterJids()}.
+     *
+     * @implNote
+     * This implementation duplicates each key buffer before copying the prefix so the iteration
+     * does not disturb LMDB's internal position state.
      *
      * @param dbi the database to scan
      * @return a set of decoded JIDs
@@ -543,11 +661,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the index of the first {@link #KEY_SEPARATOR} in
-     * {@code buffer} relative to its position, or {@code -1} if absent.
+     * Returns the offset of the first {@link #KEY_SEPARATOR} in {@code buffer} relative to its
+     * position, or {@code -1} if absent.
+     *
+     * @apiNote
+     * Internal helper for {@link #distinctJids(Dbi)}.
      *
      * @param buffer the buffer to scan
-     * @return the separator index, or {@code -1}
+     * @return the separator offset, or {@code -1}
      */
     private static int findSeparator(ByteBuffer buffer) {
         var view = buffer.duplicate();
@@ -562,8 +683,15 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the half-open key range covering every entry whose key
-     * begins with {@code jid + 0x00}.
+     * Returns the half-open key range covering every entry whose key begins with
+     * {@code jid + 0x00}.
+     *
+     * @apiNote
+     * Internal helper for per-JID cursor operations.
+     *
+     * @implNote
+     * This implementation allocates both endpoints as direct buffers because LMDB's JNI binding
+     * requires direct memory for key arguments.
      *
      * @param jid the JID prefix
      * @return a half-open {@link KeyRange}
@@ -582,8 +710,10 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Encodes a flat key holding only the supplied bytes into a direct
-     * buffer ready to be passed to LMDB.
+     * Encodes a flat key holding only the supplied bytes into a direct buffer ready for LMDB.
+     *
+     * @apiNote
+     * Internal helper for the status-feed dbi which has no JID prefix.
      *
      * @param bytes the key bytes
      * @return a flipped direct buffer containing {@code bytes}
@@ -595,11 +725,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Encodes a composite key of the form
-     * {@code jidBytes + 0x00 + suffixBytes} into a direct buffer.
+     * Encodes a composite key of the form {@code jidBytes + 0x00 + suffixBytes} into a direct
+     * buffer.
+     *
+     * @apiNote
+     * Internal helper for the chat and newsletter dbis.
      *
      * @param jid    the JID prefix
-     * @param suffix the suffix bytes (msgId or encoded serverId)
+     * @param suffix the suffix bytes (a message id or an encoded server id)
      * @return a flipped direct buffer containing the composite key
      */
     private static ByteBuffer encodePrefixedKey(Jid jid, byte[] suffix) {
@@ -612,8 +745,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Encodes a {@code serverId} as 4 big-endian bytes so unsigned-byte
-     * cursor compare yields the natural numeric order.
+     * Encodes {@code serverId} as four big-endian bytes.
+     *
+     * @apiNote
+     * Used as the suffix of newsletter-message keys.
+     *
+     * @implNote
+     * This implementation emits big-endian so unsigned-byte LMDB cursor compare yields the natural
+     * numeric order; little-endian would invert the cursor walk.
      *
      * @param serverId the server-assigned monotonic identifier
      * @return a four-byte big-endian encoding
@@ -628,12 +767,14 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Decodes an LMDB value buffer into a fully materialised
-     * {@link ChatMessageInfo}.
+     * Decodes an LMDB value buffer into a fully heap-resident {@link ChatMessageInfo}.
      *
-     * <p>Wraps the buffer in {@link CopyingProtobufInputStream} so that
-     * every {@code bytes} and {@code string} field is copied to the
-     * heap during decode, making the resulting message safe to outlive
+     * @apiNote
+     * Internal helper for every chat and status read.
+     *
+     * @implNote
+     * This implementation wraps the buffer in {@link CopyingProtobufInputStream} so every
+     * {@code bytes} field is copied to the heap during decode, making the result safe to outlive
      * the source LMDB transaction.
      *
      * @param buffer the LMDB value buffer
@@ -644,8 +785,10 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Decodes an LMDB value buffer into a fully materialised
-     * {@link NewsletterMessageInfo}.
+     * Decodes an LMDB value buffer into a fully heap-resident {@link NewsletterMessageInfo}.
+     *
+     * @apiNote
+     * Internal helper for every newsletter read.
      *
      * @param buffer the LMDB value buffer
      * @return the decoded newsletter message
@@ -655,8 +798,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the first decoded entry of {@code dbi} restricted to
-     * {@code range}, or empty if the range is empty.
+     * Returns the first decoded entry of {@code dbi} restricted to {@code range}, or empty.
+     *
+     * @apiNote
+     * Internal helper for {@link #oldestChatMessage(Jid)} and
+     * {@link #oldestNewsletterMessage(Jid)}.
      *
      * @param dbi     the database to query
      * @param range   the key range
@@ -676,8 +822,15 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the last decoded entry of {@code dbi} restricted to
-     * {@code range}, or empty if the range is empty.
+     * Returns the last decoded entry of {@code dbi} restricted to {@code range}, or empty.
+     *
+     * @apiNote
+     * Internal helper for {@link #newestChatMessage(Jid)} and
+     * {@link #newestNewsletterMessage(Jid)}.
+     *
+     * @implNote
+     * This implementation walks forward and overwrites a running pointer because LMDB Java does
+     * not expose a reverse iterator on {@link KeyRange#closedOpen(Object, Object)}.
      *
      * @param dbi     the database to query
      * @param range   the key range
@@ -698,8 +851,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Returns the number of entries in {@code dbi} restricted to
-     * {@code range}.
+     * Returns the number of entries in {@code dbi} restricted to {@code range}.
+     *
+     * @apiNote
+     * Internal helper for {@link #countChatMessages(Jid)} and
+     * {@link #countNewsletterMessages(Jid)}.
      *
      * @param dbi   the database to query
      * @param range the key range
@@ -718,8 +874,17 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Deletes every entry of {@code dbi} that lies within {@code range}
-     * inside the given write transaction.
+     * Deletes every entry of {@code dbi} that lies within {@code range}, inside the given write
+     * transaction.
+     *
+     * @apiNote
+     * Internal helper for {@link #removeChatMessages(Jid)} and
+     * {@link #removeNewsletterMessages(Jid)}.
+     *
+     * @implNote
+     * This implementation positions a cursor on each iterated key via {@link GetOp#MDB_SET} and
+     * calls {@link org.lmdbjava.Cursor#delete} on the cursor; deleting through the iterator's own
+     * key buffer would race with LMDB's internal cursor invalidation.
      *
      * @param dbi   the database to mutate
      * @param txn   the active write transaction
@@ -742,9 +907,17 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Wraps a {@code dbi} cursor walk into a closeable {@link Stream}
-     * whose {@link Stream#close()} hook closes both the cursor iterable
-     * and the read transaction.
+     * Wraps a {@code dbi} cursor walk into a closeable {@link Stream} whose
+     * {@link Stream#close()} hook closes both the cursor iterable and the read transaction.
+     *
+     * @apiNote
+     * Internal helper for {@link #streamChatMessages(Jid)},
+     * {@link #streamNewsletterMessages(Jid)} and {@link #streamStatusMessages()}.
+     *
+     * @implNote
+     * This implementation aborts the read transaction and rethrows if cursor allocation fails
+     * after the txn is open but before the stream takes ownership; without that path a failed
+     * open would leak the txn.
      *
      * @param dbi     the database to query
      * @param range   the key range
@@ -782,9 +955,11 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Runs {@code body} inside a fresh read transaction, returning its
-     * result. The transaction is always closed before this method
-     * returns.
+     * Runs {@code body} inside a fresh read transaction and returns its result.
+     *
+     * @apiNote
+     * Internal helper. The transaction is always closed before this method returns; the body must
+     * not retain the transaction or any buffers obtained from it.
      *
      * @param body the read-only operation
      * @param <T>  the result type
@@ -797,11 +972,17 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Runs {@code body} inside a fresh write transaction. On success
-     * the transaction is committed; on {@link Env.MapFullException} the
-     * env is doubled and the body is retried once. If the retry also
-     * trips {@link Env.MapFullException} that exception is allowed to
-     * propagate.
+     * Runs {@code body} inside a fresh write transaction, committing on success and retrying
+     * once after a map resize on {@link Env.MapFullException}.
+     *
+     * @apiNote
+     * Internal helper for every mutating accessor.
+     *
+     * @implNote
+     * This implementation aborts the first transaction on overflow, doubles the map under
+     * {@link #growLock}, then opens a second transaction; if the retry trips
+     * {@link Env.MapFullException} again the exception propagates unchanged because the body's
+     * effective payload exceeds the doubled bound.
      *
      * @param body the write operation
      * @param <T>  the result type
@@ -826,8 +1007,12 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * Doubles the env map size under {@link #growLock} so concurrent
-     * writers serialise on the resize.
+     * Doubles the env map size under {@link #growLock} so concurrent writers serialise on the
+     * resize.
+     *
+     * @apiNote
+     * Internal helper; the only caller is {@link #withWriteTxn(Function)} after it observes
+     * {@link Env.MapFullException}.
      */
     private void growMap() {
         synchronized (growLock) {
@@ -837,27 +1022,22 @@ final class PersistentMessageStore implements AutoCloseable {
     }
 
     /**
-     * {@link ProtobufInputStream} backed by an mmap-resident
-     * {@link ByteBuffer} that copies every {@code bytes} and
-     * {@code string} field to the heap at decode time.
+     * The {@link ProtobufInputStream} subclass that copies every {@code bytes} and {@code string}
+     * field to the heap during decode, making decoded messages safe to outlive the source LMDB
+     * read transaction.
      *
-     * <p>The stock {@code ProtobufInputStream.fromBuffer(...)}
-     * implementation returns each {@code bytes} field as a
-     * {@link ByteBuffer#slice slice} of the source buffer, sharing
-     * memory with it. When the source is an LMDB-mapped page the slice
-     * becomes invalid the moment the read transaction closes, which
-     * would turn any later access from {@code SIGSEGV}-fatal. Strings
-     * are already copied internally by the stock implementation, but
-     * {@code bytes} fields are not.
+     * @apiNote
+     * Used by {@link #decodeChatMessage(ByteBuffer)} and
+     * {@link #decodeNewsletterMessage(ByteBuffer)}; never visible to callers of this facade.
      *
-     * <p>This subclass eliminates that footgun by overriding
-     * {@link #readBytes(int)} (and, redundantly for symmetry,
-     * {@link #readString(int)}) to allocate a fresh heap array,
-     * draining {@code size} bytes out of the source buffer into it.
-     * Decoded messages can then escape the read transaction safely —
-     * which is required by every accessor on this store, since they
-     * all return decoded values to callers that hold them past the
-     * {@code withReadTxn} boundary.
+     * @implNote
+     * The stock {@code ProtobufInputStream.fromBuffer(...)} returns each {@code bytes} field as a
+     * {@link ByteBuffer#slice slice} of the source buffer, sharing memory. When the source is an
+     * LMDB-mapped page that slice becomes invalid the moment the read transaction closes, which
+     * would turn any later access into a SIGSEGV. This implementation overrides
+     * {@link #readBytes(int)} and {@link #readString(int)} to allocate fresh heap arrays so the
+     * decoded message escapes the read transaction safely. Strings are technically already copied
+     * by the stock implementation but the override is retained for symmetry.
      */
     private static final class CopyingProtobufInputStream extends ProtobufInputStream {
         /**
@@ -866,8 +1046,10 @@ final class PersistentMessageStore implements AutoCloseable {
         private final ByteBuffer buffer;
 
         /**
-         * Constructs a stream over {@code buffer}; reads start at the
-         * buffer's current position and advance it.
+         * Constructs a stream over {@code buffer}.
+         *
+         * @apiNote
+         * Reads start at the buffer's current position and advance it.
          *
          * @param buffer the source buffer
          */
@@ -876,9 +1058,11 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Returns the next byte and advances the position by one.
+         * {@inheritDoc}
          *
-         * @return the next byte
+         * @implNote
+         * This implementation delegates to {@link ByteBuffer#get()} which advances the position
+         * by one.
          */
         @Override
         protected byte readByte() {
@@ -886,12 +1070,12 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Reads {@code size} bytes into a fresh heap array and wraps
-         * the array as a {@link ByteBuffer} so that the resulting
-         * value is independent of the source buffer.
+         * {@inheritDoc}
          *
-         * @param size the number of bytes to read
-         * @return a heap-backed buffer holding the copied bytes
+         * @implNote
+         * This implementation copies {@code size} bytes out of the source buffer into a fresh
+         * heap array and wraps it as a {@link ByteBuffer}, so the returned value is independent
+         * of the LMDB-mapped source.
          */
         @Override
         protected ByteBuffer readBytes(int size) {
@@ -901,11 +1085,11 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Reads {@code size} bytes into a fresh heap array and wraps
-         * it in a {@link ProtobufString.Lazy} backed by that array.
+         * {@inheritDoc}
          *
-         * @param size the number of bytes to read
-         * @return a heap-backed lazy string
+         * @implNote
+         * This implementation copies {@code size} bytes out of the source buffer into a fresh
+         * heap array and wraps it as a {@link ProtobufString.Lazy}.
          */
         @Override
         protected ProtobufString.Lazy readString(int size) {
@@ -915,8 +1099,10 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Records the current buffer position so a subsequent
-         * {@link #rewind()} can restore it.
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation delegates to {@link ByteBuffer#mark()}.
          */
         @Override
         protected void mark() {
@@ -924,8 +1110,10 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Restores the buffer position to the most recently
-         * {@linkplain #mark() marked} value.
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation delegates to {@link ByteBuffer#reset()}.
          */
         @Override
         protected void rewind() {
@@ -933,10 +1121,10 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Returns whether the source buffer has any bytes left to
-         * read.
+         * {@inheritDoc}
          *
-         * @return {@code true} when no bytes remain
+         * @implNote
+         * This implementation returns the negation of {@link ByteBuffer#hasRemaining()}.
          */
         @Override
         protected boolean isFinished() {
@@ -944,16 +1132,13 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Returns a sub-stream covering the next {@code size} bytes of
-         * the source buffer, advancing the parent position past them.
+         * {@inheritDoc}
          *
-         * <p>The sub-stream is backed by a slice of the source buffer
-         * which is safe even when the slice points into mmap memory:
-         * every read through the sub-stream goes through this
-         * subclass's overrides and copies into the heap.
-         *
-         * @param size the number of bytes the sub-stream may read
-         * @return a sub-stream over the requested slice
+         * @implNote
+         * This implementation slices the next {@code size} bytes and wraps the slice in a fresh
+         * {@link CopyingProtobufInputStream}. The slice is safe even when it points into
+         * mmap memory: every read through the sub-stream goes through this subclass's overrides
+         * and copies into the heap before the slice can be invalidated.
          */
         @Override
         protected ProtobufInputStream subStream(int size) {
@@ -964,8 +1149,12 @@ final class PersistentMessageStore implements AutoCloseable {
         }
 
         /**
-         * Releases no resources; the source buffer's lifetime is
-         * owned by the surrounding LMDB read transaction.
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation does nothing; the source buffer's lifetime is owned by the
+         * surrounding LMDB read transaction, which closes it through the stream's
+         * {@link Stream#close()} hook or through the body of {@link #withReadTxn(Function)}.
          */
         @Override
         public void close() {

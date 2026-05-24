@@ -19,5 +19,6 @@ public enum LwiCtwaAdCtaType {
     @WamEnumConstant(9) DELETE_AD,
     @WamEnumConstant(10) SGC_INCREASE_BUDGET,
     @WamEnumConstant(11) SGC_EXTEND_DURATION,
-    @WamEnumConstant(12) ADVANTAGE_PLUS_AUDIENCE_MFR
+    @WamEnumConstant(12) ADVANTAGE_PLUS_AUDIENCE_MFR,
+    @WamEnumConstant(13) DURATION_MFR
 }

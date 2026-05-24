@@ -9,43 +9,68 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * No-op {@link WhatsAppDevicePushClient} returning empty token and code values.
- * Used by the registration code as the low-trust default when no push
- * client is configured: the {@code push_token} and {@code push_code}
- * form fields are still emitted but with empty values, which the server
- * tolerates as a low-trust signal.
+ * No-op {@link WhatsAppDevicePushClient} that emits empty token and
+ * code values without contacting any push provider.
  *
- * <p>Stateless and inherently thread-safe. Constructed via
- * {@link WhatsAppDevicePushClient#noop()}.
+ * @apiNote
+ * Returned by {@link WhatsAppDevicePushClient#noop()} as the low-trust
+ * default when the embedder has not wired a real FCM or APNS client;
+ * the {@code push_token} and {@code push_code} form fields are still
+ * sent on the registration request, but with empty values that the
+ * WhatsApp registration server treats as a low-trust signal. Use it
+ * when the device profile is not push-capable (for example when
+ * registering through SMS or voice verification only).
+ *
+ * @implNote
+ * This implementation is stateless and inherently thread-safe; a
+ * single shared {@link #INSTANCE} is exposed instead of allocating
+ * one per call.
  */
 public final class NoopMobilePushClient implements WhatsAppDevicePushClient {
     /**
-     * Cached, unmodifiable view of every {@link ClientPlatformType}
-     * entry. Returned by {@link #supportedPlatforms()} so the no-op
-     * client can be paired with any device without further checks.
+     * Cached unmodifiable view of every {@link ClientPlatformType}
+     * entry, returned by {@link #supportedPlatforms()}.
+     *
+     * @apiNote
+     * The no-op client accepts any device unconditionally, so the
+     * supported set spans every platform the enum defines.
+     *
+     * @implNote
+     * This implementation keeps a single immutable wrapper around an
+     * {@link EnumSet} so {@link #supportedPlatforms()} avoids
+     * reallocating on every call.
      */
     private static final Set<ClientPlatformType> ALL_PLATFORMS =
             Collections.unmodifiableSet(EnumSet.allOf(ClientPlatformType.class));
 
     /**
-     * Singleton instance
+     * Process-wide shared instance.
+     *
+     * @apiNote
+     * Callers should obtain instances through
+     * {@link WhatsAppDevicePushClient#noop()}; this field exists so the
+     * factory has a stable reference to return.
      */
     public static final NoopMobilePushClient INSTANCE = new NoopMobilePushClient();
 
     /**
-     * Package-private constructor invoked by
-     * {@link WhatsAppDevicePushClient#noop()}.
+     * Hidden constructor.
+     *
+     * @apiNote
+     * The class is a singleton; callers reach the only instance via
+     * {@link WhatsAppDevicePushClient#noop()} or {@link #INSTANCE}.
      */
     private NoopMobilePushClient() {
 
     }
 
     /**
-     * Returns every entry of {@link ClientPlatformType}, since the
-     * no-op client accepts any device unconditionally.
+     * {@inheritDoc}
      *
-     * @return an unmodifiable set containing every
-     *         {@link ClientPlatformType} value
+     * @implNote
+     * This implementation returns every {@link ClientPlatformType}
+     * entry so the no-op client can be paired with any device profile
+     * the registration code might pass in.
      */
     @Override
     public Set<ClientPlatformType> supportedPlatforms() {
@@ -53,20 +78,25 @@ public final class NoopMobilePushClient implements WhatsAppDevicePushClient {
     }
 
     /**
-     * No-op: there is nothing to authenticate against.
+     * {@inheritDoc}
      *
-     * @param device ignored
+     * @implNote
+     * This implementation does nothing: there is no underlying push
+     * service to authenticate against, and {@link #isAuthenticated()}
+     * already reports {@code true} unconditionally.
      */
     @Override
     public void authenticate(WhatsAppDevice device) {
     }
 
     /**
-     * Reports that this client is always "authenticated" so callers do
-     * not need to special-case it: the empty token / empty code values
-     * it produces are valid even without any real authentication.
+     * {@inheritDoc}
      *
-     * @return {@code true} unconditionally
+     * @implNote
+     * This implementation always returns {@code true} so callers do
+     * not need to special-case the no-op client; the empty token and
+     * code values it produces are valid even without any real
+     * authentication.
      */
     @Override
     public boolean isAuthenticated() {
@@ -74,10 +104,13 @@ public final class NoopMobilePushClient implements WhatsAppDevicePushClient {
     }
 
     /**
-     * Returns the empty string so the {@code push_token} form field is
-     * still emitted but with an empty value.
+     * {@inheritDoc}
      *
-     * @return the empty string
+     * @implNote
+     * This implementation returns the empty string so the
+     * {@code push_token} form field is still emitted on the wire but
+     * with an empty value, matching the low-trust contract of the
+     * no-op client.
      */
     @Override
     public String getPushToken() {
@@ -85,10 +118,13 @@ public final class NoopMobilePushClient implements WhatsAppDevicePushClient {
     }
 
     /**
-     * Returns the empty string so the {@code push_code} form field is
-     * still emitted but with an empty value.
+     * {@inheritDoc}
      *
-     * @return the empty string
+     * @implNote
+     * This implementation returns the empty string so the
+     * {@code push_code} form field is still emitted on the wire but
+     * with an empty value, matching the low-trust contract of the
+     * no-op client.
      */
     @Override
     public String getPushCode() {

@@ -16,10 +16,10 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqBizQueryOrderRequest}. Splits the WA Web
- * {@code queryOrderResponse} parser output into typed
- * {@code Success}/{@code ClientError}/{@code ServerError} variants.
+ * The typed sealed family of inbound reply variants produced by the relay in response to an {@link IqBizQueryOrderRequest}.
+ *
+ * @apiNote
+ * Use this type to switch over the three documented outcomes of a business-order fetch: {@link Success} carries the decoded order envelope, {@link ClientError} surfaces a code-451 sanctions block or a relay validation rejection, and {@link ServerError} reports a transport or backend failure. The dispatcher invokes {@link #of(Node, Node)} to project the raw {@link Node} into the right variant before handing it to the caller.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
@@ -27,6 +27,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
 
     /**
      * Tries each {@link IqBizQueryOrderResponse} variant in priority order.
+     *
+     * @apiNote
+     * Call this entry from the dispatcher to fan the inbound stanza into the matching sealed variant; the success path is tried first, then the client-error envelope, then the server-error envelope. Returns empty only when none of the three documented shapes apply.
      *
      * @param node    the inbound IQ stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
@@ -48,42 +51,46 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — projects the typed order
-     * detail.
+     * The {@code Success} reply variant carrying the typed order envelope.
+     *
+     * @apiNote
+     * Use this variant to read the per-order totals (subtotal, tax, total, currency) and the list of typed {@link LineItem} entries; consumers render the order-details surface from these fields.
      */
     final class Success implements IqBizQueryOrderResponse {
         /**
-         * One typed order line-item — id, name, optional price/quantity,
-         * optional thumbnail and variant properties.
+         * One typed order line item carrying the product identity, unit price, currency, quantity, optional thumbnail and variant properties.
+         *
+         * @apiNote
+         * Use this class to model one row in the order-details table; the optional fields mirror the wire shape where {@code price}, {@code quantity}, {@code currency}, {@code thumbnailId} and {@code thumbnailUrl} can each be absent depending on the merchant configuration.
          */
         public static final class LineItem {
             /**
-             * The product id.
+             * The product identifier within the merchant catalog.
              */
             private final String id;
 
             /**
-             * The product display name.
+             * The product display name shown in the order-details row.
              */
             private final String name;
 
             /**
-             * The unit price (string-encoded major-units integer).
+             * The unit price encoded as a major-units integer, when supplied.
              */
             private final Integer price;
 
             /**
-             * The thumbnail id, when supplied.
+             * The catalog thumbnail identifier, when supplied.
              */
             private final String thumbnailId;
 
             /**
-             * The thumbnail URL, when supplied.
+             * The catalog thumbnail URL, when supplied.
              */
             private final String thumbnailUrl;
 
             /**
-             * The currency code, when supplied.
+             * The currency code (ISO 4217), when supplied.
              */
             private final String currency;
 
@@ -93,26 +100,25 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
             private final Integer quantity;
 
             /**
-             * The list of variant properties (name → value).
+             * The list of variant properties as {@code (name, value)} pairs, in wire order.
              */
             private final List<Map.Entry<String, String>> properties;
 
             /**
-             * Constructs a line item.
+             * Constructs a typed line item.
              *
-             * @param id           the product id; never {@code null}
+             * @apiNote
+             * Call this constructor when projecting a {@code <product/>} child into the typed model; pass {@code null} for any of the optional fields that the wire shape omitted, but never for {@code id}, {@code name} or {@code properties}.
+             *
+             * @param id           the product identifier; never {@code null}
              * @param name         the display name; never {@code null}
              * @param price        the unit price; may be {@code null}
-             * @param thumbnailId  the thumbnail id; may be {@code null}
+             * @param thumbnailId  the thumbnail identifier; may be {@code null}
              * @param thumbnailUrl the thumbnail URL; may be {@code null}
              * @param currency     the currency code; may be {@code null}
-             * @param quantity     the line quantity; may be
-             *                     {@code null}
-             * @param properties   the variant properties; never
-             *                     {@code null}
-             * @throws NullPointerException if {@code id}, {@code name}
-             *                              or {@code properties} is
-             *                              {@code null}
+             * @param quantity     the line quantity; may be {@code null}
+             * @param properties   the variant properties; never {@code null}
+             * @throws NullPointerException if {@code id}, {@code name} or {@code properties} is {@code null}
              */
             public LineItem(String id,
                             String name,
@@ -134,25 +140,34 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the product id.
+             * Returns the product identifier.
              *
-             * @return the id; never {@code null}
+             * @apiNote
+             * Use this getter to read back the merchant-catalog id that identifies the product the line refers to.
+             *
+             * @return the identifier; never {@code null}
              */
             public String id() {
                 return id;
             }
 
             /**
-             * Returns the display name.
+             * Returns the product display name.
              *
-             * @return the name; never {@code null}
+             * @apiNote
+             * Use this getter to read back the localised name to render in the order-details row.
+             *
+             * @return the display name; never {@code null}
              */
             public String name() {
                 return name;
             }
 
             /**
-             * Returns the unit price.
+             * Returns the unit price encoded as a major-units integer.
+             *
+             * @apiNote
+             * Use this getter to read back the merchant-quoted unit price; the value is absent when the merchant did not stamp a per-line price on the order.
              *
              * @return an {@link Optional} carrying the price
              */
@@ -161,16 +176,22 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the thumbnail id.
+             * Returns the catalog thumbnail identifier.
              *
-             * @return an {@link Optional} carrying the id
+             * @apiNote
+             * Use this getter to fetch the thumbnail-asset id when downloading the image bytes separately; the value is absent when the order references a product without a thumbnail.
+             *
+             * @return an {@link Optional} carrying the identifier
              */
             public Optional<String> thumbnailId() {
                 return Optional.ofNullable(thumbnailId);
             }
 
             /**
-             * Returns the thumbnail URL.
+             * Returns the catalog thumbnail URL.
+             *
+             * @apiNote
+             * Use this getter to load the thumbnail image directly via HTTP when an URL is provided by the relay.
              *
              * @return an {@link Optional} carrying the URL
              */
@@ -179,7 +200,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the currency code.
+             * Returns the line currency code (ISO 4217).
+             *
+             * @apiNote
+             * Use this getter to read back the per-line currency; this may diverge from the order-wide currency when the merchant stamps line-level currencies, otherwise the value is absent.
              *
              * @return an {@link Optional} carrying the code
              */
@@ -188,7 +212,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
             }
 
             /**
-             * Returns the quantity.
+             * Returns the line quantity.
+             *
+             * @apiNote
+             * Use this getter to read back the count of units that the buyer purchased for this line; the value is absent when the wire shape omitted the quantity.
              *
              * @return an {@link Optional} carrying the quantity
              */
@@ -198,6 +225,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
 
             /**
              * Returns the variant properties.
+             *
+             * @apiNote
+             * Use this getter to render the per-line variant labels (for example {@code size=large}, {@code colour=red}) decoded from the {@code <variant_info><properties>} block.
              *
              * @return an unmodifiable list; never {@code null}
              */
@@ -239,12 +269,12 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * The order creation time, when supplied.
+         * The order creation time decoded from the {@code creation_ts} attribute, when supplied.
          */
         private final Instant createdAt;
 
         /**
-         * The currency code, when supplied.
+         * The order-wide currency code (ISO 4217), when supplied.
          */
         private final String currency;
 
@@ -264,21 +294,23 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         private final Integer total;
 
         /**
-         * The list of typed line items, in wire order.
+         * The list of typed line items in wire order.
          */
         private final List<LineItem> products;
 
         /**
-         * Constructs a successful reply.
+         * Constructs a typed success reply.
          *
-         * @param createdAt the creation time; may be {@code null}
-         * @param currency  the currency code; may be {@code null}
-         * @param subtotal  the subtotal; may be {@code null}
-         * @param tax       the tax; may be {@code null}
-         * @param total     the total; may be {@code null}
+         * @apiNote
+         * Call this constructor when projecting a {@code <order/>} child into the typed model; pass {@code null} for any of {@code createdAt}, {@code currency}, {@code subtotal}, {@code tax} or {@code total} that the wire shape omitted, but never for {@code products}.
+         *
+         * @param createdAt the creation timestamp; may be {@code null}
+         * @param currency  the order-wide currency code; may be {@code null}
+         * @param subtotal  the pre-tax subtotal; may be {@code null}
+         * @param tax       the tax amount; may be {@code null}
+         * @param total     the grand total; may be {@code null}
          * @param products  the line items; never {@code null}
-         * @throws NullPointerException if {@code products} is
-         *                              {@code null}
+         * @throws NullPointerException if {@code products} is {@code null}
          */
         public Success(Instant createdAt,
                        String currency,
@@ -296,7 +328,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the creation time.
+         * Returns the order creation time.
+         *
+         * @apiNote
+         * Use this getter to read back the merchant-stamped creation timestamp rendered as the order-receipt date; the value is absent when the wire shape omitted the {@code creation_ts} attribute.
          *
          * @return an {@link Optional} carrying the time
          */
@@ -305,7 +340,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the currency code.
+         * Returns the order-wide currency code (ISO 4217).
+         *
+         * @apiNote
+         * Use this getter to read back the currency that frames the subtotal, tax and total amounts when rendering the totals row of the order-details surface.
          *
          * @return an {@link Optional} carrying the code
          */
@@ -314,7 +352,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the subtotal.
+         * Returns the pre-tax subtotal in major-units.
+         *
+         * @apiNote
+         * Use this getter to render the subtotal row of the order-details totals block.
          *
          * @return an {@link Optional} carrying the subtotal
          */
@@ -323,7 +364,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the tax.
+         * Returns the tax amount in major-units.
+         *
+         * @apiNote
+         * Use this getter to render the tax row of the order-details totals block.
          *
          * @return an {@link Optional} carrying the tax
          */
@@ -332,7 +376,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the total.
+         * Returns the grand total in major-units.
+         *
+         * @apiNote
+         * Use this getter to render the headline total of the order-details surface.
          *
          * @return an {@link Optional} carrying the total
          */
@@ -341,7 +388,10 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Returns the line items.
+         * Returns the typed line items in wire order.
+         *
+         * @apiNote
+         * Use this getter to iterate the per-line entries when rendering the order-details table; the list is empty when the relay returned an order envelope without any product rows.
          *
          * @return an unmodifiable list; never {@code null}
          */
@@ -350,13 +400,17 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link Success} variant.
+         * Tries to parse a {@link Success} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @apiNote
+         * Call this entry from {@link IqBizQueryOrderResponse#of(Node, Node)} or directly when only the success branch is interesting; returns empty when the stanza does not carry a {@code result} envelope matching the original request.
+         *
+         * @implNote
+         * This implementation mirrors the deprecated WAP parser inside {@code WAWebBizQueryOrderJob.queryOrderResponse}: when the {@code <order/>} child is absent the result is an empty success envelope, the price totals are read from the nested {@code <price>} block as major-units integers, and each {@code <product>} child contributes a {@link LineItem} carrying its optional {@code <image><id></id><url></url></image>} and {@code <variant_info><properties>} sub-blocks.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the success schema
          */
         @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJob",
                 exports = "queryOrderResponse", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -463,25 +517,30 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant.
+     * The {@code ClientError} reply variant surfacing a client-side rejection.
+     *
+     * @apiNote
+     * Use this variant to react to a refused order fetch; WA Web's GraphQL path maps the e-commerce 451 sanctions block here and any other code-based rejection from {@code WAWebBackendErrors.ServerStatusCodeError} surfaces with the same shape.
      */
     final class ClientError implements IqBizQueryOrderResponse {
         /**
-         * The numeric error code.
+         * The numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a client-error reply.
+         * Constructs a typed client-error reply.
+         *
+         * @apiNote
+         * Call this constructor when projecting a client-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the human-readable error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -490,6 +549,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -500,6 +562,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -507,13 +572,14 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @apiNote
+         * Call this entry from {@link IqBizQueryOrderResponse#of(Node, Node)} or directly when only the client-error branch is interesting; returns empty when the stanza does not carry a client-error envelope matching the original request.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the client-error schema
          */
         public static Optional<ClientError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseClientError(node, request).orElse(null);
@@ -548,25 +614,30 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant.
+     * The {@code ServerError} reply variant surfacing a server-side failure.
+     *
+     * @apiNote
+     * Use this variant to react to a backend failure that did not produce a typed order; typical examples include the relay returning a 500-class status when the GraphQL path returned an unparseable shape.
      */
     final class ServerError implements IqBizQueryOrderResponse {
         /**
-         * The numeric error code.
+         * The numeric error code lifted from the SMAX error envelope.
          */
         private final int errorCode;
 
         /**
-         * The optional human-readable error text.
+         * The optional human-readable error text lifted from the SMAX error envelope.
          */
         private final String errorText;
 
         /**
-         * Constructs a server-error reply.
+         * Constructs a typed server-error reply.
+         *
+         * @apiNote
+         * Call this constructor when projecting a server-error envelope into the typed model; pass {@code null} for {@code errorText} when the wire shape omitted the text field.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the human-readable error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -575,6 +646,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
 
         /**
          * Returns the numeric error code.
+         *
+         * @apiNote
+         * Use this getter to read back the SMAX error code that the relay used to classify the failure.
          *
          * @return the error code
          */
@@ -585,6 +659,9 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         /**
          * Returns the human-readable error text, when supplied.
          *
+         * @apiNote
+         * Use this getter to surface the relay-supplied error explanation in the UI when present.
+         *
          * @return an {@link Optional} carrying the error text
          */
         public Optional<String> errorText() {
@@ -592,13 +669,14 @@ public sealed interface IqBizQueryOrderResponse extends IqOperation.Response
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from the inbound stanza.
          *
-         * @param node    the inbound IQ stanza
-         * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @apiNote
+         * Call this entry from {@link IqBizQueryOrderResponse#of(Node, Node)} or directly when only the server-error branch is interesting; returns empty when the stanza does not carry a server-error envelope matching the original request.
+         *
+         * @param node    the inbound IQ stanza; never {@code null}
+         * @param request the original outbound request; never {@code null}
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match the server-error schema
          */
         public static Optional<ServerError> of(Node node, Node request) {
             var envelope = SmaxBaseServerErrorMixin.parseServerError(node, request).orElse(null);

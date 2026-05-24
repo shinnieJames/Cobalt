@@ -13,27 +13,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq type="set" xmlns="w:g2">} stanza that flags a single message in a group for moderator
+ * review.
+ *
+ * @apiNote Drives the "Report message" affordance available to group admins on the message context menu. The
+ * relay returns a bare {@link SmaxGroupsReportMessagesResponse.Success} envelope on success; there is no
+ * per-report payload because the report is opaque to the client.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsReportMessagesRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseSetGroupMixin")
 public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Request {
     /**
-     * The group JID hosting the reported message.
+     * The group {@link Jid} hosting the reported message.
      */
     private final Jid groupJid;
 
     /**
-     * The stanza-id of the reported message.
+     * The stanza identifier of the reported message.
      */
     private final String reportMessageId;
 
     /**
-     * Constructs a request.
+     * Constructs a report-messages request.
      *
-     * @param groupJid        the group JID; never {@code null}
-     * @param reportMessageId the reported message id; never
-     *                        {@code null}
+     * @param groupJid        the group {@link Jid}
+     * @param reportMessageId the reported message id (a stanza id as carried by WhatsApp message envelopes)
      * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxGroupsReportMessagesRequest(Jid groupJid, String reportMessageId) {
@@ -42,28 +46,38 @@ public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Requ
     }
 
     /**
-     * Returns the group JID.
+     * Returns the target group {@link Jid}.
      *
-     * @return the group JID
+     * @apiNote The value routes verbatim into the IQ's {@code to} attribute.
+     *
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
     }
 
     /**
-     * Returns the reported message id.
+     * Returns the reported message identifier.
      *
-     * @return the message id
+     * @return the stanza id of the message being reported; never {@code null}
      */
     public String reportMessageId() {
         return reportMessageId;
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         report payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="set">
+     *         <reports>
+     *             <report message_id="<reportMessageId>"/>
+     *         </reports>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <reports>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsReportMessagesRequest",
@@ -85,6 +99,12 @@ public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Requ
                 .content(reportsNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across both fields.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsReportMessagesRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -98,11 +118,21 @@ public final class SmaxGroupsReportMessagesRequest implements SmaxOperation.Requ
                 && Objects.equals(this.reportMessageId, that.reportMessageId);
     }
 
+    /**
+     * Returns a hash composed of both fields.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, reportMessageId);
     }
 
+    /**
+     * Returns a debug string carrying both fields.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsReportMessagesRequest[groupJid=" + groupJid

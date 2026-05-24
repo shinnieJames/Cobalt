@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 
@@ -19,21 +20,38 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Fetches and applies A/B testing properties from WhatsApp servers.
+ * Production {@link ABPropsService} implementation that fetches and
+ * applies AB-props from WhatsApp's relay.
  *
- * <p>AB props are feature flags and configuration values that control client behavior.
- * Synced values are stored by their numeric {@code code} and exposed through typed
- * accessors that fall back to {@link ABProp#defaultValue()} when the server has not
- * provided a value. Queries issued before the first sync completes block (up to a
- * configurable timeout) so callers observe a consistent view, then return the default
- * if the timeout elapses.
+ * <p>The service mirrors the surface of WA Web's per-experiment
+ * sync job ({@code WAWebAbPropsSyncJob}), the per-prop and
+ * per-event configuration tables
+ * ({@code WAWebApiAbPropConfig}, {@code WAWebApiAbPropEventSamplingConfig}),
+ * and the persisted-attributes layer
+ * ({@code WAWebABPropsLocalStorage}). Queries issued before the first
+ * sync completes block on a {@link CompletableFuture} (up to
+ * {@link #DEFAULT_SYNC_TIMEOUT}) so callers observe a consistent
+ * view, then fall back to the prop default if the timeout elapses.
  *
- * <p>The service also absorbs the parsing performed by {@code updateABPropConfigs}
- * and the sampling-config cache exposed by {@code WAWebApiAbPropEventSamplingConfig}
- * (backed by an IndexedDB table in WA Web, collapsed into in-memory maps here per the
- * store-flattening pattern documented in {@code CLAUDE.md}).
+ * @apiNote
+ * Wire this into the {@link WhatsAppClient} as the canonical
+ * AB-props service for production sessions. Replace it with a
+ * test-only impl (see the {@code props.test} package) when
+ * embedders need deterministic AB-prop values.
  *
- * <p>Instances are thread-safe.
+ * @implNote
+ * This implementation absorbs the WA Web {@code instanceof}
+ * cascades over the relay response shape: each
+ * {@code <prop>} child is dispatched through the disjunction
+ * defined in {@code WASmaxInAbPropsConfigs.parseConfigs} and the
+ * {@code parseExperimentOrSamplingConfigMixinGroup} wrapper, trying
+ * {@code parseExperimentConfigMixin} first and falling back to
+ * {@code parseSamplingConfigMixin}. Sampling-config parsing applies
+ * the bounds from
+ * {@code WASmaxInAbPropsSamplingConfigMixin.parseSamplingConfigMixin}
+ * directly. Local-storage attributes and the sampling cache are
+ * only replaced on full (non-delta) updates, matching the JS
+ * gating on {@code !isDeltaUpdate}.
  *
  * @see ABProp
  */
@@ -50,45 +68,74 @@ import java.util.concurrent.atomic.AtomicReference;
 @WhatsAppWebModule(moduleName = "WASmaxInAbPropsEnums")
 public final class DefaultABPropsService implements ABPropsService {
     /**
-     * Logger used for sync-cycle warnings, errors, and informational diagnostics.
+     * JDK {@link System.Logger} used for sync-cycle warnings,
+     * errors, and informational diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(DefaultABPropsService.class.getName());
 
     /**
-     * Default timeout that query methods wait for the first sync to complete
-     * before falling back to the prop's default value.
+     * Default timeout that query methods wait for the first sync
+     * to complete before falling back to the prop's default
+     * value.
+     *
+     * @apiNote
+     * Used by the single-argument constructor; embedders that
+     * need a different timeout pass it to the two-argument
+     * constructor.
      */
     private static final Duration DEFAULT_SYNC_TIMEOUT = Duration.ofSeconds(30);
 
     /**
-     * Lower bound, inclusive, for the {@code refresh} attribute persisted by
+     * Lower bound, inclusive, for the {@code refresh} attribute
+     * persisted by
      * {@link #updateAttributesLocalStorage(String, String, Long, Instant)},
-     * expressed in seconds.
+     * expressed in seconds (600s = 10 minutes).
+     *
+     * @apiNote
+     * Mirrors the {@code 600} constant on
+     * {@code WAWebABPropsLocalStorage} so the persisted refresh
+     * interval never falls below the WA Web floor.
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "updateAttributesLocalStorage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final long REFRESH_MIN_SECONDS = 600L;
 
     /**
-     * Upper bound, inclusive, for the {@code refresh} attribute persisted by
+     * Upper bound, inclusive, for the {@code refresh} attribute
+     * persisted by
      * {@link #updateAttributesLocalStorage(String, String, Long, Instant)},
-     * expressed in seconds.
+     * expressed in seconds (604800s = 7 days).
+     *
+     * @apiNote
+     * Mirrors the {@code 604800} constant on
+     * {@code WAWebABPropsLocalStorage} so the persisted refresh
+     * interval never exceeds the WA Web ceiling.
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "updateAttributesLocalStorage",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final long REFRESH_MAX_SECONDS = 604800L;
 
     /**
-     * Default refresh interval of one day, in seconds, returned by
-     * {@link #refresh()} when no value has been recorded yet.
+     * Default refresh interval of one day, in seconds, returned
+     * by {@link #refresh()} when no value has been recorded yet.
+     *
+     * @apiNote
+     * Matches the {@code 86400} fallback constant on
+     * {@code WAWebABPropsLocalStorage.getRefresh}.
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getRefresh",
             adaptation = WhatsAppAdaptation.DIRECT)
     private static final long REFRESH_DEFAULT_SECONDS = 86400L;
 
     /**
-     * Inclusive lower bound, in events, accepted for the {@code event_code}
-     * attribute on {@code SamplingConfig} {@code <prop>} children.
+     * Inclusive lower bound, in events, accepted for the
+     * {@code event_code} attribute on {@code SamplingConfig}
+     * {@code <prop>} children.
+     *
+     * @apiNote
+     * Mirrors the WA Web validation in
+     * {@code WASmaxInAbPropsSamplingConfigMixin.parseSamplingConfigMixin};
+     * out-of-range entries are dropped with a warning.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInAbPropsSamplingConfigMixin",
             exports = "parseSamplingConfigMixin",
@@ -96,8 +143,14 @@ public final class DefaultABPropsService implements ABPropsService {
     private static final int SAMPLING_EVENT_CODE_MIN = 1;
 
     /**
-     * Inclusive lower bound accepted for the {@code sampling_weight}
-     * attribute on {@code SamplingConfig} {@code <prop>} children.
+     * Inclusive lower bound accepted for the
+     * {@code sampling_weight} attribute on
+     * {@code SamplingConfig} {@code <prop>} children.
+     *
+     * @apiNote
+     * Mirrors the WA Web validation in
+     * {@code WASmaxInAbPropsSamplingConfigMixin.parseSamplingConfigMixin};
+     * out-of-range entries are dropped with a warning.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInAbPropsSamplingConfigMixin",
             exports = "parseSamplingConfigMixin",
@@ -105,8 +158,14 @@ public final class DefaultABPropsService implements ABPropsService {
     private static final int SAMPLING_WEIGHT_MIN = -10_000;
 
     /**
-     * Inclusive upper bound accepted for the {@code sampling_weight}
-     * attribute on {@code SamplingConfig} {@code <prop>} children.
+     * Inclusive upper bound accepted for the
+     * {@code sampling_weight} attribute on
+     * {@code SamplingConfig} {@code <prop>} children.
+     *
+     * @apiNote
+     * Mirrors the WA Web validation in
+     * {@code WASmaxInAbPropsSamplingConfigMixin.parseSamplingConfigMixin};
+     * out-of-range entries are dropped with a warning.
      */
     @WhatsAppWebExport(moduleName = "WASmaxInAbPropsSamplingConfigMixin",
             exports = "parseSamplingConfigMixin",
@@ -114,59 +173,98 @@ public final class DefaultABPropsService implements ABPropsService {
     private static final int SAMPLING_WEIGHT_MAX = 10_000;
 
     /**
-     * Client used to issue the {@code <iq xmlns="abt">} stanza and to read or
-     * mutate the AB-props slots on the shared store.
+     * Client used to issue the {@code <iq xmlns="abt">} stanza
+     * and to read or mutate the AB-props slots on the shared
+     * store.
      */
     private final WhatsAppClient client;
 
     /**
-     * Synced AB-prop values keyed by their numeric {@code config_code}.
+     * Synced AB-prop values keyed by their numeric
+     * {@code config_code}.
+     *
+     * @apiNote
+     * Populated from {@code <prop>} children whose shape matches
+     * {@code ExperimentConfig}; queried by the typed
+     * {@code getXxx} accessors.
      */
     private final Map<Integer, String> props;
 
     /**
-     * WAM event sampling-weight overrides keyed by event code, populated
-     * from the {@code SamplingConfig} entries returned alongside the prop
-     * list during {@link #process(Node)}.
+     * WAM event sampling-weight overrides keyed by event code.
+     *
+     * @apiNote
+     * Populated from the {@code SamplingConfig} entries returned
+     * alongside the prop list during {@link #process(Node)};
+     * queried by {@link #getSamplingWeight(int)} during WAM event
+     * commit.
      */
     private final Map<Integer, Integer> samplingConfigs;
 
     /**
-     * Codes of AB props that the host application has read at least once,
-     * tracked for the WAM exposure-key attribute.
+     * Codes of AB props that the host application has read at
+     * least once, tracked for the WAM exposure-key attribute.
+     *
+     * @apiNote
+     * WA Web exposes this through its IndexedDB
+     * {@code abpropConfigs} table's {@code hasAccessed} column;
+     * Cobalt collapses it into an in-memory set per the
+     * store-flattening pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropConfig", exports = "setConfigAccessed",
             adaptation = WhatsAppAdaptation.ADAPTED)
     private final Set<Integer> accessedConfigs;
 
     /**
-     * Future that completes once a sync round finishes, releasing threads
-     * blocked in query methods. Held in an {@link AtomicReference} so that
-     * {@link #clear()} can swap in a fresh future for the next session.
+     * Future that completes once a sync round finishes, releasing
+     * threads blocked in {@link #awaitSync()}.
+     *
+     * @apiNote
+     * Held in an {@link AtomicReference} so that {@link #clear()}
+     * can swap in a fresh future for the next session.
      */
     private final AtomicReference<CompletableFuture<Boolean>> syncFuture;
 
     /**
-     * Timeout that query methods wait for the first sync to complete.
+     * Timeout that query methods wait for the first sync to
+     * complete.
      */
     private final Duration syncTimeout;
 
     /**
-     * Constructs a service bound to {@code client} using the
-     * {@link #DEFAULT_SYNC_TIMEOUT} query timeout.
+     * Constructs a service bound to {@code client} with the
+     * default query timeout.
      *
-     * @param client the WhatsApp client used to issue sync requests
+     * @apiNote
+     * Use this for production wiring; pass the
+     * {@link Duration} overload when a session-specific timeout
+     * is required.
+     *
+     * @param client the WhatsApp client used to issue sync
+     *               requests
      */
     public DefaultABPropsService(WhatsAppClient client) {
         this(client, DEFAULT_SYNC_TIMEOUT);
     }
 
     /**
-     * Constructs a service bound to {@code client} with a caller-supplied
-     * query timeout.
+     * Constructs a service bound to {@code client} with a
+     * caller-supplied query timeout.
      *
-     * @param client      the WhatsApp client used to issue sync requests
-     * @param syncTimeout the timeout query methods wait for the first sync
+     * @apiNote
+     * Use this when the caller needs to dial the per-query wait
+     * up or down for a specific session profile (CI fixtures,
+     * latency-tolerant embedders).
+     *
+     * @implNote
+     * This implementation seeds {@link #syncFuture} with a fresh
+     * incomplete future so queries issued before the first sync
+     * block on it.
+     *
+     * @param client      the WhatsApp client used to issue sync
+     *                    requests
+     * @param syncTimeout the timeout query methods wait for the
+     *                    first sync
      */
     public DefaultABPropsService(WhatsAppClient client, Duration syncTimeout) {
         this.client = Objects.requireNonNull(client, "client cannot be null");
@@ -178,12 +276,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Runs a sync round with the default options of
-     * {@code localRefreshId=null} and {@code shouldSendHash=true}, matching
-     * the JS module-level default object {@code m = {shouldSendHash: !0}}.
+     * Runs a sync round with the default options, matching the
+     * JS module-level default object
+     * {@code m = {shouldSendHash: !0}}.
      *
-     * @return {@code true} when at least one of the three attempts
-     *         succeeded, {@code false} otherwise
+     * @apiNote
+     * Equivalent to {@code sync(null, true)}; selects the regular
+     * {@code propsHash} branch with hash inclusion gated on
+     * {@link #isAfterFirstSync()}.
+     *
+     * @return {@code true} when at least one of the three
+     *         attempts succeeded, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebAbPropsSyncJob", exports = "syncABPropsTask",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -192,20 +295,34 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Runs a sync round with caller-supplied options, retrying up to three
-     * times with the JS jittered backoff and applying the first-sync gating
-     * rule on {@code shouldSendHash}.
+     * Runs a sync round with caller-supplied options, retrying
+     * up to three times with jittered backoff and applying the
+     * first-sync gating rule on {@code shouldSendHash}.
      *
-     * <p>On the {@code propsHash} branch, {@code shouldSendHash} is ANDed
-     * with {@link #isAfterFirstSync()} so the persisted hash is only sent
-     * once a previous sync established it. On success the sync future is
-     * completed so blocked queries can proceed; on terminal failure the
-     * future is failed exceptionally.
-     * @param localRefreshId the refresh-id override used by the emergency
-     *                       push branch, or {@code null} to take the
-     *                       regular {@code propsHash} branch
-     * @param shouldSendHash whether the {@code propsHash} branch may
-     *                       include the persisted hash on the request
+     * @apiNote
+     * Pass a non-{@code null} {@code localRefreshId} to take the
+     * emergency push branch; pass {@code null} to take the
+     * regular {@code propsHash} branch. On the regular branch
+     * {@code shouldSendHash} is ANDed with
+     * {@link #isAfterFirstSync()} so the persisted hash is only
+     * sent once a previous sync established it.
+     *
+     * @implNote
+     * This implementation completes
+     * {@link #syncFuture} on success so blocked queries proceed,
+     * fails it exceptionally on terminal failure so queries do
+     * not hang, and sleeps for a jittered
+     * {@code 10000 * Math.random()} millisecond delay between
+     * attempts to mirror the JS
+     * {@code WAPromiseDelays.delayMs} backoff.
+     *
+     * @param localRefreshId the refresh-id override used by the
+     *                       emergency push branch, or
+     *                       {@code null} to take the regular
+     *                       {@code propsHash} branch
+     * @param shouldSendHash whether the {@code propsHash} branch
+     *                       may include the persisted hash on
+     *                       the request
      * @return {@code true} when at least one attempt succeeded,
      *         {@code false} when all attempts failed
      */
@@ -249,16 +366,23 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Performs a single sync round trip, choosing between the emergency
-     * push branch (when {@code localRefreshId} is non-{@code null}) and the
-     * regular {@code propsHash} branch.
-     * @param localRefreshId the refresh-id override that selects the
-     *                       emergency push branch, or {@code null} to take
-     *                       the regular branch
-     * @param shouldSendHash whether the persisted hash is included on the
-     *                       regular branch
-     * @return {@code true} when the response was processed successfully,
-     *         {@code false} otherwise
+     * Performs a single sync round trip.
+     *
+     * @apiNote
+     * Pass a non-{@code null} {@code localRefreshId} to take the
+     * emergency push branch; pass {@code null} to take the
+     * regular branch. The regular branch sends the persisted
+     * hash from the store when {@code shouldSendHash} is true,
+     * so the relay can reply with a delta update.
+     *
+     * @param localRefreshId the refresh-id override that selects
+     *                       the emergency push branch, or
+     *                       {@code null} to take the regular
+     *                       branch
+     * @param shouldSendHash whether the persisted hash is
+     *                       included on the regular branch
+     * @return {@code true} when the response was processed
+     *         successfully, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebAbPropsSyncJob", exports = "syncABProps",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -275,8 +399,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Completes the sync future with {@code success}, releasing every
-     * thread blocked in {@link #awaitSync()}.
+     * Completes {@link #syncFuture} with {@code success},
+     * releasing every thread blocked in {@link #awaitSync()}.
+     *
+     * @apiNote
+     * Used by {@link #sync(Long, boolean)} on terminal success
+     * or terminal no-throw failure.
      *
      * @param success the result delivered to waiters
      */
@@ -285,8 +413,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Completes the sync future exceptionally so waiting threads do not
-     * hang when every sync attempt fails.
+     * Completes {@link #syncFuture} exceptionally so waiting
+     * threads do not hang when every sync attempt fails.
+     *
+     * @apiNote
+     * Used by {@link #sync(Long, boolean)} when the final
+     * attempt throws.
      *
      * @param throwable the failure observed on the last attempt
      */
@@ -295,12 +427,24 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Blocks until the next sync completes or {@link #syncTimeout} elapses.
-     * Used by typed query methods to defer reads until props are actually
-     * available.
+     * Blocks until the next sync completes or
+     * {@link #syncTimeout} elapses.
      *
-     * @return {@code true} when the sync completed successfully within the
-     *         timeout, {@code false} on timeout, interruption, or failure
+     * @apiNote
+     * Used by the typed query methods to defer reads until props
+     * are actually available; callers that need to opt out of
+     * the wait pass {@code waitForSync = false} to the
+     * two-argument query overload.
+     *
+     * @implNote
+     * This implementation maps timeouts, interruption, and any
+     * other failure mode to {@code false} so the caller proceeds
+     * with the prop's default value rather than failing the
+     * read path.
+     *
+     * @return {@code true} when the sync completed successfully
+     *         within the timeout, {@code false} on timeout,
+     *         interruption, or failure
      */
     private boolean awaitSync() {
         try {
@@ -320,19 +464,27 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Builds the {@code <iq xmlns="abt" type="get">} stanza that requests
-     * the experiment-config blob from {@code s.whatsapp.net}.
+     * Builds the {@code <iq xmlns="abt" type="get">} stanza that
+     * requests the experiment-config blob from
+     * {@code s.whatsapp.net}.
      *
-     * <p>The inner {@code <props>} child carries the literal
-     * {@code protocol="1"} together with an optional {@code hash} (used by
-     * the regular delta-update branch) or an optional {@code refresh_id}
-     * (used by the emergency push branch). Callers normally populate
-     * exactly one of the two depending on which branch they take.
-     * @param propsHash      the AB-props hash for delta updates, or
-     *                       {@code null} to omit the attribute
-     * @param propsRefreshId the refresh id used by the emergency push
-     *                       branch, or {@code null} to omit the attribute
-     * @return a {@link NodeBuilder} wrapping the constructed stanza
+     * @apiNote
+     * Used by {@link #syncABProps(Long, boolean)} as the request
+     * builder; the inner {@code <props>} child carries the
+     * literal {@code protocol="1"} together with an optional
+     * {@code hash} (used by the regular delta-update branch) or
+     * an optional {@code refresh_id} (used by the emergency push
+     * branch). Callers normally populate exactly one of the two
+     * depending on which branch they take.
+     *
+     * @param propsHash      the AB-props hash for delta updates,
+     *                       or {@code null} to omit the
+     *                       attribute
+     * @param propsRefreshId the refresh id used by the emergency
+     *                       push branch, or {@code null} to omit
+     *                       the attribute
+     * @return a {@link NodeBuilder} wrapping the constructed
+     *         stanza
      */
     @WhatsAppWebExport(moduleName = "WAGetAbPropsProtocol", exports = "getAbPropsProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -355,40 +507,43 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Parses a sync response, applies it to the in-memory caches, and
-     * persists the {@code ABPROPS} local-storage attributes.
+     * Parses a sync response, applies it to the in-memory
+     * caches, and persists the {@code ABPROPS} local-storage
+     * attributes.
      *
-     * <p>The {@code <props>} child carries the {@code hash}, {@code ab_key},
-     * {@code refresh}, {@code refresh_id}, and {@code delta_update}
-     * attributes plus a list of {@code <prop>} children. Each child is
-     * either an {@code ExperimentConfig} (carrying {@code config_code} and
-     * {@code config_value}) or a {@code SamplingConfig} (carrying
-     * {@code event_code} and {@code sampling_weight}).
+     * @apiNote
+     * The {@code <props>} child carries the {@code hash},
+     * {@code ab_key}, {@code refresh}, {@code refresh_id}, and
+     * {@code delta_update} attributes plus a list of
+     * {@code <prop>} children. Each child is either an
+     * {@code ExperimentConfig} (carrying {@code config_code} and
+     * {@code config_value}) or a {@code SamplingConfig}
+     * (carrying {@code event_code} and {@code sampling_weight}).
+     * Local-storage attributes and the sampling-config cache are
+     * only replaced on full (non-delta) updates; delta responses
+     * leave both in place even if they happen to carry sampling
+     * entries, matching the JS gating on {@code !isDeltaUpdate}.
      *
-     * <p>Local-storage attributes and the sampling-config cache are only
-     * replaced on full (non-delta) updates. Delta responses leave both in
-     * place even if they happen to carry sampling entries, matching the JS
-     * gating on {@code !isDeltaUpdate}.
+     * @implNote
+     * This implementation dispatches each {@code <prop>} child
+     * through the disjunction defined in
+     * {@code WASmaxInAbPropsConfigs.parseConfigs} and the
+     * {@code parseExperimentOrSamplingConfigMixinGroup} wrapper:
+     * tries {@code parseExperimentConfigMixin} first, falls back
+     * to {@code parseSamplingConfigMixin}, and logs a warning
+     * equivalent to
+     * {@code WASmaxParseUtils.errorMixinDisjunction} when
+     * neither shape matches. Sampling entries are accepted only
+     * when {@code event_code >= 1} and {@code sampling_weight}
+     * lies in the closed range
+     * [{@value #SAMPLING_WEIGHT_MIN}, {@value #SAMPLING_WEIGHT_MAX}].
      *
-     * <p>{@code SamplingConfig} entries are accepted only when
-     * {@code event_code >= }{@value #SAMPLING_EVENT_CODE_MIN} and
-     * {@code sampling_weight} lies in
-     * [{@value #SAMPLING_WEIGHT_MIN}, {@value #SAMPLING_WEIGHT_MAX}], matching
-     * the validation in
-     * {@code WASmaxInAbPropsSamplingConfigMixin.parseSamplingConfigMixin}.
-     *
-     * <p>Each {@code <prop>} child is dispatched through the disjunction
-     * defined in {@code WASmaxInAbPropsConfigs.parseConfigs} and the
-     * underlying {@code WASmaxInAbPropsExperimentOrSamplingConfigMixinGroup
-     * .parseExperimentOrSamplingConfigMixinGroup} wrapper: try
-     * {@code parseExperimentConfigMixin} first, fall back to
-     * {@code parseSamplingConfigMixin}, and log a warning equivalent to
-     * {@code WASmaxParseUtils.errorMixinDisjunction} when neither shape
-     * matches.
      * @param response the server response node
-     * @return {@code true} when the response was parsed successfully,
-     *         {@code false} when the {@code <props>} child was missing
-     * @throws NullPointerException when {@code response} is {@code null}
+     * @return {@code true} when the response was parsed
+     *         successfully, {@code false} when the
+     *         {@code <props>} child was missing
+     * @throws NullPointerException when {@code response} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropConfig", exports = "updateABPropConfigs",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -478,12 +633,16 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the AB key most recently received from the server, written
-     * as the WAM {@code abKey2} global attribute (field 4473) on the
-     * {@code regular} channel unless the {@code wam_disable_abkey_attribute}
-     * prop is enabled.
+     * Returns the AB key most recently received from the server.
      *
-     * @return the AB key, or empty when the server has not provided one
+     * @apiNote
+     * Embedders that mirror WA Web's telemetry surface write
+     * this as the WAM {@code abKey2} global attribute (field
+     * 4473) on the {@code regular} channel unless the
+     * {@code wam_disable_abkey_attribute} prop is enabled.
+     *
+     * @return the AB key, or empty when the server has not
+     *         provided one
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getABKey",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -492,11 +651,15 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the {@code hash} attribute most recently received from the
-     * server, sent on subsequent sync requests so the server can reply
+     * Returns the {@code hash} attribute most recently received
+     * from the server.
+     *
+     * @apiNote
+     * Sent on subsequent sync requests so the relay can reply
      * with a delta update instead of the full prop list.
      *
-     * @return the AB-props hash, or empty when no sync has completed
+     * @return the AB-props hash, or empty when no sync has
+     *         completed
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getHash",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -505,8 +668,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the configured refresh interval in seconds, falling back to
-     * {@value #REFRESH_DEFAULT_SECONDS} when no value has been recorded.
+     * Returns the configured refresh interval in seconds.
+     *
+     * @apiNote
+     * Falls back to {@value #REFRESH_DEFAULT_SECONDS} (one day)
+     * when no value has been recorded yet, matching WA Web's
+     * default.
      *
      * @return the refresh interval in seconds
      */
@@ -519,11 +686,14 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the timestamp of the most recent successful sync, persisted
-     * as the {@code lastSyncTime} field of the {@code ABPROPS} JSON blob
-     * in WA Web.
+     * Returns the timestamp of the most recent successful sync.
      *
-     * @return the last sync timestamp, or empty when none has been recorded
+     * @apiNote
+     * Persisted as the {@code lastSyncTime} field of the
+     * {@code ABPROPS} JSON blob in WA Web.
+     *
+     * @return the last sync timestamp, or empty when none has
+     *         been recorded
      */
     public Optional<Instant> lastSyncTime() {
         return client.store()
@@ -531,13 +701,23 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns whether at least one sync has completed since the session was
-     * created. WA Web tests this by parsing the persisted {@code ABPROPS}
-     * JSON blob; Cobalt approximates the same predicate by checking
-     * whether any of the stored attributes have been populated.
+     * Returns whether at least one sync has completed since the
+     * session was created.
      *
-     * @return {@code true} when a previous sync established AB-props state,
-     *         {@code false} otherwise
+     * @apiNote
+     * Used by {@link #sync(Long, boolean)} to gate inclusion of
+     * the persisted hash on the regular branch.
+     *
+     * @implNote
+     * This implementation approximates the WA Web predicate (WA
+     * Web tests whether the persisted {@code ABPROPS} JSON blob
+     * is present at all) by checking whether any of the three
+     * persisted attributes (last sync time, AB key, hash) has
+     * been populated, since Cobalt stores them as separate
+     * store fields rather than as a single JSON blob.
+     *
+     * @return {@code true} when a previous sync established
+     *         AB-props state, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "isABPropsAfterFirstSync",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -549,17 +729,32 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Persists the {@code ABPROPS} blob attributes returned on the most
-     * recent sync. Each non-{@code null} parameter overwrites the
-     * corresponding store field; {@code null} parameters keep the previous
-     * value, matching the {@code abKey ?? m.abKey} fallback chain in the
-     * JS source.
-     * @param abKey          the AB key to persist, or {@code null} to keep
-     *                       the previous value
-     * @param hash           the AB-props hash to persist, or {@code null}
-     *                       to keep the previous value
+     * Persists the {@code ABPROPS} blob attributes returned on
+     * the most recent sync.
+     *
+     * @apiNote
+     * Each non-{@code null} parameter overwrites the
+     * corresponding store field; {@code null} parameters keep
+     * the previous value, matching the {@code abKey ?? m.abKey}
+     * fallback chain in the JS source. Used by
+     * {@link #process(Node)} on full (non-delta) updates.
+     *
+     * @implNote
+     * This implementation clamps {@code refreshSeconds} to the
+     * closed range
+     * [{@value #REFRESH_MIN_SECONDS}, {@value #REFRESH_MAX_SECONDS}]
+     * before persisting, matching WA Web's pre-write clamping
+     * inside {@code WAWebABPropsLocalStorage.updateAttributesLocalStorage}.
+     *
+     * @param abKey          the AB key to persist, or
+     *                       {@code null} to keep the previous
+     *                       value
+     * @param hash           the AB-props hash to persist, or
+     *                       {@code null} to keep the previous
+     *                       value
      * @param refreshSeconds the refresh interval in seconds, or
-     *                       {@code null} to keep the previous value
+     *                       {@code null} to keep the previous
+     *                       value
      * @param lastSyncTime   the sync completion instant
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "updateAttributesLocalStorage",
@@ -587,10 +782,15 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the AB-props refresh id, used as the {@code propsRefreshId}
-     * attribute on the next sync request when justknobx {@code 3330} is
-     * enabled.
-     * @return the AB-props refresh id, or {@code 0} when never set
+     * Returns the AB-props refresh id.
+     *
+     * @apiNote
+     * Used as the {@code propsRefreshId} attribute on the next
+     * sync request when the justknobx {@code 3330} emergency
+     * push gate is enabled.
+     *
+     * @return the AB-props refresh id, or {@code 0} when never
+     *         set
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getRefreshId",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -601,6 +801,10 @@ public final class DefaultABPropsService implements ABPropsService {
     /**
      * Persists the AB-props refresh id received from the server.
      *
+     * @apiNote
+     * Called from {@link #process(Node)} when the response
+     * carries a {@code refresh_id} attribute.
+     *
      * @param refreshId the refresh id to persist
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "setRefreshId",
@@ -610,10 +814,14 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the web-only AB-props refresh id, used to gate the
-     * justknobx {@code 2086} emergency push request.
+     * Returns the web-only AB-props refresh id.
      *
-     * @return the web AB-props refresh id, or {@code 0} when never set
+     * @apiNote
+     * Used to gate the justknobx {@code 2086} emergency push
+     * request specific to the web tier.
+     *
+     * @return the web AB-props refresh id, or {@code 0} when
+     *         never set
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getWebRefreshId",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -622,7 +830,8 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Persists the web-only AB-props refresh id received from the server.
+     * Persists the web-only AB-props refresh id received from
+     * the server.
      *
      * @param webRefreshId the refresh id to persist
      */
@@ -633,7 +842,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the group AB-props refresh id received from the server.
+     * Returns the group AB-props refresh id received from the
+     * server.
+     *
+     * @apiNote
+     * Used by the group AB-props sync job to gate per-group
+     * refreshes.
      *
      * @return the group refresh id, or {@code 0} when never set
      */
@@ -644,7 +858,8 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Persists the group AB-props refresh id received from the server.
+     * Persists the group AB-props refresh id received from the
+     * server.
      *
      * @param groupRefreshId the refresh id to persist
      */
@@ -655,11 +870,16 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the timestamp of the last group AB-props emergency push
-     * recorded on the {@code <success>} stanza.
+     * Returns the timestamp of the last group AB-props
+     * emergency push recorded on the {@code <success>} stanza.
      *
-     * @return the last emergency push timestamp, or empty when none has
-     *         been recorded
+     * @apiNote
+     * Used by the group AB-props sync job to decide whether the
+     * locally cached group props are stale relative to the
+     * latest server-pushed emergency notification.
+     *
+     * @return the last emergency push timestamp, or empty when
+     *         none has been recorded
      */
     @WhatsAppWebExport(moduleName = "WAWebABPropsLocalStorage", exports = "getGroupAbPropsEmergencyPushTimestamp",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -668,7 +888,8 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Persists the timestamp of the last group AB-props emergency push.
+     * Persists the timestamp of the last group AB-props
+     * emergency push.
      *
      * @param timestamp the emergency push timestamp
      */
@@ -679,15 +900,29 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Fetches the per-group AB-props bundle from the relay and projects
-     * the response into a typed {@link GroupAbPropsResult}.
+     * Fetches the per-group AB-props bundle from the relay and
+     * projects the response into a typed
+     * {@link GroupAbPropsResult}.
      *
-     * @param groupJid  the target group JID. Never {@code null}
-     * @param propsHash the cached group-props hash, or {@code null} for
-     *                  an unconditional fetch
-     * @return an {@link Optional} carrying the projected result on
-     *         success, empty on any failure variant
-     * @throws NullPointerException if {@code groupJid} is {@code null}
+     * @apiNote
+     * Use this to drive per-group experiment overrides for group
+     * surfaces. Returns empty on any failure variant (the relay
+     * returned a non-success response, the client raised
+     * {@link WhatsAppServerRuntimeException}).
+     *
+     * @implNote
+     * This implementation drops the exposure key at the bundle
+     * layer because consumers observed via
+     * {@link #abPropConfigs()} only key on
+     * {@code configCode}/{@code configValue}.
+     *
+     * @param groupJid  the target group JID; never {@code null}
+     * @param propsHash the cached group-props hash, or
+     *                  {@code null} for an unconditional fetch
+     * @return an {@link Optional} carrying the projected result
+     *         on success, empty on any failure variant
+     * @throws NullPointerException if {@code groupJid} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAGetGroupAbPropsProtocol", exports = "getGroupAbPropsProtocol",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -703,8 +938,6 @@ public final class DefaultABPropsService implements ABPropsService {
 
             var entries = new ArrayList<GroupAbPropsResult.Entry>(bundle.experiments().size());
             for (var experiment : bundle.experiments().entrySet()) {
-                // The exposure key is dropped at the bundle layer; consumers
-                // observed via abPropConfigs() only key on configCode/configValue.
                 entries.add(new GroupAbPropsResult.Entry(experiment.getKey(), experiment.getValue(), null));
             }
             var result = new GroupAbPropsResult(
@@ -722,10 +955,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns an unmodifiable snapshot of every synced AB prop keyed by
-     * its numeric {@code config_code}.
-     * @return a defensive copy of the {@code config_code -> config_value}
-     *         map
+     * Returns an unmodifiable snapshot of every synced AB prop
+     * keyed by its numeric {@code config_code}.
+     *
+     * @apiNote
+     * Use this for diagnostics or to export the synced state for
+     * a debug-overlay UI; the typed
+     * {@link #getString(ABProp)}
+     * accessors are the read path for individual props.
+     *
+     * @return a defensive copy of the
+     *         {@code config_code -> config_value} map
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropConfig", exports = "getABPropConfigs",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -734,12 +974,19 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Flags {@code prop} as having been read by the host application,
-     * driving the WAM exposure-key attribute.
+     * Flags {@code prop} as having been read by the host
+     * application, driving the WAM exposure-key attribute.
+     *
+     * @apiNote
+     * Embedders that mirror WA Web's exposure telemetry call
+     * this on first read of each prop so the WAM server can
+     * attribute downstream events to the right experiment cell.
+     *
      * @param prop the AB prop that was just read
-     * @return {@code true} when this is the first access, {@code false}
-     *         when the prop was already flagged
-     * @throws NullPointerException when {@code prop} is {@code null}
+     * @return {@code true} when this is the first access,
+     *         {@code false} when the prop was already flagged
+     * @throws NullPointerException when {@code prop} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropConfig", exports = "setConfigAccessed",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -749,13 +996,20 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns whether {@code prop} has previously been flagged as accessed
-     * via {@link #setConfigAccessed(ABProp)}.
+     * Returns whether {@code prop} has previously been flagged
+     * as accessed.
+     *
+     * @apiNote
+     * Used by code paths that need to know whether the WAM
+     * exposure attribute has already been emitted for an
+     * AB-prop.
      *
      * @param prop the AB prop to query
-     * @return {@code true} when {@link #setConfigAccessed(ABProp)} has
-     *         already been called for {@code prop}
-     * @throws NullPointerException when {@code prop} is {@code null}
+     * @return {@code true} when
+     *         {@link #setConfigAccessed(ABProp)}
+     *         has already been called for {@code prop}
+     * @throws NullPointerException when {@code prop} is
+     *                              {@code null}
      */
     public boolean isConfigAccessed(ABProp prop) {
         Objects.requireNonNull(prop, "prop cannot be null");
@@ -763,10 +1017,16 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the raw string value for {@code prop}, blocking until the
-     * first sync completes. The fallback is
-     * {@link ABProp#debugDefaultValue()} when the WhatsApp Web Beta flag
-     * is set on the store, otherwise {@link ABProp#defaultValue()}.
+     * Returns the raw string value for {@code prop}, blocking
+     * until the first sync completes.
+     *
+     * @apiNote
+     * Equivalent to {@code getString(prop, true)}; the fallback
+     * is
+     * {@link ABProp#debugDefaultValue()}
+     * when the WhatsApp Web Beta flag is set on the store,
+     * otherwise
+     * {@link ABProp#defaultValue()}.
      *
      * @param prop the AB prop definition
      * @return the string value, or the appropriate default
@@ -776,12 +1036,25 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the raw string value for {@code prop}, optionally skipping
-     * the wait for the first sync.
+     * Returns the raw string value for {@code prop}, optionally
+     * skipping the wait for the first sync.
+     *
+     * @apiNote
+     * Pass {@code waitForSync = false} from hot paths where
+     * blocking on the first sync would stall an unrelated
+     * pipeline; the caller then accepts the prop's default on
+     * cold cache.
+     *
+     * @implNote
+     * This implementation picks the debug default
+     * ({@link ABProp#debugDefaultValue()})
+     * over the production default when the store reports the
+     * external-web-beta flag is set, matching WA Web's
+     * beta-build override.
      *
      * @param prop        the AB prop definition
-     * @param waitForSync whether to block on {@link #awaitSync()} before
-     *                    reading
+     * @param waitForSync whether to block on
+     *                    {@link #awaitSync()} before reading
      * @return the string value, or the appropriate default
      */
     public String getString(ABProp prop, boolean waitForSync) {
@@ -793,9 +1066,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the boolean value for {@code prop}, blocking until the first
-     * sync completes and falling back to the default when the synced value
-     * is unparseable.
+     * Returns the boolean value for {@code prop}, blocking
+     * until the first sync completes.
+     *
+     * @apiNote
+     * Equivalent to {@code getBool(prop, true)}; falls back to
+     * the default when the synced value is unparseable.
      *
      * @param prop the AB prop definition
      * @return the parsed boolean, or the default
@@ -806,12 +1082,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the boolean value for {@code prop}, optionally skipping the
-     * wait for the first sync.
+     * Returns the boolean value for {@code prop}, optionally
+     * skipping the wait for the first sync.
+     *
+     * @apiNote
+     * Pass {@code waitForSync = false} from hot paths where
+     * blocking on the first sync would stall an unrelated
+     * pipeline.
      *
      * @param prop        the AB prop definition
-     * @param waitForSync whether to block on {@link #awaitSync()} before
-     *                    reading
+     * @param waitForSync whether to block on
+     *                    {@link #awaitSync()} before reading
      * @return the parsed boolean, or the default
      * @see ABProp#toBoolean(String)
      */
@@ -820,9 +1101,13 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the integer value for {@code prop}, blocking until the first
-     * sync completes. Returns {@code 0} when neither the synced value nor
-     * the default parses as an integer.
+     * Returns the integer value for {@code prop}, blocking
+     * until the first sync completes.
+     *
+     * @apiNote
+     * Equivalent to {@code getInt(prop, true)}; returns
+     * {@code 0} when neither the synced value nor the default
+     * parses as an integer.
      *
      * @param prop the AB prop definition
      * @return the parsed integer, the default, or {@code 0}
@@ -833,12 +1118,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the integer value for {@code prop}, optionally skipping the
-     * wait for the first sync.
+     * Returns the integer value for {@code prop}, optionally
+     * skipping the wait for the first sync.
+     *
+     * @apiNote
+     * Pass {@code waitForSync = false} from hot paths where
+     * blocking on the first sync would stall an unrelated
+     * pipeline.
      *
      * @param prop        the AB prop definition
-     * @param waitForSync whether to block on {@link #awaitSync()} before
-     *                    reading
+     * @param waitForSync whether to block on
+     *                    {@link #awaitSync()} before reading
      * @return the parsed integer, the default, or {@code 0}
      * @see ABProp#toInt(String)
      */
@@ -853,9 +1143,13 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the long value for {@code prop}, blocking until the first
-     * sync completes. Returns {@code 0L} when neither the synced value nor
-     * the default parses as a long.
+     * Returns the long value for {@code prop}, blocking until
+     * the first sync completes.
+     *
+     * @apiNote
+     * Equivalent to {@code getLong(prop, true)}; returns
+     * {@code 0L} when neither the synced value nor the default
+     * parses as a long.
      *
      * @param prop the AB prop definition
      * @return the parsed long, the default, or {@code 0L}
@@ -866,12 +1160,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the long value for {@code prop}, optionally skipping the
-     * wait for the first sync.
+     * Returns the long value for {@code prop}, optionally
+     * skipping the wait for the first sync.
+     *
+     * @apiNote
+     * Pass {@code waitForSync = false} from hot paths where
+     * blocking on the first sync would stall an unrelated
+     * pipeline.
      *
      * @param prop        the AB prop definition
-     * @param waitForSync whether to block on {@link #awaitSync()} before
-     *                    reading
+     * @param waitForSync whether to block on
+     *                    {@link #awaitSync()} before reading
      * @return the parsed long, the default, or {@code 0L}
      * @see ABProp#toLong(String)
      */
@@ -886,9 +1185,13 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the double value for {@code prop}, blocking until the first
-     * sync completes. Returns {@code 0.0} when neither the synced value
-     * nor the default parses as a double.
+     * Returns the double value for {@code prop}, blocking until
+     * the first sync completes.
+     *
+     * @apiNote
+     * Equivalent to {@code getDouble(prop, true)}; returns
+     * {@code 0.0} when neither the synced value nor the default
+     * parses as a double.
      *
      * @param prop the AB prop definition
      * @return the parsed double, the default, or {@code 0.0}
@@ -899,12 +1202,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the double value for {@code prop}, optionally skipping the
-     * wait for the first sync.
+     * Returns the double value for {@code prop}, optionally
+     * skipping the wait for the first sync.
+     *
+     * @apiNote
+     * Pass {@code waitForSync = false} from hot paths where
+     * blocking on the first sync would stall an unrelated
+     * pipeline.
      *
      * @param prop        the AB prop definition
-     * @param waitForSync whether to block on {@link #awaitSync()} before
-     *                    reading
+     * @param waitForSync whether to block on
+     *                    {@link #awaitSync()} before reading
      * @return the parsed double, the default, or {@code 0.0}
      * @see ABProp#toDouble(String)
      */
@@ -919,10 +1227,17 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the sampling-weight override for the given WAM event code.
+     * Returns the sampling-weight override for the given WAM
+     * event code.
+     *
+     * @apiNote
+     * Called from the WAM event commit site when the WAM
+     * property's hard-coded sampling weight is overridable by
+     * the AB-props sampling channel.
+     *
      * @param eventCode the WAM event identifier
-     * @return the override weight, or empty when none was synced for this
-     *         event
+     * @return the override weight, or empty when none was synced
+     *         for this event
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropEventSamplingConfig",
             exports = "getEventSamplingWeight",
@@ -933,8 +1248,13 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns an unmodifiable snapshot of every WAM event sampling-weight
-     * override parsed from the most recent sync, keyed by event code.
+     * Returns an unmodifiable snapshot of every WAM event
+     * sampling-weight override parsed from the most recent
+     * sync.
+     *
+     * @apiNote
+     * Use this for diagnostics or to export the sampling state
+     * for a debug-overlay UI.
      *
      * @return a defensive copy of the sampling-config map
      */
@@ -946,15 +1266,22 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Replaces the sampling-config cache with the supplied entries. A
-     * {@code null} or empty argument is a no-op and returns {@code false};
-     * a non-empty argument clears and replaces the cache and returns
-     * {@code true}, matching the JS export contract.
+     * Replaces the sampling-config cache with the supplied
+     * entries.
      *
-     * @param configs the new sampling configs, or {@code null} or empty
-     *                for a no-op
-     * @return {@code true} when the cache was replaced, {@code false}
-     *         when the argument was {@code null} or empty
+     * @apiNote
+     * Called from {@link #process(Node)} when the response is
+     * a full (non-delta) update carrying sampling configs. A
+     * {@code null} or empty argument is a no-op and returns
+     * {@code false}; a non-empty argument clears and replaces
+     * the cache and returns {@code true}, matching the JS
+     * export contract.
+     *
+     * @param configs the new sampling configs, or {@code null}
+     *                or empty for a no-op
+     * @return {@code true} when the cache was replaced,
+     *         {@code false} when the argument was {@code null}
+     *         or empty
      */
     @WhatsAppWebExport(moduleName = "WAWebApiAbPropEventSamplingConfig",
             exports = "updateEventSamplingConfigs",
@@ -969,7 +1296,12 @@ public final class DefaultABPropsService implements ABPropsService {
     }
 
     /**
-     * Returns the number of synced AB props currently held in memory.
+     * Returns the number of synced AB props currently held in
+     * memory.
+     *
+     * @apiNote
+     * Use this for diagnostics; for individual prop reads use
+     * the typed accessors.
      *
      * @return the count of synced props
      */
@@ -980,21 +1312,28 @@ public final class DefaultABPropsService implements ABPropsService {
     /**
      * Returns whether no AB props have been synced yet.
      *
-     * @return {@code true} when {@link #props} is empty, {@code false}
-     *         otherwise
+     * @apiNote
+     * Use this for diagnostics; for individual prop reads use
+     * the typed accessors.
+     *
+     * @return {@code true} when {@link #props} is empty,
+     *         {@code false} otherwise
      */
     public boolean isEmpty() {
         return props.isEmpty();
     }
 
     /**
-     * Resets the service for a fresh session by clearing every in-memory
-     * cache, dropping the persisted local-storage attributes that depend
-     * on the current session, and replacing the sync future so subsequent
-     * queries block on the next sync.
+     * Resets the service for a fresh session by clearing every
+     * in-memory cache, dropping the persisted local-storage
+     * attributes that depend on the current session, and
+     * replacing the sync future so subsequent queries block on
+     * the next sync.
      *
-     * <p>Refresh interval and refresh ids stay at their persisted values
-     * because the JS exports also leave them in place across sign-outs.
+     * @apiNote
+     * Call this on logout. Refresh interval and refresh ids
+     * stay at their persisted values because the JS exports
+     * also leave them in place across sign-outs.
      */
     public void clear() {
         props.clear();

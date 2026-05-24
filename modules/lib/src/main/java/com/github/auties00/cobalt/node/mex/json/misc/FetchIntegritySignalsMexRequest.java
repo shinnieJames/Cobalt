@@ -16,41 +16,64 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Fetches integrity signals for a peer in the FMX (first-message-experience)
- * flow, returning whether the account is new and whether the start-chat
- * action is considered suspicious.
+ * Outbound MEX query that fetches first-message-experience (FMX) integrity
+ * signals for a target user, returning whether the account is new and
+ * whether starting a chat with them is considered suspicious.
  *
- * <p>Integrity signals power the safety nudges shown when a user starts a
- * conversation with an unfamiliar contact. The query batches over a list
- * of users in the wire format but WA Web only ever passes a single Jid;
- * Cobalt mirrors that single-user shape and exposes the two scalar flags
- * from the resulting {@code XWA2IntegritySignals} fragment.
+ * @apiNote Issued by WA Web's
+ * {@code WAWebFetchAndSetIntegritySignals.fetchAndSetIntegritySignals}
+ * before the user is allowed to open a chat with an unfamiliar contact; the
+ * resulting {@code isSenderNewAccount} and {@code isSenderSuspicious}
+ * flags drive the FMX safety nudges shown above the message composer. WA
+ * Web wraps the call in a 600 ms {@code promiseTimeout} and propagates
+ * timeouts and errors through the {@code WALogger} pipeline; Cobalt's
+ * caller chooses its own timeout policy.
+ *
+ * @implNote This implementation hard-codes {@code use_case = "CHAT_FMX"}
+ * and {@code telemetry.context = "INTERACTIVE"} to match the only
+ * call-site WA Web emits today. The {@code query_input} array is shaped as
+ * a single-entry list so the wire format stays compatible with the
+ * batched form, even though only one JID is ever requested.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchIntegritySignals")
 public final class FetchIntegritySignalsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay to
-     * the compiled {@code fetchIntegritySignals} query.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebMexFetchIntegritySignalsQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebMexFetchIntegritySignalsQuery.graphql}. The relay maps the
+     * id to a server-side persisted operation and never sees the GraphQL
+     * text on the wire.
      */
     public static final String QUERY_ID = "26438847999065394";
 
     /**
-     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
-     * when dispatching this query, mirroring the {@code params.name} value of
-     * the compiled {@code fetchIntegritySignals} operation.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in
+     * latency and error metrics; Cobalt keeps the name on the request for
+     * embedders mirroring WA Web's telemetry surface.
      */
     public static final String OPERATION_NAME = "fetchIntegritySignals";
+
     /**
-     * The user the integrity signals are being fetched for, bound to the
-     * {@code query_input[0].jid} GraphQL variable.
+     * The target user JID bound to the {@code query_input[0].jid} GraphQL
+     * variable.
      */
     private final Jid userJid;
 
     /**
-     * Constructs a request that asks the relay for integrity signals on the
-     * given user.
-     * @param userJid the user the integrity signals are being fetched for,
-     *                must not be {@code null}
+     * Constructs a new request targeting the given user.
+     *
+     * @apiNote The JID must address an individual user (the FMX surface
+     * never queries groups or broadcasts); WA Web emits the call through
+     * {@code WAWebWidFactory.asUserWidOrThrow}. Embedders typically issue
+     * the request as the user opens a chat for the first time with a
+     * recipient not already in their contact list.
+     *
+     * @param userJid the target user JID, must not be {@code null}
      * @throws NullPointerException if {@code userJid} is {@code null}
      */
     public FetchIntegritySignalsMexRequest(Jid userJid) {
@@ -58,9 +81,7 @@ public final class FetchIntegritySignalsMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -68,9 +89,7 @@ public final class FetchIntegritySignalsMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}; never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -78,10 +97,15 @@ public final class FetchIntegritySignalsMexRequest implements MexOperation.Reque
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp relay.
+     * {@inheritDoc}
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter}, packs the lone {@link Jid} into the
+     * single-element {@code query_input} array, fixes the FMX
+     * {@code use_case} discriminator at {@code "CHAT_FMX"} and the
+     * telemetry {@code context} at {@code "INTERACTIVE"}, then wraps the
+     * payload via
+     * {@link MexOperation.Request.Json#createMexNode(String, String)}.
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchIntegritySignals", exports = "fetchIntegritySignals",
             adaptation = WhatsAppAdaptation.ADAPTED)

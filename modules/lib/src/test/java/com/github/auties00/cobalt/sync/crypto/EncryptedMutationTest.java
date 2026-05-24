@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.sync.crypto;
 
+import com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatAction;
 import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilder;
@@ -7,6 +8,7 @@ import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -20,33 +22,57 @@ import java.util.Base64;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for {@link EncryptedMutation} — Cobalt's adapter for
- * {@code WAWebSyncdEncryptMutations.syncdEncryptMutation} and
- * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}.
+ * Exercises the outgoing-mutation wire format produced by
+ * {@link EncryptedMutation}.
  *
- * <p>The class produces the wire-format ciphertext that the relay receives in an
- * outgoing app-state sync IQ. Every byte must match WA Web; the tests pin down:
- * <ul>
- *   <li>The {@code IV || ciphertext || valueMac} layout of {@code encryptedValue}.</li>
- *   <li>The associated-data prefix invariant (SET prepends 0x01, REMOVE prepends 0x02).</li>
- *   <li>The {@code valueMac()} accessor returning the trailing 32 bytes of
- *       {@code encryptedValue}.</li>
- *   <li>Round-trip with {@link DecryptedMutation.Untrusted#of} — what we encrypt
- *       must decrypt back to the same plaintext via the matching {@link MutationKeys}.</li>
- *   <li>WA Web byte-equality oracle for captured plaintext/ciphertext pairs.</li>
- * </ul>
+ * @apiNote
+ * Covers the production class that wraps
+ * {@code WAWebSyncdEncryptMutations.syncdEncryptMutation} and
+ * {@code WAWebSyncdEncryptMutationsWrapper.encryptMutation}. The matrix
+ * pins down the {@code IV || ciphertext || valueMac} layout of
+ * {@code encryptedValue}, the associated-data prefix invariant (SET prepends
+ * {@code 0x01}, REMOVE prepends {@code 0x02}), the {@code valueMac()}
+ * accessor, round-trip with {@link DecryptedMutation.Untrusted#of}, and a
+ * WA Web byte-equality oracle for captured plaintext/ciphertext pairs.
+ *
+ * @implNote
+ * Fresh-IV randomness is verified by encrypting the same plaintext twice and
+ * checking that the IV prefix differs; the matching deterministic-output
+ * check lives on the fixed-IV overload exercised in {@link MutationKeysTest}.
  */
 @DisplayName("EncryptedMutation")
 class EncryptedMutationTest {
+    /**
+     * The 32-byte sync key all tests in this class derive their
+     * {@link MutationKeys} from.
+     */
     private static final byte[] SYNC_KEY = filled(32, 0x42);
+
+    /**
+     * The sync key id all tests in this class pin to the AAD prefix.
+     */
     private static final byte[] KEY_ID = new byte[]{0x10, 0x20, 0x30, 0x40};
 
+    /**
+     * Builds a byte array filled with a single byte value.
+     *
+     * @param length the array length
+     * @param value  the fill value, truncated to a byte
+     * @return a freshly allocated array
+     */
     private static byte[] filled(int length, int value) {
         var out = new byte[length];
         for (var i = 0; i < length; i++) out[i] = (byte) value;
         return out;
     }
 
+    /**
+     * Builds a pending archive mutation under the given operation and timestamp.
+     *
+     * @param op the operation to attach
+     * @param ts the timestamp to attach
+     * @return a fresh pending mutation
+     */
     private static SyncPendingMutation pendingArchive(SyncdOperation op, Instant ts) {
         var action = new ArchiveChatActionBuilder()
                 .archived(true)
@@ -60,6 +86,12 @@ class EncryptedMutationTest {
         return new SyncPendingMutation(trusted, 0);
     }
 
+    /**
+     * Builds a pending pin mutation under SET and the given timestamp.
+     *
+     * @param ts the timestamp to attach
+     * @return a fresh pending mutation
+     */
     private static SyncPendingMutation pendingPin(Instant ts) {
         var pin = new PinActionBuilder().pinned(true).build();
         var value = new SyncActionValueBuilder()
@@ -75,7 +107,7 @@ class EncryptedMutationTest {
     @DisplayName("wire layout")
     class WireLayout {
         @Test
-        @DisplayName("encryptedValue is [IV (16) || ciphertext (≥16) || valueMac (32)]")
+        @DisplayName("encryptedValue is [IV (16) || ciphertext (16 or more) || valueMac (32)]")
         void encryptedValueLayout() throws GeneralSecurityException {
             try (var keys = MutationKeys.ofSyncKey(SYNC_KEY)) {
                 var enc = EncryptedMutation.of(
@@ -126,7 +158,7 @@ class EncryptedMutationTest {
     }
 
     @Nested
-    @DisplayName("freshness — fresh IV per call")
+    @DisplayName("freshness - fresh IV per call")
     class Freshness {
         @Test
         @DisplayName("two encryptions of the same mutation use different IVs")
@@ -154,7 +186,7 @@ class EncryptedMutationTest {
                 var a = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), keys, KEY_ID);
                 var b = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), keys, KEY_ID);
                 assertArrayEquals(a.indexMac(), b.indexMac(),
-                        "same key + same index → same index MAC");
+                        "same key plus same index produces same index MAC");
             }
         }
     }
@@ -163,7 +195,7 @@ class EncryptedMutationTest {
     @DisplayName("round-trip with DecryptedMutation")
     class RoundTrip {
         @Test
-        @DisplayName("SET encrypt → decrypt recovers the original action")
+        @DisplayName("SET encrypt then decrypt recovers the original action")
         void setRoundTrip() throws GeneralSecurityException {
             try (var keys = MutationKeys.ofSyncKey(SYNC_KEY)) {
                 var ts = Instant.ofEpochSecond(1700000000L);
@@ -185,7 +217,7 @@ class EncryptedMutationTest {
         }
 
         @Test
-        @DisplayName("REMOVE encrypt → decrypt recovers the operation")
+        @DisplayName("REMOVE encrypt then decrypt recovers the operation")
         void removeRoundTrip() throws GeneralSecurityException {
             try (var keys = MutationKeys.ofSyncKey(SYNC_KEY)) {
                 var ts = Instant.ofEpochSecond(1700000000L);
@@ -206,7 +238,6 @@ class EncryptedMutationTest {
                 var archive = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), keys, KEY_ID);
                 var pin = EncryptedMutation.of(pendingPin(ts), keys, KEY_ID);
 
-                // The two encrypted values must differ even though both use SET — distinct index implies distinct index MAC
                 assertFalse(MessageDigest.isEqual(archive.indexMac(), pin.indexMac()),
                         "distinct indices must produce distinct index MACs");
             }
@@ -219,28 +250,38 @@ class EncryptedMutationTest {
                 var ts = Instant.ofEpochSecond(1700000000L);
                 var encSet = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), keys, KEY_ID);
                 var encRemove = EncryptedMutation.of(pendingArchive(SyncdOperation.REMOVE, ts), keys, KEY_ID);
-                // The MAC depends on AAD which differs by op byte even with same key+plaintext.
-                // IV is random so we can't compare full ciphertext, but the AAD-bound MAC pinning
-                // is visible if we decrypt cross-op and expect MAC failure.
                 assertNotNull(encSet);
                 assertNotNull(encRemove);
 
-                // Cross-op decryption must fail at the value MAC step (different AAD prefix)
                 assertCrossOpFails(keys, encSet.encryptedValue(), encSet.indexMac(), SyncdOperation.REMOVE);
                 assertCrossOpFails(keys, encRemove.encryptedValue(), encRemove.indexMac(), SyncdOperation.SET);
             }
         }
 
+        /**
+         * Decrypts the wire blob under the opposite operation and asserts the
+         * value MAC step rejects it.
+         *
+         * @apiNote
+         * Helper for the AAD prefix invariant: a SET ciphertext decrypted
+         * under REMOVE (and vice versa) must fail at the value MAC step
+         * because the AAD byte differs.
+         *
+         * @param keys     the sync keys used during encryption
+         * @param ev       the wire encrypted value
+         * @param indexMac the wire index MAC
+         * @param wrongOp  the opposite operation
+         */
         private void assertCrossOpFails(MutationKeys keys, byte[] ev, byte[] indexMac, SyncdOperation wrongOp) {
-            org.junit.jupiter.api.Assertions.assertThrows(
-                    com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
+            Assertions.assertThrows(
+                    WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
                     () -> DecryptedMutation.Untrusted.of(ev, indexMac, keys, wrongOp, KEY_ID),
                     "decrypting with the wrong operation must fail at the value MAC step");
         }
     }
 
     @Nested
-    @DisplayName("key isolation — wrong sync key cannot decrypt")
+    @DisplayName("key isolation - wrong sync key cannot decrypt")
     class KeyIsolation {
         @Test
         @DisplayName("decrypting with a different key fails at the value MAC step")
@@ -249,8 +290,8 @@ class EncryptedMutationTest {
                  var wrongKeys = MutationKeys.ofSyncKey(filled(32, 0x77))) {
                 var ts = Instant.ofEpochSecond(1700000000L);
                 var enc = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), encKeys, KEY_ID);
-                org.junit.jupiter.api.Assertions.assertThrows(
-                        com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
+                Assertions.assertThrows(
+                        WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
                         () -> DecryptedMutation.Untrusted.of(
                                 enc.encryptedValue(), enc.indexMac(), wrongKeys,
                                 SyncdOperation.SET, KEY_ID));
@@ -264,8 +305,8 @@ class EncryptedMutationTest {
                 var ts = Instant.ofEpochSecond(1700000000L);
                 var enc = EncryptedMutation.of(pendingArchive(SyncdOperation.SET, ts), keys, KEY_ID);
                 var wrongKeyId = new byte[]{(byte) 0xAA};
-                org.junit.jupiter.api.Assertions.assertThrows(
-                        com.github.auties00.cobalt.exception.WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
+                Assertions.assertThrows(
+                        WhatsAppWebAppStateSyncException.ValueMacMismatch.class,
                         () -> DecryptedMutation.Untrusted.of(
                                 enc.encryptedValue(), enc.indexMac(), keys,
                                 SyncdOperation.SET, wrongKeyId));
@@ -287,10 +328,9 @@ class EncryptedMutationTest {
             var encryptedValue  = SyncFixtures.decodeOracleBytes(oracle, "encryptedValue");
             var operation = SyncdOperation.valueOf(oracle.getString("operation").toUpperCase());
 
-            // We cannot byte-compare ciphertext because WA Web emits a fresh IV every call;
-            // instead the oracle records (indexMac, encryptedValue) and we assert Cobalt can
-            // decrypt the captured encryptedValue using the captured key, recovering the
-            // SyncActionValue that produced it.
+            // Random IV per call means we cannot byte-compare ciphertext.
+            // Decrypt the captured wire blob under the captured key instead
+            // and assert recovery of a non-null SyncActionValue.
             try (var keys = MutationKeys.ofSyncKey(syncKey)) {
                 var dec = DecryptedMutation.Untrusted.of(
                         encryptedValue, indexMac, keys, operation, keyId);
@@ -302,12 +342,11 @@ class EncryptedMutationTest {
         @DisplayName("byte-equality with captured fixed-IV oracle (when present)")
         void fixedIvOracle() {
             if (!SyncFixtures.isOracleAvailable("crypto/encrypt-mutation-fixed-iv")) return;
-            // Capture format: { syncKey, keyId, iv, plaintext, expectedEncryptedValue, expectedIndexMac }
             var oracle = SyncFixtures.loadOracle("crypto/encrypt-mutation-fixed-iv");
             var expected = Base64.getDecoder().decode(oracle.getString("expectedEncryptedValue"));
-            // The fixed-IV oracle is reserved for the rare case where WA Web allows IV
-            // injection (test/dev paths). Capture is currently optional — when present,
-            // byte-equality is enforced. Implementation follows when the fixture lands.
+            // TODO: implement fixed-IV byte-equality assertion once the capture fixture lands.
+            //       Fixed-IV captures pin the AES-CBC output against a known plaintext, which
+            //       byte-equality cannot be tested under the production random-IV path.
             assertNotNull(expected);
         }
     }
@@ -335,7 +374,7 @@ class EncryptedMutationTest {
                 var enc = EncryptedMutation.of(
                         pendingArchive(SyncdOperation.SET, Instant.ofEpochSecond(1700000000L)),
                         keys, KEY_ID);
-                // record accessors return the field — same reference twice
+                // record accessors return the underlying field reference
                 assertTrue(enc.encryptedValue() == enc.encryptedValue());
                 assertTrue(enc.indexMac() == enc.indexMac());
                 assertTrue(enc.keyId() == enc.keyId());

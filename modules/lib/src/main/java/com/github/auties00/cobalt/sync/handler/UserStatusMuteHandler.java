@@ -21,24 +21,29 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Handles {@code userStatusMute} sync actions from the {@code regular_high} collection.
+ * Mirrors the per-contact (or per-group) "mute status updates" preference
+ * across linked devices.
  *
- * <p>This handler processes mutations that mute or unmute another user's (or group's)
- * status updates across linked devices. The mute state is applied to the matching
- * contact in the local store; for groups, it is written to the typed
- * {@link GroupMetadata#statusMuted()} field on the corresponding metadata row.
- * When the referenced contact or group is unknown to the local store, the
- * mutation is recorded as orphan so that a future {@code contact} or
- * {@code group_metadata} sync may retry it.
- *
- * <p>Index format: {@code ["userStatusMute", widString]} where {@code widString}
- * is a user wid (legacy form) or a group wid.
+ * @apiNote
+ * Cobalt embedders never invoke this handler directly; the sync dispatcher
+ * routes incoming {@code userStatusMute} mutations here whenever the user
+ * mutes or unmutes another contact's or group's status posts on a linked
+ * device. The handler writes the new value to the matching
+ * {@link com.github.auties00.cobalt.model.contact.Contact} or
+ * {@link GroupMetadata#statusMuted()} record on
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore}; mutations
+ * referencing an unknown contact or group are reported as orphan so a
+ * later contact / group-metadata sync can retry them.
  */
 @WhatsAppWebModule(moduleName = "WAWebUserStatusMuteSync")
 public final class UserStatusMuteHandler implements WebAppStateActionHandler {
 
     /**
-     * Private constructor preventing external instantiation.
+     * Constructs the handler.
+     *
+     * @apiNote
+     * The handler is stateless; Cobalt's sync registry holds a single
+     * instance per client.
      */
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public UserStatusMuteHandler() {
@@ -46,8 +51,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the action name for this handler.
-     * @return the action name string
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -56,8 +60,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the sync collection this handler belongs to.
-     * @return the sync patch type
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -66,8 +69,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Returns the mutation format version for this handler.
-     * @return the version number
+     * {@inheritDoc}
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
@@ -76,26 +78,34 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
     }
 
     /**
-     * Applies a single user status mute mutation and returns the detailed result.
+     * {@inheritDoc}
      *
-     * <p>For {@code SET} operations, this method:
-     * <ul>
-     *   <li>Validates the mutation index second element is a usable wid string;
-     *       returns {@code MALFORMED} otherwise</li>
-     *   <li>Validates the mutation value carries a {@link UserStatusMuteAction}
-     *       with a non-{@code null} {@code muted} field; returns {@code MALFORMED} otherwise</li>
-     *   <li>For group wids, returns {@code ORPHAN} when the group is unknown to
-     *       the local store; otherwise updates the {@link GroupMetadata#statusMuted()}
-     *       field on the corresponding metadata row and returns {@code SUCCESS}</li>
-     *   <li>For user wids, returns {@code ORPHAN} when the contact is unknown;
-     *       otherwise updates the contact's {@code statusMuted} field and returns
-     *       {@code SUCCESS}</li>
-     * </ul>
+     * @implNote
+     * This implementation mirrors WA Web's per-mutation closure inside
+     * {@code WAWebUserStatusMuteSync.applyMutations}: the
+     * {@code indexParts[1]} JID is validated first (mirroring WA Web's
+     * {@code if(!u||!isWid(u)) return malformedActionIndex()}), then the
+     * decoded {@link UserStatusMuteAction} value must be present. Group
+     * JIDs route through
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore#applyGroupMetadataEdit(Jid, com.github.auties00.cobalt.model.chat.group.GroupMetadataEdit)};
+     * user JIDs route through the
+     * {@link com.github.auties00.cobalt.model.contact.Contact#setStatusMuted(Boolean)}
+     * accessor on the resolved contact. An unknown group or contact
+     * surfaces as {@link MutationApplicationResult#orphan(String, String)}
+     * with the model type {@code "UserStatusMute"} so the sync
+     * dispatcher can retry once the missing entity arrives via a
+     * separate sync. WA Web's newsletter-status branch is dropped
+     * because Cobalt has no newsletter status surface; WA Web's
+     * {@code WALogger.WARN} counters and frontend
+     * {@code updateContactsStatusMute} fire-and-forget hop are omitted
+     * as telemetry / UI concerns.
      *
-     * <p>For non-{@code SET} operations, returns {@code UNSUPPORTED}.
-     * @param client   the WhatsApp client instance
-     * @param mutation the mutation to apply
-     * @return the detailed application result
+     * <p>Cobalt's {@link UserStatusMuteAction#muted()} accessor coalesces
+     * a missing nullable boolean to {@code false} per the
+     * project-wide convention; the explicit {@code c === void 0} check
+     * that WA Web performs is therefore relaxed to "value action
+     * present", and a mutation carrying {@code muted: null} is silently
+     * applied as "unmute" rather than reported as malformed.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -104,12 +114,7 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
             return MutationApplicationResult.unsupported();
         }
 
-        // MISMATCH (ORDER): WA Web checks the index (indexParts[1] is a wid) BEFORE the value. Cobalt currently
-        // checks the value first, so a mutation with both a bad index and a missing muted field ends up tagged
-        // {@code MALFORMED_VALUE} in Cobalt vs {@code MALFORMED_INDEX} in WA Web. Reordered below to match WA Web.
         var indexArray = JSON.parseArray(mutation.index());
-        // WAWebUserStatusMuteSync.applyMutations: var n=e.indexParts, u=n[1]; if(!u||!isWid(u)) return malformedActionIndex().
-        // indexParts[1] is undefined when the slot is missing; mirror with explicit size check.
         if (indexArray.size() <= 1) {
             return SyncdIndexUtils.malformedActionIndex(collectionName().name(), actionName());
         }
@@ -129,26 +134,12 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
             return SyncdIndexUtils.malformedActionValue(collectionName().name());
         }
 
-        // MISMATCH (COALESCE): WA Web specifically tests {@code c === void 0} where {@code c = userStatusMuteAction.muted}.
-        // Cobalt's {@link UserStatusMuteAction#muted()} coalesces a {@code null} Boolean to {@code false}, so a
-        // mutation with {@code userStatusMuteAction: {muted: null}} is silently applied as "unmute" here instead of
-        // returning {@code malformedActionValue}. Fixing this would require promoting the nullable Boolean accessor
-        // out of the package-private field; the project-wide "nullable boolean coalesces to false" convention
-        // (see {@code feedback_nullable_bool_accessors.md}) intentionally accepts this divergence.
-        // ADAPTED: WAWebUserStatusMuteSync.applyMutations — malformed-counter + first-three WARN log telemetry
-        // is intentionally omitted (matches the project-wide policy of dropping WAM/WALogger paths).
         if (wid.hasServer(JidServer.groupOrCommunity())) {
-            // Build a GroupMetadataEdit carrying only the statusMuted override and let the store
-            // merge it into the existing GroupMetadata row. The autoboxed Boolean preserves
-            // "value applied" semantics: an absent muted field would yield Boolean.FALSE here
-            // (per the project-wide nullable-bool-coalesce convention), which is fine because
-            // any malformed-value detection already happened in the actionValue null-check above.
             var edit = new GroupMetadataEditBuilder()
                     .group(wid)
                     .statusMuted(action.muted())
                     .build();
             var updated = client.store().applyGroupMetadataEdit(wid, edit);
-            // ADAPTED: Cobalt does not have frontend event dispatching; the store update is sufficient
             return updated.isPresent()
                     ? MutationApplicationResult.success()
                     : MutationApplicationResult.orphan(widString, "UserStatusMute");
@@ -160,25 +151,34 @@ public final class UserStatusMuteHandler implements WebAppStateActionHandler {
         }
 
         contact.get().setStatusMuted(action.muted());
-        // ADAPTED: Cobalt does not have frontend event dispatching; the store update is sufficient
         return MutationApplicationResult.success();
     }
 
     /**
-     * Builds a pending mutation for muting or unmuting a user's status updates.
+     * Builds the pending {@link SyncPendingMutation} that mutes or
+     * unmutes another user's or group's status updates.
      *
-     * <p>Per WhatsApp Web {@code WAWebUserStatusMuteSync.getMutationForStatusMute(e, t, n)}:
-     * <ol>
-     *   <li>Constructs the value with {@code {userStatusMuteAction: {muted: t}}}</li>
-     *   <li>Builds the pending mutation via {@code WAWebSyncdActionUtils.buildPendingMutation}
-     *       with {@code action = this.getAction()}, {@code collection = this.collectionName},
-     *       {@code indexArgs = [e.toString({legacy: true})]}, {@code operation = SET},
-     *       {@code timestamp = n}, {@code value}, and {@code version = this.getVersion()}</li>
-     * </ol>
-     * @param wid       the JID of the user (or group) whose status mute state is being updated
-     * @param muted     the new status mute state
+     * @apiNote
+     * Used by Cobalt's outgoing-mutation factory when the embedder
+     * toggles {@code statusMuted} on a contact or group; the returned
+     * pending mutation is queued through the regular sync pipeline so
+     * the change propagates to the user's other devices.
+     *
+     * @implNote
+     * This implementation mirrors WA Web's
+     * {@code WAWebUserStatusMuteSync.getMutationForStatusMute(e, t, n)}:
+     * the index is {@code ["userStatusMute", wid.toString()]} (legacy
+     * serialization), the value carries the {@code muted} boolean, and
+     * the operation is {@link SyncdOperation#SET}. WA Web's call into
+     * {@code WAWebSyncdActionUtils.buildPendingMutation} reduces to
+     * direct {@link DecryptedMutation.Trusted} and {@link SyncPendingMutation}
+     * construction in Cobalt because the trusted mutation already
+     * carries the encoded value.
+     *
+     * @param wid       the user or group JID whose status mute state is being updated
+     * @param muted     {@code true} to mute status updates, {@code false} to unmute
      * @param timestamp the mutation timestamp
-     * @return the pending mutation for the user status mute action
+     * @return the pending mutation ready for the outgoing sync pipeline
      */
     @WhatsAppWebExport(moduleName = "WAWebUserStatusMuteSync", exports = "default", adaptation = WhatsAppAdaptation.DIRECT)
     public SyncPendingMutation getMutationForStatusMute(Jid wid, boolean muted, Instant timestamp) {

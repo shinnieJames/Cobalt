@@ -47,18 +47,6 @@ public final class BusinessMeteredMessagingPendingCampaign {
     }
 
     /**
-     * Constructs a new entry from a public constructor for caller use.
-     *
-     * @param freeReservedMsgs the reserved-message count
-     * @param sendTimestamp    the optional send timestamp; may be
-     *                         {@code null}
-     * @return the new entry
-     */
-    public static BusinessMeteredMessagingPendingCampaign of(int freeReservedMsgs, Integer sendTimestamp) {
-        return new BusinessMeteredMessagingPendingCampaign(freeReservedMsgs, sendTimestamp);
-    }
-
-    /**
      * Returns the reserved-message count.
      *
      * @return the count

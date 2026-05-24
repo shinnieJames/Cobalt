@@ -12,32 +12,41 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Tracks decryption outcomes across every encrypted payload in an incoming message
- * stanza and produces a composite {@link MessageDecryptionResult}.
+ * Stateful per-stanza handler that tracks the decryption outcome of every
+ * {@code <enc>} child and produces the aggregated {@link MessageDecryptionResult} for
+ * receipt selection.
  *
- * <p>A single stanza may carry up to two {@code <enc>} nodes: a sender-key group
- * message (SKMSG) and a per-device Signal message (PKMSG or MSG). The handler tracks
- * failures for each slot independently and applies WA Web's resolution rules to
- * determine the overall result:
- * <ul>
- *   <li>If a non-SKMSG payload fails with a retryable Signal error, no further
- *       payloads are attempted; the failure is final.</li>
- *   <li>If the SKMSG fails but the non-SKMSG succeeds (or was not present), the
- *       overall result is {@link MessageDecryptionResult#SUCCESS}.</li>
- *   <li>Error types are classified from the exception hierarchy and mapped to the
- *       appropriate result code for receipt generation.</li>
- * </ul>
+ * @apiNote
+ * Constructed once per incoming message stanza by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver};
+ * each enc is offered first to {@link #canDecryptNext(MessageReceiveEncryptedPayload)}
+ * and, on success, the receiver invokes the appropriate cipher and reports any
+ * failure back via {@link #handleError(MessageReceiveEncryptedPayload, WhatsAppMessageException.Receive)}.
+ *
+ * @implNote
+ * This implementation mirrors WhatsApp Web's
+ * {@code WAWebMsgProcessingDecryptionHandler.createDecryptionHandler} closure but
+ * lifts the state into instance fields so the handler can be reused in tests. A
+ * stanza carries at most two {@code <enc>} children: a sender-key payload (SKMSG) and
+ * a per-device Signal payload (PKMSG or MSG). Each slot tracks its own failure; the
+ * non-SKMSG slot also short-circuits the SKMSG attempt when it fails with a
+ * retryable error, matching the WA Web {@code SignalRetryable}-only blocker set.
  */
 @WhatsAppWebModule(moduleName = "WAWebMsgProcessingDecryptionHandler")
 public final class MessageDecryptionHandler {
     /**
-     * Logger for decryption handler diagnostics.
+     * Logger used for per-enc decryption-error diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(MessageDecryptionHandler.class.getName());
 
     /**
-     * Error types that block further decryption attempts when observed on a
-     * non-SKMSG payload.
+     * Error types that block further decryption attempts once observed on the
+     * non-SKMSG slot.
+     *
+     * @apiNote
+     * Mirrors WhatsApp Web's local {@code b} set inside
+     * {@code WAWebMsgProcessingDecryptionHandler}, which contains only
+     * {@code SignalRetryable}; other error types still allow the SKMSG slot to be
+     * attempted.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -45,7 +54,13 @@ public final class MessageDecryptionHandler {
             EnumSet.of(DecryptionErrorType.SIGNAL_RETRYABLE);
 
     /**
-     * Set of enc types that have been accessed (attempted) so far.
+     * Encryption types whose enc nodes have been offered so far.
+     *
+     * @apiNote
+     * Tracked so {@link #getResult()} can promote a SKMSG failure to
+     * {@link MessageDecryptionResult#SUCCESS} when the SKMSG slot was actually
+     * attempted and only the PKMSG/MSG slot failed; mirrors WA Web's
+     * {@code accessedEncs} set.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -53,28 +68,39 @@ public final class MessageDecryptionHandler {
             EnumSet.noneOf(MessageEncryptionType.class);
 
     /**
-     * Failure from the non-SKMSG (PKMSG or MSG) payload, if any.
+     * Failure recorded for the per-device Signal slot (PKMSG or MSG), or {@code null}
+     * when that slot was not attempted or succeeded.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
     private EncFailure pkOrMsgFailure;
 
     /**
-     * Failure from the SKMSG payload, if any.
+     * Failure recorded for the sender-key slot (SKMSG), or {@code null} when that
+     * slot was not attempted or succeeded.
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
     private EncFailure skMsgFailure;
 
     /**
-     * Returns whether the next encrypted payload should be attempted.
+     * Returns whether the given encrypted payload should be attempted next and
+     * records the attempt when it is.
      *
-     * <p>If a non-SKMSG payload already failed with a retryable Signal error, no
-     * further payloads are attempted. Otherwise the payload is allowed and recorded
-     * in {@link #accessedEncs}.
+     * @apiNote
+     * Called by the caller's enc-iteration loop before each cipher call; returning
+     * {@code false} aborts the remaining payloads after a retryable per-device
+     * Signal failure so the stanza's overall result is settled by the first
+     * blocker.
+     *
+     * @implNote
+     * This implementation also records the offered enc type in
+     * {@link #accessedEncs} so {@link #getResult()} can distinguish "SKMSG attempted
+     * and succeeded" from "SKMSG never tried" when the PKMSG/MSG slot also failed.
      *
      * @param enc the next encrypted payload to consider
-     * @return {@code true} if decryption should be attempted
+     * @return {@code true} if decryption should be attempted; {@code false} when a
+     *         prior retryable failure blocks further work
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -90,8 +116,15 @@ public final class MessageDecryptionHandler {
     /**
      * Records a decryption failure for the given encrypted payload.
      *
-     * <p>The exception is classified into a {@link DecryptionErrorType} and stored
-     * in the appropriate slot (SKMSG or PKMSG/MSG).
+     * @apiNote
+     * Called by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * inside the per-enc {@code try/catch}; the resulting classification drives both
+     * the SKMSG short-circuit and the final receipt selection.
+     *
+     * @implNote
+     * This implementation routes SKMSG failures into {@link #skMsgFailure} and
+     * non-SKMSG failures into {@link #pkOrMsgFailure}; if both fail the SKMSG slot
+     * is preferred as the dominant failure in {@link #getResult()}.
      *
      * @param enc   the encrypted payload that failed
      * @param error the decryption exception
@@ -117,18 +150,22 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Computes the composite decryption result from every tracked failure.
+     * Returns the aggregated decryption result computed from the recorded failures.
      *
-     * <p>Resolution rules:
-     * <ol>
-     *   <li>If no failures occurred, returns SUCCESS.</li>
-     *   <li>Picks the dominant failure: prefers skMsgFailure, else pkOrMsgFailure.</li>
-     *   <li>If SKMSG was accessed and did not fail but the other slot did, the
-     *       overall result is still SUCCESS.</li>
-     *   <li>Otherwise maps the dominant failure's error type to a result code.</li>
-     * </ol>
+     * @apiNote
+     * Called once at the end of the enc-iteration loop; the returned
+     * {@link MessageDecryptionResult} drives the follow-up receipt selection
+     * (delivery, retry, NACK, plain ack) inside the orchestrator.
      *
-     * @return the composite decryption result
+     * @implNote
+     * This implementation mirrors WhatsApp Web's local {@code E} function: if no
+     * failure was recorded the result is {@link MessageDecryptionResult#SUCCESS}; a
+     * SKMSG-only failure on a stanza that also carried an attempted SKMSG slot also
+     * resolves to SUCCESS (the WA Web {@code l} short-circuit); otherwise the
+     * dominant failure (SKMSG preferred over PKMSG/MSG) is mapped through
+     * {@link #mapErrorToResult(EncFailure)}.
+     *
+     * @return the aggregated decryption result
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -148,8 +185,14 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Returns the failed encrypted payload, when one was recorded, so callers can
-     * use it for duplicate message dedup handling.
+     * Returns the failed encrypted payload that the receipt path should reference
+     * when surfacing the failure to the server.
+     *
+     * @apiNote
+     * Used by the duplicate-message dedup branch of WhatsApp Web's
+     * {@code WAWebHandleMsg} dispatcher to attach the original failing enc to the
+     * cached duplicate-receipt info; returns {@link Optional#empty()} when no
+     * failure was recorded.
      *
      * @return an {@link Optional} wrapping the failed enc payload
      */
@@ -161,9 +204,15 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Returns the exception from the dominant failure, when one was recorded.
+     * Returns the dominant failure exception so the caller can rethrow it when no
+     * enc could be decrypted.
      *
-     * @return an {@link Optional} wrapping the decryption exception
+     * @apiNote
+     * Consumed by {@link com.github.auties00.cobalt.message.receive.ChatMessageReceiver}
+     * after the enc-iteration loop completes without a successful payload, so the
+     * original Signal exception (rather than a synthesised one) bubbles up.
+     *
+     * @return an {@link Optional} wrapping the dominant exception
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -173,10 +222,25 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Classifies a decryption exception into a {@link DecryptionErrorType}.
+     * Classifies a decryption exception into a {@link DecryptionErrorType} for
+     * downstream slot tracking and result mapping.
+     *
+     * @apiNote
+     * Mirrors WhatsApp Web's local {@code S} classifier inside
+     * {@code WAWebMsgProcessingDecryptionHandler}, which dispatches on the Signal
+     * and validation-error class hierarchy; Cobalt switches on the sealed
+     * {@link WhatsAppMessageException.Receive}
+     * hierarchy instead.
+     *
+     * @implNote
+     * This implementation collapses every Signal-protocol error subtype (NoSession,
+     * BadMac, InvalidKey, etc.) into {@link DecryptionErrorType#SIGNAL_RETRYABLE}
+     * because WhatsApp Web's classifier also folds them all into its
+     * {@code SignalRetryable} bucket via the shared {@code SignalDecryptionError}
+     * class.
      *
      * @param error the exception to classify
-     * @return the classified error type
+     * @return the corresponding error type
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -212,11 +276,21 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Maps a tracked failure's error type to the corresponding
-     * {@link MessageDecryptionResult} code.
+     * Maps the dominant failure's error type onto the corresponding
+     * {@link MessageDecryptionResult} that drives receipt selection.
      *
-     * @param failure the failure to map
-     * @return the corresponding result code
+     * @apiNote
+     * Mirrors WhatsApp Web's local {@code k}/{@code E} switch inside
+     * {@code WAWebMsgProcessingDecryptionHandler} that materialises the
+     * {@code E2EProcessResult} from the classified error type.
+     *
+     * @implNote
+     * This implementation does not surface WA Web's {@code DEFERRED} variant
+     * (used for orphan bot messages); the omission is intentional because Cobalt
+     * does not model the orphan-bot-message buffer.
+     *
+     * @param failure the dominant failure to map
+     * @return the corresponding decryption result
      */
     @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -236,91 +310,131 @@ public final class MessageDecryptionHandler {
     }
 
     /**
-     * Classifies decryption errors into categories that drive the overall message
-     * processing result and receipt type.
+     * Internal classification of decryption failures used to drive the
+     * SKMSG-blocker short-circuit and the {@link MessageDecryptionResult} mapping.
+     *
+     * @apiNote
+     * Not exposed outside the package; {@link MessageDecryptionHandler#classifyError}
+     * is the only producer and {@link MessageDecryptionHandler#mapErrorToResult}
+     * the only consumer.
      */
     @WhatsAppWebModule(moduleName = "WAWebMsgProcessingDecryptionHandler")
     private enum DecryptionErrorType {
         /**
-         * Retryable Signal protocol error such as no session, invalid key, invalid
-         * message, bad MAC, or missing sender key.
+         * Catch-all for Signal-protocol errors that the sender can resolve by
+         * re-encrypting and re-sending the payload.
          *
-         * <p>Triggers a retry receipt.
+         * @apiNote
+         * Covers NoSession, InvalidKey, InvalidMessage, BadMac, missing sender
+         * key, and similar; resolves to {@link MessageDecryptionResult#RETRY}.
          */
         SIGNAL_RETRYABLE,
 
         /**
-         * Message counter was already seen (duplicate or old counter).
+         * The Signal protocol reported a duplicate or already-seen counter.
          *
-         * <p>Handled specially for dedup; may still produce a delivery receipt.
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#SIGNAL_OLD_COUNTER_ERROR};
+         * the orchestrator either reuses the cached delivery outcome or treats
+         * the message as a normal delivery based on the dedup gate.
          */
         SIGNAL_DUPLICATE_MESSAGE,
 
         /**
-         * Message came from a companion device not in the local device list.
+         * The message came from a device not present in the local device list.
          *
-         * <p>Triggers device list sync and retry.
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#RETRY}; WhatsApp Web also
+         * triggers a device-list sync, which Cobalt drives separately from the
+         * sync handlers.
          */
         UNKNOWN_DEVICE,
 
         /**
-         * DeviceSentMessage wrapper was missing, invalid, or present when it should
-         * not be.
+         * The {@code DeviceSentMessage} envelope was missing, invalid, or
+         * present when it should not be.
+         *
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#PARSE_VALIDATION_ERROR}.
          */
         DEVICE_SENT_MESSAGE,
 
         /**
-         * Decrypted protobuf failed structural validation (multiple message keys,
-         * type mismatch, etc.).
+         * The decrypted protobuf failed structural validation
+         * (multiple message keys, type mismatch, etc.).
+         *
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#PARSE_VALIDATION_ERROR}.
          */
         INVALID_PROTOBUF,
 
         /**
-         * Stanza indicated HSM but the protobuf content did not match (or vice
-         * versa).
+         * The stanza marked the message as HSM but the protobuf did not match,
+         * or vice versa.
+         *
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#HSM_MISMATCH}.
          */
         HSM_MISMATCH,
 
         /**
          * Failed to decode broadcast ephemeral settings from the shared secret.
+         *
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#RETRY}; WhatsApp Web
+         * additionally tags the retry receipt with the
+         * {@code INVALID_BROADCAST_STANZA_ATTRIBUTE} failure reason, which
+         * Cobalt does not currently surface.
          */
         BROADCAST_EPH_SETTINGS,
 
         /**
          * Unclassified error that does not match any known category.
+         *
+         * @apiNote
+         * Resolves to {@link MessageDecryptionResult#PARSE_ERROR}.
          */
         UNKNOWN
     }
 
     /**
-     * Encapsulates a single encrypted payload's decryption failure: the payload, the
-     * exception, and the classified error type.
+     * Encapsulates a single slot's failure: the payload, the exception, and the
+     * classified error type.
+     *
+     * @apiNote
+     * Stored in {@link #pkOrMsgFailure} or {@link #skMsgFailure} so
+     * {@link #getResult()} can both pick the dominant failure and surface the
+     * original exception via {@link #failedError()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebMsgProcessingDecryptionHandler")
     private static final class EncFailure {
         /**
-         * Encrypted payload that failed decryption.
+         * The encrypted payload whose decryption failed.
          */
         @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
                 adaptation = WhatsAppAdaptation.DIRECT)
         private final MessageReceiveEncryptedPayload enc;
 
         /**
-         * Exception that caused the failure.
+         * The exception that caused the failure.
          */
         @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
                 adaptation = WhatsAppAdaptation.DIRECT)
         private final WhatsAppMessageException.Receive error;
 
         /**
-         * Classified error type produced by {@link #classifyError}.
+         * The classified error type produced by
+         * {@link MessageDecryptionHandler#classifyError}.
          */
         @WhatsAppWebExport(moduleName = "WAWebMsgProcessingDecryptionHandler", exports = "createDecryptionHandler",
                 adaptation = WhatsAppAdaptation.DIRECT)
         private final DecryptionErrorType errorType;
 
         /**
-         * Constructs a new failure record.
+         * Constructs a failure record from its three components.
+         *
+         * @apiNote
+         * Used only by {@link MessageDecryptionHandler#handleError}.
          *
          * @param enc       the encrypted payload that failed
          * @param error     the exception that caused the failure

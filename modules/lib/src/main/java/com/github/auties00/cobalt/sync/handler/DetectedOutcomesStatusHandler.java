@@ -5,26 +5,38 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
-import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.setting.DetectedOutcomesStatusAction;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
+
 /**
- * Handles detected outcomes status actions.
+ * Applies the {@code detectedOutcomeStatus} app-state sync action that
+ * carries the click-to-WhatsApp-ad detected-outcome onboarding flag.
  *
- * <p>This handler processes mutations that update the CTWA detected outcome
- * onboarding status. On SET, reads the {@code isEnabled} flag from the
- * mutation value and stores it. Other operations are acknowledged as
- * unsupported.
+ * @apiNote
+ * Drives the CTWA "detected outcome" onboarding banner on companion
+ * devices: when a business completes the primary-device onboarding flow
+ * the resulting {@code isEnabled} bit fans out across the
+ * {@link SyncPatchType#REGULAR} collection so every linked surface can
+ * render the matching state.
  *
- * <p>Index format: {@code ["detected_outcomes_status_action"]}
+ * @implNote
+ * This implementation persists the bit through
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#setDetectedOutcomesEnabled(boolean)}
+ * instead of WA Web's
+ * {@code frontendSendAndReceive("ctwaDetectedOutcomeOnboardingStatusUpdate")}
+ * RPC, since Cobalt has no JS frontend to notify. The malformed-on-null
+ * check is preserved at the action-instance level; per the project's
+ * "no Optional&lt;Boolean&gt;" rule, a {@code null} {@code isEnabled}
+ * field on a present action coalesces to {@code false} rather than
+ * triggering {@link MutationApplicationResult#malformed()}.
  */
 @WhatsAppWebModule(moduleName = "WAWebDetectedOutcomesStatusSync")
 public final class DetectedOutcomesStatusHandler implements WebAppStateActionHandler {
 
     /**
-     * Constructs a new {@code DetectedOutcomesStatusHandler}.
+     * Constructs a new singleton {@link DetectedOutcomesStatusHandler}.
      */
     @WhatsAppWebExport(moduleName = "WAWebDetectedOutcomesStatusSync", exports = "default", adaptation = WhatsAppAdaptation.ADAPTED)
     public DetectedOutcomesStatusHandler() {
@@ -61,19 +73,14 @@ public final class DetectedOutcomesStatusHandler implements WebAppStateActionHan
     /**
      * {@inheritDoc}
      *
-     * <p>Per WhatsApp Web {@code WAWebDetectedOutcomesStatusSync.applyMutations}:
-     * for each mutation, if the operation is SET, extracts
-     * {@code detectedOutcomesStatusAction} from the mutation value. If
-     * {@code isEnabled} is {@code null}, the mutation is malformed. Otherwise,
-     * sends the onboarding status to the frontend and returns success. Non-SET
-     * operations return unsupported.
-     *
-     * <p>WA Web wraps each mutation in a try/catch that returns
-     * {@code SyncActionState.Failed} on error and logs via {@code WALogger}.
-     * Per Cobalt's error model, exceptions propagate instead of being caught
-     * inline, and WAM/logger-style batch tallies ({@code a++} malformed and
-     * {@code i++} unsupported counters with post-batch {@code WALogger.WARN})
-     * are intentionally omitted.
+     * @implNote
+     * This implementation lets exceptions propagate to the orchestrator
+     * rather than catching them inline as
+     * {@link com.github.auties00.cobalt.model.sync.SyncActionState#FAILED}
+     * the way WA Web's per-mutation closure does, matching Cobalt's
+     * pluggable error model. The malformed and unsupported batch tallies
+     * that WA Web emits via {@code WALogger.WARN} after the loop are
+     * intentionally not recreated.
      */
     @Override
     @WhatsAppWebExport(moduleName = "WAWebDetectedOutcomesStatusSync", exports = "applyMutations", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -86,11 +93,7 @@ public final class DetectedOutcomesStatusHandler implements WebAppStateActionHan
             return MutationApplicationResult.malformed();
         }
 
-        // ADAPTED: WAWebDetectedOutcomesStatusSync.applyMutations: (l?.isEnabled) == null -> malformedActionValue
-        // Cobalt's DetectedOutcomesStatusAction.isEnabled() accessor coalesces null to false per the
-        // nullable boolean accessor convention, so a null protobuf field is treated as false rather
-        // than malformed. This matches Cobalt's broader policy for Boolean-backed action fields.
-        client.store().setDetectedOutcomesEnabled(action.isEnabled()); // ADAPTED: WAWebDetectedOutcomesStatusSync.applyMutations: frontendSendAndReceive("ctwaDetectedOutcomeOnboardingStatusUpdate", {onboardingStatus: l.isEnabled}) — Cobalt stores locally instead of sending to frontend
+        client.store().setDetectedOutcomesEnabled(action.isEnabled());
         return MutationApplicationResult.success();
     }
 }

@@ -1,7 +1,7 @@
 package com.github.auties00.cobalt.socket.tunnel;
 
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxyAuthenticator;
+import com.github.auties00.cobalt.client.WhatsAppProxy;
+import com.github.auties00.cobalt.client.WhatsAppProxyAuthenticator;
 import com.github.auties00.cobalt.socket.WhatsAppSslContextFactory;
 
 import javax.net.ssl.SSLSocket;
@@ -13,91 +13,85 @@ import java.nio.charset.StandardCharsets;
  * Establishes an HTTP {@code CONNECT} tunnel through an HTTP or HTTPS
  * proxy on an already-connected {@link Socket}.
  *
- * <p>The JDK's {@code Socket(Proxy)} constructor rejects
+ * @apiNote
+ * The transport-layer hook every form factor uses when the WhatsApp
+ * connection must traverse a {@link WhatsAppProxy.Http} proxy. The
+ * JDK's {@code Socket(Proxy)} constructor rejects
  * {@link java.net.Proxy.Type#HTTP} (only {@code SOCKS} and
  * {@code DIRECT} are accepted), and {@link java.net.http.HttpClient}
- * cannot speak TLS to a proxy. Every WhatsApp client form factor that
- * needs an HTTP proxy therefore negotiates the {@code CONNECT}
- * directly on the raw socket through this helper.
- *
- * <p>The method handles both proxy flavours:
+ * cannot speak TLS to a proxy, so this helper assembles the
+ * {@code CONNECT} directly on the raw socket. The two proxy flavours
+ * are handled in one call:
  * <ul>
- *   <li>{@link WhatsAppProxy.Http.Plain}: the {@code CONNECT} is sent
- *       on the raw socket in cleartext.
- *   <li>{@link WhatsAppProxy.Http.Secure}: the raw socket is wrapped
- *       in an {@link SSLSocket} created from the supplied
- *       {@link WhatsAppSslContextFactory}, the TLS handshake is
- *       driven, and the {@code CONNECT} is sent inside the TLS
- *       tunnel.
+ *   <li>{@link WhatsAppProxy.Http.Plain} sends the {@code CONNECT} on
+ *       the raw socket in cleartext.</li>
+ *   <li>{@link WhatsAppProxy.Http.Secure} wraps the raw socket in an
+ *       {@link SSLSocket} from the supplied
+ *       {@link WhatsAppSslContextFactory}, drives the TLS handshake,
+ *       and sends the {@code CONNECT} inside the TLS tunnel.</li>
  * </ul>
+ * On return the socket's input stream is positioned past the response
+ * header block, ready for the next protocol layer (typically the
+ * end-to-end TLS handshake to the target).
  *
- * <p>On return the socket's input stream is positioned past the
- * response header block, ready for the next protocol layer
- * (typically the end-to-end TLS handshake to the target).
- *
- * <p>The parser is deliberately minimal: it confirms the response is
- * {@code HTTP/X[.X] 2xx} and then scans the byte stream for the
- * {@code CRLF CRLF} header terminator. Header fields are not parsed,
- * header blocks larger than the read buffer are still accepted by
- * recycling the buffer in place, and any bytes received after
- * {@code CRLF CRLF} are rejected because the raw socket
+ * @implNote
+ * This implementation keeps the parser deliberately minimal: it
+ * confirms the response is {@code HTTP/X[.X] 2xx} and scans the byte
+ * stream for the {@code CRLF CRLF} header terminator. Header fields
+ * are not parsed, header blocks larger than the read buffer are still
+ * accepted by recycling the buffer in place, and any bytes received
+ * after {@code CRLF CRLF} are rejected because the raw socket
  * {@link java.io.InputStream} provides no push-back to the next
- * protocol layer. No {@code 407} retry is attempted; authentication
- * is preemptive: if a {@link WhatsAppProxyAuthenticator.Http.Basic}
- * authenticator is supplied the {@code Proxy-Authorization} header
- * is sent on the first request and the call fails if the proxy
- * rejects it.
- *
- * <p>Hosts containing a colon are treated as IPv6 literals and
- * bracketed in both the request-target and the {@code Host} header.
- *
- * <p>On a malformed status line the full buffered response is
- * embedded verbatim in the thrown {@link IOException} to ease
- * debugging of misbehaving proxies.
+ * protocol layer. No {@code 407} retry is attempted; authentication is
+ * preemptive when a {@link WhatsAppProxyAuthenticator.Http.Basic} is
+ * supplied and the call fails if the proxy rejects the first attempt.
+ * Hosts containing a colon are bracketed as IPv6 literals in both the
+ * request-target and the {@code Host} header. On a malformed status
+ * line the buffered response is embedded verbatim in the thrown
+ * {@link IOException} to ease proxy debugging.
  */
 public final class HttpTunnel {
 
     /**
-     * Size of the reusable read buffer used to drain the
+     * The size of the reusable read buffer used to drain the
      * {@code CONNECT} response.
      */
     private static final int READ_BUFFER_SIZE = 8192;
 
     /**
-     * Minimum length of an HTTP response status line, namely
+     * The minimum length of an HTTP response status line, namely
      * {@code "HTTP/X.X NNN"} without the trailing {@code CRLF}.
      */
     private static final int STATUS_LINE_MIN_LENGTH = 12;
 
     /**
-     * Packed bytes representing {@code "\r\n\r\n"}, used to detect
-     * the end of the header block with a single sliding 32-bit
-     * comparison.
+     * The packed bytes representing {@code "\r\n\r\n"}, used to
+     * detect the end of the header block with a single sliding
+     * 32-bit comparison.
      */
     private static final int CRLF_CRLF = 0x0D0A0D0A;
 
     /**
-     * Prevents instantiation of the utility class.
+     * Prevents instantiation of this utility holder.
      */
     private HttpTunnel() {
 
     }
 
     /**
-     * Establishes an HTTP {@code CONNECT} tunnel through the supplied
-     * proxy and returns the socket positioned for the target's
-     * protocol layer.
+     * Establishes an HTTP {@code CONNECT} tunnel through {@code proxy}
+     * and returns the socket positioned for the target's protocol
+     * layer.
      *
-     * <p>If {@code proxy} is a {@link WhatsAppProxy.Http.Secure}, the
-     * raw socket is TLS-wrapped first using {@code ssl} (server-side
-     * SNI = {@code proxy.host()}), the TLS handshake is driven, and
-     * the {@code CONNECT} is sent inside the TLS tunnel; the returned
-     * socket is the {@link SSLSocket} layer, with the underlying raw
-     * socket auto-closed when the SSL socket is closed.
-     *
-     * <p>If {@code proxy} is a {@link WhatsAppProxy.Http.Plain}, the
-     * {@code CONNECT} is sent on the raw socket in cleartext and
-     * {@code raw} itself is returned.
+     * @apiNote
+     * For {@link WhatsAppProxy.Http.Secure} the raw socket is
+     * TLS-wrapped first using {@code ssl} (SNI is set to
+     * {@code proxy.host()}), the TLS handshake is driven, and the
+     * {@code CONNECT} is sent inside the TLS tunnel; the returned
+     * socket is the {@link SSLSocket} layer and the underlying raw
+     * socket auto-closes when the SSL socket is closed. For
+     * {@link WhatsAppProxy.Http.Plain} the {@code CONNECT} is sent on
+     * the raw socket in cleartext and {@code raw} itself is returned.
      *
      * @param raw        the already-connected proxy socket
      * @param targetHost the host the tunnel is meant to reach
@@ -106,9 +100,9 @@ public final class HttpTunnel {
      * @param ssl        the SSL context factory used to TLS-wrap the
      *                   proxy hop when {@code proxy} is
      *                   {@link WhatsAppProxy.Http.Secure}
-     * @return the connected socket — the raw {@code raw} for
-     *         {@link WhatsAppProxy.Http.Plain}, an {@link SSLSocket}
-     *         wrapping {@code raw} for
+     * @return the connected socket; {@code raw} itself for
+     *         {@link WhatsAppProxy.Http.Plain}, or the
+     *         {@link SSLSocket} wrapping {@code raw} for
      *         {@link WhatsAppProxy.Http.Secure}
      * @throws IOException if the TLS handshake, the {@code CONNECT}
      *         request, or the response parsing fails
@@ -138,13 +132,13 @@ public final class HttpTunnel {
     }
 
     /**
-     * Writes the {@code CONNECT} request and the
-     * {@code Proxy-Authorization} header (if any) to the socket.
+     * Writes the {@code CONNECT} request and the optional
+     * {@code Proxy-Authorization} header to the socket.
      *
      * @param socket     the proxy socket
      * @param targetHost the target host
      * @param targetPort the target port
-     * @param auth       the optional authenticator
+     * @param auth       the optional authenticator, or {@code null}
      * @throws IOException if the underlying write fails
      */
     private static void sendConnect(Socket socket, String targetHost, int targetPort,
@@ -153,7 +147,7 @@ public final class HttpTunnel {
         appendAuthority(request, targetHost, targetPort).append(" HTTP/1.1\r\nHost: ");
         appendAuthority(request, targetHost, targetPort).append("\r\n");
         if (auth != null) {
-            request.append("Proxy-Authorization: ").append(auth.authenticate()).append("\r\n");
+            request.append("Proxy-Authorization: ").append(auth.authorization()).append("\r\n");
         }
         request.append("\r\n");
 
@@ -165,6 +159,11 @@ public final class HttpTunnel {
     /**
      * Appends an HTTP authority of the form {@code host:port} to
      * {@code sb}, bracketing the host if it is an IPv6 literal.
+     *
+     * @apiNote
+     * Detects IPv6 by the presence of a colon and the absence of a
+     * leading bracket; an already-bracketed literal is passed through
+     * verbatim.
      *
      * @param sb   the destination buffer
      * @param host the host, either a registered name, an IPv4
@@ -186,6 +185,14 @@ public final class HttpTunnel {
      * reports a {@code 2xx} code, and consumes the header block up to
      * and including the {@code CRLF CRLF} terminator.
      *
+     * @implNote
+     * This implementation slides a 32-bit window through the response
+     * bytes looking for {@link #CRLF_CRLF} so the header block can be
+     * located without parsing individual header fields. When the
+     * header block exceeds {@link #READ_BUFFER_SIZE} the buffer is
+     * recycled in place since the only state that must be preserved
+     * across refills lives in the sliding window itself.
+     *
      * @param socket the proxy socket
      * @throws IOException if the response is incomplete, malformed,
      *         or reports a non-{@code 2xx} status
@@ -195,8 +202,6 @@ public final class HttpTunnel {
         var buffer = new byte[READ_BUFFER_SIZE];
         var filled = 0;
 
-        // Drain at least the status line, then continue feeding the scanner
-        // until CRLF CRLF closes the header block.
         while (filled < STATUS_LINE_MIN_LENGTH) {
             var n = in.read(buffer, filled, buffer.length - filled);
             if (n < 0) {
@@ -207,7 +212,6 @@ public final class HttpTunnel {
 
         verifyStatusLine(buffer, filled);
 
-        // Slide a 32-bit window through the response bytes looking for "\r\n\r\n".
         var last4 = 0;
         var scanPos = 0;
         while (true) {
@@ -222,8 +226,6 @@ public final class HttpTunnel {
                 }
             }
             if (filled == buffer.length) {
-                // Header block exceeded the buffer; restart filling from offset 0
-                // since the only state we need to preserve lives in last4.
                 filled = 0;
                 scanPos = 0;
             }
@@ -236,7 +238,7 @@ public final class HttpTunnel {
     }
 
     /**
-     * Validates the first 12 bytes of {@code buffer} match the
+     * Validates that the first bytes of {@code buffer} match the
      * {@code "HTTP/X.X 2NN"} status-line prefix.
      *
      * @param buffer the response buffer
@@ -249,7 +251,6 @@ public final class HttpTunnel {
             throw invalidResponse(buffer, filled);
         }
 
-        // HTTP/X[.Y] SP -- exactly one space after the version, regardless of digits.
         var pos = 5;
         if (!isDigit(buffer[pos])) {
             throw invalidResponse(buffer, filled);
@@ -294,8 +295,14 @@ public final class HttpTunnel {
     }
 
     /**
-     * Builds an {@link IOException} carrying the full raw response
-     * bytes that were buffered up to the point of detection.
+     * Builds an {@link IOException} carrying the buffered raw
+     * response bytes up to the point of detection.
+     *
+     * @apiNote
+     * Embedding the buffered response in the exception message is
+     * the fastest path to diagnosing misbehaving proxies, which
+     * often return HTML error pages rather than RFC-compliant
+     * status lines.
      *
      * @param buffer the response buffer
      * @param filled the number of bytes currently in {@code buffer}

@@ -61,6 +61,7 @@ module com.github.auties00.cobalt.model {
     exports com.github.auties00.cobalt.model.payment;
     exports com.github.auties00.cobalt.model.preference;
     exports com.github.auties00.cobalt.model.privacy;
+    exports com.github.auties00.cobalt.model.props;
     exports com.github.auties00.cobalt.model.reporting;
     exports com.github.auties00.cobalt.model.setting;
     exports com.github.auties00.cobalt.model.setting.notice;

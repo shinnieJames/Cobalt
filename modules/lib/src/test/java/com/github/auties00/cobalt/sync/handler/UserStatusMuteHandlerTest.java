@@ -6,6 +6,7 @@ import com.github.auties00.cobalt.model.chat.group.GroupMetadata;
 import com.github.auties00.cobalt.model.chat.group.GroupMetadataBuilder;
 import com.github.auties00.cobalt.model.contact.ContactBuilder;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
@@ -23,19 +24,33 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link UserStatusMuteHandler} â€” Cobalt's adapter for
- * {@code WAWebUserStatusMuteSync}.
+ * Exercises {@link UserStatusMuteHandler}'s parity with
+ * {@code WAWebUserStatusMuteSync.applyMutations} plus the outgoing
+ * {@code getMutationForStatusMute} builder.
  *
- * <p>The handler applies {@code SET} mutations carrying the per-contact (or
- * per-group) status mute flag. The tests pin down metadata, every branch of
- * {@code applyMutation}, the static {@code getMutationForStatusMute} builder,
- * and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Covers the wire-constant trio, the happy {@code SET} branch for both
+ * a user JID (mutate the local {@link com.github.auties00.cobalt.model.contact.Contact})
+ * and a group JID (mutate the
+ * {@link GroupMetadata#statusMuted()} field), the orphan branch for an
+ * unknown contact or group, the malformed-index branches (empty
+ * array, empty wid string, wid that fails to parse), the
+ * malformed-value branch for a missing {@link UserStatusMuteAction},
+ * the {@code REMOVE} unsupported branch, and the default
+ * conflict-resolution tiebreaker.
+ *
+ * @implNote
+ * The fixture pre-seeds neither the contact nor the group metadata so
+ * tests can opt-in case by case; the static
+ * {@code getMutationForStatusMute(...)} builder is exercised
+ * separately to confirm the legacy-JID serialization remains stable.
  */
 @DisplayName("UserStatusMuteHandler")
 class UserStatusMuteHandlerTest {
@@ -46,12 +61,35 @@ class UserStatusMuteHandlerTest {
 
     private WhatsAppClient client;
 
+    /**
+     * Builds the per-test harness.
+     *
+     * @apiNote
+     * Each test runs against a fresh
+     * {@link com.github.auties00.cobalt.store.WhatsAppStore} so the
+     * contact and group metadata tables start empty.
+     */
     @BeforeEach
     void setUp() {
         var store = DeviceFixtures.temporaryStore(SELF_PN, SELF_LID);
         client = TestWhatsAppClient.create().withStore(store);
     }
 
+    /**
+     * Wraps the given wid string and muted flag into a trusted
+     * mutation under the canonical {@code ["userStatusMute", wid]}
+     * index.
+     *
+     * @apiNote
+     * Tests pass arbitrary raw strings for {@code widString} to
+     * exercise the wid-parse malformed branches.
+     *
+     * @param widString the raw wid string at index slot 1
+     * @param muted     the new muted flag, or {@code null} to omit
+     * @param op        the mutation operation
+     * @param ts        the mutation timestamp
+     * @return the trusted mutation
+     */
     private static DecryptedMutation.Trusted mutationFor(String widString, Boolean muted, SyncdOperation op, Instant ts) {
         var action = new UserStatusMuteActionBuilder().muted(muted).build();
         var value = new SyncActionValueBuilder()
@@ -200,7 +238,7 @@ class UserStatusMuteHandlerTest {
         void wrongActionInValue() {
             var wrongValue = new SyncActionValueBuilder()
                     .timestamp(Instant.now())
-                    .favoritesAction(new FavoritesActionBuilder().favorites(java.util.List.of()).build())
+                    .favoritesAction(new FavoritesActionBuilder().favorites(List.of()).build())
                     .build();
             var mutation = new DecryptedMutation.Trusted(
                     "[\"userStatusMute\",\"" + CONTACT + "\"]",
@@ -231,7 +269,7 @@ class UserStatusMuteHandlerTest {
     }
 
     @Nested
-    @DisplayName("getMutationForStatusMute â€” builder helper")
+    @DisplayName("getMutationForStatusMute - builder helper")
     class Builder {
         @Test
         @DisplayName("emits a SET pending mutation with the requested wid and flag")
@@ -250,7 +288,7 @@ class UserStatusMuteHandlerTest {
     }
 
     @Nested
-    @DisplayName("resolveConflicts â€” default timestamp-based")
+    @DisplayName("resolveConflicts - default timestamp-based")
     class ResolveConflicts {
         @Test
         @DisplayName("remote with the later timestamp wins (APPLY_REMOTE_DROP_LOCAL)")
@@ -260,7 +298,7 @@ class UserStatusMuteHandlerTest {
 
             var resolution = new UserStatusMuteHandler().resolveConflicts(earlier, later);
 
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
+            assertEquals(ConflictResolutionState.APPLY_REMOTE_DROP_LOCAL, resolution.state());
         }
 
         @Test
@@ -271,7 +309,7 @@ class UserStatusMuteHandlerTest {
 
             var resolution = new UserStatusMuteHandler().resolveConflicts(later, earlier);
 
-            assertEquals(com.github.auties00.cobalt.model.sync.ConflictResolutionState.SKIP_REMOTE, resolution.state());
+            assertEquals(ConflictResolutionState.SKIP_REMOTE, resolution.state());
         }
     }
 

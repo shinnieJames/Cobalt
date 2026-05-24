@@ -3,74 +3,89 @@ package com.github.auties00.cobalt.socket.websocket;
 /**
  * Wire-format constants for WebSocket framing, as defined by
  * <a href="https://datatracker.ietf.org/doc/html/rfc6455">RFC 6455</a>.
+ *
+ * @apiNote
+ * Shared between {@link WebSocketFrameInputStream} and
+ * {@link WebSocketFrameOutputStream} so opcode values, length-field
+ * markers and the masking helper live in exactly one place. Public
+ * because both streams expose control opcodes
+ * ({@link #OPCODE_PONG}, {@link #OPCODE_CLOSE}) on their APIs.
  */
 public final class WebSocketFrameConstants {
     /**
-     * Opcode {@code 0x0}: continuation of a fragmented message.
+     * The opcode {@code 0x0} for a continuation of a fragmented
+     * message.
      */
     public static final byte OPCODE_CONTINUATION = 0x0;
 
     /**
-     * Opcode {@code 0x1}: UTF-8 text frame.
+     * The opcode {@code 0x1} for a UTF-8 text frame.
      */
     public static final byte OPCODE_TEXT = 0x1;
 
     /**
-     * Opcode {@code 0x2}: binary frame. The only data opcode used by
-     * WhatsApp.
+     * The opcode {@code 0x2} for a binary frame.
+     *
+     * @apiNote
+     * The only data opcode used by WhatsApp: every WhatsApp frame on
+     * the {@code web.whatsapp.com} WebSocket is binary.
      */
     public static final byte OPCODE_BINARY = 0x2;
 
     /**
-     * Opcode {@code 0x8}: close control frame.
+     * The opcode {@code 0x8} for a close control frame.
      */
     public static final byte OPCODE_CLOSE = 0x8;
 
     /**
-     * Opcode {@code 0x9}: ping control frame.
+     * The opcode {@code 0x9} for a ping control frame.
      */
     public static final byte OPCODE_PING = 0x9;
 
     /**
-     * Opcode {@code 0xA}: pong control frame.
+     * The opcode {@code 0xA} for a pong control frame.
      */
     public static final byte OPCODE_PONG = 0xA;
 
     /**
-     * Inclusive upper bound for a frame payload length that fits in the
-     * 7-bit field of the second header byte.
+     * The inclusive upper bound for a frame payload length that fits
+     * in the seven-bit field of the second header byte.
      */
     public static final int SMALL_PAYLOAD_LIMIT = 125;
 
     /**
-     * Marker value in the 7-bit payload-length field signalling that an
-     * additional 16-bit extended length follows.
+     * The marker value in the seven-bit payload-length field
+     * signalling that an additional 16-bit extended length follows.
      */
     public static final int EXTENDED_16_PAYLOAD_MARKER = 126;
 
     /**
-     * Marker value in the 7-bit payload-length field signalling that an
-     * additional 64-bit extended length follows.
+     * The marker value in the seven-bit payload-length field
+     * signalling that an additional 64-bit extended length follows.
      */
     public static final int EXTENDED_64_PAYLOAD_MARKER = 127;
 
     /**
-     * Maximum payload length permitted for any control frame, as
-     * required by
-     * <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-5.5">RFC 6455 §5.5</a>.
+     * The maximum payload length permitted for any control frame,
+     * as required by
+     * <a href="https://datatracker.ietf.org/doc/html/rfc6455#section-5.5">RFC 6455 section 5.5</a>.
      */
     public static final int CONTROL_PAYLOAD_MAX_LENGTH = 125;
 
     /**
-     * Default size of the recyclable scratch buffer used by the
+     * The default size of the recyclable scratch buffer used by the
      * input-side unmask path and the output-side header builder.
      */
     public static final int SCRATCH_BUFFER_SIZE = 8192;
 
     /**
-     * Protective upper bound on a single frame's payload length; the
-     * decoder rejects any frame larger than this. Sized well above any
-     * payload WhatsApp is expected to send (16 MiB).
+     * The protective upper bound on a single frame's payload length.
+     *
+     * @apiNote
+     * Sized at 16 MiB, well above any payload WhatsApp is expected
+     * to send; the decoder rejects any frame larger than this so a
+     * malformed length prefix cannot wedge the reader on a
+     * multi-gigabyte allocation.
      */
     public static final long MAX_FRAME_LENGTH = 16L * 1024 * 1024;
 
@@ -82,10 +97,16 @@ public final class WebSocketFrameConstants {
     }
 
     /**
-     * Returns the mask byte for the given index within a 4-byte masking
-     * key.
+     * Returns the mask byte for the given index within a four-byte
+     * masking key.
      *
-     * @param maskKey the 4-byte masking key
+     * @apiNote
+     * Shared by both streams so the mask cycle layout is encoded in
+     * exactly one place; the formula reproduces the byte layout
+     * expected by RFC 6455 section 5.3 and matches the big-endian
+     * mask-key storage convention used by the SIMD unmask path.
+     *
+     * @param maskKey the four-byte masking key
      * @param index   the byte index within the payload
      * @return the mask byte for the given index
      */

@@ -11,39 +11,44 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Typed container for the {@code <skey/>} subtree carrying the
- * current signed pre-key.
+ * Typed container for the {@code <skey/>} subtree carrying the currently advertised signed
+ * pre-key.
+ *
+ * @apiNote
+ * Maps the WA Web {@code xmppSignedPreKey({keyId, keyPair, signature})} render: one {@code <skey/>}
+ * subtree with a three-byte big-endian {@code <id/>} content, a thirty-two-byte raw
+ * {@code <value/>} content (the X25519 public key), and a sixty-four-byte {@code <signature/>}
+ * content (the Ed25519 detached signature produced by the local identity key over the public key).
+ * The same record is used both outbound (under {@link IqUploadPreKeysRequest},
+ * {@link IqUploadPrekeysForRegRequest}, {@link IqRotateKeyRequest}) and as a parsed sub-projection
+ * of {@link IqDigestKeyResponse.Success}.
  */
 @WhatsAppWebModule(moduleName = "WAWebSignalUtilsApi")
 public final class IqUploadPreKeysSignedPreKey {
     /**
-     * The signed-pre-key identifier — encoded as a three-byte
-     * big-endian unsigned integer in the {@code <id/>}
-     * grandchild.
+     * The signed pre-key identifier; serialised as a three-byte big-endian unsigned integer into
+     * the {@code <id/>} grandchild.
      */
     private final int id;
 
     /**
-     * The signed-pre-key public-key bytes carried by the
-     * {@code <value/>} grandchild.
+     * The thirty-two-byte X25519 public key carried verbatim by the {@code <value/>} grandchild.
      */
     private final byte[] publicKey;
 
     /**
-     * The detached signature over {@code publicKey} produced by
-     * the local identity key — sixty-four bytes carried by the
-     * {@code <signature/>} grandchild.
+     * The sixty-four-byte Ed25519 detached signature over {@link #publicKey()} produced by the
+     * local identity key, carried verbatim by the {@code <signature/>} grandchild.
      */
     private final byte[] signature;
 
     /**
-     * Constructs a new signed-pre-key entry.
+     * Constructs a populated signed pre-key.
      *
-     * @param id        the signed-pre-key identifier
-     * @param publicKey the public-key bytes; never {@code null}
-     * @param signature the detached signature; never {@code null}
-     * @throws NullPointerException if either reference argument is
-     *                              {@code null}
+     * @param id        the signed pre-key identifier
+     * @param publicKey the public-key bytes
+     * @param signature the detached signature bytes
+     * @throws NullPointerException if {@code publicKey} or {@code signature} is {@code null}
      */
     public IqUploadPreKeysSignedPreKey(int id, byte[] publicKey, byte[] signature) {
         this.id = id;
@@ -52,7 +57,7 @@ public final class IqUploadPreKeysSignedPreKey {
     }
 
     /**
-     * Returns the signed-pre-key identifier.
+     * Returns the signed pre-key identifier.
      *
      * @return the identifier
      */
@@ -61,9 +66,9 @@ public final class IqUploadPreKeysSignedPreKey {
     }
 
     /**
-     * Returns the signed-pre-key public-key bytes.
+     * Returns the signed pre-key public-key bytes.
      *
-     * @return the public-key bytes; never {@code null}
+     * @return the public-key bytes
      */
     public byte[] publicKey() {
         return publicKey;
@@ -72,16 +77,27 @@ public final class IqUploadPreKeysSignedPreKey {
     /**
      * Returns the detached signature bytes.
      *
-     * @return the signature bytes; never {@code null}
+     * @return the signature bytes
      */
     public byte[] signature() {
         return signature;
     }
 
     /**
-     * Renders this signed-pre-key as the {@code <skey/>} subtree.
+     * Renders this signed pre-key as the canonical {@code <skey/>} subtree.
      *
-     * @return the rendered node
+     * @apiNote
+     * Called by {@link IqUploadPreKeysRequest#toNode()},
+     * {@link IqUploadPrekeysForRegRequest#toNode()} and {@link IqRotateKeyRequest#toNode()} to
+     * assemble the {@code <skey/>} portion of the outbound payload.
+     *
+     * @implNote
+     * This implementation packs the identifier with
+     * {@link DataUtils#intToBytes(int, int) DataUtils.intToBytes(id, 3)} so the wire content is
+     * three bytes regardless of {@link #id()}'s magnitude, matching WA Web's
+     * {@code BIG_ENDIAN_CONTENT(keyId, 3)}.
+     *
+     * @return the rendered {@code <skey/>} node
      */
     @WhatsAppWebExport(moduleName = "WAWebSignalUtilsApi",
             exports = "xmppSignedPreKey", adaptation = WhatsAppAdaptation.DIRECT)
@@ -104,6 +120,13 @@ public final class IqUploadPreKeysSignedPreKey {
                 .build();
     }
 
+    /**
+     * Compares this signed pre-key to another instance for equality.
+     *
+     * @param obj the candidate instance
+     * @return {@code true} when {@code obj} is an {@code IqUploadPreKeysSignedPreKey} carrying
+     *         the same identifier and identical key/signature bytes
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -118,6 +141,11 @@ public final class IqUploadPreKeysSignedPreKey {
                 && Arrays.equals(this.signature, that.signature);
     }
 
+    /**
+     * Returns a hash code derived from every carried field.
+     *
+     * @return the combined hash
+     */
     @Override
     public int hashCode() {
         var result = Integer.hashCode(id);
@@ -126,6 +154,11 @@ public final class IqUploadPreKeysSignedPreKey {
         return result;
     }
 
+    /**
+     * Returns the record-style rendering for this signed pre-key.
+     *
+     * @return the rendered string
+     */
     @Override
     public String toString() {
         return "IqUploadPreKeysSignedPreKey[id=" + id

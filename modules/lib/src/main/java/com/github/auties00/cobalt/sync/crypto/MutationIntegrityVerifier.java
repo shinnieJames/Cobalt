@@ -19,53 +19,73 @@ import java.util.HexFormat;
 import java.util.SequencedCollection;
 
 /**
- * Verifies the integrity of sync mutations using HMAC-SHA256 based MACs.
+ * Validates the snapshot MAC and patch MAC on every app-state sync envelope
+ * the relay sends, and computes the same MACs for every outgoing patch.
  *
- * <p>Provides per-patch verification of snapshot MACs and patch MACs,
- * matching the WhatsApp Web {@code WAWebSyncdAntiTampering} module behavior.
- * Each patch is verified individually with its own value MACs and the
- * wire-provided snapshot MAC, rather than batch verification across all patches.
+ * <p>The MAC formulas live in {@code WAWebSyncdEncryptionManager}; the
+ * wire-level verification routines that call into them live in
+ * {@code WAWebSyncdAntiTampering}. This class collapses the two:
+ * {@link #verifySnapshotMac} and {@link #verifyPatchIntegrity} are the
+ * verification entry points, the static {@link #computeSnapshotMac} and
+ * {@link #computePatchMac} are the underlying formulas, and
+ * {@link #computeOutgoingSnapshotAndPatchMacs} pairs them for the outgoing path.
  *
- * <p>The actual MAC computation is delegated to static methods
- * ({@link #computeSnapshotMac} and {@link #computePatchMac}) which implement
- * the HMAC-SHA256 formulas from {@code WAWebSyncdEncryptionManager}.
+ * @apiNote
+ * Driven by the collection-handler pipeline that processes a single
+ * {@code SyncdPatch} or {@code SyncdSnapshot} envelope at a time. Cobalt
+ * does not batch verification across patches; every patch carries its own
+ * value MAC list and its own wire snapshot MAC, both of which feed back into
+ * the patch MAC chain.
  */
 @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTampering")
 @WhatsAppWebModule(moduleName = "WAWebSyncdEncryptionManager")
 public final class MutationIntegrityVerifier {
     /**
-     * The WhatsApp store for key lookups and collection state queries.
+     * The store backing key-id resolution and collection-state lookups.
      */
     private final WhatsAppStore store;
 
     /**
-     * Constructs a new integrity verifier.
+     * Constructs a verifier bound to a store.
      *
-     * @param store the WhatsApp store for key lookups and collection state queries
+     * @param store the store from which sync keys, collection versions, and
+     *              the mac-mismatch latch are read
      */
     public MutationIntegrityVerifier(WhatsAppStore store) {
         this.store = store;
     }
 
     /**
-     * Verifies the snapshot MAC and returns the computed snapshot MAC for use
-     * in subsequent patch MAC verification.
+     * Verifies the snapshot MAC on a freshly received {@link SyncdSnapshot}
+     * and returns the computed MAC for downstream use.
      *
-     * <p>Snapshot MAC is computed as:
-     * {@code HMAC-SHA256(snapshotMacKey, ltHash || to64BitNetworkOrder(version) || UTF8(collectionName))}
+     * @apiNote
+     * Called once per incoming snapshot, after the caller has decrypted every
+     * mutation in the snapshot and accumulated the new LT-Hash. The
+     * {@code expectedHash} input is the locally computed LT-Hash; matching
+     * it under the snapshot-MAC key against the wire MAC closes the loop
+     * between the decrypted records and the relay's authenticated digest.
      *
-     * <p>In WA Web, this corresponds to {@code computeLtHashAndValidateSnapshot} which
-     * also computes the LT-Hash internally before calling the internal
-     * {@code validateSnapshotMac} (function G with {@code isSnapshot=true}).
-     * In Cobalt, the LT-Hash computation is separated into the caller
-     * ({@code WebAppStateService.computeNewLTHash}) and this method only performs
-     * the MAC validation. When the MAC mismatches in snapshot mode, a fatal
-     * {@link WhatsAppWebAppStateSyncException.SnapshotMacMismatch} is thrown.
-     * @param collectionName the collection type
-     * @param version the collection version
-     * @param snapshot the decoded snapshot
-     * @param expectedHash the computed LT-Hash
-     * @return the computed snapshot MAC, or {@code null} if MAC verification is disabled
+     * @implNote
+     * This implementation diverges from
+     * {@code WAWebSyncdAntiTampering.computeLtHashAndValidateSnapshot} in
+     * two ways. WA Web computes the LT-Hash inline (as part of the same
+     * routine), whereas Cobalt separates LT-Hash recomputation into the
+     * caller and only validates the MAC here. WA Web on a snapshot MAC
+     * mismatch falls through to a recovery flow with WAM telemetry; Cobalt
+     * unconditionally raises
+     * {@link WhatsAppWebAppStateSyncException.SnapshotMacMismatch} because
+     * recovery is deferred to the configurable
+     * {@code WhatsAppClientErrorHandler}.
+     *
+     * @param collectionName the collection type (drives the MAC-input suffix)
+     * @param version        the snapshot version (drives the 8-byte big-endian suffix)
+     * @param snapshot       the wire snapshot, source of both the wire MAC and the key id
+     * @param expectedHash   the locally computed LT-Hash over the decrypted records
+     * @return the computed snapshot MAC, or {@code null} when MAC checks are disabled
+     * @throws WhatsAppWebAppStateSyncException.SnapshotMacMismatch if the wire MAC is absent or does not match
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError     if the snapshot lacks a key id or the resolved key has no data
+     * @throws WhatsAppWebAppStateSyncException.MissingKey          if the snapshot's key id is not in the local store
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTampering", exports = "computeLtHashAndValidateSnapshot", adaptation = WhatsAppAdaptation.ADAPTED)
     public byte[] verifySnapshotMac(SyncPatchType collectionName, long version, SyncdSnapshot snapshot, byte[] expectedHash) {
@@ -73,13 +93,12 @@ public final class MutationIntegrityVerifier {
             return null;
         }
 
-        // Per WA Web: missing snapshot MAC is a fatal validation error, not a skip
         var mac = snapshot.mac();
         if(mac.isEmpty()) {
             throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, version);
         }
 
-        var keyId = snapshot.keyId() // WAWebSyncdAntiTampering.computeLtHashAndValidateSnapshot: n.keyId
+        var keyId = snapshot.keyId()
                 .flatMap(KeyId::id);
         if(keyId.isEmpty()) {
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
@@ -88,7 +107,7 @@ public final class MutationIntegrityVerifier {
             );
         }
 
-        var keyData = store.findWebAppStateKeyById(keyId.get()) // WAWebSyncdAntiTampering: getKeyData(a.id) -> SyncdMissingKeyError
+        var keyData = store.findWebAppStateKeyById(keyId.get())
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId.get()))
                 .keyData()
                 .flatMap(AppStateSyncKeyData::keyData)
@@ -97,41 +116,54 @@ public final class MutationIntegrityVerifier {
                         null
                 ));
 
-        try (var keys = MutationKeys.ofSyncKey(keyData)) { // WAWebSyncdAntiTampering: generateEncryptionKeys(c)
-            var expectedMac = computeSnapshotMac(keys.snapshotMacKey(), expectedHash, version, collectionName); // WAWebSyncdEncryptionManager.generateSnapshotMac
-            if (!MessageDigest.isEqual(mac.get(), expectedMac)) { // WAWebSyncdAntiTampering.validateSnapshotMac: arrayBuffersEqual(T, t)
-                throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, version); // WAWebSyncdAntiTampering: SyncdFatalError("unable to validate snapshot mac")
+        try (var keys = MutationKeys.ofSyncKey(keyData)) {
+            var expectedMac = computeSnapshotMac(keys.snapshotMacKey(), expectedHash, version, collectionName);
+            if (!MessageDigest.isEqual(mac.get(), expectedMac)) {
+                throw new WhatsAppWebAppStateSyncException.SnapshotMacMismatch(collectionName, version);
             }
             return expectedMac;
         }
     }
 
     /**
-     * Verifies the integrity of a single patch by checking both the patch MAC
-     * and the snapshot MAC.
+     * Verifies the patch MAC and the snapshot MAC on a freshly received
+     * {@link SyncdPatch}.
      *
-     * <p>Per WhatsApp Web, patch MAC mismatch is fatal (throws), but snapshot MAC mismatch
-     * is non-fatal, the collection is marked as mac-mismatch and processing continues.
+     * @apiNote
+     * Called once per incoming patch envelope. The patch MAC chains over the
+     * wire snapshot MAC plus the per-mutation value MACs and is the primary
+     * integrity gate; the snapshot MAC re-checks the locally accumulated
+     * LT-Hash against the relay's expected digest. WA Web treats the two
+     * mismatches differently and Cobalt mirrors that asymmetry: patch MAC
+     * mismatch is fatal, snapshot MAC mismatch reports {@code false} so the
+     * caller can flip the collection into the mac-mismatch state without
+     * tearing down the session.
      *
-     * <p>Per WA Web function G ({@code validateSnapshotMac}): when the collection is
-     * already in mac-mismatch state ({@code isCollectionInMacMismatchFatal}), the
-     * snapshot MAC validation is skipped entirely for patches. This avoids repeated
-     * mismatch logging for a collection that is already known to be inconsistent.
-     * @param collectionName the collection type for MAC computation
-     * @param patch          the wire patch with its MAC fields
-     * @param computedLtHash the locally computed LT-Hash after applying this patch's mutations
-     * @param patchValueMacs the value MACs from only this patch's mutations, in order
-     * @return {@code true} if the snapshot MAC matched (or was not checked),
-     *         {@code false} if the snapshot MAC mismatched (collection should be marked mac-mismatch)
+     * @implNote
+     * This implementation skips the snapshot MAC validation when the
+     * collection is already in the mac-mismatch state, matching the
+     * {@code if (E && k) return} short-circuit in the WA Web
+     * {@code validateSnapshotMac} helper. The {@code checkPatchMacs} short
+     * circuit returning {@code true} unconditionally has no WA Web analogue;
+     * it is a Cobalt-only embedder toggle for fixture replay.
+     *
+     * @param collectionName the collection type
+     * @param patch          the wire patch
+     * @param computedLtHash the locally accumulated LT-Hash after applying this patch
+     * @param patchValueMacs the value MACs from this patch's mutations, in wire order
+     * @return {@code true} when the snapshot MAC matched (or was skipped),
+     *         {@code false} when the snapshot MAC mismatched and the collection should be flagged
      * @throws WhatsAppWebAppStateSyncException.PatchMacMismatch if the wire patch MAC does not match
+     * @throws WhatsAppWebAppStateSyncException.UnexpectedError  if the patch lacks a key id or the key has no data
+     * @throws WhatsAppWebAppStateSyncException.MissingKey       if the patch's key id is not in the local store
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTampering", exports = "computeLtHashAndValidatePatch", adaptation = WhatsAppAdaptation.ADAPTED)
     public boolean verifyPatchIntegrity(SyncPatchType collectionName, SyncdPatch patch, byte[] computedLtHash, SequencedCollection<byte[]> patchValueMacs) {
-        if (!store.checkPatchMacs()) { // ADAPTED: Cobalt-specific toggle, no WA Web equivalent
+        if (!store.checkPatchMacs()) {
             return true;
         }
 
-        var keyId = patch.keyId() // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: l = t.keyId, f = l.id
+        var keyId = patch.keyId()
                 .flatMap(KeyId::id);
         if (keyId.isEmpty()) {
             throw new WhatsAppWebAppStateSyncException.UnexpectedError(
@@ -140,7 +172,7 @@ public final class MutationIntegrityVerifier {
             );
         }
 
-        var keyData = store.findWebAppStateKeyById(keyId.get()) // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: getKeyData(f) -> SyncdMissingKeyError
+        var keyData = store.findWebAppStateKeyById(keyId.get())
                 .orElseThrow(() -> new WhatsAppWebAppStateSyncException.MissingKey(keyId.get()))
                 .keyData()
                 .flatMap(AppStateSyncKeyData::keyData)
@@ -149,36 +181,30 @@ public final class MutationIntegrityVerifier {
                         null
                 ));
 
-        long patchVersion = patch.version() // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: _ = t.version
+        long patchVersion = patch.version()
                 .map(version -> version.version().orElse(0L))
                 .orElse(0L);
 
-        try (var keys = MutationKeys.ofSyncKey(keyData)) { // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: generateEncryptionKeys(g)
-            var wireSnapshotMac = patch.snapshotMac().orElse(null); // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: p = t.snapshotMac
+        try (var keys = MutationKeys.ofSyncKey(keyData)) {
+            var wireSnapshotMac = patch.snapshotMac().orElse(null);
 
-            // Step 1: Verify wire patchMac using wire snapshotMac as input (patch MAC first per WA Web)
-            // WAWebSyncdAntiTampering.validatePatchMac (function j/K)
-            var wirePatchMac = patch.patchMac().orElse(null); // WAWebSyncdAntiTampering.computeLtHashAndValidatePatch: m = t.patchMac
+            var wirePatchMac = patch.patchMac().orElse(null);
             if (wirePatchMac != null) {
-                var expectedPatchMac = computePatchMac(keys.patchMacKey(), wireSnapshotMac, patchValueMacs, patchVersion, collectionName); // WAWebSyncdAntiTampering.validatePatchMac: generatePatchMac(n, r, a, l, e)
-                if (!MessageDigest.isEqual(wirePatchMac, expectedPatchMac)) { // WAWebSyncdAntiTampering.validatePatchMac: arrayBuffersEqual(c, t)
-                    throw new WhatsAppWebAppStateSyncException.PatchMacMismatch(collectionName, patchVersion); // WAWebSyncdAntiTampering.validatePatchMac: SyncdFatalError("unable to validate patch mac")
+                var expectedPatchMac = computePatchMac(keys.patchMacKey(), wireSnapshotMac, patchValueMacs, patchVersion, collectionName);
+                if (!MessageDigest.isEqual(wirePatchMac, expectedPatchMac)) {
+                    throw new WhatsAppWebAppStateSyncException.PatchMacMismatch(collectionName, patchVersion);
                 }
             }
 
-            // Step 2: Verify wire snapshotMac against locally computed LT-Hash
-            // WAWebSyncdAntiTampering.validateSnapshotMac (function G) with isSnapshot=false
-            // Per WA Web function G: if the collection is already in mac-mismatch state,
-            // skip the snapshot MAC validation entirely
-            var alreadyInMacMismatch = store.findWebAppState(collectionName).macMismatch(); // WAWebSyncdAntiTampering.validateSnapshotMac: getIsCollectionInMacMismatchFatalInTransaction(e)
-            if (alreadyInMacMismatch) { // WAWebSyncdAntiTampering.validateSnapshotMac: if (E && k) return
+            var alreadyInMacMismatch = store.findWebAppState(collectionName).macMismatch();
+            if (alreadyInMacMismatch) {
                 return true;
             }
 
             if (wireSnapshotMac != null) {
-                var expectedSnapshotMac = computeSnapshotMac(keys.snapshotMacKey(), computedLtHash, patchVersion, collectionName); // WAWebSyncdAntiTampering.validateSnapshotMac: generateSnapshotMac(n, r, u, e)
-                if (!MessageDigest.isEqual(wireSnapshotMac, expectedSnapshotMac)) { // WAWebSyncdAntiTampering.validateSnapshotMac: arrayBuffersEqual(T, t)
-                    return false; // ADAPTED: WAWebSyncdAntiTampering.validateSnapshotMac — non-fatal path: updateIsCollectionInMacMismatchFatalInTransaction
+                var expectedSnapshotMac = computeSnapshotMac(keys.snapshotMacKey(), computedLtHash, patchVersion, collectionName);
+                if (!MessageDigest.isEqual(wireSnapshotMac, expectedSnapshotMac)) {
+                    return false;
                 }
             }
         }
@@ -186,10 +212,10 @@ public final class MutationIntegrityVerifier {
     }
 
     /**
-     * Result of {@link #computeOutgoingSnapshotAndPatchMacs(SecretKeySpec, SecretKeySpec, byte[], SequencedCollection, long, SyncPatchType)}
-     * holding both the snapshot MAC and the patch MAC for an outgoing patch upload.
-     * @param snapshotMac the computed snapshot MAC for the new version
-     * @param patchMac the computed patch MAC chained over the snapshot MAC and value MACs
+     * The paired output of {@link #computeOutgoingSnapshotAndPatchMacs}.
+     *
+     * @param snapshotMac the snapshot MAC over the new LT-Hash and version
+     * @param patchMac    the patch MAC chained over the snapshot MAC and the value MACs
      */
     public record OutgoingMacs(
             byte[] snapshotMac,
@@ -198,24 +224,27 @@ public final class MutationIntegrityVerifier {
     }
 
     /**
-     * Computes the snapshot MAC and patch MAC for an outgoing patch upload.
+     * Computes the snapshot MAC and patch MAC for an outgoing patch envelope.
      *
-     * <p>Matches the WA Web {@code computeOutgoingSnapshotAndPatchMacs} (function X/Y)
-     * which derives the next collection version, invokes the encryption manager to
-     * generate the snapshot MAC over the updated LT-Hash and the version, then
-     * generates the patch MAC chaining the snapshot MAC with the value MACs of the
-     * outgoing mutations.
+     * @apiNote
+     * Called by the outgoing patch builder after the LT-Hash has been
+     * recomputed for the new version. The patch MAC chains over the snapshot
+     * MAC, so callers must use the {@link OutgoingMacs#snapshotMac()} output
+     * (not any pre-existing wire MAC) for the relay to accept the patch.
      *
-     * <p>In Cobalt, the caller ({@code MutationRequestBuilder}) is responsible for
-     * deriving the new version and the updated LT-Hash; this helper centralizes the
-     * two HMAC computations so the pairing is performed in a single location.
-     * @param snapshotMacKey the HMAC key for snapshot MAC
-     * @param patchMacKey the HMAC key for patch MAC
-     * @param newLtHash the computed LT-Hash for the new version
-     * @param valueMacs the individual value MACs from the outgoing mutations
-     * @param newVersion the new collection version after applying this patch
+     * @implNote
+     * This implementation accepts the already-derived MAC keys directly; the
+     * WA Web routine re-derives them via {@code generateEncryptionKeys}
+     * inside the same closure. Holding the keys in the caller avoids a
+     * second HKDF expansion per outgoing patch.
+     *
+     * @param snapshotMacKey the snapshot MAC key
+     * @param patchMacKey    the patch MAC key
+     * @param newLtHash      the LT-Hash for the new version
+     * @param valueMacs      the value MACs from the outgoing mutations, in wire order
+     * @param newVersion     the new collection version
      * @param collectionName the collection type
-     * @return an {@link OutgoingMacs} record containing both the snapshot MAC and patch MAC
+     * @return the paired snapshot and patch MACs
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTampering", exports = "computeOutgoingSnapshotAndPatchMacs", adaptation = WhatsAppAdaptation.ADAPTED)
     public static OutgoingMacs computeOutgoingSnapshotAndPatchMacs(
@@ -226,34 +255,40 @@ public final class MutationIntegrityVerifier {
             long newVersion,
             SyncPatchType collectionName
     ) {
-        var snapshotMac = computeSnapshotMac(snapshotMacKey, newLtHash, newVersion, collectionName); // WAWebSyncdAntiTampering.computeOutgoingSnapshotAndPatchMacs: s.generateSnapshotMac(r, t, a, e)
-        var patchMac = computePatchMac(patchMacKey, snapshotMac, valueMacs, newVersion, collectionName); // WAWebSyncdAntiTampering.computeOutgoingSnapshotAndPatchMacs: s.generatePatchMac(r, u, n.map(e => e.valueMac), a, e)
-        return new OutgoingMacs(snapshotMac, patchMac); // WAWebSyncdAntiTampering.computeOutgoingSnapshotAndPatchMacs: return {snapshotMac: u, patchMac: c}
+        var snapshotMac = computeSnapshotMac(snapshotMacKey, newLtHash, newVersion, collectionName);
+        var patchMac = computePatchMac(patchMacKey, snapshotMac, valueMacs, newVersion, collectionName);
+        return new OutgoingMacs(snapshotMac, patchMac);
     }
 
     /**
-     * Computes the snapshot MAC.
+     * Computes the snapshot MAC under the snapshot-MAC key.
      *
-     * <p>Formula: {@code HMAC-SHA256(snapshotMacKey, ltHash || version8 || collectionUtf8)}
-     * where {@code version8} is an 8-byte big-endian encoding produced by
-     * {@code WAWebSyncdCryptoUtils.to64BitNetworkOrder} (upper 4 bytes zeroed,
-     * lower 4 bytes are the version as a big-endian uint32).
-     * @param snapshotMacKey the HMAC key for snapshot MAC
-     * @param ltHash the computed LT-Hash
-     * @param version the snapshot or patch version
-     * @param type the collection type
-     * @return the computed snapshot MAC
+     * @apiNote
+     * Formula: {@code HMAC-SHA256(snapshotMacKey, ltHash || version8 || collectionUtf8)}
+     * where {@code version8} is an 8-byte big-endian encoding of the version
+     * (the upper 4 bytes are zero in practice because versions are unsigned
+     * 32-bit counters).
+     *
+     * @implNote
+     * This implementation emits the 8 version bytes inline rather than
+     * allocating a temporary buffer. The shift sequence reproduces
+     * {@code WAWebSyncdCryptoUtils.to64BitNetworkOrder} byte for byte.
+     *
+     * @param snapshotMacKey the snapshot MAC key
+     * @param ltHash         the LT-Hash to authenticate
+     * @param version        the collection version
+     * @param type           the collection type
+     * @return the 32-byte MAC
+     * @throws WhatsAppWebAppStateSyncException.MacComputationFailed if the JCE HMAC primitive fails
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdEncryptionManager", exports = "generateSnapshotMac", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] computeSnapshotMac(SecretKeySpec snapshotMacKey, byte[] ltHash, long version, SyncPatchType type) {
         try {
-            var mac = Mac.getInstance("HmacSHA256"); // WAWebSyncdEncryptionManager: hmacSha256(snapshotMacKey, ...)
-            mac.init(snapshotMacKey); // WAWebSyncdEncryptionManager: a.snapshotMacKey
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(snapshotMacKey);
 
-            mac.update(ltHash); // WAWebSyncdEncryptionManager: combine([t, ...]) — ltHash first
+            mac.update(ltHash);
 
-            // Equivalent to: mac.update(SyncKeyUtils.to64BitNetworkOrder(version));
-            // WAWebSyncdCryptoUtils.to64BitNetworkOrder: 8 bytes, upper 4 zeroed, lower 4 big-endian uint32
             mac.update((byte) (version >> 56));
             mac.update((byte) (version >> 48));
             mac.update((byte) (version >> 40));
@@ -263,7 +298,7 @@ public final class MutationIntegrityVerifier {
             mac.update((byte) (version >> 8));
             mac.update((byte) version);
 
-            mac.update(type.toBytes()); // WAWebSyncdEncryptionManager: toUtf8(collectionName).buffer
+            mac.update(type.toBytes());
 
             return mac.doFinal();
         } catch (GeneralSecurityException exception) {
@@ -272,36 +307,43 @@ public final class MutationIntegrityVerifier {
     }
 
     /**
-     * Computes the patch MAC.
+     * Computes the patch MAC under the patch-MAC key.
      *
-     * <p>Formula: {@code HMAC-SHA256(patchMacKey, snapshotMac || valueMac1 || ... || valueMacN || version8 || collectionUtf8)}
-     * where {@code version8} is an 8-byte big-endian encoding produced by
-     * {@code WAWebSyncdCryptoUtils.to64BitNetworkOrder}.
-     * @param patchMacKey the HMAC key for patch MAC
-     * @param snapshotMac the snapshot MAC (may be {@code null})
-     * @param valueMacs the individual value MACs from mutations
-     * @param version the patch version
-     * @param type the collection type
-     * @return the computed patch MAC
+     * @apiNote
+     * Formula: {@code HMAC-SHA256(patchMacKey, snapshotMac || valueMac1 || ... || valueMacN || version8 || collectionUtf8)}.
+     * The patch MAC therefore depends on the snapshot MAC, which is what
+     * binds the per-mutation value MACs and the collection-level LT-Hash
+     * digest together into a single per-version authenticator.
+     *
+     * @implNote
+     * This implementation tolerates a {@code null} {@code snapshotMac} by
+     * skipping its contribution to the HMAC. WA Web always supplies the
+     * wire snapshot MAC; the null branch exists for the very first patch
+     * on a fresh collection and for unit tests that exercise the formula
+     * without a paired snapshot.
+     *
+     * @param patchMacKey the patch MAC key
+     * @param snapshotMac the snapshot MAC, or {@code null} to omit
+     * @param valueMacs   the per-mutation value MACs, in wire order
+     * @param version     the collection version
+     * @param type        the collection type
+     * @return the 32-byte MAC
+     * @throws WhatsAppWebAppStateSyncException.MacComputationFailed if the JCE HMAC primitive fails
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdEncryptionManager", exports = "generatePatchMac", adaptation = WhatsAppAdaptation.DIRECT)
     public static byte[] computePatchMac(SecretKeySpec patchMacKey, byte[] snapshotMac, SequencedCollection<byte[]> valueMacs, long version, SyncPatchType type) {
         try {
-            var mac = Mac.getInstance("HmacSHA256"); // WAWebSyncdEncryptionManager: hmacSha256(patchMacKey, ...)
-            mac.init(patchMacKey); // WAWebSyncdEncryptionManager: i.patchMacKey
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(patchMacKey);
 
-            // WAWebSyncdEncryptionManager: combine([t].concat(n, [u, s])) — snapshotMac first
             if (snapshotMac != null) {
                 mac.update(snapshotMac);
             }
 
-            // WAWebSyncdEncryptionManager: .concat(n, ...) — individual valueMacs
             for (var valueMac : valueMacs) {
                 mac.update(valueMac);
             }
 
-            // Equivalent to: mac.update(SyncKeyUtils.to64BitNetworkOrder(version));
-            // WAWebSyncdCryptoUtils.to64BitNetworkOrder: 8 bytes, upper 4 zeroed, lower 4 big-endian uint32
             mac.update((byte) (version >> 56));
             mac.update((byte) (version >> 48));
             mac.update((byte) (version >> 40));
@@ -311,7 +353,7 @@ public final class MutationIntegrityVerifier {
             mac.update((byte) (version >> 8));
             mac.update((byte) version);
 
-            mac.update(type.toBytes()); // WAWebSyncdEncryptionManager: toUtf8(collection).buffer
+            mac.update(type.toBytes());
 
             return mac.doFinal();
         } catch (GeneralSecurityException exception) {
@@ -320,91 +362,81 @@ public final class MutationIntegrityVerifier {
     }
 
     /**
-     * Formats an {@code (indexMac, valueMac)} pair as a colon-delimited diagnostic
-     * string, suitable for inclusion in log output.
+     * Formats an {@code (indexMac, valueMac)} pair as a colon-delimited hex string.
      *
-     * <p>Matches the WA Web {@code indexAndValueMacToString} (function O) exported
-     * from {@code WAWebSyncdAntiTampering}:
-     * <pre>{@code
-     * function O(e, t, n) {
-     *   n === void 0 && (n = !0);
-     *   var r = typeof e === "string" ? e : arrayBufferToHexPadded(e);
-     *   var a = typeof t === "string" ? t : arrayBufferToHexPadded(t);
-     *   var i = n ? -16 : 0;
-     *   return r.slice(i) + ":" + a.slice(i);
+     * @apiNote
+     * Diagnostic helper consumed by the collection-handler log statements
+     * that print per-mutation MAC pairs when a patch or snapshot fails to
+     * validate. Not part of the wire-protocol surface. The truncated form
+     * (last 16 hex characters of each side) is WA Web's default and the form
+     * that flows into production log lines.
+     * {@snippet :
+     *     // verbose          = "0102030405060708...:090a0b0c0d0e0f10..."
+     *     // truncated (true) = "0a1b2c3d4e5f6071:1234567890abcdef"
      * }
-     * }</pre>
      *
-     * <p>When {@code truncate} is {@code true} (the WA Web default), each component
-     * is truncated to its last 16 hex characters (the final 8 bytes of the MAC).
-     * When {@code false}, the full hex encodings of both MACs are returned joined
-     * by a colon.
      * @param indexMac the index MAC bytes
      * @param valueMac the value MAC bytes
-     * @param truncate whether to truncate to the last 16 hex characters (WA Web default behavior)
-     * @return the colon-delimited diagnostic string
+     * @param truncate {@code true} to keep only the last 16 hex characters per side
+     * @return the colon-delimited string
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTampering", exports = "indexAndValueMacToString", adaptation = WhatsAppAdaptation.ADAPTED)
     public static String indexAndValueMacToString(byte[] indexMac, byte[] valueMac, boolean truncate) {
-        var indexHex = HexFormat.of().formatHex(indexMac); // WAWebSyncdAntiTampering.indexAndValueMacToString: arrayBufferToHexPadded(e)
-        var valueHex = HexFormat.of().formatHex(valueMac); // WAWebSyncdAntiTampering.indexAndValueMacToString: arrayBufferToHexPadded(t)
-        var indexSlice = truncate && indexHex.length() > 16 // WAWebSyncdAntiTampering.indexAndValueMacToString: i = n ? -16 : 0; r.slice(i)
+        var indexHex = HexFormat.of().formatHex(indexMac);
+        var valueHex = HexFormat.of().formatHex(valueMac);
+        var indexSlice = truncate && indexHex.length() > 16
                 ? indexHex.substring(indexHex.length() - 16)
                 : indexHex;
-        var valueSlice = truncate && valueHex.length() > 16 // WAWebSyncdAntiTampering.indexAndValueMacToString: a.slice(i)
+        var valueSlice = truncate && valueHex.length() > 16
                 ? valueHex.substring(valueHex.length() - 16)
                 : valueHex;
-        return indexSlice + ":" + valueSlice; // WAWebSyncdAntiTampering.indexAndValueMacToString: r.slice(i) + ":" + a.slice(i)
+        return indexSlice + ":" + valueSlice;
     }
 
     /**
-     * Formats an {@code (indexMac, valueMac)} pair using the WA Web default
-     * truncation (last 16 hex characters of each component).
+     * Formats an {@code (indexMac, valueMac)} pair with the WA Web default truncation.
      *
-     * <p>Convenience overload matching the WA Web {@code indexAndValueMacToString(e, t)}
-     * invocation where the {@code n} (truncate) parameter is defaulted to {@code true}.
+     * @apiNote
+     * Convenience overload that pins the {@code truncate} parameter to
+     * {@code true}, matching the WA Web call sites that rely on the
+     * defaulted argument.
+     *
      * @param indexMac the index MAC bytes
      * @param valueMac the value MAC bytes
-     * @return the colon-delimited diagnostic string with 16-character truncation per side
+     * @return the colon-delimited string, truncated to the last 16 hex characters per side
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTampering", exports = "indexAndValueMacToString", adaptation = WhatsAppAdaptation.DIRECT)
     public static String indexAndValueMacToString(byte[] indexMac, byte[] valueMac) {
-        return indexAndValueMacToString(indexMac, valueMac, true); // WAWebSyncdAntiTampering.indexAndValueMacToString: n === void 0 && (n = !0)
+        return indexAndValueMacToString(indexMac, valueMac, true);
     }
 
     /**
-     * The direction of a syncd patch relative to the client.
+     * The direction of a syncd patch relative to this device.
      *
-     * <p>In WhatsApp Web, this enum is passed to the internal {@code computeLtHash}
-     * helper and is used exclusively for diagnostic purposes: it gates the
-     * {@code enable_syncd_debug_data_in_patch} verbose-logging branch and is
-     * embedded in error log messages as {@code direction: ...}. It has no impact
-     * on any computed value (LT-Hash, snapshot MAC, or patch MAC).
+     * @apiNote
+     * Surfaced for parity with WA Web's {@code WAWebSyncdAntiTampering.flow}
+     * enum, which threads through the LT-Hash computation helper purely for
+     * the verbose-logging branch that the {@code enable_syncd_debug_data_in_patch}
+     * AB prop gates. The enum has no effect on any wire value (LT-Hash,
+     * snapshot MAC, or patch MAC); it is kept so callers that want to log
+     * the direction have a typed constant.
      *
-     * <p>In Cobalt, this enum is retained for parity with WA Web but is currently
-     * unused because Cobalt does not re-implement the verbose diagnostic logging
-     * path. {@link #verifyPatchIntegrity} is implicitly the {@link #INCOMING}
-     * direction (matching {@code computeLtHashAndValidatePatch}), and outgoing
-     * MAC computation paths do not call into the direction-aware diagnostic
-     * helper.
+     * @implNote
+     * This implementation does not yet route the direction through to any
+     * diagnostic path; {@link #verifyPatchIntegrity} is implicitly
+     * {@link #INCOMING} and the outgoing MAC helper does not consult this
+     * enum. Future contributors should plumb it through if and when the
+     * Cobalt-side debug-data-in-patch logging is implemented.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTampering.flow")
     public enum SyncdPatchDirection {
         /**
-         * A patch received from the server, applied locally.
-         *
-         * <p>Corresponds to {@code SyncdPatchDirection.Incoming} in WA Web.
-         * Used by {@code computeLtHashAndValidatePatch} when validating
-         * server-sent patches against local state.
+         * A patch the relay sent to this device.
          */
         INCOMING,
 
         /**
-         * A patch produced locally, to be uploaded to the server.
-         *
-         * <p>Corresponds to {@code SyncdPatchDirection.Outgoing} in WA Web.
-         * Enables the {@code enable_syncd_debug_data_in_patch} verbose
-         * logging branch in {@code computeLtHash}.
+         * A patch this device built for upload to the relay.
          */
         OUTGOING
     }

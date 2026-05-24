@@ -12,31 +12,46 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the detail of a business order identified by a message id and a
- * server-issued token.
+ * Outbound MEX request that fetches the detail of a business order.
  *
- * <p>An order is produced when a customer submits an {@code OrderMessage} to
- * a business contact. The business response carries a sensitive token that
- * authenticates subsequent order look-ups. WA Web's
- * {@code WAWebBizQueryOrderJob.queryOrder} routes the request through the
- * GraphQL operation when the GraphQL gate is enabled and falls back to a
- * legacy {@code fb:thrift_iq} IQ otherwise. Cobalt mirrors the GraphQL path
- * and omits the {@code fb:thrift_iq} fallback.
+ * @apiNote Drives the order-detail surface for customers viewing or
+ * interacting with a business order. An order is produced when a customer
+ * submits an {@code OrderMessage} to a business contact; the business reply
+ * carries a sensitive base64 token that authenticates subsequent order
+ * look-ups. Surfaced from
+ * {@code WAWebBizOrderBridge.queryOrder} via
+ * {@code WAWebBizOrderAction.queryOrder}.
+ *
+ * @implNote This implementation only models WA Web's GraphQL path
+ * ({@code WAWebBizQueryOrderJob.queryOrder} when
+ * {@code WAWebBizGatingUtils.graphQLForGetOrderInfoEnabled()} is on). The
+ * legacy {@code fb:thrift_iq} fallback (the {@code WAWap.wap("order", ...)}
+ * Smax IQ) is intentionally not implemented; Cobalt assumes the GraphQL gate
+ * is enabled. Cobalt also omits the {@code direct_connection_encrypted_info}
+ * variable used by the business direct-connection retry loop.
  */
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJob")
 @WhatsAppWebModule(moduleName = "WAWebBizQueryOrderJobQuery.graphql")
 public final class QueryOrderMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebBizQueryOrderJobQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebBizQueryOrderJobQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebBizQueryOrderJobQuery.graphql}. The relay maps this id to
+     * its persisted operation; the GraphQL text is never sent on the wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJobQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "26593811266898374";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJob", exports = "queryOrder",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -50,6 +65,13 @@ public final class QueryOrderMexRequest implements MexOperation.Request.Json {
 
     /**
      * Creates a new order query request.
+     *
+     * @apiNote The {@code userJid} mirrors WA Web's
+     * {@code WAWebUserPrefsMeUser.getMePnUserOrThrow_DO_NOT_USE().toString()}:
+     * it is the logged-in user's phone-number JID stringified, not the
+     * business JID. {@code tokenBase64} is the sensitive token returned by
+     * the business with the order message and must be replayed verbatim;
+     * leaking it lets a third party read the order.
      *
      * @param userJid     the logged-in user JID stringified via
      *                    {@code toString()}, mirroring the WA Web
@@ -71,9 +93,7 @@ public final class QueryOrderMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -81,9 +101,7 @@ public final class QueryOrderMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -91,10 +109,16 @@ public final class QueryOrderMexRequest implements MexOperation.Request.Json {
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp
-     * relay.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter}, mirroring the
+     * {@code {"variables": {"request": {"order": {...}}}}} shape expected by
+     * {@code xwa_checkout_get_order_info}. The token is wrapped in the WA
+     * Web {@code {"sensitive_string_value": ...}} envelope so the relay
+     * scrubs it from server-side logs, and the {@code image_dimensions}
+     * height and width are sent as JSON integers (not strings) matching the
+     * GraphQL {@code Int} type.
      */
     @WhatsAppWebExport(moduleName = "WAWebBizQueryOrderJob", exports = "queryOrder",
             adaptation = WhatsAppAdaptation.ADAPTED)

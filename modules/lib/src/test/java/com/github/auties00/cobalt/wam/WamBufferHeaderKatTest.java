@@ -15,62 +15,55 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
- * Byte-identical agreement tests for the 8-byte WAM buffer header
- * against vectors captured from the live WhatsApp Web bundle's
- * {@code WAWebWamLibContext} module.
+ * Byte-identical KAT for the 8-byte WAM buffer header against vectors
+ * captured from {@code WAWebWamLibContext}.
  *
- * <p>The header layout is fixed:
+ * @apiNote
+ * Pins the on-the-wire layout {@code WamService} produces at the head
+ * of every upload buffer: {@code "WAM"} magic, protocol version,
+ * stream id, little-endian sequence number, channel byte. Vectors live
+ * in {@code fixtures/wam/wam-buffer-headers.json} and pin snapshot
+ * revision {@code 1039260921}. The end-to-end {@code WamService} flush
+ * path that emits this header sits in {@code WamServiceTest}; this
+ * file checks the bytes only.
  *
- * <pre>{@code
- *     bytes 0..2  = "WAM" magic (ASCII)
- *     byte  3     = protocol version (currently 5)
- *     byte  4     = stream id (always 1 for the regular client stream)
- *     bytes 5..6  = sequence number, little-endian uint16
- *     byte  7     = channel byte (0=regular, 1=realtime, 2=private)
- * }</pre>
- *
- * <p>Each fixture row pins the bytes for a specific
- * {@code (channelByte, seqNum)} pair, covering the lower wrap boundary
- * ({@code 0xFFFF -> 1}) and the 256-boundary for big-endian byte
- * ordering bugs.
- *
- * <p>The test reconstructs the header inline using the same primitives
- * {@code WamService.writeHeader} uses (since the production method is
- * private). The end-to-end {@code WamService} path that writes this
- * header during a flush cycle is exercised separately by
- * {@code WamServiceTest}.
- *
- * <p>Vectors live in {@code fixtures/wam/wam-buffer-headers.json}; see
- * {@code tools/web/wam-fixtures/README.md} for the re-capture
- * procedure.
+ * @implNote
+ * Reconstructs the header in-line via {@link DataUtils#putShort} (the
+ * same primitive {@code WamService.writeHeader} uses), because the
+ * production method is private and exercising it from outside the
+ * package would require a permission edit. Vector ordering covers the
+ * {@code 0xFFFF -> 1} lower wrap and the 256-boundary, which are the
+ * two cases a big-endian regression would surface first.
  */
 @DisplayName("WAM buffer header KAT against live WhatsApp Web bundle")
 class WamBufferHeaderKatTest {
     /**
-     * Snapshot revision the vectors were captured against.
+     * The snapshot revision the KAT vectors were captured against;
+     * compared against the fixture header so revision drift fails
+     * loudly.
      */
     private static final long PINNED_SNAPSHOT_REVISION = 1039260921L;
 
     /**
-     * Total header size in bytes.
+     * The fixed 8-byte header length.
      */
     private static final int HEADER_SIZE = 8;
 
     /**
-     * Header magic bytes.
+     * The {@code "WAM"} magic bytes at the start of every buffer.
      */
     private static final byte[] WAM_MAGIC = {'W', 'A', 'M'};
 
     /**
-     * Wire-format protocol version. Pinned to the
-     * {@code WAM_PROTOCOL_VERSION} value captured at fixture creation;
-     * the fixture header's {@code protocolVersion} entry is asserted
-     * against this constant before per-vector tests run.
+     * The wire protocol version pinned at fixture capture; cross-checked
+     * against the fixture's own {@code protocolVersion} entry before
+     * any vector runs so a server-side bump fails loudly rather than
+     * surfacing as a per-vector byte mismatch.
      */
     private static final int PROTOCOL_VERSION = 5;
 
     /**
-     * Stream id, always {@code 1} for the regular client stream.
+     * The stream id; always {@code 1} for the regular client stream.
      */
     private static final int STREAM_ID = 1;
 
@@ -100,8 +93,9 @@ class WamBufferHeaderKatTest {
     }
 
     /**
-     * Builds the 8-byte header for the captured (channelByte, seqNum)
-     * pair and asserts the produced hex matches the captured bytes.
+     * Builds the 8-byte header for the captured
+     * (channelByte, seqNum) pair and asserts the produced hex matches
+     * the captured bytes.
      *
      * @param vector the captured header descriptor
      */

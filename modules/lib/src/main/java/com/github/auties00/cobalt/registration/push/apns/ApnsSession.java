@@ -5,53 +5,82 @@ import it.auties.protobuf.annotation.ProtobufProperty;
 import it.auties.protobuf.model.ProtobufType;
 
 /**
- * Full serializable state of an {@link ApnsClient}: the immutable
- * {@link ApnsConfig} plus the device-bound credentials accumulated
- * across the activation pipeline. Two of these credentials persist for
- * roughly three years (the keypair and the {@code deviceCertificate}
- * Apple signs against it). The third ({@code authToken}) is only
- * meaningful while a courier connection is alive.
+ * The full serialisable state of an {@link ApnsClient}.
  *
- * <p>This is the only class the caller needs to round-trip via
+ * @apiNote
+ * Carries the immutable {@link ApnsConfig} plus the device-bound
+ * credentials accumulated by the activation pipeline. Two of the
+ * credentials persist for roughly three years (the RSA keypair and
+ * the {@code deviceCertificate} Apple signs against it); the third
+ * piece of state held by a running client (the courier auth token)
+ * is rebuilt every connection and is not part of this serialisable
+ * snapshot. This is the only class the caller needs to round-trip via
  * {@link ApnsClient#getSession()} /
- * {@link ApnsClient#loadSession(ApnsSession)} to keep the same APNS
- * push token across process restarts without re-running the
- * activation flow.
+ * {@link ApnsClient#loadSession(ApnsSession)} to keep the same device
+ * identity across process restarts without re-running the activation
+ * flow.
  */
 @ProtobufMessage(name = "ApnsSession")
 public final class ApnsSession {
     /**
-     * The configuration the session was created with. Bundled in the
-     * serialized output so a saved session loads back without the
-     * caller having to remember which {@link ApnsConfig} it was
-     * originally created against.
+     * The configuration this session was created with.
+     *
+     * @apiNote
+     * Bundled in the serialised output so a saved session loads back
+     * without the caller having to remember which {@link ApnsConfig}
+     * it was originally created against.
      */
     @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
     ApnsConfig config;
 
     /**
-     * PKCS#8-encoded RSA private key (DER). Generated once and bound to
-     * {@link #deviceCertificate}. Empty until activation succeeds.
+     * The PKCS#8-encoded RSA private key (DER).
+     *
+     * @apiNote
+     * Generated once and bound to {@link #deviceCertificate}; empty
+     * until activation succeeds.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.BYTES)
     byte[] privateKeyDer;
 
     /**
-     * X.509-encoded RSA public key (DER), the {@code SubjectPublicKeyInfo}
-     * that goes into the CSR. Empty until activation succeeds.
+     * The X.509-encoded RSA public key (DER), the
+     * {@code SubjectPublicKeyInfo} that goes into the activation CSR.
+     *
+     * @apiNote
+     * Empty until activation succeeds.
      */
     @ProtobufProperty(index = 3, type = ProtobufType.BYTES)
     byte[] publicKeyDer;
 
     /**
-     * DER-encoded {@code DeviceCertificate} returned by
-     * {@code albert.apple.com} after a successful activation. Valid
-     * for ~3 years, after which {@link ApnsClient} must re-run the
-     * activation flow. Empty until activation succeeds.
+     * The DER-encoded device certificate returned by
+     * {@code albert.apple.com} after a successful activation.
+     *
+     * @apiNote
+     * Valid for roughly three years; once it expires
+     * {@link ApnsClient} must re-run the activation flow against
+     * {@code albert.apple.com} to obtain a fresh cert. Empty until
+     * activation succeeds.
      */
     @ProtobufProperty(index = 4, type = ProtobufType.BYTES)
     byte[] deviceCertificate;
 
+    /**
+     * Package-private constructor for the protobuf builder.
+     *
+     * @apiNote
+     * Reachable by the generated {@code ApnsSessionBuilder} and by
+     * {@link #newSession(ApnsConfig)}; normalises {@code null} byte
+     * arrays into empty arrays so the activation flow can probe
+     * "credential present" via {@code length > 0}.
+     *
+     * @param config            the topic-list configuration
+     * @param privateKeyDer     the PKCS#8 DER bytes, or {@code null}
+     * @param publicKeyDer      the X.509 DER bytes, or {@code null}
+     * @param deviceCertificate the device certificate DER bytes, or
+     *                          {@code null}
+     */
     ApnsSession(ApnsConfig config, byte[] privateKeyDer, byte[] publicKeyDer, byte[] deviceCertificate) {
         this.config = config;
         this.privateKeyDer = privateKeyDer == null ? new byte[0] : privateKeyDer;
@@ -60,9 +89,12 @@ public final class ApnsSession {
     }
 
     /**
-     * Creates an empty session bound to {@code config}. Every
-     * credential field is zero-length. Used by
-     * {@link ApnsClient#authenticate} on first run.
+     * Creates an empty session bound to a configuration.
+     *
+     * @apiNote
+     * Used by {@link ApnsClient#authenticate} on a first-run
+     * client, where every credential field is zero-length until the
+     * activation flow populates them.
      *
      * @param config the topic list to bind the new session to
      * @return a fresh credential-less session
@@ -71,30 +103,80 @@ public final class ApnsSession {
         return new ApnsSession(config, new byte[0], new byte[0], new byte[0]);
     }
 
+    /**
+     * Returns the bound configuration.
+     *
+     * @return the configuration this session was created with
+     */
     public ApnsConfig config() {
         return config;
     }
 
+    /**
+     * Returns the PKCS#8-encoded RSA private key bytes.
+     *
+     * @return the private key DER bytes, or a zero-length array
+     *         before activation has populated them
+     */
     public byte[] privateKeyDer() {
         return privateKeyDer;
     }
 
+    /**
+     * Returns the X.509-encoded RSA public key bytes.
+     *
+     * @return the public key DER bytes, or a zero-length array
+     *         before activation has populated them
+     */
     public byte[] publicKeyDer() {
         return publicKeyDer;
     }
 
+    /**
+     * Returns the device certificate bytes.
+     *
+     * @return the device certificate DER bytes, or a zero-length
+     *         array before activation has populated them
+     */
     public byte[] deviceCertificate() {
         return deviceCertificate;
     }
 
+    /**
+     * Stores the freshly generated private key bytes.
+     *
+     * @apiNote
+     * Called by {@code ApnsActivation.activate} on a successful
+     * round-trip; not part of the public API.
+     *
+     * @param privateKeyDer the PKCS#8 DER bytes
+     */
     void setPrivateKeyDer(byte[] privateKeyDer) {
         this.privateKeyDer = privateKeyDer;
     }
 
+    /**
+     * Stores the freshly generated public key bytes.
+     *
+     * @apiNote
+     * Called by {@code ApnsActivation.activate} on a successful
+     * round-trip; not part of the public API.
+     *
+     * @param publicKeyDer the X.509 DER bytes
+     */
     void setPublicKeyDer(byte[] publicKeyDer) {
         this.publicKeyDer = publicKeyDer;
     }
 
+    /**
+     * Stores the Apple-signed device certificate bytes.
+     *
+     * @apiNote
+     * Called by {@code ApnsActivation.activate} on a successful
+     * round-trip; not part of the public API.
+     *
+     * @param deviceCertificate the device certificate DER bytes
+     */
     void setDeviceCertificate(byte[] deviceCertificate) {
         this.deviceCertificate = deviceCertificate;
     }

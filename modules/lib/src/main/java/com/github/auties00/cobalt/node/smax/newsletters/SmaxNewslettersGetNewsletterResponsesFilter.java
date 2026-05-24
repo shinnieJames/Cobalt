@@ -15,24 +15,46 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed disjunction over the optional contacts/replied filter, at
- * most one is applied per request.
+ * Sealed disjunction over the at-most-one filter applied to a
+ * {@link SmaxNewslettersGetNewsletterResponsesRequest}.
+ *
+ * @apiNote
+ * Pick this when narrowing the question-responses slice; the variant
+ * maps onto WA Web's {@code ResponsesFilterType.CONTACTS} or
+ * {@code ResponsesFilterType.REPLIED} toggle as wired through
+ * {@code WAWebNewsletterGetQuestionResponsesQuery.getQuestionResponsesQuery}.
+ * The two variants are mutually exclusive and the parameter remains
+ * optional; omit it entirely to disable filtering.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersContactsOrRepliedFilterMixinMixinGroup")
 public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits SmaxNewslettersGetNewsletterResponsesFilter.Contacts, SmaxNewslettersGetNewsletterResponsesFilter.Replied {
 
     /**
-     * Filters the response slice to entries authored by the user's
-     * address-book contacts.
+     * The variant that restricts the slice to address-book contacts.
+     *
+     * @apiNote
+     * Surfaces the WA Web "contacts" toggle on the question-responses
+     * UI, materialised on the wire as an empty {@code <contacts/>}
+     * marker inside the {@code <filters>} block.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersContactsFilterMixinMixin")
     final class Contacts implements SmaxNewslettersGetNewsletterResponsesFilter {
         /**
-         * Constructs a new contacts filter.
+         * Constructs the contacts filter marker.
+         *
+         * @apiNote
+         * Carries no data; the variant identity alone selects the
+         * filter on the wire.
          */
         public Contacts() {
         }
 
+        /**
+         * Compares two markers for type identity.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Contacts}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -41,11 +63,21 @@ public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits Smax
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a stable hash code for the marker.
+         *
+         * @return the class's {@link Object#hashCode()}
+         */
         @Override
         public int hashCode() {
             return Contacts.class.hashCode();
         }
 
+        /**
+         * Returns a debug representation of the marker.
+         *
+         * @return a record-like rendering of this variant
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterResponsesFilter.Contacts[]";
@@ -53,17 +85,32 @@ public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits Smax
     }
 
     /**
-     * Filters the response slice to entries the question owner has
-     * already explicitly replied to.
+     * The variant that restricts the slice to entries the question
+     * owner has explicitly replied to.
+     *
+     * @apiNote
+     * Surfaces the WA Web "replied" toggle on the question-responses
+     * UI, materialised on the wire as an empty {@code <replied/>}
+     * marker inside the {@code <filters>} block.
      */
     @WhatsAppWebModule(moduleName = "WASmaxOutNewslettersRepliedFilterMixinMixin")
     final class Replied implements SmaxNewslettersGetNewsletterResponsesFilter {
         /**
-         * Constructs a new replied filter.
+         * Constructs the replied filter marker.
+         *
+         * @apiNote
+         * Carries no data; the variant identity alone selects the
+         * filter on the wire.
          */
         public Replied() {
         }
 
+        /**
+         * Compares two markers for type identity.
+         *
+         * @param obj the reference object to compare against
+         * @return {@code true} when {@code obj} is a {@link Replied}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -72,11 +119,21 @@ public sealed interface SmaxNewslettersGetNewsletterResponsesFilter permits Smax
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a stable hash code for the marker.
+         *
+         * @return the class's {@link Object#hashCode()}
+         */
         @Override
         public int hashCode() {
             return Replied.class.hashCode();
         }
 
+        /**
+         * Returns a debug representation of the marker.
+         *
+         * @return a record-like rendering of this variant
+         */
         @Override
         public String toString() {
             return "SmaxNewslettersGetNewsletterResponsesFilter.Replied[]";

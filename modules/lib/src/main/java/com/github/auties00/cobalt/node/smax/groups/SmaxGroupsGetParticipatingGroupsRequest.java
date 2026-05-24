@@ -13,30 +13,34 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="w:g2" type="get" to="g.us">} stanza that lists every group the caller participates in.
+ *
+ * @apiNote Drives the {@code WAWebGroupQueryJob.queryGroups} bulk-loader fired after the admin-ship cache is cleared,
+ * for example on login or on group-server-side cache invalidation. The two flags toggle the per-group projection:
+ * {@link #includeParticipants()} asks the relay to inline each group's participant list, {@link #includeDescription()}
+ * asks for the per-group description body.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetParticipatingGroupsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
 public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperation.Request {
     /**
-     * When {@code true}, the relay includes a per-group participant
-     * list inside each {@code <group>} child.
+     * Whether the relay should include a per-group participant list inside each {@code <group/>} child.
      */
     private final boolean includeParticipants;
 
     /**
-     * When {@code true}, the relay includes the per-group description
-     * inside each {@code <group>} child.
+     * Whether the relay should include the per-group description inside each {@code <group/>} child.
      */
     private final boolean includeDescription;
 
     /**
-     * Constructs a request.
+     * Constructs a request with explicit projection flags.
      *
-     * @param includeParticipants {@code true} to include participants
-     *                            in the projection
-     * @param includeDescription  {@code true} to include the
-     *                            description in the projection
+     * @apiNote Passing {@code includeParticipants=true} and {@code includeDescription=true} matches the WA Web bulk
+     * loader's default; passing both as {@code false} retrieves only the minimal {@code <group jid .../>} envelope.
+     *
+     * @param includeParticipants {@code true} to inline per-group participant lists
+     * @param includeDescription  {@code true} to inline per-group description bodies
      */
     public SmaxGroupsGetParticipatingGroupsRequest(boolean includeParticipants, boolean includeDescription) {
         this.includeParticipants = includeParticipants;
@@ -46,26 +50,37 @@ public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperat
     /**
      * Returns whether participants are included.
      *
-     * @return the flag
+     * @return {@code true} when each group's participant list should be inlined
      */
     public boolean includeParticipants() {
         return includeParticipants;
     }
 
     /**
-     * Returns whether description is included.
+     * Returns whether descriptions are included.
      *
-     * @return the flag
+     * @return {@code true} when each group's description body should be inlined
      */
     public boolean includeDescription() {
         return includeDescription;
     }
 
     /**
-     * Builds the outbound IQ stanza.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         {@code <participating/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="g.us" type="get">
+     *         <participating>
+     *             <participants/>
+     *             <description/>
+     *         </participating>
+     *     </iq>
+     * }
+     * where the {@code <participants/>} and {@code <description/>} markers are present only when the matching flag is
+     * {@code true}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <participating/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetParticipatingGroupsRequest",
@@ -86,6 +101,12 @@ public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperat
                 .content(participatingBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetParticipatingGroupsRequest} with identical fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -99,11 +120,21 @@ public final class SmaxGroupsGetParticipatingGroupsRequest implements SmaxOperat
                 && this.includeDescription == that.includeDescription;
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(includeParticipants, includeDescription);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetParticipatingGroupsRequest[includeParticipants=" + includeParticipants

@@ -12,19 +12,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Tests for {@link BotMessageSecret}, mirroring
- * {@code WAWebBotMessageSecret.genBotMsgSecretFromMsgSecret}.
+ * Structural tests for {@link BotMessageSecret#derive(byte[])}.
  *
- * <p>The derivation is deterministic HKDF-SHA256 with a null salt and the
- * fixed info string {@code "Bot Message"}, so it is a pure function of the
- * input {@code messageSecret} and a perfect byte-equality oracle target.
- * These tests pin the structural contract (32-byte output, determinism,
- * input-sensitivity); the byte-equal WA Web KAT is captured separately
- * once the live corpus lands.
+ * @apiNote
+ * Pins the structural contract that backs WA Web's
+ * {@code WAWebBotMessageSecret.genBotMsgSecretFromMsgSecret}: deterministic
+ * 32-byte output keyed by the supplied {@code messageSecret} via HKDF-SHA-256
+ * with a null salt and the fixed info string {@code "Bot Message"}. Drift on
+ * any of those axes silently breaks the bot encryption envelope.
+ * @implNote
+ * The byte-equal known-answer test against WA Web is captured separately once
+ * the live corpus lands; these tests assert structure (length, determinism,
+ * input-sensitivity, no-mutation, arbitrary-IKM length) rather than a fixed
+ * output vector.
  */
 @DisplayName("BotMessageSecret")
 class BotMessageSecretTest {
 
+    /**
+     * Verifies that {@link BotMessageSecret#derive(byte[])} produces exactly
+     * 32 bytes.
+     */
     @Test
     @DisplayName("derive produces exactly 32 bytes")
     void derivedLength() throws GeneralSecurityException {
@@ -33,8 +41,12 @@ class BotMessageSecretTest {
         assertEquals(32, derived.length, "HKDF expand length is the bot-secret slot size");
     }
 
+    /**
+     * Verifies that two calls with the same input produce byte-identical
+     * output.
+     */
     @Test
-    @DisplayName("derive is deterministic — same input → same output")
+    @DisplayName("derive is deterministic: same input yields same output")
     void deterministic() throws GeneralSecurityException {
         var secret = new byte[]{
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
@@ -44,21 +56,29 @@ class BotMessageSecretTest {
         var first = BotMessageSecret.derive(secret);
         var second = BotMessageSecret.derive(secret);
         assertArrayEquals(first, second,
-                "HKDF must produce identical output for the same input — derivation is stateless");
+                "HKDF must produce identical output for the same input (derivation is stateless)");
     }
 
+    /**
+     * Verifies that a one-bit input difference propagates across every
+     * output byte.
+     */
     @Test
-    @DisplayName("derive is input-sensitive — different inputs → different outputs")
+    @DisplayName("derive is input-sensitive: different inputs yield different outputs")
     void inputSensitive() throws GeneralSecurityException {
         var secretA = new byte[32];
         var secretB = new byte[32];
-        secretB[0] = 1; // one-bit-of-difference input
+        secretB[0] = 1;
         var derivedA = BotMessageSecret.derive(secretA);
         var derivedB = BotMessageSecret.derive(secretB);
         assertFalse(Arrays.equals(derivedA, derivedB),
                 "HKDF-SHA256 must propagate input differences through the full 32-byte output");
     }
 
+    /**
+     * Verifies that {@link BotMessageSecret#derive(byte[])} does not mutate
+     * the caller's buffer.
+     */
     @Test
     @DisplayName("derive does not mutate the input secret")
     void inputIsNotMutated() throws GeneralSecurityException {
@@ -72,11 +92,17 @@ class BotMessageSecretTest {
         assertArrayEquals(snapshot, secret, "derive must not modify the caller's secret buffer");
     }
 
+    /**
+     * Verifies that HKDF accepts inputs of any non-null length.
+     *
+     * @implNote
+     * HKDF-Extract collapses arbitrary IKM to a fixed-length PRK, so the
+     * derivation must work for any non-null secret length even though WA Web
+     * always passes 32 bytes.
+     */
     @Test
-    @DisplayName("derive accepts non-32-byte secrets — HKDF is length-agnostic")
+    @DisplayName("derive accepts non-32-byte secrets (HKDF is length-agnostic)")
     void acceptsArbitraryLengthSecret() throws GeneralSecurityException {
-        // HKDF-Extract collapses arbitrary IKM to a fixed-length PRK, so the
-        // derivation works for any non-null secret length.
         var shortSecret = new byte[]{1, 2, 3};
         var longSecret = new byte[256];
         for (var i = 0; i < longSecret.length; i++) {
@@ -86,6 +112,10 @@ class BotMessageSecretTest {
         assertEquals(32, BotMessageSecret.derive(longSecret).length);
     }
 
+    /**
+     * Verifies that a {@code null} secret throws
+     * {@link NullPointerException}.
+     */
     @Test
     @DisplayName("null secret throws NullPointerException")
     void nullSecretThrows() {

@@ -18,41 +18,58 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Fetches the list of pending newsletter admin invites awaiting the user's acceptance.
+ * Builds the MEX request that lists pending admin invites awaiting
+ * acceptance on a newsletter.
  *
- * <p>Users may be invited to administer multiple newsletters; this query returns all invitations that are still pending so the client can surface them in the notifications surface.
+ * @apiNote
+ * Drives the admin-management surface where the owner inspects the users
+ * who have been invited as admins but have not yet accepted; WA Web
+ * additionally gates the call behind
+ * {@code WAWebNewsletterGatingUtils.isNewsletterCreationEnabled()} and
+ * skips it when newsletter creation is disabled.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchNewsletterPendingInvitesJob")
 public final class FetchNewsletterPendingInvitesMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code FetchNewsletterPendingInvites} compiled query.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexFetchNewsletterPendingInvitesJobQuery.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child.
      */
     public static final String QUERY_ID = "9783111038412085";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexFetchNewsletterPendingInvites
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this query.
      */
     public static final String OPERATION_NAME = "mexFetchNewsletterPendingInvites";
+
+    /**
+     * The newsletter Jid whose pending admin invites are being requested.
+     */
     private final String newsletterId;
 
     /**
-     * Creates a request with the given variables.
+     * Constructs a request for the pending admin invites of the given
+     * newsletter.
      *
-     * @param newsletterId the newsletter id
+     * @apiNote
+     * Pass {@code null} to omit the {@code newsletter_id} variable from the
+     * payload entirely.
+     *
+     * @param newsletterId the newsletter Jid, may be {@code null}
      */
     public FetchNewsletterPendingInvitesMexRequest(String newsletterId) {
         this.newsletterId = newsletterId;
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}.
      */
     @Override
     public String id() {
@@ -60,10 +77,10 @@ public final class FetchNewsletterPendingInvitesMexRequest implements MexOperati
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}.
      */
     @Override
     public String name() {
@@ -71,11 +88,21 @@ public final class FetchNewsletterPendingInvitesMexRequest implements MexOperati
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder}.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the {@code {variables: {newsletter_id}}} payload; the
+     * {@code newsletter_id} variable is omitted when the field is
+     * {@code null}.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and wraps any {@link IOException} from the
+     * in-memory writer in an {@link UncheckedIOException}.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchNewsletterPendingInvitesJob", exports = "mexFetchNewsletterPendingInvites",
             adaptation = WhatsAppAdaptation.ADAPTED)

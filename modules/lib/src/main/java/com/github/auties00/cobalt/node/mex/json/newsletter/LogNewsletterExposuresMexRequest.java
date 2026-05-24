@@ -14,32 +14,62 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Logs a batch of newsletter exposure events for attribution and ranking.
+ * Builds the MEX request that uploads a batch of newsletter capability
+ * exposure events.
  *
- * <p>When a user browses newsletters the client records lightweight exposure events which are later flushed to the server via this mutation. The backend uses the exposure signal to improve directory ranking.
+ * @apiNote
+ * Drives the low-priority background job surfaced by
+ * {@code WAWebNewsletterLogExposuresJob.logNewsletterExposures}: as the
+ * client renders newsletter UI surfaces it queues one
+ * {@link NewsletterExposure} per (newsletter Jid, capability) pair that
+ * the user was exposed to, then flushes the batch through this mutation
+ * so the relay can drive directory ranking and feature-rollout analytics.
+ * Build via the constructor with a non-null (possibly empty) batch and
+ * submit through the MEX IQ dispatcher; the relay does not return data of
+ * interest, so the {@link LogNewsletterExposuresMexResponse} is a marker.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexLogNewsletterExposuresJob")
 public final class LogNewsletterExposuresMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric GraphQL query identifier assigned by the WhatsApp relay
-     * to the {@code LogNewsletterExposures} compiled mutation.
+     * The compiled persisted-query identifier of
+     * {@code WAWebMexLogNewsletterExposuresJobMutation.graphql} on the
+     * WhatsApp relay.
+     *
+     * @apiNote
+     * Sent as the {@code id} attribute of the outgoing {@code <query>} child;
+     * the WhatsApp relay refuses requests whose persisted-query id is unknown.
      */
     public static final String QUERY_ID = "25260800823586918";
 
     /**
-     * The GraphQL operation name reported by WA Web's
-     * {@code MexPerfTracker} when dispatching this query, mirroring the
-     * {@code params.name} value of the compiled mexLogNewsletterExposures
-     * operation.
+     * The GraphQL operation name reported by WA Web's {@code MexPerfTracker}
+     * for this mutation.
+     *
+     * @apiNote
+     * Reported to observability sinks that key telemetry on the operation
+     * name; mirrors the export name exposed by
+     * {@code WAWebMexLogNewsletterExposuresJob}.
      */
     public static final String OPERATION_NAME = "mexLogNewsletterExposures";
+
+    /**
+     * The defensive copy of the exposure batch this request will flush.
+     */
     private final List<NewsletterExposure> exposures;
 
     /**
-     * Constructs a {@link LogNewsletterExposuresMexRequest} from a batch of exposure entries.
+     * Constructs a request that uploads the given batch of exposures.
      *
-     * @param exposures the batch of exposure entries; must not be
-     *                  {@code null}, but may be empty
+     * @apiNote
+     * Each {@link NewsletterExposure} pairs a newsletter Jid with a
+     * capability identifier (mirroring WA Web's
+     * {@code WAWebNewsletterQueryUtils.getNewsletterCapabilityFromEnum}
+     * output). An empty list is accepted and produces an empty
+     * {@code exposures} array on the wire; a {@code null} list is
+     * rejected so callers cannot silently send malformed batches.
+     *
+     * @param exposures the batch of exposure entries; never {@code null},
+     *                  may be empty
      * @throws NullPointerException if {@code exposures} is {@code null}
      */
     public LogNewsletterExposuresMexRequest(List<NewsletterExposure> exposures) {
@@ -48,10 +78,11 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     }
 
     /**
-     * Returns the compiled GraphQL query identifier projected from
-     * {@link #QUERY_ID}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * @apiNote
+     * Returns {@link #QUERY_ID}, the persisted-query identifier of the
+     * mutation.
      */
     @Override
     public String id() {
@@ -59,10 +90,11 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     }
 
     /**
-     * Returns the GraphQL operation name projected from
-     * {@link #OPERATION_NAME}.
+     * {@inheritDoc}
      *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * @apiNote
+     * Returns {@link #OPERATION_NAME}, the value WA Web's
+     * {@code MexPerfTracker} reports for this mutation.
      */
     @Override
     public String name() {
@@ -70,11 +102,28 @@ public final class LogNewsletterExposuresMexRequest implements MexOperation.Requ
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the
-     * WhatsApp relay.
+     * Serialises this request into a MEX IQ {@link NodeBuilder} ready to be
+     * dispatched through the WhatsApp relay.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * @apiNote
+     * Produces the
+     * {@code {variables: {input: {exposures: [{newsletter_id, capability}, ...]}}}}
+     * payload consumed by the persisted-query identified by
+     * {@link #QUERY_ID}; the {@code newsletter_id} and {@code capability}
+     * fields are written as JSON {@code null} when the underlying
+     * {@link NewsletterExposure} accessor is empty, matching the
+     * defensive shape WA Web emits.
+     *
+     * @implNote
+     * This implementation writes the GraphQL variables directly through
+     * {@link JSONWriter} and delegates IQ envelope construction to
+     * {@link Json#createMexNode(String, String)}; any {@link IOException}
+     * raised by the in-memory writer is wrapped in an
+     * {@link UncheckedIOException} since neither sink can fail in practice.
+     *
+     * @return the {@link NodeBuilder} carrying the IQ envelope and serialised
+     *         GraphQL variables
+     * @throws UncheckedIOException if the underlying writer fails
      */
     @WhatsAppWebExport(moduleName = "WAWebMexLogNewsletterExposuresJob", exports = "mexLogNewsletterExposures",
             adaptation = WhatsAppAdaptation.ADAPTED)

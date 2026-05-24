@@ -14,25 +14,39 @@ import com.github.auties00.cobalt.store.WhatsAppStore;
 import java.time.Instant;
 
 /**
- * Processes incoming plaintext newsletter messages into {@link NewsletterMessageInfo}
- * records.
+ * Inbound receiver that turns a plaintext newsletter {@code <message>} stanza into a
+ * fully populated {@link NewsletterMessageInfo}.
  *
- * <p>Newsletter messages are not end-to-end encrypted: the content is carried as raw
- * protobuf bytes inside a {@code <plaintext>} child of the message node. The stanza
- * also carries a server-assigned {@code server_id}, a timestamp, and an
- * {@code is_sender} attribute indicating whether the current user authored the post.
+ * @apiNote
+ * Selected by {@link MessageReceivingService#process(Node)} whenever the {@code from}
+ * JID belongs to the {@code @newsletter} server; the Channels feature exposes these
+ * posts so the recipient can read them in the Channels tab. Newsletter messages are
+ * not Signal-encrypted so the receiver skips the entire decryption pipeline used by
+ * {@link ChatMessageReceiver}.
+ *
+ * @implNote
+ * This implementation collapses WhatsApp Web's
+ * {@code WAWebHandleNewsletterMsg.default} processor and the
+ * {@code WAWebNewsletterMsgParser} parser into a single member-by-member parse against
+ * the {@link Node} attributes; the WA Web path also runs the message through
+ * {@code WAWebNewsletterMsgProcessor.preprocessNewsletterMsg} for add-on votes and
+ * orphan detection, neither of which Cobalt currently models.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleNewsletterMsg")
 final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageInfo> {
     /**
-     * Logger for newsletter message processing diagnostics.
+     * Logger used for the receive-completion trace and the missing-plaintext skip
+     * branch.
      */
     private static final System.Logger LOGGER = System.getLogger(NewsletterMessageReceiver.class.getName());
 
     /**
-     * Constructs a new newsletter message receiver.
+     * Constructs a newsletter receiver bound to the given store.
      *
-     * @param store the central session data store
+     * @apiNote
+     * Invoked by {@link MessageReceivingService}; never called by embedders directly.
+     *
+     * @param store the session store used by the parent {@link MessageReceiver}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleNewsletterMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -41,17 +55,20 @@ final class NewsletterMessageReceiver extends MessageReceiver<NewsletterMessageI
     }
 
     /**
-     * Processes an incoming plaintext newsletter message node.
+     * {@inheritDoc}
      *
-     * <p>Extracts {@code id}, {@code t} (timestamp), {@code server_id}, and
-     * {@code is_sender} attributes; reads the raw protobuf bytes from the
-     * {@code <plaintext>} child; decodes them into a {@code MessageContainer}; and
-     * assembles a {@link NewsletterMessageInfo} with a {@code DELIVERED} status.
+     * @apiNote
+     * Reads {@code id}, {@code t} (seconds since epoch), {@code server_id}, and the
+     * optional {@code is_sender} attribute from the stanza, then decodes the protobuf
+     * carried inside the {@code <plaintext>} child. Returns {@code null} when the
+     * {@code <plaintext>} child is missing or empty; the orchestrator treats this as
+     * a silent drop.
      *
-     * @param node    the raw {@code <message>} node
-     * @param fromJid the newsletter JID from the {@code from} attribute
-     * @return the processed newsletter message info, or {@code null} if the plaintext
-     *         content is missing or cannot be decoded
+     * @implNote
+     * This implementation always stamps the resulting
+     * {@link NewsletterMessageInfo#status()} as
+     * {@link MessageStatus#DELIVERED}; newsletter posts do not carry an
+     * end-to-end-ack contract so the status is fixed at receive time.
      */
     @WhatsAppWebExport(moduleName = "WAWebHandleNewsletterMsg", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)

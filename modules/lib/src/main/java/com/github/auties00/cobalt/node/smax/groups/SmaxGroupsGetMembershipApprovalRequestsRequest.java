@@ -15,7 +15,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant.
+ * The outbound {@code <iq xmlns="w:g2" type="get">} stanza that lists the pending membership-approval requests for a
+ * group.
+ *
+ * @apiNote Drives the {@code WAWebGroupGetMembershipApprovalRequestsJob.queryAndUpdateGroupMembershipApprovalRequests}
+ * flow that powers the "Pending requests" admin surface. The default constructor sends the bare query; the rich
+ * constructor sets {@link #requestorFetch()} to ask the relay to populate the {@code requestor}, {@code requestor_pn},
+ * and {@code requestor_username} attributes on each entry (used when admins triage community-link join requests).
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetMembershipApprovalRequestsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetGroupMixin")
@@ -23,26 +29,24 @@ import java.util.Optional;
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetMembershipApprovalRequestsRequestorFetchMixin")
 public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements SmaxOperation.Request {
     /**
-     * The group whose pending approval requests are being queried.
+     * The group {@link Jid} whose pending approval queue is being queried; surfaced on the IQ's {@code to} attribute.
      */
     private final Jid groupJid;
 
     /**
-     * When {@code true}, asks the relay to populate the
-     * {@code requestor}/{@code requestor_pn}/{@code requestor_username}
-     * attributes on every {@code <membership_approval_request>}
-     * entry — the "rich" projection used by sub-group admins
-     * handling community-link join requests.
+     * Whether the relay should populate the rich {@code requestor}/{@code requestor_pn}/{@code requestor_username}
+     * projection on each {@code <membership_approval_request>} child.
      */
     private final boolean requestorFetch;
 
     /**
-     * Constructs a request without the {@code requestor_fetch}
-     * projection.
+     * Constructs a request without the rich requestor projection.
      *
-     * @param groupJid the group JID; never {@code null}
-     * @throws NullPointerException if {@code groupJid} is
-     *                              {@code null}
+     * @apiNote Convenience overload for the common case where the admin UI only needs the requesting user JID and
+     * timestamp.
+     *
+     * @param groupJid the group {@link Jid}; never {@code null}
+     * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetMembershipApprovalRequestsRequest(Jid groupJid) {
         this(groupJid, false);
@@ -51,11 +55,13 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
     /**
      * Constructs a fully-parametrised request.
      *
-     * @param groupJid       the group JID; never {@code null}
-     * @param requestorFetch whether the relay should populate the
-     *                       rich requestor projection
-     * @throws NullPointerException if {@code groupJid} is
-     *                              {@code null}
+     * @apiNote Pass {@code requestorFetch=true} to surface the {@code requestor}/{@code requestor_pn}/
+     * {@code requestor_username} attributes that are needed when sub-group admins triage community-link join requests
+     * issued under a different identity.
+     *
+     * @param groupJid       the group {@link Jid}; never {@code null}
+     * @param requestorFetch whether the relay should populate the rich requestor projection
+     * @throws NullPointerException if {@code groupJid} is {@code null}
      */
     public SmaxGroupsGetMembershipApprovalRequestsRequest(Jid groupJid, boolean requestorFetch) {
         this.groupJid = Objects.requireNonNull(groupJid, "groupJid cannot be null");
@@ -63,9 +69,9 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
     }
 
     /**
-     * Returns the group JID.
+     * Returns the group {@link Jid}.
      *
-     * @return the JID; never {@code null}
+     * @return the group {@link Jid}; never {@code null}
      */
     public Jid groupJid() {
         return groupJid;
@@ -74,19 +80,25 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
     /**
      * Returns whether the rich requestor projection is requested.
      *
-     * @return {@code true} when the caller asked the relay to
-     *         resolve {@code requestor}/{@code requestor_pn}/
-     *         {@code requestor_username}; {@code false} otherwise
+     * @return {@code true} when the relay should populate {@code requestor}/{@code requestor_pn}/
+     *         {@code requestor_username}
      */
     public boolean requestorFetch() {
         return requestorFetch;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         {@code <membership_approval_requests/>} payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="<groupJid>" type="get">
+     *         <membership_approval_requests requestor_fetch="true"/>
+     *     </iq>
+     * }
+     * where the {@code requestor_fetch} attribute is omitted when {@link #requestorFetch()} is {@code false}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <membership_approval_requests/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetMembershipApprovalRequestsRequest",
@@ -106,6 +118,13 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
                 .content(payloadBuilder.build());
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetMembershipApprovalRequestsRequest} with identical
+     *         fields
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -119,11 +138,21 @@ public final class SmaxGroupsGetMembershipApprovalRequestsRequest implements Sma
                 && Objects.equals(this.groupJid, that.groupJid);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(groupJid, requestorFetch);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetMembershipApprovalRequestsRequest[groupJid=" + groupJid

@@ -6,7 +6,7 @@ import { writeABPropJava } from "./generator/java-writer.js";
 
 const { values: args } = parseArgs({
     options: {
-        "output-dir": { type: "string", default: "../../../modules/lib/src/main/java" },
+        "output-dir": { type: "string", default: "../../../modules/model/src/main/java" },
         "package":    { type: "string", default: "com.github.auties00.cobalt.props" },
     },
 });

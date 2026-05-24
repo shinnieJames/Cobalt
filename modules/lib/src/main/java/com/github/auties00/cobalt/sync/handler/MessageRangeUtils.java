@@ -14,48 +14,64 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Utilities for comparing, merging, and rewriting
- * {@link SyncActionMessageRange} objects used by chat-scoped app state
- * mutations (archive, clear-chat, delete-chat, mark-chat-as-read).
+ * Utilities for comparing, merging, validating, and rewriting
+ * {@link SyncActionMessageRange} objects attached to chat-scoped app state mutations.
  *
- * <p>Per WhatsApp Web {@code WAWebMessageRangeUtils}: a message range
- * describes the set of messages an action applies to. It is used both to
- * resolve conflicts between local and remote mutations on the same index
- * (via {@link #compareMessageRanges(SyncActionMessageRange, SyncActionMessageRange)}
- * and
- * {@link #mergeMessageRanges(SyncActionMessageRange, SyncActionMessageRange)})
- * and to make mutations deterministic across linked devices (by pinning
- * the affected messages by timestamp and key).
+ * @apiNote
+ * Chat-scoped sync actions (archive, clear-chat, delete-chat,
+ * mark-chat-as-read) carry a message range that pins the action to a
+ * specific window of messages by timestamp and key. The helpers here
+ * are consumed by the matching handlers
+ * ({@link ArchiveChatHandler}, {@link ClearChatHandler},
+ * {@link DeleteChatHandler}, {@link MarkChatAsReadHandler}) when they
+ * apply incoming mutations, and by their mutation factories when they
+ * build the outgoing range.
  *
- * <p>Several WA Web exports in this module are tied to browser-specific
- * infrastructure ({@code WAWebDBMessageRange}, {@code WAWebApiActiveMessageRanges},
- * {@code WAWebSyncdCoreApi.lockForSync}) that Cobalt does not maintain.
- * The {@code constructMessageRange}, {@code constructForwardMovingMessageRange}
- * and {@code lockForMessageRangeSync} exports are adapted outside this class:
+ * @implNote
+ * This implementation omits the WAM critical-event metric emissions
+ * that {@code WAWebMessageRangeUtils.validateMessageRange} performs
+ * on each invariant failure; Cobalt does not ship the WAM telemetry
+ * pipeline. The {@code constructMessageRange},
+ * {@code constructForwardMovingMessageRange} and
+ * {@code lockForMessageRangeSync} exports are intentionally not
+ * adapted here: they depend on the browser-only
+ * {@code WAWebDBMessageRange}, {@code WAWebApiActiveMessageRanges}
+ * and {@code WAWebSyncdCoreApi.lockForSync} infrastructure that
+ * Cobalt does not maintain. The minimal outgoing range is derived
+ * directly by
  * {@link com.github.auties00.cobalt.client.WhatsAppClient#buildOutgoingMessageRange}
- * derives a minimal range from the chat's newest in-memory message, and
- * {@code WebAppStateService.pushPatches} serializes per-collection writes so
- * no explicit lock is required.
+ * from the chat's newest in-memory message, and per-collection
+ * serialization is enforced by {@code WebAppStateService.pushPatches}
+ * so no explicit lock is required.
  */
 @WhatsAppWebModule(moduleName = "WAWebMessageRangeUtils")
 final class MessageRangeUtils {
     /**
-     * The result of comparing two message ranges.
+     * The result of comparing two {@link SyncActionMessageRange} instances
+     * for enclosure.
      *
-     * <p>Per WhatsApp Web {@code MessageRangeEncloseType}: enum with four
-     * string-valued members. Cobalt maps each to an equivalent Java enum
-     * constant; the renaming from camel case to SCREAMING_SNAKE is purely
-     * stylistic.
+     * @apiNote
+     * Returned by
+     * {@link #compareMessageRanges(SyncActionMessageRange, SyncActionMessageRange)}
+     * and consumed by chat-scoped handlers when reconciling a local pending
+     * mutation against an incoming remote mutation; the constants encode
+     * which side covers the other so the handler can decide whether to
+     * drop the local, drop the remote, or merge.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code MessageRangeEncloseType}
+     * mirrored-enum members one-for-one; the camel-case-to-screaming-snake
+     * rename is purely stylistic.
      */
     @WhatsAppWebModule(moduleName = "WAWebMessageRangeUtils")
     enum EnclosureType {
         /**
-         * Range A fully encloses range B (A covers all messages that B covers).
+         * Range A fully covers every message that range B covers.
          */
         RANGE_A_ENCLOSES_RANGE_B,
 
         /**
-         * Range B fully encloses range A (B covers all messages that A covers).
+         * Range B fully covers every message that range A covers.
          */
         RANGE_B_ENCLOSES_RANGE_A,
 
@@ -65,26 +81,43 @@ final class MessageRangeUtils {
         RANGES_ARE_EQUAL,
 
         /**
-         * Neither range fully encloses the other (partial overlap or disjoint).
+         * Neither range encloses the other; the ranges either partially
+         * overlap or are disjoint.
          */
         RANGES_NOT_ENCLOSING
     }
 
     /**
-     * Private constructor to prevent instantiation of this utility class.
+     * Prevents instantiation of this utility class.
+     *
+     * @apiNote
+     * Every member of this class is {@code static}; instances carry no
+     * useful state.
      */
     private MessageRangeUtils() {
     }
 
     /**
-     * Compares two message ranges to determine their enclosure relationship.
+     * Compares two message ranges and returns their {@link EnclosureType}
+     * relationship.
      *
-     * <p>Per WhatsApp Web {@code compareMessageRanges}: checks in both
-     * directions whether one range encloses the other and maps the two
-     * boolean outcomes to one of the four {@link EnclosureType} values.
-     * @param rangeA the first range (typically remote)
-     * @param rangeB the second range (typically local)
-     * @return the enclosure relationship between the two ranges
+     * @apiNote
+     * Used by the chat-scoped sync handlers to classify the relationship
+     * between a local pending range and an incoming remote range when the
+     * two share the same mutation index. The two ranges are passed in the
+     * order they came from the wire; nothing in the result implies a
+     * preferred side.
+     *
+     * @implNote
+     * This implementation evaluates {@link #encloses(SyncActionMessageRange, SyncActionMessageRange)}
+     * in both directions and combines the two booleans into the four
+     * {@link EnclosureType} values, mirroring the WA Web {@code f}
+     * helper bit-for-bit.
+     *
+     * @param rangeA the first range
+     * @param rangeB the second range
+     * @return the {@link EnclosureType} describing how {@code rangeA}
+     *         and {@code rangeB} relate
      */
     @WhatsAppWebExport(
             moduleName = "WAWebMessageRangeUtils",
@@ -106,21 +139,34 @@ final class MessageRangeUtils {
     }
 
     /**
-     * Merges two message ranges into one that covers the union of both.
+     * Merges two message ranges into a new range covering the union of both.
      *
-     * <p>Per WhatsApp Web {@code mergeMessageRanges}:
+     * @apiNote
+     * Used when a chat-scoped handler accepts a local pending range and an
+     * incoming remote range that overlap and need to be combined into a
+     * single canonical range before being persisted. The result has the
+     * later {@code lastMessageTimestamp}, the deduplicated message list
+     * after the threshold, and the later
+     * {@code lastSystemMessageTimestamp} when it strictly exceeds the
+     * merged {@code lastMessageTimestamp}.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code mergeMessageRanges}
+     * (function {@code h}) exactly:
      * <ul>
-     *   <li>Takes the maximum of both {@code lastMessageTimestamp} values
-     *   <li>Merges message lists: keeps only messages whose timestamp is
-     *       {@code >=} the max timestamp; among duplicates (same key ID),
-     *       keeps the one with the higher timestamp
-     *   <li>Takes the maximum of both {@code lastSystemMessageTimestamp}
-     *       values, but only sets it if it strictly exceeds the merged
-     *       {@code lastMessageTimestamp}
+     *   <li>{@code lastMessageTimestamp} is the maximum of both inputs;</li>
+     *   <li>messages are merged via {@link #mergeMessages(List, List, long)}
+     *       which keeps only entries with timestamp greater than or equal
+     *       to the merged value, deduplicated by key id with the higher
+     *       timestamp winning;</li>
+     *   <li>{@code lastSystemMessageTimestamp} is propagated only when at
+     *       least one input has it AND the merged value strictly exceeds
+     *       the merged {@code lastMessageTimestamp}.</li>
      * </ul>
-     * @param rangeA the first range (typically remote)
-     * @param rangeB the second range (typically local)
-     * @return a new merged range covering both inputs
+     *
+     * @param rangeA the first range
+     * @param rangeB the second range
+     * @return a new range covering the union of {@code rangeA} and {@code rangeB}
      */
     @WhatsAppWebExport(
             moduleName = "WAWebMessageRangeUtils",
@@ -154,23 +200,30 @@ final class MessageRangeUtils {
     }
 
     /**
-     * Validates a message range and returns it unchanged when valid.
+     * Validates a message range and returns it unchanged when the input is
+     * non-{@code null}.
      *
-     * <p>Per WhatsApp Web {@code validateMessageRange}: checks the range
-     * against a series of invariants (non-null range, system timestamp
-     * bounds, message count limit, per-message key/remoteJid/fromMe/id
-     * invariants) and emits WAM critical-event metrics
-     * ({@code uploadMdCriticalEventMetric}) for each failing invariant.
-     * When any invariant fails the function returns {@code undefined},
-     * otherwise it returns the input range unchanged.
+     * @apiNote
+     * Called by chat-scoped sync handlers before applying a mutation, to
+     * mirror WA Web's pre-apply gate. Cobalt does not ship the field-level
+     * invariant checks WA Web emits as WAM telemetry, so the only outcome
+     * a Cobalt caller can observe is {@code null} in / {@code null} out;
+     * any non-{@code null} input is returned as-is.
      *
-     * <p>Cobalt does not emit WAM telemetry, so the function is reduced to
-     * a pass-through validator that returns {@code null} only when the
-     * range itself is {@code null}. Applied mutation callers that need the
-     * null-check already perform it inline via
-     * {@code orElse(null)} on the action's optional {@code messageRange}.
-     * @param messageRange the message range to validate, may be {@code null}
-     * @return the same range when non-{@code null}, otherwise {@code null}
+     * @implNote
+     * This implementation drops every per-invariant
+     * {@code uploadMdCriticalEventMetric} call from
+     * {@code WAWebMessageRangeUtils.validateMessageRange}: the metric
+     * pipeline ({@code WAWebSyncdMetrics}) is not implemented in Cobalt.
+     * Field-level checks the WA Web validator performs (system-timestamp
+     * bound, 1000-message limit, key/remoteJid/fromMe/id presence) are
+     * deferred to the calling handler, which already null-guards
+     * {@code messageRange} via {@code Optional.orElse(null)} on the
+     * action.
+     *
+     * @param messageRange the message range to validate; may be {@code null}
+     * @return the same range when {@code messageRange} is non-{@code null};
+     *         otherwise {@code null}
      */
     @WhatsAppWebExport(
             moduleName = "WAWebMessageRangeUtils",
@@ -179,32 +232,36 @@ final class MessageRangeUtils {
     )
     static SyncActionMessageRange validateMessageRange(SyncActionMessageRange messageRange) {
         if (messageRange == null) {
-            return null; // ADAPTED: WAM telemetry emission skipped (not shipped in Cobalt)
+            return null;
         }
-        // Cobalt treats the range as valid and defers field-level validation to callers.
         return messageRange;
     }
 
     /**
      * Returns a copy of the given message range with every message key's
-     * {@code remoteJid} replaced by the given JID's string form.
+     * {@code remoteJid} replaced by the string form of {@code remoteJid}.
      *
-     * <p>Per WhatsApp Web {@code replaceMessageRangeRemoteJid}:
-     * <pre>{@code
-     * function E(e, t) {
-     *   return {...t, messages: t.messages.map(function(m) {
-     *     return {...m, key: {...m.key, remoteJid: e.toString()}};
-     *   })};
-     * }
-     * }</pre>
+     * @apiNote
+     * Used by {@link ClearChatHandler} and {@link DeleteChatHandler}
+     * (Cobalt's analogues of {@code applyMutations} on the clear-chat
+     * and delete-chat handlers) to swap the per-message {@code remoteJid}
+     * for the resolved local chat JID before applying the range to the
+     * chat database. The action's mutation index can reference a JID
+     * different from the canonical chat id; the rewrite keeps every
+     * downstream consumer indexing into the same chat.
      *
-     * <p>Used by {@code applyMutations} in the clear-chat and delete-chat
-     * handlers to swap the remote JID (which may reference the original
-     * mutation index JID) for the resolved local chat JID before applying
-     * the range to the chat database.
+     * @implNote
+     * This implementation mirrors the WA Web {@code replaceMessageRangeRemoteJid}
+     * (function {@code E}) by rebuilding each
+     * {@link com.github.auties00.cobalt.model.message.MessageKey} with the
+     * supplied {@link Jid} stamped into {@code parentJid}, preserving the
+     * existing {@code fromMe}, {@code id}, and {@code senderJid} fields.
+     * Both {@code lastMessageTimestamp} and {@code lastSystemMessageTimestamp}
+     * are carried through unchanged.
+     *
      * @param remoteJid    the JID to stamp into every message key
      * @param messageRange the range whose messages should be rewritten
-     * @return a new range with identical timestamps and rewritten message keys
+     * @return a new range with the same timestamps and rewritten message keys
      */
     @WhatsAppWebExport(
             moduleName = "WAWebMessageRangeUtils",
@@ -236,14 +293,24 @@ final class MessageRangeUtils {
     }
 
     /**
-     * Merges two message lists per WhatsApp Web {@code g} helper.
+     * Concatenates and deduplicates two message lists, keeping only entries
+     * whose timestamp is greater than or equal to {@code maxTimestamp}.
      *
-     * <p>Concatenates both lists, then keeps only messages whose timestamp
-     * is {@code >=} the given threshold. Among messages with the same key ID,
-     * the one with the higher timestamp wins.
+     * @apiNote
+     * Internal helper for
+     * {@link #mergeMessageRanges(SyncActionMessageRange, SyncActionMessageRange)};
+     * not used outside this class.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code mergeMessages} helper
+     * (function {@code g}). For every key id, the message with the higher
+     * timestamp wins; messages whose timestamp falls below the threshold
+     * are dropped. A missing timestamp is treated as {@code 0}.
+     *
      * @param messagesA    the first message list
      * @param messagesB    the second message list
-     * @param maxTimestamp the threshold timestamp (epoch seconds)
+     * @param maxTimestamp the threshold timestamp (epoch seconds);
+     *                     entries strictly below this value are filtered out
      * @return the merged and deduplicated message list
      */
     private static List<SyncActionMessage> mergeMessages(List<SyncActionMessage> messagesA, List<SyncActionMessage> messagesB, long maxTimestamp) {
@@ -275,17 +342,22 @@ final class MessageRangeUtils {
     }
 
     /**
-     * Checks whether range {@code encloser} encloses range {@code enclosed}.
+     * Returns whether {@code encloser} fully covers every message that
+     * {@code enclosed} references.
      *
-     * <p>Per WhatsApp Web (function {@code m}): a range A encloses range B
-     * when every message in B is accounted for by A. Specifically, for each
-     * message in B:
-     * <ul>
-     *   <li>If the message has no timestamp, its key ID must be present in A's
-     *       messages list
-     *   <li>If the message's key ID is NOT found in A's messages, its timestamp
-     *       must be strictly less than A's {@code lastMessageTimestamp}
-     * </ul>
+     * @apiNote
+     * Internal predicate used twice by
+     * {@link #compareMessageRanges(SyncActionMessageRange, SyncActionMessageRange)}
+     * (once per direction); not used outside this class.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web {@code m} helper. A message
+     * in {@code enclosed} is accounted for when its key id is present in
+     * {@code encloser}'s message list, OR when its timestamp is strictly
+     * less than {@code encloser}'s {@code lastMessageTimestamp}. A message
+     * with no key id and no timestamp is unconditionally treated as
+     * not-enclosed.
+     *
      * @param encloser the range that should enclose
      * @param enclosed the range that should be enclosed
      * @return {@code true} if {@code encloser} encloses {@code enclosed}
@@ -307,7 +379,7 @@ final class MessageRangeUtils {
             var msgTimestamp = msg.timestamp().orElse(null);
 
             if (keyId != null && encloserKeyIds.contains(keyId)) {
-                continue; // Message explicitly present in encloser's list
+                continue;
             }
 
             if (msgTimestamp == null) {
@@ -323,11 +395,20 @@ final class MessageRangeUtils {
     }
 
     /**
-     * Converts an {@link Instant} to epoch seconds, returning {@code 0}
-     * for {@code null} values. Mirrors the WhatsApp Web convention of
-     * treating missing timestamps as {@code 0}.
-     * @param instant the instant to convert, may be {@code null}
-     * @return the epoch seconds, or {@code 0} if {@code null}
+     * Converts an {@link Instant} to epoch seconds, treating {@code null}
+     * as {@code 0}.
+     *
+     * @apiNote
+     * Internal helper used throughout this class to coalesce optional
+     * timestamps; not used outside this class.
+     *
+     * @implNote
+     * This implementation matches the WA Web convention
+     * ({@code (t = e.timestamp) != null ? t : 0}) of treating a missing
+     * timestamp as {@code 0} rather than throwing.
+     *
+     * @param instant the instant to convert; may be {@code null}
+     * @return the epoch seconds, or {@code 0} when {@code instant} is {@code null}
      */
     private static long toEpochSeconds(Instant instant) {
         return instant != null ? instant.getEpochSecond() : 0;

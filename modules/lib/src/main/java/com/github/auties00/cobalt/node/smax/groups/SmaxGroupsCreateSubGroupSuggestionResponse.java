@@ -16,8 +16,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsCreateSubGroupSuggestionRequest}.
+ * Sealed family of inbound reply variants produced by the relay in response to a
+ * {@link SmaxGroupsCreateSubGroupSuggestionRequest}.
+ *
+ * @apiNote
+ * Pattern-match the result returned by {@link #of(Node, Node)} to drive UI surfaces equivalent to WA Web's
+ * {@code WAWebSubgroupSuggestionCreateJob} switch: {@link NewGroupSuggestionSuccess} carries the provisional
+ * sub-group metadata when the new-group branch was used, {@link ExistingGroupsSuggestionSuccess} carries the
+ * per-candidate verdict rows for the existing-groups branch, and the two error variants surface caller-side
+ * and relay-side failures.
  */
 public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxOperation.Response
         permits SmaxGroupsCreateSubGroupSuggestionResponse.NewGroupSuggestionSuccess,
@@ -26,16 +33,24 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
                 SmaxGroupsCreateSubGroupSuggestionResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsCreateSubGroupSuggestionResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Parses the inbound IQ stanza into the first matching
+     * {@link SmaxGroupsCreateSubGroupSuggestionResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote
+     * Mirrors WA Web's {@code WASmaxGroupsCreateSubGroupSuggestionRPC.sendCreateSubGroupSuggestionRPC}
+     * fall-through cascade: {@link NewGroupSuggestionSuccess}, {@link ExistingGroupsSuggestionSuccess},
+     * {@link ClientError}, {@link ServerError}. An empty {@link Optional} signals a stanza shape outside the
+     * documented union.
+     *
+     * @implNote
+     * This implementation runs the variant probes in the same priority order as WA Web; it does not throw
+     * a parsing-failure exception, leaving the recovery decision to the caller.
+     *
+     * @param node    the inbound IQ stanza received from the relay; never {@code null}
+     * @param request the original outbound {@link SmaxGroupsCreateSubGroupSuggestionRequest} stanza; used to
+     *                validate the echoed {@code id} attribute; never {@code null}
+     * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when no
+     *         documented variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsCreateSubGroupSuggestionRPC",
@@ -59,63 +74,58 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
     }
 
     /**
-     * The {@code NewGroupSuggestionSuccess} reply variant — the
-     * relay accepted the new-group suggestion and surfaced its
-     * provisional metadata (jid / creator / creation timestamp,
-     * optional creator phone number, optional description-error
-     * marker).
+     * The success variant returned when the relay accepted a {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.NewGroup}
+     * suggestion and provisioned the sub-group.
+     *
+     * @apiNote
+     * Carries the provisional identity triple ({@link #subGroupSuggestionJid()},
+     * {@link #subGroupSuggestionCreator()}, {@link #subGroupSuggestionCreation()}), the optional creator
+     * phone-number JID for LID-addressed creators, and an optional description-error marker for callers that
+     * need to surface partial-acceptance UI when the description body was rejected even though the sub-group
+     * was created.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseNewGroupSuggestionSuccess")
     final class NewGroupSuggestionSuccess implements SmaxGroupsCreateSubGroupSuggestionResponse {
         /**
-         * The provisional sub-group JID.
+         * The provisional sub-group {@link Jid} echoed by the relay.
          */
         private final Jid subGroupSuggestionJid;
 
         /**
-         * The user who created the sub-group suggestion.
+         * The creator {@link Jid} of the sub-group suggestion.
          */
         private final Jid subGroupSuggestionCreator;
 
         /**
-         * The creation timestamp (seconds since epoch).
+         * The creation timestamp in seconds since epoch.
          */
         private final long subGroupSuggestionCreation;
 
         /**
-         * The optional creator phone-number JID.
+         * The optional creator phone-number {@link Jid} echoed by the relay for LID-addressed creators;
+         * {@code null} when omitted.
          */
         private final Jid subGroupSuggestionCreatorPn;
 
         /**
-         * The optional {@code error} attribute on the inner
-         * {@code <description/>} child — surfaces parse failures
-         * (e.g. {@code "406"}) when the relay could not accept the
-         * description verbatim.
+         * The optional {@code error} attribute on the inner {@code <description/>} child; surfaces parse
+         * failures (e.g. {@code "406"}) when the relay could not accept the description verbatim. {@code null}
+         * when the description committed cleanly.
          */
         private final String subGroupSuggestionDescriptionError;
 
         /**
-         * Constructs a new-group success reply.
+         * Constructs a new-group success variant.
          *
-         * @param subGroupSuggestionJid              the sub-group
-         *                                           JID; never
-         *                                           {@code null}
-         * @param subGroupSuggestionCreator          the creator JID;
-         *                                           never
-         *                                           {@code null}
-         * @param subGroupSuggestionCreation         the creation
-         *                                           timestamp
-         * @param subGroupSuggestionCreatorPn        the optional
-         *                                           creator phone
-         *                                           JID; may be
-         *                                           {@code null}
-         * @param subGroupSuggestionDescriptionError the optional
-         *                                           description-error
-         *                                           string; may be
-         *                                           {@code null}
-         * @throws NullPointerException if {@code subGroupSuggestionJid}
-         *                              or {@code subGroupSuggestionCreator}
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         *
+         * @param subGroupSuggestionJid              the sub-group JID; never {@code null}
+         * @param subGroupSuggestionCreator          the creator JID; never {@code null}
+         * @param subGroupSuggestionCreation         the creation timestamp
+         * @param subGroupSuggestionCreatorPn        the optional creator phone JID; may be {@code null}
+         * @param subGroupSuggestionDescriptionError the optional description-error string; may be {@code null}
+         * @throws NullPointerException if {@code subGroupSuggestionJid} or {@code subGroupSuggestionCreator}
          *                              is {@code null}
          */
         public NewGroupSuggestionSuccess(Jid subGroupSuggestionJid,
@@ -131,7 +141,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Returns the sub-group JID.
+         * Returns the provisional sub-group {@link Jid}.
          *
          * @return the sub-group JID; never {@code null}
          */
@@ -140,7 +150,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Returns the creator JID.
+         * Returns the creator {@link Jid}.
          *
          * @return the creator JID; never {@code null}
          */
@@ -151,17 +161,16 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         /**
          * Returns the creation timestamp.
          *
-         * @return the creation timestamp (seconds since epoch)
+         * @return the creation timestamp in seconds since epoch
          */
         public long subGroupSuggestionCreation() {
             return subGroupSuggestionCreation;
         }
 
         /**
-         * Returns the optional creator phone-number JID.
+         * Returns the optional creator phone-number {@link Jid}.
          *
-         * @return an {@link Optional} carrying the creator phone
-         *         JID, or empty when the relay omitted it
+         * @return an {@link Optional} carrying the creator phone JID, or empty when the relay omitted it
          */
         public Optional<Jid> subGroupSuggestionCreatorPn() {
             return Optional.ofNullable(subGroupSuggestionCreatorPn);
@@ -170,22 +179,34 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         /**
          * Returns the optional description-error string.
          *
-         * @return an {@link Optional} carrying the error string, or
-         *         empty when the relay accepted the description
+         * @apiNote
+         * Non-empty when the relay accepted the sub-group but rejected the description body; callers should
+         * surface a partial-acceptance UI rather than treating the whole operation as failed.
+         *
+         * @return an {@link Optional} carrying the error string, or empty when the relay accepted the
+         *         description
          */
         public Optional<String> subGroupSuggestionDescriptionError() {
             return Optional.ofNullable(subGroupSuggestionDescriptionError);
         }
 
         /**
-         * Tries to parse a {@link NewGroupSuggestionSuccess} variant
-         * from the given inbound stanza.
+         * Parses the inbound stanza into a {@link NewGroupSuggestionSuccess} variant.
+         *
+         * @apiNote
+         * Invoked as the first probe in the variant cascade by
+         * {@link SmaxGroupsCreateSubGroupSuggestionResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation validates the IQ envelope via {@link SmaxIqResultResponseMixin#validate(Node, Node)},
+         * then extracts the {@code <sub_group_suggestion/>} child and reads the {@code jid}, {@code creator},
+         * {@code creation}, optional {@code creator_pn} attributes plus the optional inner
+         * {@code <description error="...">} marker.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         new-group-success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         stanza does not match the new-group-success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseNewGroupSuggestionSuccess",
                 exports = "parseCreateSubGroupSuggestionResponseNewGroupSuggestionSuccess",
@@ -252,24 +273,28 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
     }
 
     /**
-     * The {@code ExistingGroupsSuggestionSuccess} reply variant — the
-     * relay accepted (or partially accepted) the existing-groups
-     * suggestion and returned a per-group result row.
+     * The success variant returned when the relay accepted (or partially accepted) a
+     * {@link SmaxGroupsCreateSubGroupSuggestionSuggestion.ExistingGroups} suggestion.
+     *
+     * @apiNote
+     * Carries one {@link Candidate} row per requested group; each row's {@link Candidate#errorTag()} signals
+     * whether that specific candidate was admitted or rejected and, when rejected, why.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseExistingGroupsSuggestionSuccess")
     final class ExistingGroupsSuggestionSuccess implements SmaxGroupsCreateSubGroupSuggestionResponse {
         /**
-         * The per-group result rows.
+         * The per-candidate result rows, one per requested group.
          */
         private final List<Candidate> candidates;
 
         /**
-         * Constructs an existing-groups success reply.
+         * Constructs an existing-groups success variant.
          *
-         * @param candidates the per-group result rows; never
-         *                   {@code null}
-         * @throws NullPointerException if {@code candidates} is
-         *                              {@code null}
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
+         *
+         * @param candidates the per-group result rows; never {@code null}
+         * @throws NullPointerException if {@code candidates} is {@code null}
          */
         public ExistingGroupsSuggestionSuccess(List<Candidate> candidates) {
             Objects.requireNonNull(candidates, "candidates cannot be null");
@@ -277,7 +302,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Returns the per-group result rows.
+         * Returns the per-candidate result rows.
          *
          * @return an unmodifiable list of result rows
          */
@@ -286,14 +311,22 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Tries to parse an {@link ExistingGroupsSuggestionSuccess}
-         * variant from the given inbound stanza.
+         * Parses the inbound stanza into an {@link ExistingGroupsSuggestionSuccess} variant.
+         *
+         * @apiNote
+         * Invoked as the second probe in the variant cascade by
+         * {@link SmaxGroupsCreateSubGroupSuggestionResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation validates the IQ envelope via {@link SmaxIqResultResponseMixin#validate(Node, Node)},
+         * iterates the {@code <group/>} children of the inner {@code <sub_group_suggestion/>} node, and walks
+         * each child's child list looking for the first recognised error-discriminator tag through
+         * {@link Candidate#isErrorTag(String)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         existing-groups-success schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         stanza does not match the existing-groups-success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseExistingGroupsSuggestionSuccess",
                 exports = "parseCreateSubGroupSuggestionResponseExistingGroupsSuggestionSuccess",
@@ -355,28 +388,35 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Per-candidate-group result row inside an
-         * {@link ExistingGroupsSuggestionSuccess}.
+         * Per-candidate result row inside an {@link ExistingGroupsSuggestionSuccess}.
          *
-         * <p>The optional {@link #errorTag()} captures the
-         * discriminator tag emitted by the relay when a single
-         * candidate is rejected — possible values mirror the WA Web
-         * mixin family:
-         * {@code "not_authorized"}, {@code "not_exist"},
-         * {@code "conflict"}, {@code "suggestion_not_allowed"},
-         * {@code "resource_limit"}, {@code "bad_request"},
-         * {@code "not_acceptable"}, {@code "server_error"}.
+         * @apiNote
+         * The optional {@link #errorTag()} captures the discriminator tag emitted by the relay when a single
+         * candidate is rejected; absence signals the candidate was admitted cleanly. The set of recognised
+         * tags mirrors WA Web's mixin family:
+         * <ul>
+         *   <li>{@code "not_authorized"}</li>
+         *   <li>{@code "not_exist"}</li>
+         *   <li>{@code "conflict"}</li>
+         *   <li>{@code "suggestion_not_allowed"}</li>
+         *   <li>{@code "resource_limit"}</li>
+         *   <li>{@code "bad_request"}</li>
+         *   <li>{@code "not_acceptable"}</li>
+         *   <li>{@code "server_error"}</li>
+         * </ul>
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseExistingGroupsSuggestionSuccess")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsSubGroupNotAuthorizedOrNotExistOrConflictOrSuggestionNotAllowedOrResourceLimitOrBadRequestOrNotAcceptableOrServerErrorMixinGroup")
         public static final class Candidate {
             /**
-             * Returns whether {@code description} is one of the
-             * documented sub-group error discriminator tags.
+             * Returns whether {@code description} is one of the documented sub-group error discriminator tags.
+             *
+             * @apiNote
+             * Called by {@link ExistingGroupsSuggestionSuccess#of(Node, Node)} to single out the first
+             * recognised error marker child while ignoring other metadata children.
              *
              * @param description the child tag to test
-             * @return {@code true} when the tag is a recognised
-             *         error tag
+             * @return {@code true} when the tag is a recognised error tag
              */
             private static boolean isErrorTag(String description) {
                 return "not_authorized".equals(description)
@@ -390,24 +430,26 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
             }
 
             /**
-             * The candidate sub-group JID echoed by the relay.
+             * The candidate sub-group {@link Jid} echoed by the relay.
              */
             private final Jid jid;
 
             /**
-             * The optional error-discriminator tag; {@code null}
-             * when the candidate was admitted cleanly.
+             * The optional error-discriminator tag emitted as a child of the {@code <group/>} entry;
+             * {@code null} when the candidate was admitted cleanly.
              */
             private final String errorTag;
 
             /**
              * Constructs a candidate result row.
              *
+             * @apiNote
+             * Typically produced by {@link ExistingGroupsSuggestionSuccess#of(Node, Node)}; direct
+             * construction is used to seed test fixtures.
+             *
              * @param jid      the candidate JID; never {@code null}
-             * @param errorTag the optional error-discriminator tag;
-             *                 may be {@code null}
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param errorTag the optional error-discriminator tag; may be {@code null}
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public Candidate(Jid jid, String errorTag) {
                 this.jid = Objects.requireNonNull(jid, "jid cannot be null");
@@ -415,7 +457,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
             }
 
             /**
-             * Returns the candidate JID.
+             * Returns the candidate {@link Jid}.
              *
              * @return the candidate JID; never {@code null}
              */
@@ -426,8 +468,11 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
             /**
              * Returns the optional error-discriminator tag.
              *
-             * @return an {@link Optional} carrying the tag, or empty
-             *         when the candidate was admitted cleanly
+             * @apiNote
+             * Empty means the candidate was admitted; otherwise carries one of the eight documented tags
+             * listed on the enclosing class.
+             *
+             * @return an {@link Optional} carrying the tag, or empty when the candidate was admitted cleanly
              */
             public Optional<String> errorTag() {
                 return Optional.ofNullable(errorTag);
@@ -460,28 +505,37 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * request as malformed, unauthorised, or referencing an
-     * inadmissible community / candidate.
+     * The client-error variant returned when the relay rejected the request as malformed, unauthorised, or
+     * referencing an inadmissible community.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebSubgroupSuggestionCreateJob} forwards this variant as a
+     * {@code ServerStatusCodeError} carrying {@link #errorCode()} and {@link #errorText()}; the per-candidate
+     * rejection markers live on {@link ExistingGroupsSuggestionSuccess.Candidate#errorTag()}, not on this
+     * envelope-level error.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseClientError")
     final class ClientError implements SmaxGroupsCreateSubGroupSuggestionResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -489,7 +543,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -500,22 +554,28 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Parses the inbound stanza into a {@link ClientError} envelope.
+         *
+         * @apiNote
+         * Invoked as the third probe in the variant cascade by
+         * {@link SmaxGroupsCreateSubGroupSuggestionResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} so every SMAX response in the family
+         * shares the same client-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the client-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseClientError",
                 exports = "parseCreateSubGroupSuggestionResponseClientError",
@@ -553,27 +613,35 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure while processing the request.
+     * The server-error variant returned when the relay encountered a transient internal failure.
+     *
+     * @apiNote
+     * WA Web's {@code WAWebSubgroupSuggestionCreateJob} forwards this variant as a
+     * {@code ServerStatusCodeError}; callers can decide whether to retry based on the surfaced
+     * {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseServerError")
     final class ServerError implements SmaxGroupsCreateSubGroupSuggestionResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code, mirroring the {@code <error code="...">} attribute on the
+         * inbound stanza.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The human-readable error text echoed by the relay; {@code null} when the relay omitted the
+         * {@code <error text="...">} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a server-error variant.
+         *
+         * @apiNote
+         * Typically produced by {@link #of(Node, Node)}; direct construction is used to seed test fixtures.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -581,7 +649,7 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric server-side error code.
          *
          * @return the error code
          */
@@ -592,22 +660,28 @@ public sealed interface SmaxGroupsCreateSubGroupSuggestionResponse extends SmaxO
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Parses the inbound stanza into a {@link ServerError} envelope.
+         *
+         * @apiNote
+         * Invoked as the terminal probe in the variant cascade by
+         * {@link SmaxGroupsCreateSubGroupSuggestionResponse#of(Node, Node)}.
+         *
+         * @implNote
+         * This implementation delegates the error-envelope extraction to
+         * {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} so every SMAX response in the family
+         * shares the same server-error parsing.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return an {@link Optional} carrying the parsed variant, or {@link Optional#empty()} when the
+         *         envelope does not match the server-error schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsCreateSubGroupSuggestionResponseServerError",
                 exports = "parseCreateSubGroupSuggestionResponseServerError",

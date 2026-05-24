@@ -1,5 +1,6 @@
 package com.github.auties00.cobalt.sync.crypto;
 
+import com.alibaba.fastjson2.JSONObject;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.sync.SyncFixtures;
 import org.junit.jupiter.api.DisplayName;
@@ -10,7 +11,9 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,32 +24,40 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * KAT tests for {@link MutationKeys} — Cobalt's adapter for
- * {@code WAWebSyncdCryptoHelper.generateEncryptionKeysUnmemoized} and the
- * {@code WAWebSyncdMutationsCryptoUtils} primitives.
+ * Exercises every primitive on {@link MutationKeys} against WA Web's byte
+ * layout.
  *
- * <p>The class is the foundation of every sync-mutation cryptography path. Every
- * method here must match WA Web byte-for-byte; the tests therefore mix:
- * <ul>
- *   <li>Synthetic deterministic vectors that pin down the internal contract
- *       (slice offsets, AAD layout, IV-prefix layout, MAC truncation length,
- *       round-trip correctness).</li>
- *   <li>WA Web byte-equality oracles for fixtures captured via
- *       {@code tools/web/mcp-server/scripts/capture-sync-corpus.mjs --phase=2}.
- *       Oracle assertions are gated on {@link SyncFixtures#isOracleAvailable(String)}
- *       so the synthetic suite still runs before the corpus is captured.</li>
- * </ul>
+ * @apiNote
+ * Covers the production class that wraps {@code WAWebSyncdCrypto},
+ * {@code WAWebSyncdCryptoHelper}, and {@code WAWebSyncdMutationsCryptoUtils}.
+ * The matrix is constructed around two scenarios: synthetic deterministic
+ * vectors that pin down the internal contract (slice offsets, AAD layout,
+ * IV-prefix layout, MAC truncation length, round-trip correctness), and WA
+ * Web byte-equality oracles for fixtures captured via
+ * {@code src/test/resources/fixtures/sync/generate.mjs --phase=2}.
+ *
+ * @implNote
+ * Oracle assertions are gated on {@link SyncFixtures#isOracleAvailable(String)}
+ * so the synthetic suite still runs before the captured corpus lands. The
+ * {@link #SYNC_KEY_PATTERN} matches the {@code "pattern"} sample in the
+ * captured {@code crypto/mutation-keys.expected} fixture.
  */
 @DisplayName("MutationKeys")
 class MutationKeysTest {
     /**
-     * A deterministic 32-byte sync key used for round-trip and slice tests.
+     * A 32-byte sync key whose contents are {@code k[i] = (i * 7) & 0xFF}.
+     *
+     * @implNote
+     * Matches the {@code "pattern"} sample in the captured
+     * {@code crypto/mutation-keys.expected} fixture so the synthetic
+     * derivation tests and the oracle assertion exercise the same key.
      */
     private static final byte[] SYNC_KEY_PATTERN = patternKey();
 
     /**
-     * Builds a deterministic 32-byte sync key matching the {@code 'pattern'}
-     * sample in {@code crypto/mutation-keys.expected}: {@code k[i] = (i * 7) & 0xFF}.
+     * Builds the {@link #SYNC_KEY_PATTERN} byte array.
+     *
+     * @return a freshly allocated 32-byte array
      */
     private static byte[] patternKey() {
         var k = new byte[32];
@@ -57,7 +68,11 @@ class MutationKeysTest {
     }
 
     /**
-     * Returns a deterministic byte array filled with the given value.
+     * Builds a byte array filled with a single byte value.
+     *
+     * @param length the array length
+     * @param value  the fill value, truncated to a byte
+     * @return a freshly allocated array
      */
     private static byte[] filled(int length, int value) {
         var b = new byte[length];
@@ -66,7 +81,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("ofSyncKey — HKDF derivation")
+    @DisplayName("ofSyncKey - HKDF derivation")
     class OfSyncKey {
         @Test
         @DisplayName("rejects null")
@@ -164,7 +179,22 @@ class MutationKeysTest {
             assertOracleSample(oracle, "pattern", SYNC_KEY_PATTERN);
         }
 
-        private void assertOracleSample(com.alibaba.fastjson2.JSONObject oracle, String tag, byte[] syncKey) {
+        /**
+         * Asserts every derived key slice of one oracle sample matches the
+         * sample's recorded values.
+         *
+         * @implNote
+         * The oracle file groups three samples ({@code "zero"}, {@code "ones"},
+         * {@code "pattern"}) under the same JSON object. This helper looks up
+         * the sample by tag, re-derives the keys from the recorded sync key,
+         * and compares each of the five 32-byte slices in turn so a failure
+         * names the specific slice that disagreed.
+         *
+         * @param oracle  the loaded oracle JSON object
+         * @param tag     the sample name to look up
+         * @param syncKey the sync key the test code expects the oracle to record
+         */
+        private void assertOracleSample(JSONObject oracle, String tag, byte[] syncKey) {
             var sample = oracle.getJSONObject(tag);
             assertNotNull(sample, "missing oracle sample '" + tag + "'");
             var oracleSyncKey = Base64.getDecoder().decode(sample.getString("syncKey"));
@@ -186,7 +216,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("generateAssociatedData — SET=0x01, REMOVE=0x02, key id appended")
+    @DisplayName("generateAssociatedData - SET=0x01, REMOVE=0x02, key id appended")
     class GenerateAssociatedData {
         @Test
         @DisplayName("SET prepends 0x01 then the raw key id")
@@ -195,7 +225,7 @@ class MutationKeysTest {
             var ad = MutationKeys.generateAssociatedData(SyncdOperation.SET, keyId);
             assertEquals(5, ad.length);
             assertEquals((byte) 0x01, ad[0]);
-            assertArrayEquals(keyId, java.util.Arrays.copyOfRange(ad, 1, ad.length));
+            assertArrayEquals(keyId, Arrays.copyOfRange(ad, 1, ad.length));
         }
 
         @Test
@@ -205,7 +235,7 @@ class MutationKeysTest {
             var ad = MutationKeys.generateAssociatedData(SyncdOperation.REMOVE, keyId);
             assertEquals(5, ad.length);
             assertEquals((byte) 0x02, ad[0]);
-            assertArrayEquals(keyId, java.util.Arrays.copyOfRange(ad, 1, ad.length));
+            assertArrayEquals(keyId, Arrays.copyOfRange(ad, 1, ad.length));
         }
 
         @Test
@@ -248,7 +278,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("generatePadding — currently always empty (MAX_OF_MIN_DATA_LENGTH = 0)")
+    @DisplayName("generatePadding - currently always empty (MAX_OF_MIN_DATA_LENGTH = 0)")
     class GeneratePadding {
         @Test
         @DisplayName("returns empty array regardless of input lengths")
@@ -261,7 +291,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("generateCipherText / decryptCipherText — AES-CBC round-trip")
+    @DisplayName("generateCipherText / decryptCipherText - AES-CBC round-trip")
     class CipherText {
         @Test
         @DisplayName("round-trip with random IV recovers the plaintext")
@@ -271,8 +301,8 @@ class MutationKeysTest {
                 var output = keys.generateCipherText(plaintext);
                 assertTrue(output.length >= MutationKeys.IV_LENGTH + plaintext.length,
                         "output must carry IV + ciphertext");
-                var iv = java.util.Arrays.copyOfRange(output, 0, MutationKeys.IV_LENGTH);
-                var ciphertext = java.util.Arrays.copyOfRange(output, MutationKeys.IV_LENGTH, output.length);
+                var iv = Arrays.copyOfRange(output, 0, MutationKeys.IV_LENGTH);
+                var ciphertext = Arrays.copyOfRange(output, MutationKeys.IV_LENGTH, output.length);
                 var recovered = keys.decryptCipherText(iv, ciphertext);
                 assertArrayEquals(plaintext, recovered);
             }
@@ -285,8 +315,8 @@ class MutationKeysTest {
                 var pt = filled(32, 0x55);
                 var a = keys.generateCipherText(pt);
                 var b = keys.generateCipherText(pt);
-                var ivA = java.util.Arrays.copyOfRange(a, 0, MutationKeys.IV_LENGTH);
-                var ivB = java.util.Arrays.copyOfRange(b, 0, MutationKeys.IV_LENGTH);
+                var ivA = Arrays.copyOfRange(a, 0, MutationKeys.IV_LENGTH);
+                var ivB = Arrays.copyOfRange(b, 0, MutationKeys.IV_LENGTH);
                 assertFalse(MessageDigest.isEqual(ivA, ivB),
                         "consecutive encryptions must draw fresh IVs");
             }
@@ -301,7 +331,7 @@ class MutationKeysTest {
                 var a = keys.generateCipherText(iv, pt);
                 var b = keys.generateCipherText(iv, pt);
                 assertArrayEquals(a, b, "fixed-(key, IV, plaintext) must produce identical ciphertext");
-                assertArrayEquals(iv, java.util.Arrays.copyOfRange(a, 0, MutationKeys.IV_LENGTH),
+                assertArrayEquals(iv, Arrays.copyOfRange(a, 0, MutationKeys.IV_LENGTH),
                         "IV must be prepended");
             }
         }
@@ -313,8 +343,8 @@ class MutationKeysTest {
                  var other = MutationKeys.ofSyncKey(filled(32, 0xAB))) {
                 var pt = filled(64, 0x33);
                 var output = keys.generateCipherText(pt);
-                var iv = java.util.Arrays.copyOfRange(output, 0, MutationKeys.IV_LENGTH);
-                var ct = java.util.Arrays.copyOfRange(output, MutationKeys.IV_LENGTH, output.length);
+                var iv = Arrays.copyOfRange(output, 0, MutationKeys.IV_LENGTH);
+                var ct = Arrays.copyOfRange(output, MutationKeys.IV_LENGTH, output.length);
                 assertThrows(BadPaddingException.class, () -> other.decryptCipherText(iv, ct));
             }
         }
@@ -337,7 +367,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("generateMac — HMAC-SHA512 truncated to 32 bytes with length suffix")
+    @DisplayName("generateMac - HMAC-SHA512 truncated to 32 bytes with length suffix")
     class GenerateMac {
         @Test
         @DisplayName("output is exactly 32 bytes")
@@ -389,7 +419,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("generateIndexMac — HMAC-SHA256 over index bytes")
+    @DisplayName("generateIndexMac - HMAC-SHA256 over index bytes")
     class GenerateIndexMac {
         @Test
         @DisplayName("output is 32 bytes")
@@ -429,7 +459,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("valueMacFromIndexAndValueCipherText — exact slice of last 32 bytes")
+    @DisplayName("valueMacFromIndexAndValueCipherText - exact slice of last 32 bytes")
     class ValueMacFromIndexAndValueCipherText {
         @Test
         @DisplayName("returns the last MAC_LENGTH bytes verbatim")
@@ -438,7 +468,7 @@ class MutationKeysTest {
             for (var i = 0; i < buf.length; i++) buf[i] = (byte) i;
             var mac = MutationKeys.valueMacFromIndexAndValueCipherText(buf);
             assertEquals(MutationKeys.MAC_LENGTH, mac.length);
-            assertArrayEquals(java.util.Arrays.copyOfRange(buf, buf.length - MutationKeys.MAC_LENGTH, buf.length), mac);
+            assertArrayEquals(Arrays.copyOfRange(buf, buf.length - MutationKeys.MAC_LENGTH, buf.length), mac);
         }
 
         @Test
@@ -457,7 +487,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("close — destroys key material without error")
+    @DisplayName("close - destroys key material without error")
     class Close {
         @Test
         @DisplayName("close swallows DestroyFailedException and is idempotent")
@@ -483,14 +513,14 @@ class MutationKeysTest {
             try (var keys = MutationKeys.ofSyncKey(SYNC_KEY_PATTERN)) {
                 var s = keys.toString();
                 assertEquals("AppStateSyncKeys", s);
-                assertNotEquals(java.util.HexFormat.of().formatHex(SYNC_KEY_PATTERN), s,
+                assertNotEquals(HexFormat.of().formatHex(SYNC_KEY_PATTERN), s,
                         "toString must not contain hex sync key");
             }
         }
     }
 
     @Nested
-    @DisplayName("constants — match WA Web's WAWebSyncdCryptoConst")
+    @DisplayName("constants - match WA Web's WAWebSyncdCryptoConst")
     class Constants {
         @Test
         @DisplayName("MAC_LENGTH is 32")
@@ -518,7 +548,7 @@ class MutationKeysTest {
     }
 
     @Nested
-    @DisplayName("accessor sanity — key getters return the expected slices")
+    @DisplayName("accessor sanity - key getters return the expected slices")
     class Accessors {
         @Test
         @DisplayName("each accessor returns the same SecretKeySpec across calls")

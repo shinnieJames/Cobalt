@@ -10,40 +10,43 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * Thrown for failures during Web App State (also known as syncd)
+ * Sealed root for failures during Web App State (also known as syncd)
  * synchronization.
  *
- * <p>Web App State is the encrypted key-value protocol WhatsApp uses
- * to keep contacts, chat metadata, settings, starred messages, the
+ * @apiNote
+ * Web App State is the encrypted key-value protocol WhatsApp uses to
+ * keep contacts, chat metadata, settings, starred messages, the
  * blocklist, and similar shared state in sync across the primary phone
  * and every linked companion device. State is published as named
- * collections; updates are sent as patches that the receiving device
- * applies on top of the last known snapshot. Each patch carries
- * mutations whose values, indices, and ordering are protected by HMACs
- * and chained against the previous patch.
+ * collections; updates are sent as patches the receiving device applies
+ * on top of the last known snapshot. Each patch carries mutations whose
+ * values, indices, and ordering are protected by HMACs and chained
+ * against the previous patch.
  *
- * <p>The nested subtypes describe every distinct way that pipeline can
- * fail: integrity checks at the snapshot, patch, value or index level
- * ({@link SnapshotMacMismatch}, {@link PatchMacMismatch},
- * {@link ValueMacMismatch}, {@link IndexMacMismatch}), missing
- * encryption keys ({@link MissingKey},
- * {@link MissingKeyOnAllDevices},
- * {@link TimeoutWhileWaitingForMissingKey}), decryption failures
- * ({@link DecryptionFailed}), problems with externally hosted blob
- * mutations ({@link ExternalDownloadFailed},
- * {@link ExternalDecodeFailed}), MAC computation failures
- * ({@link MacComputationFailed}), structural violations of the patch
- * stream ({@link MissingPatches}, {@link TerminalPatch},
- * {@link MissingActionTimestamp}, {@link DuplicateIndexInPatch},
- * {@link DuplicatePatchVersion}), server-side rejections
- * ({@link Conflict}, {@link RetryableServerError}), and a catch-all
- * ({@link UnexpectedError}).
+ * <p>The nested subtypes split into three buckets that mirror WA Web's
+ * {@code WAWebSyncdError} module: <ul>
+ *   <li>fatal-classified errors (mapped to {@code SyncdFatalError}):
+ *       integrity checks at the snapshot/patch/value/index level,
+ *       unrecoverable key losses, decryption failures, structural
+ *       violations of the patch stream, terminal patches, and the
+ *       catch-all {@link UnexpectedError};
+ *   <li>retryable-classified errors (mapped to {@code SyncdRetryableError}):
+ *       {@link Conflict}, {@link RetryableServerError},
+ *       {@link ExternalDownloadFailed}, {@link ExternalDecodeFailed};
+ *   <li>recoverable-classified errors (mapped to {@code SyncdMissingKeyError}):
+ *       {@link MissingKey}.
+ * </ul>
  *
- * <p>Whether a failure is fatal depends on the subtype: integrity
- * failures, structural violations, and unrecoverable key losses are
- * fatal because the affected collection has to be wiped and
- * resynchronized from scratch; missing keys, transient server errors,
- * and external-blob retries are non-fatal.
+ * <p>{@link #isFatal()} reports the classification at the subtype level
+ * so the configurable error handler can wipe and resync the affected
+ * collection, schedule a retry, or wait for an out-of-band key delivery.
+ *
+ * @implNote
+ * This implementation classifies each subtype individually because WA
+ * Web's three concrete error classes are too coarse for embedders that
+ * want to differentiate between, for example, a {@link Conflict} (must
+ * refetch) and a {@link RetryableServerError} (must honour
+ * {@link RetryableServerError#serverBackoffMs}).
  *
  * @see SnapshotMacMismatch
  * @see PatchMacMismatch
@@ -107,13 +110,16 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the HMAC stamped over a state snapshot does not
-     * match the value Cobalt computes locally.
+     * Thrown when the HMAC stamped over a state snapshot does not match
+     * the value Cobalt computes locally.
      *
-     * <p>Snapshots are full state dumps used during initial sync and
-     * after a fatal resync. A mismatch means the snapshot bytes are
-     * corrupt, were tampered with, or were validated against the
-     * wrong key. The collection has to be wiped and refetched.
+     * @apiNote
+     * Snapshots are full state dumps used during initial sync and after
+     * a fatal resync. A mismatch means the snapshot bytes are corrupt,
+     * were tampered with, or were validated against the wrong key. WA
+     * Web's {@code WAWebSyncdAntiTampering} wraps the same condition as
+     * a {@code SyncdFatalError}; the collection has to be wiped and
+     * refetched.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -160,9 +166,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: snapshot
+         * integrity failures require a wipe-and-resync.
          */
         @Override
         public boolean isFatal() {
@@ -174,11 +182,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when the HMAC stamped over a state patch does not match
      * the value Cobalt computes locally.
      *
-     * <p>Patches are incremental updates chained on top of the latest
-     * snapshot; a MAC mismatch means the patch bytes are corrupt,
-     * were tampered with, or that the chain has been broken by a
-     * missing predecessor. The affected collection has to be wiped
-     * and resynced.
+     * @apiNote
+     * Patches are incremental updates chained on top of the latest
+     * snapshot. A MAC mismatch means the patch bytes are corrupt, were
+     * tampered with, or that the chain has been broken by a missing
+     * predecessor; the affected collection has to be wiped and resynced.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -225,9 +233,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a broken
+         * patch chain requires a wipe-and-resync.
          */
         @Override
         public boolean isFatal() {
@@ -236,13 +246,14 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the HMAC over the encrypted value of a single
-     * mutation does not match the expected value after decryption.
+     * Thrown when the HMAC over the encrypted value of a single mutation
+     * does not match the expected value after decryption.
      *
-     * <p>The value MAC ties an encrypted mutation to its plaintext.
-     * A mismatch means either the ciphertext was corrupted or the
-     * decryption key is wrong; in either case the collection cannot
-     * be trusted and has to be resynced.
+     * @apiNote
+     * The value MAC ties an encrypted mutation to its plaintext. A
+     * mismatch means either the ciphertext was corrupted or the
+     * decryption key is wrong; in either case the collection cannot be
+     * trusted and has to be resynced.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -255,9 +266,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: value
+         * integrity failures require a wipe-and-resync.
          */
         @Override
         public boolean isFatal() {
@@ -266,12 +279,13 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the HMAC over the encrypted index of a single
-     * mutation does not match the expected value after decryption.
+     * Thrown when the HMAC over the encrypted index of a single mutation
+     * does not match the expected value after decryption.
      *
-     * <p>The index MAC binds a mutation to its key in the key-value
-     * store and prevents an attacker from substituting one mutation
-     * for another. A mismatch is treated as data corruption and the
+     * @apiNote
+     * The index MAC binds a mutation to its key in the key-value store
+     * and prevents an attacker from substituting one mutation for
+     * another. A mismatch is treated as data corruption and the
      * collection is resynced.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
@@ -285,9 +299,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: index
+         * integrity failures require a wipe-and-resync.
          */
         @Override
         public boolean isFatal() {
@@ -296,13 +312,16 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when a sync mutation references an encryption key that
-     * is not yet present locally.
+     * Thrown when a sync mutation references an encryption key that is
+     * not yet present locally.
      *
-     * <p>App-state keys are pushed from the primary phone and rotated
-     * periodically. A missing key is normally transient: requesting
-     * the key from a companion that has it and waiting for the reply
-     * is enough to make progress, so the failure is not fatal.
+     * @apiNote
+     * App-state keys are pushed from the primary phone and rotated
+     * periodically. A missing key is normally transient: requesting the
+     * key from a companion that has it and waiting for the reply is
+     * enough to make progress. WA Web's {@code WAWebSyncdAntiTampering}
+     * and {@code WAWebSyncdDecryptMutationsWrapper} raise the equivalent
+     * {@code SyncdMissingKeyError} at the same sites.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdMissingKeyError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -334,9 +353,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code false}
+         * @implNote
+         * This implementation always returns {@code false}: the key may
+         * arrive from a companion and let progress resume.
          */
         @Override
         public boolean isFatal() {
@@ -348,11 +369,13 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when no companion device has the encryption key that a
      * mutation needs.
      *
-     * <p>Cobalt asks every other device about a missing key before
-     * concluding the key is unrecoverable. When every device has
-     * answered that it does not hold the key, this exception is
-     * raised: the affected collection cannot be decrypted on this
-     * device without re-pairing, so the failure is fatal.
+     * @apiNote
+     * Mirrors the {@code SyncdFatalErrorType.MISSING_KEY_ON_ALL_CLIENTS}
+     * branch in WA Web's {@code WAWebSyncdStoreMissingKeys}. Cobalt asks
+     * every other device about a missing key before concluding the key
+     * is unrecoverable; when every device has answered that it does not
+     * hold the key, this exception is raised. The affected collection
+     * cannot be decrypted on this device without re-pairing.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
@@ -385,9 +408,12 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: with no
+         * device holding the key, only re-pairing recovers the
+         * collection.
          */
         @Override
         public boolean isFatal() {
@@ -399,10 +425,12 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when the wait for a missing app-state key expires before
      * any companion device has answered with the key.
      *
-     * <p>The wait timeout is longer than the per-device round-trip,
-     * so timing out means the key is effectively unobtainable. The
-     * failure is fatal and the collection has to be resynced from
-     * scratch.
+     * @apiNote
+     * Mirrors the {@code SyncdFatalErrorType.TIMEOUT_WHILE_WAITING_FOR_MISSING_KEY}
+     * branch in WA Web's {@code WAWebSyncdStoreMissingKeys}. The wait
+     * timeout is longer than the per-device round-trip, so timing out
+     * means the key is effectively unobtainable and the collection has
+     * to be resynced from scratch.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdStoreMissingKeys")
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
@@ -435,9 +463,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: an unbounded
+         * wait failure means the key is unobtainable.
          */
         @Override
         public boolean isFatal() {
@@ -449,8 +479,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when AES-GCM decryption of a mutation fails after the
      * correct key has been located.
      *
-     * <p>This typically indicates corrupted ciphertext or an issue
-     * with key derivation. The collection is wiped and resynced.
+     * @apiNote
+     * Mirrors WA Web's {@code WASyncdKmpEncryptionManager} reporting
+     * {@code SyncdFatalErrorType.DECRYPTION_FAILED}. Typically indicates
+     * corrupted ciphertext or an issue with key derivation; the
+     * collection is wiped and resynced.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -475,9 +508,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a decryption
+         * failure after the right key is in hand cannot be retried.
          */
         @Override
         public boolean isFatal() {
@@ -488,10 +523,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     /**
      * Thrown when downloading an external mutation blob fails.
      *
-     * <p>Mutations larger than the inline limit are stored on the
-     * media servers; the patch only carries a URL and the encryption
-     * key. A failed download is treated as transient and the operation
-     * can be retried.
+     * @apiNote
+     * Mutations larger than the inline limit are stored on the media
+     * servers; the patch only carries a URL and the encryption key.
+     * Mirrors {@code SyncdRetryableError} surfaced by WA Web's
+     * {@code WAWebSyncdNetCallbacksApi}; the operation can be retried.
      */
     @WhatsAppWebModule(moduleName = "WAWebSyncdNetCallbacksApi")
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
@@ -507,9 +543,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code false}
+         * @implNote
+         * This implementation always returns {@code false}: the
+         * external blob may become available on a retry.
          */
         @Override
         public boolean isFatal() {
@@ -518,12 +556,13 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when an external mutation blob downloads successfully
-     * but its decoded payload is malformed.
+     * Thrown when an external mutation blob downloads successfully but
+     * its decoded payload is malformed.
      *
-     * <p>The most common cause is a stale recovery snapshot that no
-     * longer matches the current schema. The operation can be
-     * retried.
+     * @apiNote
+     * Mirrors {@code SyncdRetryableError} surfaced by WA Web's
+     * {@code WAWebNonMessageDataRequestHandler}; common cause is a stale
+     * recovery snapshot that no longer matches the current schema.
      */
     @WhatsAppWebModule(moduleName = "WAWebNonMessageDataRequestHandler")
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
@@ -539,9 +578,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code false}
+         * @implNote
+         * This implementation always returns {@code false}: re-fetching
+         * a fresh blob may decode successfully.
          */
         @Override
         public boolean isFatal() {
@@ -552,9 +593,9 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     /**
      * Thrown when computing an HMAC for a sync operation fails.
      *
-     * <p>This points at a problem with the JCE provider, the key
-     * material, or the cryptographic state of the process and is
-     * treated as fatal.
+     * @apiNote
+     * Indicates a problem with the JCE provider, the key material, or
+     * the cryptographic state of the process.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -569,9 +610,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: HMAC
+         * computation is required for every outgoing patch.
          */
         @Override
         public boolean isFatal() {
@@ -583,8 +626,9 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when a SET mutation arrives without the timestamp every
      * SyncActionValue must carry.
      *
-     * <p>The validation only applies to SET mutations; REMOVE
-     * mutations have no SyncActionValue and are unaffected.
+     * @apiNote
+     * The validation only applies to SET mutations; REMOVE mutations
+     * have no SyncActionValue and are unaffected.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -597,9 +641,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a SET
+         * mutation without a timestamp cannot be ordered against peers.
          */
         @Override
         public boolean isFatal() {
@@ -611,8 +657,9 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when a single patch contains two mutations of the same
      * kind (two SETs or two REMOVEs) targeting the same index.
      *
-     * <p>Such a patch is malformed by construction and processing
-     * cannot continue safely.
+     * @apiNote
+     * Such a patch is malformed by construction and processing cannot
+     * continue safely.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -642,9 +689,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a malformed
+         * patch cannot be applied partially.
          */
         @Override
         public boolean isFatal() {
@@ -656,9 +705,9 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown when two patches in the same collection share the same
      * version number.
      *
-     * <p>Patch versions are required to be unique; a duplicate makes
-     * it impossible to determine ordering and the response is
-     * rejected.
+     * @apiNote
+     * Patch versions are required to be unique; a duplicate makes it
+     * impossible to determine ordering and the response is rejected.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -704,9 +753,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a duplicate
+         * version makes patch ordering ambiguous.
          */
         @Override
         public boolean isFatal() {
@@ -718,7 +769,8 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
      * Thrown for sync failures that do not match any of the more
      * specific categories.
      *
-     * <p>Treated as fatal because the cause is unknown and the safe
+     * @apiNote
+     * Treated as fatal because the cause is unknown and the safe
      * recovery is to wipe the affected collection and resync.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
@@ -744,9 +796,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: when the
+         * cause is unknown, only a wipe-and-resync is safe.
          */
         @Override
         public boolean isFatal() {
@@ -756,11 +810,15 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
 
     /**
      * Thrown when there is a gap in the patch sequence the server
-     * delivered: the lowest version in the response is greater than
-     * the local version plus one.
+     * delivered: the lowest version in the response is greater than the
+     * local version plus one.
      *
-     * <p>The chain integrity is broken and the only safe recovery is
-     * to wipe the collection and resync from a fresh snapshot.
+     * @apiNote
+     * Equivalent to WA Web's {@code WAWebSyncdAntiTampering}
+     * version-check error raised when {@code minPatchVersion >
+     * localVersion + 1}. The chain integrity is broken and the only safe
+     * recovery is to wipe the collection and resync from a fresh
+     * snapshot.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -824,9 +882,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a broken
+         * patch chain cannot be back-filled.
          */
         @Override
         public boolean isFatal() {
@@ -835,11 +895,12 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the server marks a patch as terminal, signaling
-     * that the collection data is unrecoverable.
+     * Thrown when the server marks a patch as terminal, signaling that
+     * the collection data is unrecoverable.
      *
-     * <p>The exit code carries the server's reason; the collection
-     * is wiped and resynchronized from scratch.
+     * @apiNote
+     * The exit code carries the server's reason; the collection is
+     * wiped and resynchronized from scratch.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdFatalError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -886,9 +947,12 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code true}
+         * @implNote
+         * This implementation always returns {@code true}: a terminal
+         * patch is the server explicitly declaring the data
+         * unrecoverable.
          */
         @Override
         public boolean isFatal() {
@@ -897,12 +961,15 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the server returns a {@code 409 Conflict} response
-     * to a patch publication, meaning a newer version exists on the
-     * server.
+     * Thrown when the server returns a {@code 409 Conflict} response to
+     * a patch publication, meaning a newer version exists on the server.
      *
-     * <p>The client refetches the collection and applies the patch on
-     * top of the new version, so the failure is retryable.
+     * @apiNote
+     * The client refetches the collection and applies the patch on top
+     * of the new version. The flag {@link #hasMorePatches()} mirrors WA
+     * Web's {@code ConflictHasMore} variant of the {@code Conflict}
+     * server response and tells the caller whether further patches are
+     * pending after the conflict.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -934,9 +1001,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code false}
+         * @implNote
+         * This implementation always returns {@code false}: a conflict
+         * is resolved by refetch-and-reapply.
          */
         @Override
         public boolean isFatal() {
@@ -945,12 +1014,14 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
     }
 
     /**
-     * Thrown when the server returns a retryable error code other
-     * than {@code 409 Conflict} or one of the fatal codes.
+     * Thrown when the server returns a retryable error code other than
+     * {@code 409 Conflict} or one of the fatal codes.
      *
-     * <p>The server can attach a backoff hint (in milliseconds) that
-     * is exposed via {@link #serverBackoffMs()} and should be honored
-     * before the next attempt.
+     * @apiNote
+     * The server can attach a backoff hint (in milliseconds) that is
+     * exposed via {@link #serverBackoffMs()} and should be honored
+     * before the next attempt. Equivalent to the {@code backoff}
+     * property WA Web's {@code SyncdRetryableError} carries.
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdError", exports = "SyncdRetryableError",
                        adaptation = WhatsAppAdaptation.ADAPTED)
@@ -1006,9 +1077,11 @@ public sealed abstract class WhatsAppWebAppStateSyncException extends WhatsAppEx
         }
 
         /**
-         * Returns whether the failure invalidates the current session.
+         * {@inheritDoc}
          *
-         * @return {@code false}
+         * @implNote
+         * This implementation always returns {@code false}: the server
+         * has explicitly classified the failure as retryable.
          */
         @Override
         public boolean isFatal() {

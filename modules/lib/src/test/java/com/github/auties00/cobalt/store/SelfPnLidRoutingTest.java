@@ -7,35 +7,30 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Closes the loop on the self-send PN→LID routing bug.
+ * Exercises the self-send PN/LID round-trip through {@link AbstractWhatsAppStore}.
  *
- * <p>Background: outgoing self-messages were addressed to the user's own
- * PN. WA Web instead rewrites a self-PN chat to the user's own LID and
- * stamps {@code peer_recipient_pn} on the wire. Without that rewrite the
- * server {@code ack}s but the primary phone never surfaces the message.
+ * @apiNote
+ * Pins the store-side half of the self-send routing contract: when the local user sends a
+ * message addressed to their own phone-number JID, the store must resolve the corresponding LID
+ * and the LID must round-trip back to the same PN. Without this, the server acks the stanza but
+ * the primary phone never surfaces the message because the destination chat is keyed under the
+ * LID, not the PN.
  *
- * <p>The fix was two-fold:
- * <ul>
- *   <li>{@link AbstractWhatsAppStore#findPhoneByLid(Jid)} grew a self-special
- *       case symmetric to {@link AbstractWhatsAppStore#findLidByPhone(Jid)},
- *       so that for the local user the LID→PN lookup falls back to
- *       {@link AbstractWhatsAppStore#jid()} the same way the PN→LID lookup
- *       falls back to {@link AbstractWhatsAppStore#lid()};</li>
- *   <li>{@code UserMessageSender.maybeReplaceWidWithAccountLid} rewrites
- *       the chat JID for a self-send before fanout/stanza building,
- *       mirroring WA Web's
- *       {@code WAWebPnlessStanzaMigration.maybeReplaceWidWithAccountLid}.</li>
- * </ul>
- *
- * <p>This test asserts the store side of the contract against the captured
- * live oracle ({@code fixtures/device/self-chat-routing.expected.json}):
- * for the captured account, the round-trip
- * {@code PN → findLidByPhone → LID → findPhoneByLid → PN} returns the
- * expected JIDs, with the {@code accountLid} field on WA Web's chat
- * record matching the LID Cobalt resolves through its store.
+ * @implNote
+ * This test compares against a captured live oracle
+ * ({@code fixtures/device/self-chat-routing.expected.json}) produced by exercising WA Web's
+ * {@code findOrCreateLatestChat(<own PN>)}, which yields a LID-keyed chat. The round-trip checked
+ * here is {@code PN -> findLidByPhone -> LID -> findPhoneByLid -> PN}; the assertion on the
+ * reverse direction exists to guarantee {@link AbstractWhatsAppStore#findPhoneByLid(Jid)} carries
+ * the self-special-case symmetric to {@link AbstractWhatsAppStore#findLidByPhone(Jid)}, without
+ * which the local user's LID would never resolve back to a PN.
  */
 class SelfPnLidRoutingTest {
 
+    /**
+     * Round-trips the local user's own PN through the LID lookup back to the same PN and
+     * matches the captured oracle's account LID.
+     */
     @Test
     void selfMappingRoundTripMatchesLiveOracle() {
         var oracle = DeviceFixtures.loadOracle("self-chat-routing");
@@ -43,9 +38,6 @@ class SelfPnLidRoutingTest {
         var expectedLidBare = Jid.of(oracle.getString("chatId"));
         var expectedAccountLid = Jid.of(oracle.getString("accountLid"));
 
-        // The oracle captured WA Web's findOrCreateLatestChat(<own PN>) producing
-        // a LID-keyed chat. Cobalt's store should be able to give the same LID
-        // back when populated with the same self identity.
         var store = DeviceFixtures.temporaryStore(pnInput, expectedLidBare);
 
         var lookedUpLid = store.findLidByPhone(pnInput).orElseThrow();
@@ -57,8 +49,6 @@ class SelfPnLidRoutingTest {
                 "findPhoneByLid(<own LID>) must round-trip back to the same PN; "
                         + "before the symmetric self-special-case fix, this returned empty");
 
-        // The chat.accountLid field on WA Web's side matches the LID, confirming
-        // that maybeReplaceWidWithAccountLid points at the right destination.
         assertEquals(expectedLidBare, expectedAccountLid,
                 "captured oracle invariant: chat.id == chat.accountLid for self-chat");
     }

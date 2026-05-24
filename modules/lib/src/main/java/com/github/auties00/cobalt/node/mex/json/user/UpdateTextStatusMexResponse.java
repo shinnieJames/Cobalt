@@ -15,30 +15,40 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Parsed response for the update-text-status mutation. Carries the relay's status token from
- * {@code data.xwa2_update_text_status}.
+ * Decoded reply to the update-text-status mutation.
+ *
+ * @apiNote Consume after dispatching {@link UpdateTextStatusMexRequest}.
+ * Wraps the {@code xwa2_update_text_status.result} status token; WA Web's
+ * {@code WAWebUpdateTextStatusJob} inspects this token to drive the
+ * post-submit UI and emits a structured log entry tagged with the result.
+ *
+ * @see UpdateTextStatusMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexUpdateTextStatusJob")
 public final class UpdateTextStatusMexResponse implements MexOperation.Response.Json {
     /**
-     * The status token reported by the relay after the mutation runs.
+     * The {@code result} field carrying the relay's status token.
      */
     private final String result;
 
     /**
-     * Constructs a new response with the given status token.
+     * Wraps the decoded relay status token.
      *
-     * @param result the status token reported by the relay
+     * @param result the {@code result} field
      */
     private UpdateTextStatusMexResponse(String result) {
         this.result = result;
     }
 
     /**
-     * Parses the MEX response carried by an inbound IQ stanza.
+     * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
+     * @apiNote Pass the IQ node received in reply to a stanza dispatched
+     * with {@link UpdateTextStatusMexRequest#toNode()}.
+     *
+     * @param node the IQ reply stanza
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJob", exports = "mexUpdateTextStatus",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -49,19 +59,28 @@ public final class UpdateTextStatusMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Returns the status token reported by the relay.
+     * Returns the raw status token.
      *
-     * @return an {@link Optional} containing the status token, or empty if absent
+     * @apiNote Use {@link #isSuccess()} for the boolean WA Web exposes;
+     * the raw token is preserved for callers that want to distinguish
+     * among the relay's error tokens.
+     *
+     * @return the token wrapped in an {@link Optional}, or
+     *         {@link Optional#empty()} when the relay omitted the field
      */
     public Optional<String> result() {
         return Optional.ofNullable(result);
     }
 
     /**
-     * Returns whether the text-status mutation succeeded. Mirrors the WA Web check
-     * {@code result?.xwa2_update_text_status?.result === "SUCCESS"}.
+     * Returns whether the mutation succeeded.
      *
-     * @return {@code true} if the {@code result} field equals {@code "SUCCESS"}, {@code false} otherwise
+     * @apiNote Mirrors WA Web's
+     * {@code result?.xwa2_update_text_status?.result === "SUCCESS"} check
+     * inside {@code WAWebUpdateTextStatusJob}.
+     *
+     * @return {@code true} when {@link #result()} equals
+     *         {@code "SUCCESS"}, {@code false} otherwise
      */
     @WhatsAppWebExport(moduleName = "WAWebMexUpdateTextStatusJob", exports = "mexUpdateTextStatus",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -70,10 +89,15 @@ public final class UpdateTextStatusMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses the response from the raw JSON payload bytes.
+     * Decodes the {@code <result>} payload bytes into a {@link UpdateTextStatusMexResponse}.
      *
-     * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty if the envelope is missing
+     * @implNote This implementation projects
+     * {@code data.xwa2_update_text_status.result}; missing intermediate
+     * envelopes yield {@link Optional#empty()}.
+     *
+     * @param json the raw {@code <result>} payload bytes
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload does not parse or lacks the required envelope
      */
     private static Optional<UpdateTextStatusMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

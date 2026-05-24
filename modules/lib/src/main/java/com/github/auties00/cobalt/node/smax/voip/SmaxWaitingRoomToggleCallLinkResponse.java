@@ -11,18 +11,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay.
+ * The inbound reply to a {@link SmaxWaitingRoomToggleCallLinkRequest},
+ * projecting the relay's {@code <ack class="call">} stanza into either
+ * {@link Success} (toggle applied) or {@link ClientError} (toggle rejected).
+ *
+ * @apiNote
+ * Consumed by the call-link admin UI to confirm the toggle change persisted;
+ * {@code WAWebVoipWaitingRoomToggleJob} surfaces a Nack as a backend
+ * {@code ServerStatusCodeError}.
  */
 public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperation.Response
         permits SmaxWaitingRoomToggleCallLinkResponse.Success, SmaxWaitingRoomToggleCallLinkResponse.ClientError {
 
     /**
-     * Tries each {@link SmaxWaitingRoomToggleCallLinkResponse} variant in priority order.
+     * Parses an inbound stanza into the first matching reply variant.
+     *
+     * @apiNote
+     * Mirrors {@code WASmaxVoipWaitingRoomToggleCallLinkRPC.sendWaitingRoomToggleCallLinkRPC};
+     * Cobalt returns {@link Optional#empty()} on no-match instead of throwing
+     * the JS {@code SmaxParsingFailure}.
      *
      * @param node    the inbound stanza; never {@code null}
      * @param request the original outbound stanza; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         empty on no-match
+     * @return an {@link Optional} carrying the parsed variant, or empty on no-match
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxVoipWaitingRoomToggleCallLinkRPC",
@@ -38,13 +49,17 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     }
 
     /**
-     * Validates the {@code <ack class="call">} envelope shared by
-     * both reply variants.
+     * Validates the {@code <ack class="call">} envelope common to both reply
+     * variants.
+     *
+     * @implNote
+     * This implementation mirrors {@code WASmaxInVoipCallAckBaseMixin.parseCallAckBaseMixin}:
+     * it requires the {@code <ack>} description, the {@code class="call"} marker,
+     * the echoed request {@code id}, and the literal {@code from="call"} server.
      *
      * @param node    the inbound stanza
      * @param request the original outbound request
-     * @return {@code true} when the envelope matches; {@code false}
-     *         otherwise
+     * @return {@code true} when the envelope matches; {@code false} otherwise
      */
     private static boolean validateAckEnvelope(Node node, Node request) {
         if (!node.hasDescription("ack")) {
@@ -68,8 +83,13 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     }
 
     /**
-     * The {@code Success} reply variant. The relay accepted the
-     * toggle and echoed back the link-token of the affected link.
+     * The successful reply carrying the link-token whose waiting-room state
+     * was toggled.
+     *
+     * @apiNote
+     * The echoed token confirms which link was affected; the new state is
+     * implied by the request's {@code waitingRoomToggleEnabled} since the
+     * Ack carries no enabled echo.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkAck")
     final class Success implements SmaxWaitingRoomToggleCallLinkResponse {
@@ -79,19 +99,17 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         private final String waitingRoomToggleLinkToken;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a successful reply.
          *
-         * @param waitingRoomToggleLinkToken the echoed token; never
-         *                                   {@code null}
-         * @throws NullPointerException if {@code waitingRoomToggleLinkToken}
-         *                              is {@code null}
+         * @param waitingRoomToggleLinkToken the echoed token; never {@code null}
+         * @throws NullPointerException if {@code waitingRoomToggleLinkToken} is {@code null}
          */
         public Success(String waitingRoomToggleLinkToken) {
             this.waitingRoomToggleLinkToken = Objects.requireNonNull(waitingRoomToggleLinkToken, "waitingRoomToggleLinkToken cannot be null");
         }
 
         /**
-         * Returns the echoed token.
+         * Returns the echoed call-link token.
          *
          * @return the token; never {@code null}
          */
@@ -100,13 +118,17 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link Success} variant.
+         *
+         * @implNote
+         * This implementation requires the shared ack envelope, the
+         * {@code type="waiting_room_toggle"} marker, an inner
+         * {@code <waiting_room_toggle>} child, and a non-null
+         * {@code link-token} attribute.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkAck",
                 exports = "parseWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkAck",
@@ -154,39 +176,38 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * toggle, typically because the caller is not the link's creator
-     * or the link no longer exists.
+     * The client-error reply produced when the relay rejects the toggle.
+     *
+     * @apiNote
+     * Typical causes are a non-creator caller, a revoked link, or a media
+     * mismatch; the per-RPC {@link #errorLinkToken()} echoes the offending
+     * token to support multi-link admin surfaces.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkNack")
     final class ClientError implements SmaxWaitingRoomToggleCallLinkResponse {
         /**
-         * The numeric error code, parsed from the {@code @error}
-         * attribute when it is a decimal integer; {@code -1} when
-         * non-numeric.
+         * The numeric error code parsed from the {@code error} attribute,
+         * or {@code -1} when the raw value is non-numeric.
          */
         private final int errorCode;
 
         /**
-         * The raw {@code @error} attribute string.
+         * The raw {@code error} attribute value.
          */
         private final String errorText;
 
         /**
          * The per-RPC link-token attribute carried by the inner
-         * {@code <error/>} child.
+         * {@code <error>} child; identifies which link the error refers to.
          */
         private final String errorLinkToken;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a client-error reply.
          *
-         * @param errorCode      the numeric code; {@code -1} when
-         *                       non-numeric
-         * @param errorText      the raw error string; may be
-         *                       {@code null}
-         * @param errorLinkToken the per-RPC link-token; may be
-         *                       {@code null}
+         * @param errorCode      the numeric code; {@code -1} when the raw attribute is non-numeric
+         * @param errorText      the raw error string; may be {@code null}
+         * @param errorLinkToken the per-RPC link-token; may be {@code null}
          */
         public ClientError(int errorCode, String errorText, String errorLinkToken) {
             this.errorCode = errorCode;
@@ -197,7 +218,8 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         /**
          * Returns the numeric error code.
          *
-         * @return the error code
+         * @return the error code, or {@code -1} when the raw {@code error}
+         *         attribute was non-numeric
          */
         public int errorCode() {
             return errorCode;
@@ -206,31 +228,34 @@ public sealed interface SmaxWaitingRoomToggleCallLinkResponse extends SmaxOperat
         /**
          * Returns the optional raw error string.
          *
-         * @return an {@link Optional} carrying the error string, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the error string, or empty when omitted
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Returns the optional per-RPC link-token.
+         * Returns the per-RPC link-token attribute.
          *
-         * @return an {@link Optional} carrying the link-token, or
-         *         empty when omitted
+         * @return an {@link Optional} carrying the link-token, or empty when omitted
          */
         public Optional<String> errorLinkToken() {
             return Optional.ofNullable(errorLinkToken);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * inbound stanza.
+         * Parses an inbound stanza into a {@link ClientError} variant.
+         *
+         * @implNote
+         * This implementation requires the shared ack envelope, the
+         * {@code type="waiting_room_toggle"} marker, a non-null {@code error}
+         * attribute, and a non-null {@code link-token} attribute on the inner
+         * {@code <error>} child; the attribute value is parsed as a decimal
+         * integer and falls back to {@code -1} when non-numeric.
          *
          * @param node    the inbound stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty on schema mismatch
+         * @return an {@link Optional} carrying the parsed variant, or empty on schema mismatch
          */
         @WhatsAppWebExport(moduleName = "WASmaxInVoipWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkNack",
                 exports = "parseWaitingRoomToggleCallLinkResponseWaitingRoomToggleCallLinkNack",

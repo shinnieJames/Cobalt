@@ -12,29 +12,48 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 
 /**
- * Fetches the list of product collections that belong to a WhatsApp Business
- * catalog.
+ * Outbound MEX request that fetches the product collections of a WhatsApp
+ * Business catalog.
  *
- * <p>Collections are named groups of products that business owners can define
- * inside a catalog. The query returns the top-level metadata of each
- * collection (id, name) along with the products nested inside it. WA Web
- * exposes both an owner and a guest entry point but both funnel the same
- * GraphQL document.
+ * @apiNote Drives the collections browser surface for business catalogs.
+ * Collections are named groups of products that business owners define
+ * inside a catalog; the response returns each collection's id and name
+ * paired with the products nested inside it. Surfaced from
+ * {@code WAWebProductCollCollection} via
+ * {@code WAWebQueryProductCollections.default}, which dispatches to the
+ * owner ({@code queryCollectionsGraphQLByOwner}) or guest
+ * ({@code queryCollectionsGraphQLByGuest}) variant on the same compiled
+ * document depending on the caller; Cobalt issues the single query and lets
+ * the relay disambiguate.
+ *
+ * @implNote This implementation lets the caller pass every optional GraphQL
+ * variable (cursor, encrypted direct-connection blob, variant info,
+ * thumbnail dimensions) as explicit {@code null} when not needed, matching
+ * WA Web's pass-through behaviour rather than baking in WA-Web defaults.
  */
 @WhatsAppWebModule(moduleName = "WAWebQueryProductCollections")
 @WhatsAppWebModule(moduleName = "WAWebQueryProductCollectionsQuery.graphql")
 public final class QueryProductCollectionsMexRequest implements MexOperation.Request.Json {
     /**
-     * The numeric query identifier assigned to the compiled
-     * {@code WAWebQueryProductCollectionsQuery} GraphQL operation.
+     * Compiled GraphQL query identifier for the
+     * {@code WAWebQueryProductCollectionsQuery} document.
+     *
+     * @apiNote Mirrors the {@code params.id} value baked into
+     * {@code WAWebQueryProductCollectionsQuery.graphql}. The relay maps this
+     * id to its persisted operation; the GraphQL text is never sent on the
+     * wire.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollectionsQuery.graphql", exports = "params.id",
             adaptation = WhatsAppAdaptation.DIRECT)
     public static final String QUERY_ID = "9430970660362540";
 
     /**
-     * The GraphQL operation name fed into {@code MexPerfTracker.setOperationName}
-     * when this query is dispatched.
+     * GraphQL operation name reported to
+     * {@code MexPerfTracker.setOperationName} when this query is dispatched.
+     *
+     * @apiNote Used by WA Web's MEX perf tracker to tag the query in latency
+     * and error metrics; Cobalt keeps the name on the request for embedders
+     * mirroring WA Web's telemetry surface.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollections", exports = "default",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -53,6 +72,13 @@ public final class QueryProductCollectionsMexRequest implements MexOperation.Req
 
     /**
      * Creates a new collections query request.
+     *
+     * @apiNote {@code collectionLimit} and {@code itemLimit} are independent:
+     * the first bounds the number of collections returned per page, the
+     * second bounds the number of products returned inside each collection.
+     * {@code directConnectionEncryptedInfo} is the optional payload the
+     * business direct-connection retry loop produces; pass {@code null} when
+     * the call is not routed through that retry path.
      *
      * @param businessJid                   the target business JID owning
      *                                      the catalog
@@ -97,9 +123,7 @@ public final class QueryProductCollectionsMexRequest implements MexOperation.Req
     }
 
     /**
-     * Returns the compiled GraphQL query identifier.
-     *
-     * @return the constant {@link #QUERY_ID}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String id() {
@@ -107,9 +131,7 @@ public final class QueryProductCollectionsMexRequest implements MexOperation.Req
     }
 
     /**
-     * Returns the GraphQL operation name.
-     *
-     * @return the constant {@link #OPERATION_NAME}, never {@code null}
+     * {@inheritDoc}
      */
     @Override
     public String name() {
@@ -117,10 +139,18 @@ public final class QueryProductCollectionsMexRequest implements MexOperation.Req
     }
 
     /**
-     * Builds the IQ stanza that dispatches this operation to the WhatsApp
-     * relay.
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised GraphQL variables
+     * {@inheritDoc}
+     *
+     * @implNote This implementation streams the GraphQL variables through
+     * fastjson2's {@link JSONWriter}, mirroring the
+     * {@code {"variables": {"request": {"collections": {...}}}}} shape
+     * expected by {@code xwa_product_catalog_get_collections}. Width,
+     * height, limit and pagination fields are stringified to match the WA
+     * Web wire shape, which sends them as JSON strings even though they are
+     * integers in the GraphQL schema. {@code null} variants of the four
+     * optional fields are emitted as explicit JSON {@code null}, not
+     * omitted, to match the WA Web {@code variant_thumbnail_height: m != null
+     * ? String(m) : null} pattern.
      */
     @WhatsAppWebExport(moduleName = "WAWebQueryProductCollections", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)

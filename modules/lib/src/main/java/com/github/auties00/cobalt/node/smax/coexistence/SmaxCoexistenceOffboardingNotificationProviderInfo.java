@@ -9,33 +9,59 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Projection of the {@code <provider_info/>} child carried by a
- * coexistence notification's payload child.
+ * The {@code <provider_info/>} sub-child carried by a coexistence
+ * notification.
+ *
+ * @apiNote
+ * Identifies the third-party provider behind a hosted onboarding or
+ * offboarding event ({@code AI from Meta}, the
+ * {@code business_platform} surface, automation providers); embedders
+ * surface the logo and display name when notifying users that the
+ * coexistence link has been established or torn down.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInCoexistenceProviderInfoMixin")
 public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
-     * The optional logo-URL content bytes.
+     * The optional logo-URL bytes for the provider.
+     *
+     * @apiNote
+     * Empty when the relay did not include the {@code <logo_url/>}
+     * child; otherwise the raw bytes of the URL the embedder loads
+     * into the notification.
      */
     private final byte[] logoUrl;
 
     /**
-     * The optional name content bytes.
+     * The optional human-readable name bytes for the provider.
+     *
+     * @apiNote
+     * Empty when the relay omitted the {@code <name/>} child;
+     * otherwise the raw bytes of the provider's display name.
      */
     private final byte[] name;
 
     /**
-     * The optional provider id (parsed from {@code <id/>} content
-     * as a base-10 integer).
+     * The optional provider id.
+     *
+     * @apiNote
+     * Empty when the relay omitted the {@code <id/>} child or when the
+     * content cannot be parsed as a base-10 integer; embedders use the
+     * value as a stable provider key when cross-referencing the
+     * coexistence link with their own records.
      */
     private final Integer id;
 
     /**
      * Constructs a new provider-info projection.
      *
-     * @param logoUrl the optional logo-URL bytes. May be {@code null}
-     * @param name    the optional name bytes. May be {@code null}
-     * @param id      the optional provider id. May be {@code null}
+     * @apiNote
+     * Built by {@link #of(Node)} from the parsed children of the
+     * {@code <provider_info/>} node; embedders rarely instantiate this
+     * class directly outside tests.
+     *
+     * @param logoUrl the optional logo-URL bytes; may be {@code null}
+     * @param name    the optional name bytes; may be {@code null}
+     * @param id      the optional provider id; may be {@code null}
      */
     public SmaxCoexistenceOffboardingNotificationProviderInfo(byte[] logoUrl, byte[] name, Integer id) {
         this.logoUrl = logoUrl;
@@ -46,6 +72,10 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
      * Returns the optional logo-URL bytes.
      *
+     * @apiNote
+     * Returns the underlying mutable buffer; callers must not mutate
+     * it.
+     *
      * @return an {@link Optional} carrying the bytes
      */
     public Optional<byte[]> logoUrl() {
@@ -54,6 +84,10 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
 
     /**
      * Returns the optional name bytes.
+     *
+     * @apiNote
+     * Returns the underlying mutable buffer; callers must not mutate
+     * it.
      *
      * @return an {@link Optional} carrying the bytes
      */
@@ -64,6 +98,10 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     /**
      * Returns the optional provider id.
      *
+     * @apiNote
+     * Empty when the relay omitted it or when the content failed the
+     * base-10 integer check.
+     *
      * @return an {@link Optional} carrying the id
      */
     public Optional<Integer> id() {
@@ -71,14 +109,28 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
     }
 
     /**
-     * Tries to parse a {@code <provider_info/>} child from the given
-     * parent node.
+     * Tries to parse a {@code <provider_info/>} sub-child from the
+     * given parent node.
      *
-     * @param parent the parent node carrying the {@code <provider_info/>}
-     *               child. Never {@code null}
-     * @return an {@link Optional} carrying the parsed projection, or
-     *         empty when the child is missing or when {@code <id/>}
-     *         content cannot be parsed as a base-10 integer
+     * @apiNote
+     * Mirrors {@code WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoMixin}
+     * composed with the per-child accessors; consumed by
+     * {@link SmaxCoexistenceOffboardingNotificationResponse#of(Node)}
+     * and
+     * {@link SmaxCoexistenceOnboardingStatusNotificationResponse#of(Node)}
+     * to lift the nested provider block.
+     *
+     * @implNote
+     * This implementation collapses a malformed {@code <id/>} content
+     * (non-numeric or out-of-range for {@code int}) to
+     * {@link Optional#empty()}, matching the {@code contentInt} parser
+     * in {@code WASmaxParseUtils} which signals a parse error on
+     * {@code NaN}; WA Web propagates the underlying error envelope
+     * instead.
+     *
+     * @param parent the node carrying the {@code <provider_info/>}
+     *               child; never {@code null}
+     * @return an {@link Optional} carrying the projection
      * @throws NullPointerException if {@code parent} is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxInCoexistenceProviderInfoMixin",
@@ -91,20 +143,16 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
             adaptation = WhatsAppAdaptation.ADAPTED)
     public static Optional<SmaxCoexistenceOffboardingNotificationProviderInfo> of(Node parent) {
         Objects.requireNonNull(parent, "parent cannot be null");
-        // WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoMixin: flattenedChildWithTag(t, "provider_info")
         var providerInfoNode = parent.getChild("provider_info").orElse(null);
         if (providerInfoNode == null) {
             return Optional.empty();
         }
-        // WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoProviderInfoLogoUrl: assertTag("logo_url") + contentBytes
         var logoUrl = providerInfoNode.getChild("logo_url")
                 .flatMap(Node::toContentBytes)
                 .orElse(null);
-        // WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoProviderInfoName: assertTag("name") + contentBytes
         var name = providerInfoNode.getChild("name")
                 .flatMap(Node::toContentBytes)
                 .orElse(null);
-        // WASmaxInCoexistenceProviderInfoMixin.parseProviderInfoProviderInfoId: assertTag("id") + contentInt
         var idBytes = providerInfoNode.getChild("id")
                 .flatMap(Node::toContentString)
                 .orElse(null);
@@ -113,8 +161,6 @@ public final class SmaxCoexistenceOffboardingNotificationProviderInfo {
             try {
                 id = Integer.parseInt(idBytes);
             } catch (NumberFormatException _) {
-                // ADAPTED: WASmaxParseUtils.contentInt: parseInt(e,10) NaN -> error;
-                // here a malformed id collapses the whole parse to Optional.empty().
                 return Optional.empty();
             }
         }

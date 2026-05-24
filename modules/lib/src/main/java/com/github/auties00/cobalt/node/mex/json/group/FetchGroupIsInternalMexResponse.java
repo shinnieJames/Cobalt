@@ -14,19 +14,30 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 
 /**
- * Parsed response of the {@link FetchGroupIsInternalMexRequest} query,
- * exposing whether the queried group is flagged as internal by the relay.
+ * Inbound parsed response of the {@link FetchGroupIsInternalMexRequest}
+ * query, exposing whether the queried group is flagged as internal by the
+ * relay.
+ *
+ * @apiNote Drives the staff-only indicator badge that WA Web renders on
+ * Meta-internal testing groups when the {@code internal_group_indicator}
+ * AB-prop is enabled. The flag lives under the
+ * {@code XWA2*Properties.internal} scalar of every group inline-fragment
+ * variant.
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchGroupIsInternalJob")
 public final class FetchGroupIsInternalMexResponse implements MexOperation.Response.Json {
     /**
      * The internal-flag scalar projected from
-     * {@code xwa2_group_query_by_id.properties.internal}.
+     * {@code data.xwa2_group_query_by_id.properties.internal}.
      */
     private final boolean internal;
 
     /**
-     * Constructs a response wrapping the boolean internal-flag scalar.
+     * Constructs a new response wrapping the parsed boolean
+     * internal-flag scalar.
+     *
+     * @apiNote Package-private; instances are produced by the
+     * {@link #of(Node)} parser.
      *
      * @param internal whether the relay reports the group as internal
      */
@@ -35,11 +46,16 @@ public final class FetchGroupIsInternalMexResponse implements MexOperation.Respo
     }
 
     /**
-     * Parses a MEX response from the given IQ response node.
+     * Parses the MEX response carried by an inbound IQ stanza.
      *
-     * @param node the IQ response node received from the relay
-     * @return an {@link Optional} containing the parsed response, or empty
-     *         if the node is missing a result payload
+     * @apiNote Entry point for receivers handling the IQ reply of
+     * {@link FetchGroupIsInternalMexRequest}. The returned value is
+     * {@link Optional#empty()} when the reply lacks a {@code <result>}
+     * child or its JSON body cannot be parsed into the expected envelope.
+     *
+     * @param node the inbound IQ stanza carrying the {@code <result>} child
+     * @return the parsed response, or {@link Optional#empty()} if the
+     *         expected JSON shape is absent
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchGroupIsInternalJob", exports = "mexFetchGroupIsInternal",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -50,7 +66,12 @@ public final class FetchGroupIsInternalMexResponse implements MexOperation.Respo
     }
 
     /**
-     * Returns whether the queried group is flagged as internal.
+     * Returns whether the queried group is flagged as internal by the relay.
+     *
+     * @apiNote {@code true} only when the relay populated
+     * {@code properties.internal} with a JSON {@code true} literal;
+     * {@code false} for the missing-property and JSON-{@code false} cases
+     * (matching the WA Web {@code === true} strict comparison).
      *
      * @return {@code true} if the relay reports the group as internal,
      *         {@code false} otherwise
@@ -60,12 +81,17 @@ public final class FetchGroupIsInternalMexResponse implements MexOperation.Respo
     }
 
     /**
-     * Parses a {@link FetchGroupIsInternalMexResponse} from the raw JSON
-     * bytes of the {@code <result>} child.
+     * Parses the JSON payload carried by the {@code <result>} child into a
+     * {@link FetchGroupIsInternalMexResponse}.
+     *
+     * @implNote This implementation collapses the missing-envelope,
+     * missing-{@code properties} and missing-{@code internal} cases to a
+     * {@code false} verdict, mirroring the WA Web optional-chain
+     * {@code ((t = n.xwa2_group_query_by_id) == null || (t = t.properties) == null ? void 0 : t.internal) === true}.
      *
      * @param json the UTF-8 encoded JSON payload
      * @return an {@link Optional} containing the parsed response, or empty
-     *         if the envelope is missing expected fields
+     *         if the {@code data.xwa2_group_query_by_id} envelope is absent
      */
     private static Optional<FetchGroupIsInternalMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);
@@ -83,13 +109,11 @@ public final class FetchGroupIsInternalMexResponse implements MexOperation.Respo
             return Optional.empty();
         }
 
-        // The "properties" sub-object is shared by all four group inline fragments
         var properties = root.getJSONObject("properties");
         if (properties == null) {
             return Optional.of(new FetchGroupIsInternalMexResponse(false));
         }
 
-        // ((t = n.xwa2_group_query_by_id) == null || (t = t.properties) == null ? void 0 : t.internal) === true
         var internal = Boolean.TRUE.equals(properties.getBoolean("internal"));
 
         return Optional.of(new FetchGroupIsInternalMexResponse(internal));

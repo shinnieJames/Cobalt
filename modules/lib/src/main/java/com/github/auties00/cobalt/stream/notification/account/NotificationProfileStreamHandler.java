@@ -1,5 +1,7 @@
 package com.github.auties00.cobalt.stream.notification.account;
 
+import com.github.auties00.cobalt.ack.AckClass;
+import com.github.auties00.cobalt.ack.AckSender;
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -18,64 +20,94 @@ import java.util.Base64;
 import java.util.Objects;
 
 /**
- * Handles incoming profile picture and about (text status) notification stanzas.
+ * Handles {@code type="picture"} and {@code type="status"} notifications
+ * announcing profile-picture or about-text changes on a peer contact, a
+ * group, or self.
  *
- * <p>This handler processes two types of notification stanzas dispatched by
- * {@link NotificationAccountDispatcher}: {@code type="picture"} for profile picture
- * changes, and {@code type="status"} for about/text-status changes. For each
- * notification type, it parses the stanza, updates the local store, fires the
- * appropriate listener callbacks, and sends an acknowledgement back to the server.
+ * @apiNote
+ * Dispatched by {@link NotificationAccountDispatcher}. Profile-picture
+ * notifications carry one of four action children ({@code delete},
+ * {@code set}, {@code request}, {@code set_avatar}) and may identify
+ * the target either inline via {@code jid} or indirectly via {@code hash};
+ * the hash form is the WA contact-hash truncation
+ * ({@code Base64(MD5(user + "WA_ADD_NOTIF")[0:3])}) used by the
+ * sidelist refresh path. About notifications similarly split into a
+ * direct {@code <set>} with inline content, a hash-based
+ * {@code <set hash=.../>} requiring server-side resolution, and an
+ * {@code unknown} fall-through.
  *
- * <p>Profile picture notifications can arrive in two forms: with an explicit
- * {@code jid} attribute on the action child (identifying the target contact or group
- * directly), or with a {@code hash} attribute that must be resolved against the
- * local contact database using the WhatsApp contact hash algorithm. About
- * notifications similarly distinguish between a direct {@code change} (inline
- * content) and a {@code sideListChange} (hash-based contact resolution with
- * server-side status fetch).
+ * @implNote
+ * This implementation merges WA Web's separate
+ * {@code WAWebHandleProfilePicNotification} and
+ * {@code WAWebHandleAboutNotification} modules into one Cobalt handler
+ * because they share enough structure (jid-vs-hash resolution, ack
+ * format, contact-store fan-out) that the consolidation halves the
+ * branch count.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandleProfilePicNotification")
 @WhatsAppWebModule(moduleName = "WAWebHandleAboutNotification")
 public final class NotificationProfileStreamHandler implements SocketStream.Handler {
 
     /**
-     * The logger instance for this handler, using the fully qualified class name
-     * as the logger name.
+     * Logger used for warnings about malformed action children and debug
+     * messages about unhandled types.
      */
     private static final System.Logger LOGGER =
             System.getLogger(NotificationProfileStreamHandler.class.getName());
 
     /**
-     * The salt string appended to a contact's user component before MD5 hashing,
-     * used by the WhatsApp contact hash algorithm to produce a short hash for
-     * side-list contact resolution.
+     * The salt appended to a contact's user component before the
+     * truncated MD5 hash used by the WA contact-hash side-list lookup.
+     *
+     * @apiNote
+     * Mirrors WA Web's hard-coded {@code "WA_ADD_NOTIF"} constant used
+     * by both
+     * {@code WAWebContactGetters.getUserhash} (consumer) and
+     * {@code WAWebApiContact.getContactRecordByHash} (lookup). The
+     * server uses the truncated, base64-encoded digest as a privacy
+     * preserving identifier in side-list notifications.
      */
     private static final String CONTACT_HASH_SALT = "WA_ADD_NOTIF";
 
     /**
-     * The WhatsApp client instance providing access to the store, query methods,
-     * and node sending capabilities.
+     * The {@link WhatsAppClient} used for store reads and server queries
+     * (picture, about).
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new profile/status notification handler.
-     *
-     * @param whatsapp the non-{@code null} WhatsApp client instance
+     * The {@link AckSender} used to ship the post-processing
+     * {@code <ack class="notification">} stanza for both picture and
+     * status notifications.
      */
-    public NotificationProfileStreamHandler(WhatsAppClient whatsapp) {
+    private final AckSender ackSender;
+
+    /**
+     * Constructs the handler with the shared client and ack sender.
+     *
+     * @apiNote
+     * Called once by {@link NotificationAccountDispatcher}; embedders
+     * do not instantiate this handler directly.
+     *
+     * @param whatsapp  the non-{@code null} client
+     * @param ackSender the non-{@code null} ack sender
+     */
+    public NotificationProfileStreamHandler(WhatsAppClient whatsapp, AckSender ackSender) {
         this.whatsapp = whatsapp;
+        this.ackSender = ackSender;
     }
 
     /**
-     * Dispatches a notification node to the appropriate handler based on the
-     * {@code type} attribute value.
+     * Routes the incoming stanza to {@link #handlePicture(Node)} or
+     * {@link #handleAbout(Node)} based on the stanza's {@code type}
+     * attribute.
      *
-     * <p>Notifications with {@code type="picture"} are routed to
-     * {@link #handlePicture(Node)}, and notifications with {@code type="status"}
-     * are routed to {@link #handleAbout(Node)}.
+     * @apiNote
+     * Invoked by {@link NotificationAccountDispatcher}. Stanzas whose
+     * type is neither {@code "picture"} nor {@code "status"} return
+     * without side-effects.
      *
-     * @param node the non-{@code null} notification stanza node
+     * @param node the {@code <notification>} stanza
      */
     @Override
     public void handle(Node node) {
@@ -90,23 +122,23 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Handles an incoming profile picture notification stanza.
+     * Processes a profile-picture notification by resolving the target
+     * JID, applying the action, and sending the ACK.
      *
-     * <p>The notification stanza contains one of four action children:
-     * {@code delete} (picture removed), {@code set} (picture changed),
-     * {@code request} (self-picture request, no-op), or {@code set_avatar}
-     * (avatar set, not yet implemented). The action child may identify the
-     * target via an explicit {@code jid} attribute or via a {@code hash}
-     * attribute that is resolved against the local contact database.
+     * @apiNote
+     * Drives the profile-picture-change affordance for both self
+     * (own profile picture refreshed) and any peer or group. Group
+     * picture changes log the author and timestamp at {@code DEBUG}
+     * but do not synthesise the in-thread system message; the next
+     * UI render fetches the new image.
      *
-     * <p>For {@code delete} and {@code set} actions, the handler updates
-     * the local profile picture for the target contact (or self) and fires
-     * the {@code onProfilePictureChanged} listener callback. For group
-     * targets, a system message is logged (full group system message
-     * generation requires MessageService integration).
+     * @implNote
+     * This implementation always ACKs in the {@code finally} block,
+     * matching WA Web's
+     * {@code WAWebHandleProfilePicNotification.handleProfilePicNotificationJob}
+     * which returns the ack from the parser's promise resolution.
      *
-     * @param node the non-{@code null} notification stanza node with
-     *             {@code type="picture"}
+     * @param node the {@code <notification type="picture"/>} stanza
      */
     private void handlePicture(Node node) {
         try {
@@ -127,12 +159,10 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
 
             Jid targetJid;
             if (actionNode.getAttributeAsJid("jid").isPresent()) {
-                // Branch 1: child has jid attr -> use it directly
                 targetJid = actionNode.getAttributeAsJid("jid")
                         .map(Jid::withoutData)
                         .orElse(null);
             } else {
-                // Branch 2: child has hash attr -> resolve via contact hash lookup
                 var hash = actionNode.getAttributeAsString("hash", null);
                 if (hash != null) {
                     targetJid = resolveContactByHash(hash);
@@ -151,9 +181,9 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
                         handlePictureSetOrDelete(targetJid, actionType, node, actionNode);
                     }
                     case "request" -> {
-                        // No-op: WA Web also does nothing for request type
                     }
                     case "set_avatar" -> {
+                        // TODO: implement the set_avatar branch once Cobalt has avatar metadata; today the stanza is logged and ACKed without effect.
                         LOGGER.log(System.Logger.Level.WARNING,
                                 "set_avatar picture notification is not implemented");
                     }
@@ -173,28 +203,29 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Handles the {@code set} or {@code delete} action for a profile picture notification.
+     * Applies a profile-picture change for the resolved target JID,
+     * persisting the new URI for self and firing
+     * {@code onProfilePictureChanged} for all targets.
      *
-     * <p>For {@code delete}, the profile picture thumbnail is cleared from the local store
-     * for the target contact. For {@code set}, the profile picture is fetched from the
-     * server and stored locally. In both cases, the alternate user JID (LID/PN mapping)
-     * is also updated if it exists, mirroring the behavior of
-     * {@code WAWebChangeProfilePicThumb.changeProfilePicThumb}.
+     * @apiNote
+     * Self-picture changes are persisted on the store so the cached
+     * URI survives without a server round-trip; non-self changes
+     * trigger the listener so the UI may re-query lazily.
      *
-     * <p>For group targets with a non-{@code null} timestamp, a log message notes
-     * where a group system message would be generated. Full group system message
-     * generation requires {@code MessageService} integration which is not currently
-     * available to this handler.
+     * @implNote
+     * This implementation only persists the URI for the local account.
+     * WA Web's
+     * {@code WAWebChangeProfilePicThumb.changeProfilePicThumb} caches
+     * the thumb bytes per-target in IndexedDB; Cobalt has no thumb
+     * cache and lets callers re-query on demand via
+     * {@link WhatsAppClient#queryPicture}.
      *
      * @param targetJid  the non-{@code null} JID of the entity whose picture changed
      * @param actionType either {@code "set"} or {@code "delete"}
-     * @param node       the notification stanza node (for timestamp and author extraction)
-     * @param actionNode the action child node (for author extraction)
+     * @param node       the notification stanza, used for timestamp extraction on group targets
+     * @param actionNode the action child, used for author extraction on group targets
      */
     private void handlePictureSetOrDelete(Jid targetJid, String actionType, Node node, Node actionNode) {
-        // ADAPTED: Cobalt only persists the picture URI for the local account; non-self
-        // contact and group pictures are fetched on demand via queryPicture(). Listeners
-        // still receive the change event below for all targets.
         if (isSelf(targetJid)) {
             if ("delete".equals(actionType)) {
                 whatsapp.store().setProfilePicture((URI) null);
@@ -207,9 +238,7 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
         if (targetJid.hasGroupOrCommunityServer()) {
             var ts = node.getAttributeAsLong("t", (Long) null);
             if (ts != null) {
-                // NOTE: Full group system message generation requires MessageService which
-                // is not injected into this handler. The group pic change event is still
-                // reported via the onProfilePictureChanged listener below.
+                // TODO: synthesize the group-pic-change system message via MessageService once it is injected here; today the change is only delivered via the listener fan-out below.
                 LOGGER.log(System.Logger.Level.DEBUG,
                         "Group {0} picture changed at {1} by {2} - system message generation not available",
                         targetJid,
@@ -218,26 +247,22 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
             }
         }
 
-        // Fire listener for all targets (not just self)
         fireProfilePictureChanged(targetJid);
     }
 
     /**
-     * Handles an incoming about/text-status notification stanza.
+     * Processes an about/text-status notification by classifying the
+     * {@code <set>} child as inline change, hash-based side-list change,
+     * or unknown.
      *
-     * <p>The notification stanza is classified into one of three types based on the
-     * {@code set} child node: {@code change} (set child without {@code hash} attribute,
-     * containing inline status text), {@code sideListChange} (set child with {@code hash}
-     * attribute, requiring contact resolution and server-side status fetch), or
-     * {@code unknown} (no set child at all, logged as a warning).
+     * @apiNote
+     * Drives the about/text-status update for the originating user.
+     * Inline changes apply to both the primary JID and its alternate
+     * (LID or PN counterpart); hash-based changes resolve the target
+     * via {@link #resolveContactByHash(String)} and re-query the about
+     * text from the server.
      *
-     * <p>For {@code change} notifications, the handler updates the text status for both
-     * the primary JID and any alternate JID (LID/PN mapping). For {@code sideListChange}
-     * notifications, the handler resolves the contact by hash and fetches the status from
-     * the server.
-     *
-     * @param node the non-{@code null} notification stanza node with
-     *             {@code type="status"}
+     * @param node the {@code <notification type="status"/>} stanza
      */
     private void handleAbout(Node node) {
         try {
@@ -263,16 +288,27 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Handles an about notification of type {@code change}, where the new status text
-     * is provided inline in the {@code set} child's content.
+     * Applies an inline about-text change to the primary JID and to its
+     * alternate JID (LID-PN counterpart) when one is registered.
      *
-     * <p>Updates the text status for both the primary JID and its alternate JID
-     * (the LID/PN counterpart), mirroring the WA Web behavior of iterating both
-     * the contact's from-JID and its alternate user WID.
+     * @apiNote
+     * Mirrors WA Web's {@code "change"} branch which builds the JID
+     * list as {@code [from, getAlternateUserWid(from)]} and dispatches
+     * {@code frontendFireAndForget("updateTextStatuses", {ids, content})}
+     * to update both at once. Cobalt iterates the same list and
+     * updates the local text-status records directly.
      *
-     * @param node     the notification stanza node (for {@code from}, {@code notify}, {@code t} attrs)
-     * @param setNode  the {@code set} child node containing the status content
-     * @param stanzaId the stanza ID for logging purposes
+     * @implNote
+     * This implementation also reads the stanza's {@code notify}
+     * attribute and writes it to the contact's chosen-name field; WA
+     * Web does not propagate the pushname here because its contact
+     * push-name pipeline runs from a different stanza category.
+     * Cobalt's listener API needs the chosen-name fresh for the
+     * about-text affordance.
+     *
+     * @param node     the {@code <notification>} stanza (for {@code from}, {@code notify}, {@code t})
+     * @param setNode  the {@code <set>} child carrying the inline content
+     * @param stanzaId the stanza id, used for logging
      */
     private void handleAboutChange(Node node, Node setNode, String stanzaId) {
         var from = node.getAttributeAsJid("from")
@@ -285,13 +321,11 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
             return;
         }
 
-        // ADAPTED: Cobalt updates the contact's chosen name from pushname
         node.getAttributeAsString("notify")
                 .ifPresent(pushName -> updateContactChosenName(from, pushName));
 
         var content = setNode.toContentString().orElse(null);
 
-        // Build list of JIDs to update: [from, alternateWid]
         var jidsToUpdate = new ArrayList<Jid>();
         jidsToUpdate.add(from);
         var alternateJid = getAlternateUserJid(from);
@@ -315,15 +349,24 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Handles an about notification of type {@code sideListChange}, where the target
-     * contact is identified by a hash and the new status must be fetched from the server.
+     * Applies a hash-based about-text change by resolving the target
+     * contact and re-querying the about text from the server.
      *
-     * <p>Resolves the contact JID from the hash using the WhatsApp contact hash algorithm,
-     * then looks up the existing text status. If found, fetches the updated status from
-     * the server and updates the local store.
+     * @apiNote
+     * Mirrors WA Web's {@code "sideListChange"} branch which calls
+     * {@code WAWebApiContact.getContactRecordByHash} followed by a
+     * {@code frontendFireAndForget("refreshTextStatus", ...)} request.
+     * Cobalt performs the equivalent {@code queryAbout} and writes the
+     * result to the local text-status record.
      *
-     * @param setNode  the {@code set} child node containing the {@code hash} attribute
-     * @param stanzaId the stanza ID for logging purposes
+     * @implNote
+     * This implementation only applies the new about text when an
+     * existing text-status record exists for the resolved JID; WA Web
+     * unconditionally fires the refresh and lets the response handler
+     * create the record on demand.
+     *
+     * @param setNode  the {@code <set hash=.../>} child
+     * @param stanzaId the stanza id, used for logging
      */
     private void handleAboutSideListChange(Node setNode, String stanzaId) {
         var hash = setNode.getAttributeAsString("hash", null);
@@ -354,15 +397,22 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Resolves a contact JID from a WhatsApp contact hash.
+     * Walks the local contact store and returns the JID whose computed
+     * hash matches the target hash.
      *
-     * <p>The contact hash is computed as the first 3 bytes of the MD5 digest of
-     * the contact's user component concatenated with the salt {@code "WA_ADD_NOTIF"},
-     * then Base64-encoded. This method iterates all known contacts and computes the
-     * hash for each to find a match.
+     * @apiNote
+     * Equivalent to WA Web's
+     * {@code WAWebApiContact.getContactRecordByHash} which performs the
+     * same linear scan over the in-memory contact collection.
      *
-     * @param targetHash the Base64-encoded contact hash to look up
-     * @return the resolved contact JID, or {@code null} if no match was found
+     * @implNote
+     * This implementation iterates {@link com.github.auties00.cobalt.store.AbstractWhatsAppStore#contacts}
+     * and re-computes the hash for every contact; for small directories
+     * (a few thousand entries) this is cheap. A hash-keyed cache would
+     * help only at much higher contact counts.
+     *
+     * @param targetHash the base64-encoded 3-byte hash to resolve
+     * @return the matching JID, or {@code null} if no contact hashes to {@code targetHash}
      */
     private Jid resolveContactByHash(String targetHash) {
         for (var contact : whatsapp.store().contacts()) {
@@ -381,14 +431,24 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Computes the WhatsApp contact hash for a given user identifier.
+     * Computes the WA contact hash for the given user component as
+     * {@snippet :
+     * Base64(MD5(user + "WA_ADD_NOTIF")[0:3])
+     * }
      *
-     * <p>The hash is computed as: {@code Base64(MD5(user + "WA_ADD_NOTIF")[0:3])}.
-     * This truncated, Base64-encoded MD5 is used by the WhatsApp server to identify
-     * contacts in side-list notifications without revealing the full phone number.
+     * @apiNote
+     * Used only by {@link #resolveContactByHash(String)}. The 3-byte
+     * truncation matches the WA server's published format for
+     * side-list notifications.
      *
-     * @param user the user component of the contact's JID (typically a phone number)
-     * @return the Base64-encoded 3-byte hash
+     * @implNote
+     * This implementation throws {@link AssertionError} if MD5 is
+     * unavailable; {@code MessageDigest.getInstance("MD5")} is
+     * guaranteed to succeed on every JRE shipping the standard
+     * cryptography providers.
+     *
+     * @param user the user component of a JID (typically a phone number or LID)
+     * @return the base64-encoded 3-byte hash
      */
     private String computeContactHash(String user) {
         try {
@@ -399,21 +459,21 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
             System.arraycopy(digest, 0, truncated, 0, 3);
             return Base64.getEncoder().encodeToString(truncated);
         } catch (NoSuchAlgorithmException exception) {
-            // MD5 is guaranteed to be available in all JDK implementations
             throw new AssertionError("MD5 algorithm not available", exception);
         }
     }
 
     /**
-     * Returns the alternate user JID for the given JID by mapping between
-     * phone-number-based and LID-based identifiers.
+     * Returns the LID-counterpart for a PN JID, or the PN-counterpart
+     * for a LID JID, or {@code null} when no mapping is registered.
      *
-     * <p>If the given JID is a phone-number JID, returns the corresponding LID.
-     * If the given JID is a LID, returns the corresponding phone number JID.
-     * Returns {@code null} if no mapping exists.
+     * @apiNote
+     * Internal helper used by {@link #handleAboutChange(Node, Node, String)}
+     * to fan the about-text update out to both JID forms a contact may
+     * appear under.
      *
-     * @param jid the JID to find the alternate for
-     * @return the alternate JID, or {@code null} if no mapping exists
+     * @param jid the source JID
+     * @return the alternate JID, or {@code null} when no mapping exists
      */
     private Jid getAlternateUserJid(Jid jid) {
         if (jid.hasUserServer()) {
@@ -425,10 +485,15 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Returns whether the given JID belongs to the currently logged-in account.
+     * Returns whether the given JID identifies the authenticated account.
+     *
+     * @apiNote
+     * Internal helper used by {@link #handlePictureSetOrDelete} to
+     * distinguish self-picture changes (persist the URI) from peer
+     * changes (listener-only).
      *
      * @param jid the JID to check
-     * @return {@code true} if the JID matches the local account
+     * @return {@code true} when {@code jid} matches the local account, {@code false} otherwise
      */
     private boolean isSelf(Jid jid) {
         return whatsapp.store().jid()
@@ -437,13 +502,16 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Updates the chosen name (push name) of a contact in the local store.
+     * Writes the chosen-name field on the contact, creating a new
+     * contact record when none exists.
      *
-     * <p>If the contact does not exist, a new contact record is created. The chosen
-     * name is only updated if the provided value is non-{@code null} and non-blank.
+     * @apiNote
+     * Internal helper used by {@link #handleAboutChange} to consume
+     * the stanza's {@code notify} attribute (the pushname) alongside
+     * the about text update.
      *
-     * @param contactJid the non-{@code null} JID of the contact to update
-     * @param chosenName the new chosen name, or {@code null} to skip the update
+     * @param contactJid the JID of the contact being updated
+     * @param chosenName the new chosen name, ignored when {@code null} or blank
      */
     private void updateContactChosenName(Jid contactJid, String chosenName) {
         if (contactJid == null || chosenName == null || chosenName.isBlank()) {
@@ -457,10 +525,13 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Fires the {@code onProfilePictureChanged} listener callback on all registered
-     * listeners, each on its own virtual thread.
+     * Fans {@code onProfilePictureChanged} out to every registered
+     * listener on its own virtual thread.
      *
-     * @param jid the JID of the entity whose profile picture changed
+     * @apiNote
+     * Internal helper used by {@link #handlePictureSetOrDelete}.
+     *
+     * @param jid the JID of the entity whose picture changed
      */
     private void fireProfilePictureChanged(Jid jid) {
         for (var listener : whatsapp.store().listeners()) {
@@ -469,11 +540,15 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Notifies all registered listeners that a contact's text status has changed,
-     * each on its own virtual thread.
+     * Fans {@code onContactTextStatus} out to every registered listener
+     * on its own virtual thread.
      *
-     * @param contactJid the JID of the contact whose text status changed
-     * @param status     the updated text status
+     * @apiNote
+     * Internal helper used by {@link #handleAboutChange} and
+     * {@link #handleAboutSideListChange}.
+     *
+     * @param contactJid the JID whose text status changed
+     * @param status     the updated text-status record
      */
     private void notifyContactTextStatusChanged(Jid contactJid, ContactTextStatus status) {
         for (var listener : whatsapp.store().listeners()) {
@@ -482,50 +557,30 @@ public final class NotificationProfileStreamHandler implements SocketStream.Hand
     }
 
     /**
-     * Sends an acknowledgement stanza for a profile picture notification.
+     * Sends the {@code <ack class="notification" type="picture"/>}
+     * stanza for the processed notification.
      *
-     * <p>The acknowledgement is sent with {@code class="notification"} and
-     * {@code type="picture"}, matching the format expected by the WhatsApp server.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleProfilePicNotification} ack-builder.
      *
-     * @param node the notification stanza node to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendPictureNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", stanzaFrom)
-                .attribute("type", "picture")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("picture").send();
     }
 
     /**
-     * Sends an acknowledgement stanza for an about/status notification.
+     * Sends the {@code <ack class="notification" type="status"/>}
+     * stanza for the processed notification.
      *
-     * <p>The acknowledgement is sent with {@code class="notification"} and
-     * {@code type="status"}, matching the format expected by the WhatsApp server.
+     * @apiNote
+     * Fire-and-forget; identical attribute set to WA Web's
+     * {@code WAWebHandleAboutNotification} ack-builder.
      *
-     * @param node the notification stanza node to acknowledge
+     * @param node the original {@code <notification>} stanza
      */
     private void sendStatusNotificationAck(Node node) {
-        var stanzaId = node.getAttributeAsString("id", null);
-        var stanzaFrom = node.getAttributeAsJid("from", null);
-        if (stanzaId == null || stanzaFrom == null) {
-            return;
-        }
-
-        whatsapp.sendNodeWithNoResponse(new NodeBuilder()
-                .description("ack")
-                .attribute("id", stanzaId)
-                .attribute("class", "notification")
-                .attribute("to", stanzaFrom)
-                .attribute("type", "status")
-                .build());
+        ackSender.ack(AckClass.NOTIFICATION, node).type("status").send();
     }
 }

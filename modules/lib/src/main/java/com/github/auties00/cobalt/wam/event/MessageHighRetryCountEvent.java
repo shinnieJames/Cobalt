@@ -11,6 +11,7 @@ import com.github.auties00.cobalt.wam.type.EncryptionTypeCode;
 import com.github.auties00.cobalt.wam.type.InvisibleMessageCategoryType;
 import com.github.auties00.cobalt.wam.type.MediaType;
 import com.github.auties00.cobalt.wam.type.MessageType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 
 import java.util.Optional;
@@ -48,4 +49,7 @@ public interface MessageHighRetryCountEvent extends WamEventSpec {
 
     @WamProperty(index = 2, type = WamType.INTEGER)
     OptionalInt retryCount();
+
+    @WamProperty(index = 11, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 }

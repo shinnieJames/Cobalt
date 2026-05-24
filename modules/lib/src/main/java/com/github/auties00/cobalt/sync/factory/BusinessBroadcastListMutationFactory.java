@@ -15,36 +15,57 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing business-broadcast-list sync mutations.
+ * Builds outgoing app-state mutations that create, update, or delete a Business Broadcast list.
  *
- * <p>Mirrors the {@code getBroadcastListMutation} and
- * {@code getDeleteBroadcastListMutation} exports of WhatsApp Web's
- * {@code WAWebBroadcastListSync} module. The factory is the
- * outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the WhatsApp Business broadcast-list feature: SMB users curate the
+ * audience for a recurring broadcast through the Web UI, and the resulting
+ * mutations populate the broadcast-list collection consistently across
+ * linked devices via {@code WAWebBroadcastListStorageUtils}. The factory is
+ * the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.BusinessBroadcastListHandler}.
+ *
+ * @implNote
+ * This implementation accepts the audience expression as an already-serialized
+ * JSON string. WA Web's
+ * {@code WAWebBroadcastListSync.getBroadcastListMutation} runs the object
+ * through {@code WAWebAudienceExpressionTypes.serializeAudienceExpression}
+ * before persisting; that AudienceExpression DSL is not ported to Cobalt,
+ * so callers either supply the pre-serialized form or pass {@code null} to
+ * leave the field clear.
  */
 public final class BusinessBroadcastListMutationFactory {
     /**
-     * Constructs a business-broadcast-list mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public BusinessBroadcastListMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation for creating or updating a business broadcast list with
-     * a {@code null} audience expression.
+     * Returns a SET mutation for a broadcast list whose audience is described purely by its explicit participant snapshot.
      *
-     * <p>Convenience overload that delegates to
-     * {@link #getBroadcastListMutation(String, List, String, Instant, String)} with a
-     * {@code null} audience expression, matching the common WA Web caller path where the
-     * broadcast list is defined purely by its explicit participant snapshot.
+     * @apiNote
+     * Convenience overload for the common call path where the broadcast list
+     * has no label-driven or DSL-driven audience predicate; delegates to
+     * {@link #getBroadcastListMutation(String, List, String, Instant, String)}
+     * with {@code audienceExpression == null}.
      *
-     * @param listId       the broadcast list identifier (index arg)
-     * @param participants the list of broadcast list participants
-     * @param listName     the name of the broadcast list
+     * @implNote
+     * This implementation forwards the {@code null} audience expression to
+     * the five-arg overload; the receive-side handler then falls back to
+     * {@code WAWebAudienceExpressionTypes.createExplicitExpression} over
+     * the participant LID list.
+     *
+     * @param listId       the broadcast-list identifier used as the mutation index
+     * @param participants the ordered list of recipients in LID form
+     * @param listName     the user-visible name of the broadcast list
      * @param timestamp    the mutation timestamp
-     * @return a pending mutation ready for outbound sync
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getBroadcastListMutation(
@@ -53,29 +74,36 @@ public final class BusinessBroadcastListMutationFactory {
             String listName,
             Instant timestamp
     ) {
-        return getBroadcastListMutation(listId, participants, listName, timestamp, null); // ADAPTED: WAWebBroadcastListSync.getBroadcastListMutation defaults audience expression to null
+        return getBroadcastListMutation(listId, participants, listName, timestamp, null);
     }
 
     /**
-     * Builds a pending SET mutation for creating or updating a business broadcast list.
+     * Returns a SET mutation that creates or updates a broadcast list with an explicit audience expression.
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastListSync.getBroadcastListMutation}), this method
-     * creates a sync action value containing the business broadcast list action with the
-     * supplied participants, list name, an always-empty label id list, and a serialized
-     * audience expression.
+     * @apiNote
+     * Call this when the user saves a broadcast-list edit through the Web
+     * UI; the mutation index follows
+     * {@snippet :
+     *     ["businessBroadcastList", listId]
+     * }
+     * and the {@link BusinessBroadcastListAction} sub-message carries the
+     * participants snapshot, the list name, an always-empty
+     * {@code labelIds} field, and the serialized audience expression
+     * (or {@code null} to clear it).
      *
-     * <p>WA Web compiles the audience expression object through
-     * {@code WAWebAudienceExpressionTypes.serializeAudienceExpression(i)} before persisting it
-     * on the wire. Cobalt accepts the already-serialized JSON string directly because the
-     * AudienceExpression DSL is not ported; callers must supply the serialized form or
-     * {@code null} to clear it.
+     * @implNote
+     * This implementation pins {@code labelIds = List.of()} to match
+     * {@code WAWebBroadcastListSync.getBroadcastListMutation}, which hard
+     * codes the same empty list at the call site; receive-side audience
+     * resolution prefers {@code audienceExpression} over {@code labelIds}
+     * when both are present.
      *
-     * @param listId             the broadcast list identifier (index arg)
-     * @param participants       the list of broadcast list participants
-     * @param listName           the name of the broadcast list
+     * @param listId             the broadcast-list identifier used as the mutation index
+     * @param participants       the ordered list of recipients in LID form
+     * @param listName           the user-visible name of the broadcast list
      * @param timestamp          the mutation timestamp
-     * @param audienceExpression the pre-serialized audience expression, or {@code null}
-     * @return a pending mutation ready for outbound sync
+     * @param audienceExpression the pre-serialized audience-expression JSON, or {@code null}
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getBroadcastListMutation(
@@ -107,15 +135,26 @@ public final class BusinessBroadcastListMutationFactory {
     }
 
     /**
-     * Builds a pending REMOVE mutation for deleting a business broadcast list.
+     * Returns a REMOVE mutation that deletes a broadcast list.
      *
-     * <p>Per WhatsApp Web ({@code WAWebBroadcastListSync.getDeleteBroadcastListMutation}),
-     * this method creates a sync action value with an empty payload and builds
-     * a REMOVE operation via {@code WAWebSyncdActionUtils.buildPendingMutation}.
+     * @apiNote
+     * Call this when the user deletes a broadcast list from the Web UI; the
+     * mutation index follows
+     * {@snippet :
+     *     ["businessBroadcastList", listId]
+     * }
+     * with an empty value. The receive-side handler responds by calling
+     * {@code WAWebBroadcastListStorageUtils.removeBroadcastListStorage}.
      *
-     * @param listId    the broadcast list identifier to remove
+     * @implNote
+     * This implementation mirrors
+     * {@code WAWebBroadcastListSync.getDeleteBroadcastListMutation} and
+     * emits a {@link SyncdOperation#REMOVE} with an empty
+     * {@link com.github.auties00.cobalt.model.sync.SyncActionValue}.
+     *
+     * @param listId    the broadcast-list identifier to delete
      * @param timestamp the mutation timestamp
-     * @return a pending mutation ready for outbound sync
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebBroadcastListSync", exports = "getDeleteBroadcastListMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getDeleteBroadcastListMutation(String listId, Instant timestamp) {

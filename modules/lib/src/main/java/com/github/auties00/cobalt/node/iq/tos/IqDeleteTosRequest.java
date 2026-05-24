@@ -9,21 +9,40 @@ import com.github.auties00.cobalt.node.iq.IqOperation;
 import java.util.Objects;
 
 /**
- * The outbound {@code <iq xmlns="tos" type="set">} stanza variant.
- * Wraps a single {@code <delete id="…"/>} child.
+ * Outbound {@code <iq xmlns="tos" type="set">} stanza that clears the server-side accepted
+ * state for a single notice id.
+ *
+ * @apiNote
+ * Use this to back WA Web's {@code WAWebTos.TosManager.resetState} /
+ * {@code resetAllState} paths: the notice id is one of the well-known TOS / disclosure
+ * identifiers (e.g. the 3P-disclosure id {@code "20210210"}, the bot agent / invoke /
+ * shortcut TOS ids, the newsletter producer / consumer / admin-invite TOS ids, the
+ * MM signal-sharing disclosure id, etc.). Resetting causes WA Web to re-prompt on the
+ * next surface. The reply is parsed by {@link IqDeleteTosResponse}.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's {@code WAWebTosJob.deleteTosState} verbatim,
+ * including the gating: WA Web gates the dispatch on the {@code gkx 26258}
+ * server-killswitch (no-op when the killswitch is active). Cobalt does not consult
+ * the gkx and always dispatches.
  */
 @WhatsAppWebModule(moduleName = "WAWebTosJob")
 public final class IqDeleteTosRequest implements IqOperation.Request {
     /**
-     * The notice id to delete. Routed verbatim into the
-     * {@code <delete>} child's {@code id} attribute.
+     * Holds the notice id to clear, routed verbatim into the {@code <delete>}
+     * child's {@code id} attribute.
      */
     private final String noticeId;
 
     /**
-     * Constructs a new delete-tos request.
+     * Constructs a new delete-tos request bound to the given notice id.
      *
-     * @param noticeId the notice id to delete. Never {@code null}
+     * @apiNote
+     * Pass the literal notice-id string (e.g. {@code "20210210"}); WA Web treats
+     * unknown ids as {@code UnknownUserNoticeIdError} at the TosManager layer
+     * before this IQ is ever dispatched.
+     *
+     * @param noticeId the notice id to clear; never {@code null}
      * @throws NullPointerException if {@code noticeId} is {@code null}
      */
     public IqDeleteTosRequest(String noticeId) {
@@ -31,16 +50,21 @@ public final class IqDeleteTosRequest implements IqOperation.Request {
     }
 
     /**
-     * Returns the notice id being deleted.
+     * Returns the bound notice id.
      *
-     * @return the notice id. Never {@code null}
+     * @return the notice id; never {@code null}
      */
     public String noticeId() {
         return noticeId;
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Builds the outbound {@code <iq>} stanza wrapping the
+     * {@code <delete id="..."/>} payload.
+     *
+     * @apiNote
+     * The resulting {@link NodeBuilder} is wire-ready except for the IQ {@code id}
+     * attribute, which the dispatch layer assigns.
      *
      * @return a {@link NodeBuilder} carrying the IQ envelope and the
      *         {@code <delete>} payload
@@ -49,12 +73,10 @@ public final class IqDeleteTosRequest implements IqOperation.Request {
     @WhatsAppWebExport(moduleName = "WAWebTosJob",
             exports = "deleteTosState", adaptation = WhatsAppAdaptation.DIRECT)
     public NodeBuilder toNode() {
-        // WAWebTosJob: wap("delete", {id})
         var deleteNode = new NodeBuilder()
                 .description("delete")
                 .attribute("id", noticeId)
                 .build();
-        // WAWebTosJob: wap("iq", {xmlns:"tos", id, type:"set", to:S_WHATSAPP_NET}, delete)
         return new NodeBuilder()
                 .description("iq")
                 .attribute("xmlns", "tos")

@@ -1,6 +1,5 @@
 package com.github.auties00.cobalt.client;
 
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
 import com.github.auties00.cobalt.registration.MobileClientRegistration;
 import com.github.auties00.cobalt.model.business.profile.BusinessCategory;
 import com.github.auties00.cobalt.model.contact.ContactTextStatus;
@@ -547,24 +546,6 @@ public sealed class WhatsAppClientBuilder {
         }
 
         /**
-         * Controls whether the library sends read receipts automatically
-         * for incoming messages.
-         *
-         * <p>Disabled by default. For the web API, enabling this option
-         * suppresses notifications on the companion device because the
-         * server only delivers notifications for unread messages.
-         *
-         * @param automaticMessageReceipts {@code true} to enable automatic
-         *                                 receipts, {@code false}
-         *                                 otherwise
-         * @return this builder, for chaining
-         */
-        public Options automaticMessageReceipts(boolean automaticMessageReceipts) {
-            store.setAutomaticMessageReceipts(automaticMessageReceipts);
-            return this;
-        }
-
-        /**
          * Sets the WhatsApp client version advertised by the connection.
          *
          * @param clientVersion the client version, or {@code null} to
@@ -645,14 +626,6 @@ public sealed class WhatsAppClientBuilder {
              * {@inheritDoc}
              */
             @Override
-            public Web automaticMessageReceipts(boolean automaticMessageReceipts) {
-                return (Web) super.automaticMessageReceipts(automaticMessageReceipts);
-            }
-
-            /**
-             * {@inheritDoc}
-             */
-            @Override
             public Web clientVersion(ClientAppVersion clientVersion) {
                 return (Web) super.clientVersion(clientVersion);
             }
@@ -690,7 +663,7 @@ public sealed class WhatsAppClientBuilder {
             public WhatsAppClient unregistered(WhatsAppClientVerificationHandler.Web.QrCode qrHandler) {
                 Objects.requireNonNull(qrHandler, "qrHandler must not be null");
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new LinkedWhatsAppClient(store, qrHandler, errorHandler);
+                return new DefaultWhatsAppClient(store, qrHandler, errorHandler);
             }
 
             /**
@@ -708,7 +681,7 @@ public sealed class WhatsAppClientBuilder {
                 Objects.requireNonNull(pairingCodeHandler, "pairingCodeHandler must not be null");
                 store.setPhoneNumber(phoneNumber);
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new LinkedWhatsAppClient(store, pairingCodeHandler, errorHandler);
+                return new DefaultWhatsAppClient(store, pairingCodeHandler, errorHandler);
             }
 
             /**
@@ -724,7 +697,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                var result = new LinkedWhatsAppClient(store, null, errorHandler);
+                var result = new DefaultWhatsAppClient(store, null, errorHandler);
                 return Optional.of(result);
             }
         }
@@ -751,8 +724,8 @@ public sealed class WhatsAppClientBuilder {
 
             /**
              * Push client captured by
-             * {@link #devicePushClient(WhatsAppDevicePushClient)} —
-             * the caller-owned variant. The builder treats this
+             * {@link #devicePushClient(WhatsAppDevicePushClient)}, the
+             * caller-owned variant. The builder treats this
              * instance as borrowed and never closes it. Mutually
              * exclusive with {@link #pushClientSupplier}: setting
              * either overload clears the other.
@@ -768,7 +741,7 @@ public sealed class WhatsAppClientBuilder {
 
             /**
              * Push client supplier captured by
-             * {@link #devicePushClient(Supplier)} — the
+             * {@link #devicePushClient(Supplier)}, the
              * builder-owned variant. The supplier is invoked exactly
              * once at registration time and the produced instance is
              * closed via {@link WhatsAppDevicePushClient#close()}
@@ -1113,15 +1086,6 @@ public sealed class WhatsAppClientBuilder {
              * {@inheritDoc}
              */
             @Override
-            public Mobile automaticMessageReceipts(boolean automaticMessageReceipts) {
-                super.automaticMessageReceipts(automaticMessageReceipts);
-                return this;
-            }
-
-            /**
-             * {@inheritDoc}
-             */
-            @Override
             public Mobile clientVersion(ClientAppVersion clientVersion) {
                 return (Mobile) super.clientVersion(clientVersion);
             }
@@ -1270,7 +1234,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                var result = new LinkedWhatsAppClient(store, null, errorHandler);
+                var result = new DefaultWhatsAppClient(store, null, errorHandler);
                 return Optional.of(result);
             }
 
@@ -1319,7 +1283,7 @@ public sealed class WhatsAppClientBuilder {
                 }
 
                 var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-                return new LinkedWhatsAppClient(store, null, errorHandler);
+                return new DefaultWhatsAppClient(store, null, errorHandler);
             }
         }
     }
@@ -1412,7 +1376,7 @@ public sealed class WhatsAppClientBuilder {
                 case MOBILE -> null;
             };
             var errorHandler = Objects.requireNonNullElse(this.errorHandler, DEFAULT_ERROR_HANDLER);
-            return new LinkedWhatsAppClient(store, webVerificationHandler, errorHandler);
+            return new DefaultWhatsAppClient(store, webVerificationHandler, errorHandler);
         }
     }
 }

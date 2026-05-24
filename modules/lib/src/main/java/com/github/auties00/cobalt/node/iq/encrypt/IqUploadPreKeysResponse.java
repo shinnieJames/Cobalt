@@ -12,8 +12,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqUploadPreKeysRequest}.
+ * Closed family of reply variants observable on the steady-state pre-key upload
+ * {@link IqUploadPreKeysRequest} roundtrip.
+ *
+ * @apiNote
+ * {@link Success} signals that the new pre-key bundle is live and the local Signal store should
+ * flip {@code setServerHasPreKeys(true)}. {@link ClientError} surfaces {@code 4xx} envelopes,
+ * notably {@code 406} "uploaded invalid keys". {@link ServerError} surfaces {@code 5xx} envelopes
+ * (the WA Web log labels these as "server requested backoff"); WA Web's retry loop drives the next
+ * attempt through {@code PromiseRetryLoop} with a fibonacci backoff schedule capped at roughly
+ * ten minutes.
  */
 @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
 public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
@@ -22,19 +30,17 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         IqUploadPreKeysResponse.ServerError {
 
     /**
-     * Tries each {@link IqUploadPreKeysResponse} variant in priority
-     * order and returns the first that parses cleanly.
+     * Parses the inbound stanza into the first matching {@link IqUploadPreKeysResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to
-     *                validate echoed identifiers; never
-     *                {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @apiNote
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}.
+     *
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound stanza
+     * @return the parsed variant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+     *         the stanza shape matched none of the three documented schemas
+     * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebUploadPreKeysJob",
             exports = "uploadPreKeyResParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -53,29 +59,31 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay accepted the
-     * pre-key bundle.
+     * Successful echo from the relay; the new pre-key bundle is now live.
      *
-     * <p>Carries no payload beyond the envelope echo; WA Web
-     * collapses the parsed projection to {@code {success: true}}.
+     * @apiNote
+     * Carries no payload because the relay's reply is just an envelope ack. Callers should mirror
+     * WA Web's behaviour and flip the local {@code setServerHasPreKeys(true)} flag so the next
+     * {@code PreKeyLow} push triggers another upload only after the server-side stash has been
+     * consumed.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class Success implements IqUploadPreKeysResponse {
         /**
-         * Constructs a new successful reply.
+         * Constructs the singleton-shaped success envelope.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses a {@link Success} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         success schema
+         * @return the parsed {@link Success}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebUploadPreKeysJob",
                 exports = "uploadPreKeyResParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -86,6 +94,15 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
             return Optional.of(new Success());
         }
 
+        /**
+         * Compares this success envelope to another instance for equality.
+         *
+         * @apiNote
+         * All instances are interchangeable; equality reduces to a class-identity check.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a non-{@code null} {@code Success}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -94,11 +111,21 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a stable hash code shared by all instances.
+         *
+         * @return the class identity hash
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * Returns the canonical record-style rendering.
+         *
+         * @return the literal {@code "IqUploadPreKeysResponse.Success[]"}
+         */
         @Override
         public String toString() {
             return "IqUploadPreKeysResponse.Success[]";
@@ -106,30 +133,29 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected
-     * the upload as malformed or unauthorised; in particular,
-     * code {@code 406} means the uploaded keys failed
-     * server-side validation.
+     * Client-error variant; the relay rejected the upload with a {@code 4xx} envelope.
+     *
+     * @apiNote
+     * The documented case is {@code 406} "uploaded invalid keys"; WA Web logs the failure and the
+     * retry loop drops out of the upload step.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class ClientError implements IqUploadPreKeysResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 4xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a populated client-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -148,22 +174,21 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the
-         * given inbound stanza.
+         * Parses a {@link ClientError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         client-error schema
+         * @return the parsed {@link ClientError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebUploadPreKeysJob",
                 exports = "uploadPreKeyResParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -175,6 +200,12 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this client-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -188,11 +219,21 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this client-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqUploadPreKeysResponse.ClientError[errorCode=" + errorCode
@@ -201,30 +242,30 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay
-     * encountered a transient internal failure (codes
-     * {@code >= 500}) while processing the upload; WA Web
-     * recommends a backoff retry in this case.
+     * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope.
+     *
+     * @apiNote
+     * WA Web logs these as "server requested backoff" and lets {@code PromiseRetryLoop} schedule
+     * the next attempt with a fibonacci timer (first {@code 1s}, second {@code 2s}, capped at
+     * {@code 610s}). Callers that mirror the policy should defer retries accordingly.
      */
     @WhatsAppWebModule(moduleName = "WAWebUploadPreKeysJob")
     final class ServerError implements IqUploadPreKeysResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 5xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a populated server-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may
-         *                  be {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -243,22 +284,21 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the
-         * given inbound stanza.
+         * Parses a {@link ServerError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant,
-         *         or empty when the stanza does not match the
-         *         server-error schema
+         * @return the parsed {@link ServerError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebUploadPreKeysJob",
                 exports = "uploadPreKeyResParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -270,6 +310,12 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this server-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -283,11 +329,21 @@ public sealed interface IqUploadPreKeysResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this server-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqUploadPreKeysResponse.ServerError[errorCode=" + errorCode

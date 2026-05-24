@@ -11,24 +11,32 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to an {@link IqRotateKeyRequest}.
+ * Closed family of reply variants observable on the signed pre-key rotation
+ * {@link IqRotateKeyRequest} roundtrip.
+ *
+ * @apiNote
+ * {@link Success} carries no payload beyond the envelope echo and signals that the new signed
+ * pre-key is now the live one server-side. {@link ClientError} surfaces the two documented
+ * rejection codes ({@code 406} "rotateKey generated bad key", {@code 409} "skey did not pass
+ * server validation", which WA Web treats as a hint to fall through to a
+ * {@link IqDigestKeyRequest digest probe}). {@link ServerError} carries {@code 5xx} envelopes for
+ * which WA Web's job loop "waits a day" before retrying.
  */
 @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
 public sealed interface IqRotateKeyResponse extends IqOperation.Response
         permits IqRotateKeyResponse.Success, IqRotateKeyResponse.ClientError, IqRotateKeyResponse.ServerError {
 
     /**
-     * Tries each {@link IqRotateKeyResponse} variant in priority order and returns
-     * the first that parses cleanly.
+     * Parses the inbound stanza into the first matching {@link IqRotateKeyResponse} variant.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote
+     * Attempts {@link Success#of(Node, Node)} first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}.
+     *
+     * @param node    the inbound IQ stanza received from the relay
+     * @param request the original outbound stanza
+     * @return the parsed variant wrapped in an {@link Optional}, or {@link Optional#empty()} when
+     *         the stanza shape matched none of the three documented schemas
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",
@@ -48,26 +56,30 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant — the relay accepted the
-     * key rotation. Carries no payload beyond the envelope echo.
+     * Successful echo from the relay; the new signed pre-key is now live.
+     *
+     * @apiNote
+     * Carries no payload because WA Web's {@code rotateKeyResponseParser} only asserts the
+     * envelope shape and discards any body. Consumers can treat this variant as a boolean
+     * success marker.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
     final class Success implements IqRotateKeyResponse {
         /**
-         * Constructs a new successful reply.
+         * Constructs the singleton-shaped success envelope.
          */
         public Success() {
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Parses a {@link Success} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Returns {@link Optional#empty()} when the envelope fails the IQ-result echo check.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return the parsed {@link Success}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",
                 exports = "rotateKeyResponseParser", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -78,6 +90,15 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
             return Optional.of(new Success());
         }
 
+        /**
+         * Compares this success envelope to another instance for equality.
+         *
+         * @apiNote
+         * All instances are interchangeable; equality reduces to a class-identity check.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a non-{@code null} {@code Success}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -86,11 +107,21 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
             return obj != null && obj.getClass() == this.getClass();
         }
 
+        /**
+         * Returns a stable hash code shared by all instances.
+         *
+         * @return the class identity hash
+         */
         @Override
         public int hashCode() {
             return Success.class.hashCode();
         }
 
+        /**
+         * Returns the canonical record-style rendering.
+         *
+         * @return the literal {@code "IqRotateKeyResponse.Success[]"}
+         */
         @Override
         public String toString() {
             return "IqRotateKeyResponse.Success[]";
@@ -98,29 +129,31 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * key rotation as malformed. Code {@code 406} means "bad key
-     * generated", code {@code 409} means "skey did not pass server
-     * validation".
+     * Client-error variant; the relay rejected the rotation with a {@code 4xx} envelope.
+     *
+     * @apiNote
+     * WA Web's rotation job distinguishes two codes here. {@code 406} "rotateKey generated bad
+     * key" is logged and dropped. {@code 409} "skey did not pass server validation" is treated as a
+     * trigger to run {@link IqDigestKeyRequest} on the next job step. Cobalt surfaces both as the
+     * same variant and lets the caller branch on {@link #errorCode()}.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
     final class ClientError implements IqRotateKeyResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 4xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a populated client-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -139,22 +172,21 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ClientError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return the parsed {@link ClientError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",
                 exports = "rotateKey", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -166,6 +198,12 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this client-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -179,11 +217,21 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this client-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqRotateKeyResponse.ClientError[errorCode=" + errorCode
@@ -192,28 +240,29 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure (codes {@code >= 500}) while
-     * processing the rotation; WA Web recommends a one-day backoff.
+     * Server-error variant; the relay reported a transient failure with a {@code 5xx} envelope.
+     *
+     * @apiNote
+     * WA Web's rotation job logs the code and waits roughly a day before the next retry; callers
+     * that mirror that policy should schedule retries accordingly.
      */
     @WhatsAppWebModule(moduleName = "WAWebRotateKeyJob")
     final class ServerError implements IqRotateKeyResponse {
         /**
-         * The numeric server-side error code.
+         * The relay's {@code 5xx} numeric error code.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied one.
+         * The optional human-readable error text from the {@code <error text="..."/>} attribute.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a populated server-error envelope.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional human-readable text, possibly {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -232,22 +281,21 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
         /**
          * Returns the optional human-readable error text.
          *
-         * @return an {@link Optional} carrying the error text, or empty
-         *         when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant from the given
-         * inbound stanza.
+         * Parses a {@link ServerError} variant from the inbound stanza.
+         *
+         * @apiNote
+         * Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         server-error schema
+         * @return the parsed {@link ServerError}, or empty when the stanza shape does not match
          */
         @WhatsAppWebExport(moduleName = "WAWebRotateKeyJob",
                 exports = "rotateKey", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -259,6 +307,12 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this server-error envelope to another instance for equality.
+         *
+         * @param obj the candidate instance
+         * @return {@code true} when {@code obj} is a {@code ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -272,11 +326,21 @@ public sealed interface IqRotateKeyResponse extends IqOperation.Response
                     && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash code derived from the code and text fields.
+         *
+         * @return the combined hash
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns the record-style rendering for this server-error envelope.
+         *
+         * @return the rendered string
+         */
         @Override
         public String toString() {
             return "IqRotateKeyResponse.ServerError[errorCode=" + errorCode

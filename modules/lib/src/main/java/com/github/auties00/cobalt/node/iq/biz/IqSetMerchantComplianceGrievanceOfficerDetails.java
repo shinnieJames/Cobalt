@@ -5,23 +5,36 @@ import java.util.Optional;
 
 /**
  * Typed grievance-officer block carried inside an
- * {@link IqSetMerchantComplianceRequest}. Wraps a
- * {@link IqSetMerchantComplianceContactDetails} contact triple together
- * with an optional officer name.
+ * {@link IqSetMerchantComplianceRequest}.
+ *
+ * @apiNote
+ * Use this block to set or update the grievance officer's display name
+ * and contact triple (regulatory disclosure required for India sellers
+ * by the Consumer Protection rules and similar markets); the name is
+ * optional and an absent name is dropped from the wire stanza rather
+ * than zeroed out.
  */
 public final class IqSetMerchantComplianceGrievanceOfficerDetails {
     /**
-     * The optional officer name.
+     * The optional officer name stamped into the {@code <name/>}
+     * grandchild.
      */
     private final String name;
 
     /**
-     * The contact triple.
+     * The contact triple flattened into the {@code <email/>},
+     * {@code <landline_number/>} and {@code <mobile_number/>}
+     * grandchildren.
      */
     private final IqSetMerchantComplianceContactDetails contact;
 
     /**
      * Constructs a block.
+     *
+     * @apiNote
+     * Pass the officer's contact triple; the name is optional and may
+     * be left {@code null} when the merchant only wants to update the
+     * contact channels.
      *
      * @param name    the name; may be {@code null}
      * @param contact the contact triple; never {@code null}
@@ -33,7 +46,12 @@ public final class IqSetMerchantComplianceGrievanceOfficerDetails {
     }
 
     /**
-     * Returns the name.
+     * Returns the officer name.
+     *
+     * @apiNote
+     * Use this getter to read back the officer name the mutation will
+     * stamp; an empty optional means the field is dropped from the
+     * wire stanza.
      *
      * @return an {@link Optional} carrying the name
      */
@@ -44,12 +62,19 @@ public final class IqSetMerchantComplianceGrievanceOfficerDetails {
     /**
      * Returns the contact triple.
      *
+     * @apiNote
+     * Use this getter to read back the officer's contact channels;
+     * the triple itself follows the same field-by-field optionality.
+     *
      * @return the triple; never {@code null}
      */
     public IqSetMerchantComplianceContactDetails contact() {
         return contact;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -63,11 +88,17 @@ public final class IqSetMerchantComplianceGrievanceOfficerDetails {
                 && Objects.equals(this.contact, that.contact);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(name, contact);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "IqSetMerchantComplianceGrievanceOfficerDetails[name=" + name

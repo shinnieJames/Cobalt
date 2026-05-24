@@ -26,5 +26,6 @@ public enum MessageSendResultType {
     @WamEnumConstant(17) ERROR_CLIENT_OUT_OF_MEMORY,
     @WamEnumConstant(18) ERROR_UPLOAD_CANCELLED_MANUALLY,
     @WamEnumConstant(19) ERROR_UPLOAD_CANCELLED_AUTOMATIC,
-    @WamEnumConstant(20) ERROR_BOUNDED_STANZA_TOO_LARGE
+    @WamEnumConstant(20) ERROR_BOUNDED_STANZA_TOO_LARGE,
+    @WamEnumConstant(21) AEA_SEND_RECONCILATION_FAILURE
 }

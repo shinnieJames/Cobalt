@@ -14,14 +14,26 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound {@code <iq xmlns="w:stats">} stanza variant.
+ * The outbound {@code <iq xmlns="w:stats" type="set">} stanza uploading
+ * an encoded WAM (WhatsApp Analytics Metrics) buffer to the relay.
+ *
+ * @apiNote
+ * Backs the field-stats / WAM upload pipeline driven by WA Web's
+ * {@code WAWebStatsUploadJob}: a periodic flush serialises a batch of
+ * encoded WAM events into the {@code addElementValue} byte buffer and
+ * sends it through
+ * {@code WASmaxStatsSendBufferRPC.sendSendBufferRPC}. The reply is
+ * parsed by {@link SmaxStatsSendBufferResponse}; a {@code Success}
+ * lets the local buffer be cleared, an {@code ErrorRetry} requires
+ * re-buffering, and an {@code ErrorNoRetry} surfaces a permanent
+ * rejection.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutStatsSendBufferRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutStatsBaseIQSetRequestMixin")
 public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
-     * The Unix-epoch timestamp at which the batch was sealed.
-     * Routed verbatim into the {@code <add t="…"/>} attribute.
+     * The Unix-epoch timestamp at which the batch was sealed;
+     * forwarded verbatim into the {@code <add t="..."/>} attribute.
      */
     private final long addT;
 
@@ -34,9 +46,15 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
      * Constructs a new send-buffer request.
      *
-     * @param addT             the batch timestamp
-     * @param addElementValue  the encoded WAM payload bytes. Never
-     *                         {@code null}
+     * @apiNote
+     * The pair {@code (addT, addElementValue)} matches the keys WA
+     * Web's {@code WAWebStatsUploadJob} passes to
+     * {@code sendSendBufferRPC}; the bytes are the encoded WAM
+     * buffer, not a serialised stanza child.
+     *
+     * @param addT the batch timestamp in seconds since the Unix epoch
+     * @param addElementValue the encoded WAM payload bytes; never
+     *                        {@code null}
      * @throws NullPointerException if {@code addElementValue} is
      *                              {@code null}
      */
@@ -49,7 +67,7 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
      * Returns the batch timestamp.
      *
-     * @return the timestamp
+     * @return the timestamp in seconds since the Unix epoch
      */
     public long addT() {
         return addT;
@@ -58,7 +76,7 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
      * Returns the encoded WAM payload bytes.
      *
-     * @return the bytes. Never {@code null}
+     * @return the bytes; never {@code null}
      */
     public byte[] addElementValue() {
         return addElementValue;
@@ -67,8 +85,14 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and
-     *         the {@code <add>} child
+     * @apiNote
+     * Produces
+     * {@code <iq xmlns="w:stats" type="set" to="s.whatsapp.net">
+     *   <add t="...">BYTES</add></iq>}; the envelope's {@code id} is
+     * stamped by the dispatch path.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the
+     *         {@code <add>} child
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutStatsSendBufferRequest",
@@ -87,6 +111,14 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
                 .content(addNode);
     }
 
+    /**
+     * Returns whether the given object is a
+     * {@link SmaxStatsSendBufferRequest} with equal timestamp and
+     * payload.
+     *
+     * @param obj the candidate; may be {@code null}
+     * @return {@code true} when both fields match
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -100,6 +132,11 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
                 && Arrays.equals(this.addElementValue, that.addElementValue);
     }
 
+    /**
+     * Returns a hash code derived from the timestamp and payload.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         var result = Long.hashCode(addT);
@@ -107,6 +144,11 @@ public final class SmaxStatsSendBufferRequest implements SmaxOperation.Request {
         return result;
     }
 
+    /**
+     * Returns a debug-friendly textual representation of this request.
+     *
+     * @return the textual representation
+     */
     @Override
     public String toString() {
         return "SmaxStatsSendBufferRequest[addT=" + addT

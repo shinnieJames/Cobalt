@@ -21,5 +21,7 @@ public enum PrekeysFetchContext {
     @WamEnumConstant(11) RESEND_MESSAGE,
     @WamEnumConstant(12) RETRY_MESSAGE,
     @WamEnumConstant(13) USER_INTENT_STATUS_PREFETCH,
-    @WamEnumConstant(14) SEND_SENDERKEY
+    @WamEnumConstant(14) SEND_SENDERKEY,
+    @WamEnumConstant(15) AEA_SEND_TIME_RECONCILATION,
+    @WamEnumConstant(16) AEA_CONSUMER_BACKFILL
 }

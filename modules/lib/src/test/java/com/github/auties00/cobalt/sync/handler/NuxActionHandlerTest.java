@@ -29,13 +29,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link NuxActionHandler} â€” Cobalt's adapter for
- * {@code WAWebNuxSync}.
+ * Exercises {@link NuxActionHandler} against the
+ * {@code WAWebNuxSync.applyMutations} per-mutation flow.
  *
- * <p>The handler records acknowledgement of New User Experience prompts.
- * The test matrix exercises metadata, every applyMutation branch, the
- * {@code getNuxMutation} / {@code acknowledgeNux} / {@code unAcknowledgeNux}
- * helpers, and the default timestamp-based conflict resolution.
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: a {@link SyncdOperation#SET} with
+ * {@code acknowledged=true} or {@code acknowledged=false} writes a
+ * matching {@code dismissed} flag via
+ * {@link com.github.auties00.cobalt.store.WhatsAppStore#putOnboardingHintState};
+ * a missing {@code nuxAction} on the value coalesces to
+ * {@code dismissed=false} and STILL returns
+ * {@link SyncActionState#SUCCESS}
+ * (matching WA Web's optional-chain default); a missing
+ * {@code indexParts[1]} surfaces as
+ * {@link SyncActionState#MALFORMED};
+ * {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED};
+ * the default {@code resolveConflicts} chooses the later timestamp.
+ * The
+ * {@link NuxActionMutationFactory}
+ * produces a SET pending mutation with the requested key, flag, and
+ * timestamp, and rejects {@code null} key or {@code null} timestamp.
+ *
+ * @implNote
+ * This implementation drives the handler directly through
+ * {@link NuxActionHandler#applyMutation} via the local
+ * {@code nuxMutation} helper.
  */
 @DisplayName("NuxActionHandler")
 class NuxActionHandlerTest {

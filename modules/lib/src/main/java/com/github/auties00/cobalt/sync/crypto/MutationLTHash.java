@@ -16,72 +16,90 @@ import java.util.*;
 import java.util.logging.Logger;
 
 /**
- * LT-Hash (Lattice Hash) implementation for anti-tampering verification.
+ * The 128-byte lattice-hash accumulator that WhatsApp uses as the anti-tampering
+ * digest for every app-state collection.
  *
- * <p>LT-Hash is a cryptographic accumulator with the following properties:
- * <ul>
- *   <li><b>Commutative</b>: hash(a, b) = hash(b, a)</li>
- *   <li><b>Associative</b>: hash(hash(a, b), c) = hash(a, hash(b, c))</li>
- *   <li><b>Reversible</b>: hash_remove(hash(a, b), b) = hash(a)</li>
- *   <li><b>Deterministic</b>: Same input always produces same output</li>
- * </ul>
+ * <p>LT-Hash is a homomorphic group accumulator: each value MAC is expanded
+ * via HKDF-SHA256 to 128 bytes and treated as 64 little-endian unsigned 16-bit
+ * lanes that pointwise add into the running hash, with subtraction as the
+ * inverse operation. The accumulator is commutative, associative, and
+ * group-invertible, which is what lets the relay incrementally apply a patch
+ * to a snapshot without re-reading every record.
  *
- * <p>This implementation uses HKDF-expanded values with unsigned 16-bit wrapping
- * arithmetic, matching the WhatsApp Web {@code WACryptoLtHash} algorithm. Each
- * value MAC is expanded via HKDF-SHA256 to 128 bytes, then treated as 64
- * little-endian Uint16 values for pointwise addition or subtraction with
- * wrapping overflow (mod 65536).
+ * @apiNote
+ * Driven by both the incoming-patch verifier ({@link MutationIntegrityVerifier})
+ * and the outgoing-patch builder, which both compute a new LT-Hash from the
+ * mutations they are about to commit. The {@link #checkLtHash} and
+ * {@link #reportCollectionInconsistency} helpers are used by periodic
+ * consistency tasks rather than by the main sync path.
  */
 @WhatsAppWebModule(moduleName = "WACryptoLtHash")
 @WhatsAppWebModule(moduleName = "WAWebSyncdAntiTamperingLtHash")
 public final class MutationLTHash {
     /**
-     * Logger for LT-Hash consistency check diagnostics.
+     * The logger for LT-Hash consistency-check diagnostics.
      */
     private static final Logger LOGGER = Logger.getLogger(MutationLTHash.class.getName());
 
     /**
-     * Length of the hash state in bytes (64 little-endian Uint16 values).
-     * Exported as {@code KEY_LENGTH_BYTES} in WA Web.
+     * The fixed byte length of every LT-Hash buffer.
+     *
+     * @apiNote
+     * WA Web exposes this as the {@code KEY_LENGTH_BYTES} constant; the
+     * Cobalt rename to {@code HASH_LENGTH} reflects the actual role (it is
+     * the hash output length, not a key length).
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "KEY_LENGTH_BYTES", adaptation = WhatsAppAdaptation.DIRECT)
     public static final int HASH_LENGTH = 128;
 
     /**
-     * HKDF info string used for expanding value MACs.
-     * Despite the WA Web variable name "salt", this is used as the HKDF info/context
-     * parameter, not as the HKDF salt (which is null/default zeros).
+     * The HKDF info bytes used when expanding each value MAC into a lane buffer.
+     *
+     * @implNote
+     * The WA Web source names the matching field {@code salt} on
+     * {@code LtHash16}; the value is passed to {@code WACryptoHkdf.extractAndExpand}
+     * as the {@code info} parameter, not as the HKDF salt (the salt defaults
+     * to the 32-byte zero string). The Cobalt name reflects the actual HKDF
+     * argument position.
      */
     private static final byte[] HKDF_INFO = "WhatsApp Patch Integrity".getBytes();
 
     /**
-     * The empty/zero hash state.
-     * Used as the initial state for a collection with no mutations.
+     * The all-zero hash state.
+     *
+     * @apiNote
+     * The starting accumulator for a collection that has never seen a
+     * mutation. Every {@code add} call moves the hash off zero; every
+     * matching {@code subtract} call moves it back.
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "EMPTY_LT_HASH", adaptation = WhatsAppAdaptation.DIRECT)
     public static final byte[] EMPTY_HASH = new byte[HASH_LENGTH];
 
     /**
-     * Prevents instantiation of this utility class.
+     * Prevents instantiation.
      */
     private MutationLTHash() {
 
     }
 
     /**
-     * Expands a value MAC to 128 bytes using HKDF-SHA256.
+     * Expands a value MAC to {@value #HASH_LENGTH} bytes via HKDF-SHA256.
      *
-     * <p>Performs HKDF-Extract with null salt (defaults to 32 zero bytes per RFC 5869)
-     * followed by HKDF-Expand with info="WhatsApp Patch Integrity" and length=128.
+     * @apiNote
+     * The per-element expansion step that turns each 32-byte value MAC into a
+     * 128-byte vector ready for pointwise addition. The HKDF salt is null
+     * (RFC 5869 default of 32 zero bytes); the info parameter is
+     * {@link #HKDF_INFO}.
+     *
      * @param valueMac the value MAC to expand
-     * @return the expanded 128-byte value
+     * @return the expanded 128-byte lane buffer
      */
     private static byte[] expand(byte[] valueMac) {
         try {
-            var kdf = KDF.getInstance("HKDF-SHA256"); // WACryptoHkdf.extractAndExpand
-            var params = HKDFParameterSpec.ofExtract() // WACryptoHkdf.extractSha256(null, valueMac)
+            var kdf = KDF.getInstance("HKDF-SHA256");
+            var params = HKDFParameterSpec.ofExtract()
                     .addIKM(valueMac)
-                    .thenExpand(HKDF_INFO, HASH_LENGTH); // WACryptoHkdf.expand(prk, this.salt, 128)
+                    .thenExpand(HKDF_INFO, HASH_LENGTH);
             return kdf.deriveData(params);
         } catch (GeneralSecurityException e) {
             throw new InternalError("Failed to expand value MAC via HKDF", e);
@@ -89,101 +107,103 @@ public final class MutationLTHash {
     }
 
     /**
-     * Performs pointwise unsigned 16-bit arithmetic on two hash buffers.
+     * Performs pointwise wrapping arithmetic on two 128-byte hash buffers
+     * treated as 64 little-endian unsigned 16-bit lanes.
      *
-     * <p>Treats both input buffers as arrays of 64 little-endian Uint16 values
-     * and applies the given operator pointwise with unsigned 16-bit wrapping.
-     * @param hash the current hash state buffer
-     * @param expanded the HKDF-expanded value buffer
-     * @param addition {@code true} for addition, {@code false} for subtraction
-     * @return new hash state after the pointwise operation
+     * @param hash     the current hash state
+     * @param expanded the HKDF-expanded value MAC
+     * @param addition {@code true} for addition (modular sum), {@code false} for subtraction (modular difference)
+     * @return a freshly allocated buffer holding the result
      */
     private static byte[] performPointwiseWithOverflow(byte[] hash, byte[] expanded, boolean addition) {
-        var hashBuf = ByteBuffer.wrap(hash).order(ByteOrder.LITTLE_ENDIAN); // WACryptoLtHash.performPointwiseWithOverflow: new DataView(t)
-        var expandedBuf = ByteBuffer.wrap(expanded).order(ByteOrder.LITTLE_ENDIAN); // WACryptoLtHash.performPointwiseWithOverflow: new DataView(n)
-        var result = ByteBuffer.allocate(hashBuf.capacity()).order(ByteOrder.LITTLE_ENDIAN); // WACryptoLtHash.performPointwiseWithOverflow: new DataView(new ArrayBuffer(e.byteLength))
-        for (var i = 0; i < hashBuf.capacity(); i += 2) { // WACryptoLtHash.performPointwiseWithOverflow: l += s (s=2)
-            var a = Short.toUnsignedInt(hashBuf.getShort()); // WACryptoLtHash.performPointwiseWithOverflow: e.getUint16(l, true)
-            var b = Short.toUnsignedInt(expandedBuf.getShort()); // WACryptoLtHash.performPointwiseWithOverflow: o.getUint16(l, true)
-            result.putShort((short) ((addition ? a + b : a - b) & 0xFFFF)); // WACryptoLtHash.performPointwiseWithOverflow: i.setUint16(l, r(e, t), true)
+        var hashBuf = ByteBuffer.wrap(hash).order(ByteOrder.LITTLE_ENDIAN);
+        var expandedBuf = ByteBuffer.wrap(expanded).order(ByteOrder.LITTLE_ENDIAN);
+        var result = ByteBuffer.allocate(hashBuf.capacity()).order(ByteOrder.LITTLE_ENDIAN);
+        for (var i = 0; i < hashBuf.capacity(); i += 2) {
+            var a = Short.toUnsignedInt(hashBuf.getShort());
+            var b = Short.toUnsignedInt(expandedBuf.getShort());
+            result.putShort((short) ((addition ? a + b : a - b) & 0xFFFF));
         }
         return result.array();
     }
 
     /**
-     * Adds a single element to the current hash state.
+     * Adds a single value MAC into the running hash.
      *
-     * <p>The element (value MAC) is first expanded via HKDF-SHA256 to 128 bytes,
-     * then both the current hash and expanded value are treated as 64
-     * little-endian Uint16 values and pointwise added with unsigned 16-bit
-     * wrapping overflow.
-     * @param currentHash the current hash state (must be {@link #HASH_LENGTH} bytes)
-     * @param valueMac the value MAC to add (will be HKDF-expanded)
-     * @return new hash state after addition
+     * @param currentHash the current hash state (must be {@value #HASH_LENGTH} bytes)
+     * @param valueMac    the value MAC to add
+     * @return the new hash state
      */
     private static byte[] addSingle(byte[] currentHash, byte[] valueMac) {
-        var expanded = expand(valueMac); // WACryptoLtHash.LtHash16.$1: extractAndExpand(valueMac, this.salt, 128)
-        return performPointwiseWithOverflow(currentHash, expanded, true); // WACryptoLtHash.LtHash16.$1: performPointwiseWithOverflow(e, n, (a, b) => a + b)
+        var expanded = expand(valueMac);
+        return performPointwiseWithOverflow(currentHash, expanded, true);
     }
 
     /**
-     * Removes a single element from the current hash state.
+     * Subtracts a single value MAC from the running hash.
      *
-     * <p>This is the inverse operation of {@link #addSingle(byte[], byte[])}.
-     * The element (value MAC) is first expanded via HKDF-SHA256 to 128 bytes,
-     * then both the current hash and expanded value are treated as 64
-     * little-endian Uint16 values and pointwise subtracted with unsigned
-     * 16-bit wrapping underflow.
-     * @param currentHash the current hash state (must be {@link #HASH_LENGTH} bytes)
-     * @param valueMac the value MAC to remove (will be HKDF-expanded)
-     * @return new hash state after removal
+     * @param currentHash the current hash state (must be {@value #HASH_LENGTH} bytes)
+     * @param valueMac    the value MAC to subtract
+     * @return the new hash state
      */
     private static byte[] subtractSingle(byte[] currentHash, byte[] valueMac) {
-        var expanded = expand(valueMac); // WACryptoLtHash.LtHash16.$2: extractAndExpand(valueMac, this.salt, 128)
-        return performPointwiseWithOverflow(currentHash, expanded, false); // WACryptoLtHash.LtHash16.$2: performPointwiseWithOverflow(e, n, (a, b) => a - b)
+        var expanded = expand(valueMac);
+        return performPointwiseWithOverflow(currentHash, expanded, false);
     }
 
     /**
-     * Adds multiple elements to the current hash state by reducing over the list.
+     * Folds a sequence of value MACs into the running hash by repeated addition.
      *
-     * <p>Each value MAC is individually expanded and pointwise-added to the hash,
-     * sequentially reducing from the initial {@code currentHash}.
-     * @param currentHash the current hash state (must be {@link #HASH_LENGTH} bytes)
-     * @param valueMacs the list of value MACs to add
-     * @return new hash state after all additions
+     * @apiNote
+     * Drives the simple-add path used when building a fresh snapshot's
+     * LT-Hash from its decrypted mutations. Ordering of the input does not
+     * change the result; the operation is commutative and associative.
+     *
+     * @param currentHash the current hash state (must be {@value #HASH_LENGTH} bytes)
+     * @param valueMacs   the value MACs to add, in any order
+     * @return the new hash state
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static byte[] add(byte[] currentHash, List<byte[]> valueMacs) {
-        var result = currentHash; // WACryptoLtHash.LtHash16.add: Promise.resolve(r)
-        for (var valueMac : valueMacs) { // WACryptoLtHash.LtHash16.add: o.reduce(...)
-            result = addSingle(result, valueMac); // WACryptoLtHash.LtHash16.add: t.$1(yield e, n)
+        var result = currentHash;
+        for (var valueMac : valueMacs) {
+            result = addSingle(result, valueMac);
         }
         return result;
     }
 
     /**
-     * Removes multiple elements from the current hash state by reducing over the list.
+     * Folds a sequence of value MACs out of the running hash by repeated subtraction.
      *
-     * <p>Each value MAC is individually expanded and pointwise-subtracted from the hash,
-     * sequentially reducing from the initial {@code currentHash}.
-     * @param currentHash the current hash state (must be {@link #HASH_LENGTH} bytes)
-     * @param valueMacs the list of value MACs to subtract
-     * @return new hash state after all removals
+     * @apiNote
+     * Inverse of {@link #add(byte[], List)}: subtracting every element of a
+     * previously added sequence restores the original hash. Used by the
+     * outgoing-patch builder when a mutation is replaced or removed.
+     *
+     * @param currentHash the current hash state (must be {@value #HASH_LENGTH} bytes)
+     * @param valueMacs   the value MACs to subtract, in any order
+     * @return the new hash state
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static byte[] subtract(byte[] currentHash, List<byte[]> valueMacs) {
-        var result = currentHash; // WACryptoLtHash.LtHash16.subtract: Promise.resolve(r)
-        for (var valueMac : valueMacs) { // WACryptoLtHash.LtHash16.subtract: o.reduce(...)
-            result = subtractSingle(result, valueMac); // WACryptoLtHash.LtHash16.subtract: t.$2(yield e, n)
+        var result = currentHash;
+        for (var valueMac : valueMacs) {
+            result = subtractSingle(result, valueMac);
         }
         return result;
     }
 
     /**
-     * Result of a {@link #subtractThenAdd} operation, containing both the final hash
-     * and the intermediate subtract result.
-     * @param ltHash the final hash state after subtract and add operations
-     * @param subtractResult the intermediate hash state after subtract but before add operations
+     * The paired output of {@link #subtractThenAdd}.
+     *
+     * @apiNote
+     * The intermediate result is preserved because WA Web's
+     * {@code WAWebSyncdAntiTampering.computeLtHash} consumes it as
+     * {@code subtractResult} for the verbose diagnostic logging block that
+     * fires on a snapshot MAC mismatch.
+     *
+     * @param ltHash         the final hash after both phases
+     * @param subtractResult the intermediate hash after the subtract phase
      */
     public record SubtractThenAddResult(
             byte[] ltHash,
@@ -193,15 +213,18 @@ public final class MutationLTHash {
     }
 
     /**
-     * Batch operation: removes multiple elements then adds multiple elements.
+     * Subtracts a removal set out of the running hash and then adds an addition set.
      *
-     * <p>First subtracts all {@code toRemove} elements from the hash, producing an
-     * intermediate {@code subtractResult}. Then adds all {@code toAdd} elements to
-     * produce the final {@code ltHash}. Both results are returned.
-     * @param currentHash the current hash state (must be {@link #HASH_LENGTH} bytes)
-     * @param toAdd list of value MACs to add (may be empty)
-     * @param toRemove list of value MACs to remove (may be empty)
-     * @return a {@link SubtractThenAddResult} containing both the final hash and intermediate subtract result
+     * @apiNote
+     * The combined operation that the patch-application path uses to move
+     * from a collection's old LT-Hash to its new one in a single sweep.
+     * Returning the intermediate {@code subtractResult} lets the caller log
+     * both phases without re-running the subtract.
+     *
+     * @param currentHash the current hash state (must be {@value #HASH_LENGTH} bytes)
+     * @param toAdd       the value MACs to add (may be empty)
+     * @param toRemove    the value MACs to subtract (may be empty)
+     * @return the paired final and intermediate hashes
      */
     @WhatsAppWebExport(moduleName = "WACryptoLtHash", exports = "LT_HASH_ANTI_TAMPERING", adaptation = WhatsAppAdaptation.ADAPTED)
     public static SubtractThenAddResult subtractThenAdd(
@@ -209,36 +232,42 @@ public final class MutationLTHash {
         List<byte[]> toAdd,
         List<byte[]> toRemove
     ) {
-        var subtractResult = subtract(currentHash, toRemove); // WACryptoLtHash.LtHash16.subtractThenAdd: var r = yield this.subtract(e, n)
-        var ltHash = add(subtractResult, toAdd); // WACryptoLtHash.LtHash16.subtractThenAdd: var o = yield this.add(r, t)
-        return new SubtractThenAddResult(ltHash, subtractResult); // WACryptoLtHash.LtHash16.subtractThenAdd: {ltHash: o, subtractResult: r}
+        var subtractResult = subtract(currentHash, toRemove);
+        var ltHash = add(subtractResult, toAdd);
+        return new SubtractThenAddResult(ltHash, subtractResult);
     }
 
     /**
-     * Creates a copy of the given hash state.
-     * @param hash the hash state to copy
-     * @return a new array with the same contents, or {@code null} if input is {@code null}
+     * Returns a defensive clone of a hash buffer, or {@code null} for a {@code null} input.
+     *
+     * @apiNote
+     * Used wherever a hash buffer escapes from a {@link MutationLTHash}
+     * routine into mutable storage; the {@code null} tolerance matches the
+     * nullable accessors on the collection-version store.
+     *
+     * @param hash the hash to clone
+     * @return a defensive copy, or {@code null}
      */
     public static byte[] copy(byte[] hash) {
-        return hash == null // ADAPTED: Java defensive copy
+        return hash == null
                 ? null
                 : hash.clone();
     }
 
     /**
-     * Result of an LT-Hash consistency check, containing the consistency status
-     * and the computed and cached LT-Hash values.
+     * The outcome of an LT-Hash consistency check across one or more collections.
      *
-     * <p>When the total mutation count across all checked collections exceeds the
-     * maximum threshold, all fields are set to their unknown/null values indicating
-     * that the check was skipped.
-     * @param isLtHashConsistent {@code true} if all checked collections are consistent,
-     *                           {@code false} if any mismatch was found, or {@code null}
-     *                           if the check was skipped due to exceeding the mutation threshold
-     * @param scratchLtHash the first recomputed LT-Hash from mutations, or {@code null} if
-     *                      no collections were checked
-     * @param cachedLtHash the first stored LT-Hash from the collection version store,
-     *                     or {@code null} if no collections were checked
+     * @apiNote
+     * All three fields are {@code null} when the mutation-count threshold
+     * triggered a skip; otherwise {@code isLtHashConsistent} carries the
+     * boolean verdict and the two hash fields carry the first collection's
+     * recomputed and stored hashes (used in the diagnostic log line).
+     *
+     * @param isLtHashConsistent {@code true} if every checked collection matched,
+     *                           {@code false} if any mismatched,
+     *                           {@code null} if the check was skipped
+     * @param scratchLtHash      the first checked collection's recomputed hash, or {@code null}
+     * @param cachedLtHash       the first checked collection's stored hash, or {@code null}
      */
     public record LtHashCheckResult(
             Boolean isLtHashConsistent,
@@ -248,33 +277,32 @@ public final class MutationLTHash {
     }
 
     /**
-     * Checks the LT-Hash consistency of one or all collections by recomputing
-     * the hash from the store's sync action entries and comparing against the
-     * stored hash.
+     * Recomputes the LT-Hash of one or every collection from the
+     * {@code SyncActionEntry} table and compares it against the stored hash.
      *
-     * <p>For each collection, the LT-Hash is recomputed by deduplicating entries
-     * by index MAC (last-write-wins) and adding all remaining value MACs to
-     * {@link #EMPTY_HASH} using {@link #add(byte[], List)}. The result is compared
-     * against the stored LT-Hash from the collection metadata.
+     * @apiNote
+     * The Cobalt counterpart of {@code WAWebSyncdAntiTamperingLtHash.checkLtHash},
+     * driven by a periodic task that runs on the {@code lthash_check_hours}
+     * cadence in WA Web. Skipped (returns the unknown sentinel) when the
+     * total mutation count across the checked collections exceeds
+     * {@code maxMutations}; passing {@code null} disables the threshold.
      *
-     * <p>When the total mutation count across all collections exceeds the
-     * {@code maxMutations} threshold, the check is skipped and an unknown result
-     * is returned. For employee accounts in WA Web, this threshold is overridden
-     * to 900; Cobalt uses the caller-provided value directly.
-     * @param store the WhatsApp store providing sync action entries and collection metadata
-     * @param collection the specific collection to check, or {@code null} to check all collections
-     * @param maxMutations the maximum total mutation count threshold; if the total exceeds
-     *                     this value, the check is skipped and an unknown result is returned.
-     *                     Pass {@code null} to disable the threshold.
-     * @param context a context string for diagnostic logging
-     * @return the {@link LtHashCheckResult} with consistency status and hash values
+     * @implNote
+     * This implementation always uses the caller-supplied threshold value as
+     * is. WA Web overrides the threshold to {@code 900} for employee
+     * accounts; Cobalt has no notion of employee status, so the override
+     * does not apply.
+     *
+     * @param store        the store providing the {@code SyncActionEntry} table and the cached hashes
+     * @param collection   a single collection to check, or {@code null} to check every collection
+     * @param maxMutations the mutation-count threshold, or {@code null} to skip the threshold
+     * @param context      a free-form context string folded into the inconsistency log line
+     * @return the verdict and the diagnostic hash pair
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTamperingLtHash", exports = "checkLtHash", adaptation = WhatsAppAdaptation.ADAPTED)
     public static LtHashCheckResult checkLtHash(WhatsAppStore store, SyncPatchType collection, Integer maxMutations, String context) {
-        // WAWebSyncdAntiTamperingLtHash.checkLtHash: runInTransaction({SyncActionStore, CollectionVersionStore})
-        // Collect collection metadata and their sync action entries
-        var collectionsData = new ArrayList<CollectionCheckData>(); // WAWebSyncdAntiTamperingLtHash.checkLtHash: a.filter(Boolean).map(...)
-        if (collection == null) { // WAWebSyncdAntiTamperingLtHash.checkLtHash: r == null ? yield t.getAll() : [yield t.get(r)]
+        var collectionsData = new ArrayList<CollectionCheckData>();
+        if (collection == null) {
             for (var patchType : SyncPatchType.values()) {
                 var metadata = store.findWebAppState(patchType);
                 var entries = store.getSyncActionEntries(patchType);
@@ -286,38 +314,34 @@ public final class MutationLTHash {
             collectionsData.add(new CollectionCheckData(collection, metadata.ltHash(), entries));
         }
 
-        // WAWebSyncdAntiTamperingLtHash.checkLtHash: count total mutations
-        var totalMutations = 0; // WAWebSyncdAntiTamperingLtHash.checkLtHash: s = 0
+        var totalMutations = 0;
         for (var data : collectionsData) {
-            totalMutations += data.entries().size(); // WAWebSyncdAntiTamperingLtHash.checkLtHash: s += r.length
+            totalMutations += data.entries().size();
         }
 
-        // WAWebSyncdAntiTamperingLtHash.checkLtHash: if (i !== void 0 && s > i) return unknown
         if (maxMutations != null && totalMutations > maxMutations) {
             return new LtHashCheckResult(null, null, null);
         }
 
-        byte[] scratchLtHash = null; // WAWebSyncdAntiTamperingLtHash.checkLtHash: u = null
-        byte[] cachedLtHash = null; // WAWebSyncdAntiTamperingLtHash.checkLtHash: m = null
-        var consistent = true; // WAWebSyncdAntiTamperingLtHash.checkLtHash: p = true
-        var inconsistentCollections = new ArrayList<SyncPatchType>(); // WAWebSyncdAntiTamperingLtHash.checkLtHash: _ = []
+        byte[] scratchLtHash = null;
+        byte[] cachedLtHash = null;
+        var consistent = true;
+        var inconsistentCollections = new ArrayList<SyncPatchType>();
 
-        for (var data : collectionsData) { // WAWebSyncdAntiTamperingLtHash.checkLtHash: l.map(...)
-            var computed = computeFromEntries(data.entries()); // WAWebSyncdAntiTamperingLtHash.checkLtHash: yield d(r)
-            if (scratchLtHash == null) { // WAWebSyncdAntiTamperingLtHash.checkLtHash: u == null && (u = a)
+        for (var data : collectionsData) {
+            var computed = computeFromEntries(data.entries());
+            if (scratchLtHash == null) {
                 scratchLtHash = computed;
             }
-            if (cachedLtHash == null) { // WAWebSyncdAntiTamperingLtHash.checkLtHash: m == null && (m = n)
+            if (cachedLtHash == null) {
                 cachedLtHash = data.storedLtHash();
             }
-            // WAWebSyncdAntiTamperingLtHash.checkLtHash: arrayBuffersEqual(n, a) || s > 0 && (p = false, _.push(t))
             if (!Arrays.equals(data.storedLtHash(), computed) && totalMutations > 0) {
                 consistent = false;
                 inconsistentCollections.add(data.collection());
             }
         }
 
-        // WAWebSyncdAntiTamperingLtHash.checkLtHash: _.length > 0 && WALogger.ERROR(...)
         if (!inconsistentCollections.isEmpty()) {
             LOGGER.warning("[" + context + "] syncd: failed LtHash check for "
                     + inconsistentCollections.size() + " collections => "
@@ -328,21 +352,30 @@ public final class MutationLTHash {
     }
 
     /**
-     * Reports a collection hash inconsistency by running a LT-Hash consistency
-     * check and logging the result.
+     * Runs {@link #checkLtHash} on a single collection and emits a diagnostic
+     * log line describing the result.
      *
-     * <p>Calls {@link #checkLtHash(WhatsAppStore, SyncPatchType, Integer, String)}
-     * with the specified collection and a default threshold of 400 mutations.
-     * Logs detailed diagnostic information about the consistency check result
-     * including truncated hex representations of the scratch and cached hashes.
-     * @param store the WhatsApp store providing sync action entries and collection metadata
-     * @param collection the collection to check
-     * @param diagnosticContext a human-readable context string for log messages
-     * @param checkContext the context string passed to {@link #checkLtHash}
-     * @param maxMutations the maximum total mutation count threshold, defaults to 400
-     *                     if {@code null}
-     * @return {@code true} if the LT-Hash is inconsistent, {@code false} if consistent,
-     *         or {@code null} if the check was skipped (unknown)
+     * @apiNote
+     * The Cobalt counterpart of
+     * {@code WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency},
+     * driven by the collection handler at patch-pre-processing time and on
+     * any path that wants a side-effecting consistency probe. Defaults the
+     * mutation-count threshold to {@code 400} when {@code maxMutations} is
+     * {@code null}, matching the WA Web default.
+     *
+     * @implNote
+     * This implementation does not call into the WA Web telemetry helpers
+     * (no {@code sendLogs}, no {@code printSyncdLog}). The log line carries
+     * the truncated hex suffixes of both the recomputed and stored hashes,
+     * which is the same surface that the matching WA Web log lines expose.
+     *
+     * @param store             the store providing the {@code SyncActionEntry} table and the cached hashes
+     * @param collection        the collection to check
+     * @param diagnosticContext a free-form context describing the call site
+     * @param checkContext      the context string passed through to {@link #checkLtHash}
+     * @param maxMutations      the mutation-count threshold, defaulting to {@code 400} when {@code null}
+     * @return {@code true} on detected inconsistency, {@code false} on a confirmed match,
+     *         {@code null} when the check was skipped
      */
     @WhatsAppWebExport(moduleName = "WAWebSyncdAntiTamperingLtHash", exports = "reportCollectionInconsistency", adaptation = WhatsAppAdaptation.ADAPTED)
     public static Boolean reportCollectionInconsistency(
@@ -352,85 +385,79 @@ public final class MutationLTHash {
             String checkContext,
             Integer maxMutations
     ) {
-        var threshold = maxMutations != null ? maxMutations : 400; // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: r === void 0 && (r = 400)
-        var result = checkLtHash(store, collection, threshold, checkContext); // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: yield m(n, e, r)
+        var threshold = maxMutations != null ? maxMutations : 400;
+        var result = checkLtHash(store, collection, threshold, checkContext);
 
-        // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: format hash suffixes for logging
         var scratchSuffix = result.scratchLtHash() == null
-                ? "" // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: c == null ? ""
-                : hexPaddedSuffix(result.scratchLtHash(), 16); // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: arrayBufferToHexPadded(c).slice(-16)
+                ? ""
+                : hexPaddedSuffix(result.scratchLtHash(), 16);
         var cachedSuffix = result.cachedLtHash() == null
-                ? "" // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: i == null ? ""
-                : hexPaddedSuffix(result.cachedLtHash(), 16); // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: arrayBufferToHexPadded(i).slice(-16)
+                ? ""
+                : hexPaddedSuffix(result.cachedLtHash(), 16);
 
         if (result.isLtHashConsistent() != null && !result.isLtHashConsistent()) {
-            // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: l === false
             LOGGER.warning("[" + checkContext + "] lthash first time inconsistent."
                     + " scratchLtHash: " + scratchSuffix
                     + ", cachedLtHash: " + cachedSuffix
                     + ", context: " + diagnosticContext);
-            return true; // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: return true
+            return true;
         } else if (result.isLtHashConsistent() != null && result.isLtHashConsistent()) {
-            // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: l === true
             LOGGER.fine("lthash consistent."
                     + " scratchLtHash: " + scratchSuffix
                     + ", cachedLtHash: " + cachedSuffix
                     + ", context: " + diagnosticContext);
-            return false; // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: return false
+            return false;
         }
 
-        // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: l === undefined (skipped)
         LOGGER.fine("lthash unknown if consistent."
                 + " scratchLtHash: " + scratchSuffix
                 + ", cachedLtHash: " + cachedSuffix
                 + ", context: " + diagnosticContext);
-        return null; // WAWebSyncdAntiTamperingLtHash.reportCollectionInconsistency: implicit undefined return
+        return null;
     }
 
     /**
-     * Computes the LT-Hash from a collection of sync action entries by deduplicating
-     * entries by index MAC (last-write-wins) and adding all remaining value MACs
-     * to {@link #EMPTY_HASH}.
+     * Recomputes the LT-Hash for a collection from its persisted entries.
      *
-     * <p>This matches the WA Web helper function {@code d} in {@code WAWebSyncdAntiTamperingLtHash}
-     * which creates a Map keyed by hex(indexMac) with value=valueMac, then calls
-     * {@code LT_HASH_ANTI_TAMPERING.add(EMPTY_LT_HASH, Array.from(map.values()))}.
-     * @param entries the sync action entries for the collection
-     * @return the computed LT-Hash
+     * @apiNote
+     * Helper for {@link #checkLtHash}. Entries are deduplicated by hex
+     * {@code indexMac} with last-write-wins semantics before they are folded
+     * into the hash; this matches the {@code new Map(...)} idiom in
+     * WA Web's {@code WAWebSyncdAntiTamperingLtHash} private helper.
+     *
+     * @param entries the persisted sync action entries for the collection
+     * @return the recomputed LT-Hash
      */
     private static byte[] computeFromEntries(Collection<SyncActionEntry> entries) {
-        // WAWebSyncdAntiTamperingLtHash.d: new Map(e.map(e => [arrayBufferToHexPadded(e.indexMac), e.valueMac]))
-        // Deduplication by indexMac (using hex string as key, last-write-wins)
-        var deduplicated = new LinkedHashMap<String, byte[]>(); // WAWebSyncdAntiTamperingLtHash.d: new Map(...)
+        var deduplicated = new LinkedHashMap<String, byte[]>();
         for (var entry : entries) {
             if (entry.indexMac() != null && entry.valueMac() != null) {
-                deduplicated.put(HexFormat.of().formatHex(entry.indexMac()), entry.valueMac()); // WAWebSyncdAntiTamperingLtHash.d: arrayBufferToHexPadded(e.indexMac), e.valueMac
+                deduplicated.put(HexFormat.of().formatHex(entry.indexMac()), entry.valueMac());
             }
         }
-        // WAWebSyncdAntiTamperingLtHash.d: LT_HASH_ANTI_TAMPERING.add(EMPTY_LT_HASH, Array.from(t.values()))
         return add(EMPTY_HASH, List.copyOf(deduplicated.values()));
     }
 
     /**
-     * Returns the last {@code suffixLength} characters of a hex-encoded byte array,
-     * matching WA Web's {@code arrayBufferToHexPadded(buf).slice(-N)} pattern.
-     * @param data the byte array to encode
-     * @param suffixLength the number of trailing hex characters to return
-     * @return the hex suffix string
+     * Returns the trailing {@code suffixLength} hex characters of {@code data}.
+     *
+     * @param data         the bytes to encode
+     * @param suffixLength the number of trailing hex characters to keep
+     * @return the suffix, or the full encoding when shorter than {@code suffixLength}
      */
     private static String hexPaddedSuffix(byte[] data, int suffixLength) {
-        var hex = HexFormat.of().formatHex(data); // WAWebSyncdCryptoUtils.arrayBufferToHexPadded
+        var hex = HexFormat.of().formatHex(data);
         return hex.length() <= suffixLength
                 ? hex
-                : hex.substring(hex.length() - suffixLength); // .slice(-16)
+                : hex.substring(hex.length() - suffixLength);
     }
 
     /**
-     * Internal data holder for a single collection's check data, bundling the
-     * collection type, its stored LT-Hash, and its sync action entries.
-     * @param collection the collection type
-     * @param storedLtHash the stored LT-Hash from collection metadata
-     * @param entries the sync action entries for the collection
+     * A bundle of one collection's identity, stored hash, and entries.
+     *
+     * @param collection    the collection type
+     * @param storedLtHash  the stored hash from {@code WebAppState.ltHash()}
+     * @param entries       the {@code SyncActionEntry} rows for the collection
      */
     private record CollectionCheckData(
             SyncPatchType collection,

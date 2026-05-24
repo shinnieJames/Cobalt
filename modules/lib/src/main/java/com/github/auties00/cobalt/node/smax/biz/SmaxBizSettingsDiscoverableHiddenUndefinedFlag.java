@@ -7,17 +7,22 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Literal-tuple validator for the SMB-profile discoverability tri-state
- * carried by documented business-settings attributes. Accepts the
- * uppercase wire literals {@code "DISCOVERABLE"} / {@code "HIDDEN"} /
- * {@code "UNDEFINED"} mapped onto the named flag constants
- * {@link #DISCOVERABLE} / {@link #HIDDEN} / {@link #UNDEFINED}.
+ * Literal-tuple validator for the SMB-profile discoverability tri-state on
+ * business-settings stanzas, accepting the uppercase wire literals
+ * {@code "DISCOVERABLE"}, {@code "HIDDEN"}, and {@code "UNDEFINED"}.
  *
- * <p>No Cobalt parser observes this enum on the wire today; it is
- * provided for completeness to mirror the WA literal universe and to
- * record provenance for the
+ * @apiNote
+ * Provided for parity with the WA literal universe; no Cobalt parser
+ * observes this enum on the wire today. The corresponding
  * {@code WASmaxInBizSettingsEnums.ENUM_DISCOVERABLE_HIDDEN_UNDEFINED}
- * export.
+ * tuple is referenced by SMB business-profile settings flows on WA Web.
+ *
+ * @implNote
+ * This implementation enumerates only the three literals exported by
+ * {@code WASmaxInBizSettingsEnums.ENUM_DISCOVERABLE_HIDDEN_UNDEFINED};
+ * the wire literals are uppercase (unlike most other SMAX enums) and
+ * {@link #of(String)} therefore preserves the input case rather than
+ * normalising it.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBizSettingsEnums")
 @WhatsAppWebExport(
@@ -27,8 +32,11 @@ import java.util.Optional;
 )
 public enum SmaxBizSettingsDiscoverableHiddenUndefinedFlag {
     /**
-     * Wire literal {@code "DISCOVERABLE"}. The SMB profile is
-     * publicly discoverable.
+     * The wire literal {@code "DISCOVERABLE"}.
+     *
+     * @apiNote
+     * Indicates the SMB profile is publicly discoverable in WhatsApp's
+     * business directory and search surfaces.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBizSettingsEnums",
@@ -38,8 +46,11 @@ public enum SmaxBizSettingsDiscoverableHiddenUndefinedFlag {
     DISCOVERABLE,
 
     /**
-     * Wire literal {@code "HIDDEN"}. The SMB profile is hidden from
-     * directory and search surfaces.
+     * The wire literal {@code "HIDDEN"}.
+     *
+     * @apiNote
+     * Indicates the SMB profile is hidden from directory and search
+     * surfaces.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBizSettingsEnums",
@@ -49,9 +60,12 @@ public enum SmaxBizSettingsDiscoverableHiddenUndefinedFlag {
     HIDDEN,
 
     /**
-     * Wire literal {@code "UNDEFINED"}. The discoverability has not
-     * been set by the user; the client surfaces the relevant
-     * onboarding dialog whenever this value is observed.
+     * The wire literal {@code "UNDEFINED"}.
+     *
+     * @apiNote
+     * Indicates the user has not yet picked a discoverability mode; the
+     * client surfaces the relevant onboarding dialog whenever this value
+     * is observed.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBizSettingsEnums",
@@ -61,15 +75,22 @@ public enum SmaxBizSettingsDiscoverableHiddenUndefinedFlag {
     UNDEFINED;
 
     /**
-     * Tries to parse a wire-form attribute string into the matching
-     * enum constant. Mirrors the WA Web {@code attrStringEnum} lookup,
-     * which is a case-sensitive dictionary match against the documented
-     * literals.
+     * Parses a wire-form attribute string into the matching enum constant.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code attrStringEnum} lookup against
+     * {@code ENUM_DISCOVERABLE_HIDDEN_UNDEFINED}: any value other than
+     * the three documented uppercase literals yields empty and aborts
+     * the surrounding stanza parse.
+     *
+     * @implNote
+     * This implementation does NOT case-normalise the input because the
+     * wire literals are themselves uppercase; passing a lowercase value
+     * yields empty.
      *
      * @param value the attribute value; may be {@code null}
-     * @return an {@link Optional} carrying the matching enum constant,
-     *         or empty when {@code value} is {@code null} or does not
-     *         match any documented literal
+     * @return an {@link Optional} carrying the matching constant, or empty
+     *         when {@code value} is {@code null} or does not match
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBizSettingsEnums",

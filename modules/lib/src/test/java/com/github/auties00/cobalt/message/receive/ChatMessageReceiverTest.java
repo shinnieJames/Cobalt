@@ -8,6 +8,7 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.message.MessageContainer;
 import com.github.auties00.cobalt.model.message.MessageContainerSpec;
 import com.github.auties00.cobalt.model.message.text.ExtendedTextMessage;
+import com.github.auties00.cobalt.node.Node;
 import com.github.auties00.cobalt.node.NodeBuilder;
 import com.github.auties00.libsignal.SignalSessionCipher;
 import com.github.auties00.libsignal.groups.SignalGroupCipher;
@@ -19,17 +20,24 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Tests for {@link ChatMessageReceiver}, mirroring
- * {@code WAWebHandleMsg.default} and
- * {@code WAWebMsgProcessingDecryptApi.decryptE2EPayload}.
+ * Parity tests for {@link ChatMessageReceiver} against WhatsApp Web's
+ * {@code WAWebHandleMsg.default} and {@code WAWebMsgProcessingDecryptApi.decryptE2EPayload}.
  *
- * <p>Drives a full encrypt-then-receive cycle: a sender's
- * {@link MessageEncryption} produces a {@code PKMSG} ciphertext, which is
- * wrapped in a synthetic inbound {@code <message>} node and handed to
- * the recipient's {@link ChatMessageReceiver}. The receiver must
- * decrypt the payload, decode the protobuf, and return a populated
- * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} carrying
- * the original {@link MessageContainer}.
+ * @apiNote
+ * Drives a full encrypt-then-receive cycle: a sender-side
+ * {@link MessageEncryption} produces a PKMSG ciphertext, wraps it in a synthetic
+ * inbound {@code <message>} node, and hands it to the recipient's
+ * {@link ChatMessageReceiver}; the receiver must decrypt, decode the protobuf, and
+ * return a populated
+ * {@link com.github.auties00.cobalt.model.chat.ChatMessageInfo} carrying the
+ * sender's original {@link MessageContainer}.
+ *
+ * @implNote
+ * Both sides share libsignal session state installed by
+ * {@link TestSignalSession#establishSession} before the first encrypt; the second
+ * test exercises the WA Web behaviour that a sender's PKMSG remains sticky until
+ * the recipient's first ack lands, so the recipient must be able to decrypt two
+ * consecutive PKMSGs into the established session.
  */
 @DisplayName("ChatMessageReceiver")
 class ChatMessageReceiverTest {
@@ -39,6 +47,10 @@ class ChatMessageReceiverTest {
     private static final Jid RECIPIENT_BARE = Jid.of("19254863482@s.whatsapp.net");
     private static final Jid SENDER_BARE = Jid.of("12025550100@s.whatsapp.net");
 
+    /**
+     * Verifies that a PKMSG round-trip recovers the sender's plaintext on the
+     * recipient side.
+     */
     @Test
     @DisplayName("PKMSG receive: decrypts to the sender's MessageContainer and returns a populated ChatMessageInfo")
     void receivePkmsgRoundTrip() {
@@ -86,6 +98,16 @@ class ChatMessageReceiverTest {
                 "decrypted payload bytes equal the sender's plaintext");
     }
 
+    /**
+     * Verifies that the sender's sticky-PKMSG behaviour does not break the second
+     * decrypt: a second PKMSG from the same sender must still resolve into the
+     * installed session.
+     *
+     * @apiNote
+     * Pins the WhatsApp Web behaviour that the sender keeps emitting PKMSG until
+     * the recipient's first ack lands; the matching expectation is verified by
+     * {@code MessageEncryptionTest.typeSwitchesAfterFirstAck} on the send side.
+     */
     @Test
     @DisplayName("PKMSG receive: subsequent decrypts switch to MSG and recover correctly")
     void msgEnvelopeAfterPrekeyConsumed() {
@@ -100,16 +122,11 @@ class ChatMessageReceiverTest {
                 new SignalGroupCipher(recipientStore));
         var receiver = new ChatMessageReceiver(recipientStore, recipientDecryption);
 
-        // 1) First send: PKMSG. Recipient decrypts and the session is installed.
         var firstPayload = senderEncryption.encryptForDevice(
                 RECIPIENT_PRIMARY,
                 MessageContainerSpec.encode(MessageContainer.of("first")));
         receiver.receive(buildInbound("3EB0RCV0010", "pkmsg", firstPayload.ciphertext()), SENDER_PRIMARY);
 
-        // 2) Second send from the sender's perspective is still PKMSG (sticky
-        // until ack — pinned in MessageEncryptionTest.typeSwitchesAfterFirstAck).
-        // The recipient sees it as a second PKMSG and decrypts again from the
-        // established session.
         var secondPayload = senderEncryption.encryptForDevice(
                 RECIPIENT_PRIMARY,
                 MessageContainerSpec.encode(MessageContainer.of("second")));
@@ -121,15 +138,22 @@ class ChatMessageReceiverTest {
     }
 
     /**
-     * Builds an inbound {@code <message>} node carrying a single
+     * Builds a synthetic inbound {@code <message>} node carrying a single
      * {@code <enc>} child of the supplied type and ciphertext.
+     *
+     * @apiNote
+     * Used by the second test to keep both PKMSG sends parameterised by id alone.
+     *
+     * @implNote
+     * The hardcoded timestamp pins a deterministic stanza age so the
+     * expired-status branch never fires during the round-trip.
      *
      * @param id         the wire message id
      * @param encType    the enc type ({@code "pkmsg"} or {@code "msg"})
      * @param ciphertext the encrypted payload bytes
      * @return the synthetic inbound node
      */
-    private static com.github.auties00.cobalt.node.Node buildInbound(String id, String encType, byte[] ciphertext) {
+    private static Node buildInbound(String id, String encType, byte[] ciphertext) {
         return new NodeBuilder()
                 .description("message")
                 .attribute("id", id)

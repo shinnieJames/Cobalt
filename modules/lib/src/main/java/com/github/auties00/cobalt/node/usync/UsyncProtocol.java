@@ -17,24 +17,23 @@ import com.github.auties00.cobalt.node.usync.protocol.UsyncUsernameProtocol;
 import java.util.Optional;
 
 /**
- * Sealed interface implemented by every USync protocol descriptor.
+ * Sealed descriptor of one of the eleven USync protocols.
  *
- * <p>A USync stanza is composed of one or more protocol elements that describe
- * what the client wants to learn about each user, plus one {@code <user>} entry
- * per peer with optional protocol-specific child elements. Each protocol
- * declares three things. Its wire {@link #name()} is the literal tag name on
- * the {@code <query>} child. The {@link #buildQueryElement()} method emits the
- * {@code <query>} child, often empty and sometimes carrying the protocol's
- * request shape. The {@link #buildUserElement(UsyncUser)} method emits an
- * optional child inside each {@code <user>} entry, returning
- * {@link Optional#empty()} when the protocol has no per-user payload.
+ * @apiNote
+ * A {@link UsyncQuery} carries one or more protocol descriptors plus a list
+ * of {@link UsyncUser} entries. Each descriptor knows how to emit its
+ * {@code <query>} child, how to emit the optional per-user element, and how
+ * to parse the per-user response. The eleven permitted implementations
+ * correspond one-to-one with the {@code WAWebUsync*Protocol} JS classes
+ * (contact, devices, feature, business, picture, status, disappearing-mode,
+ * lid, bot, username, text-status).
  *
- * <p>Protocols also expose {@link #parseUserResult(Node)} that consumes a
- * {@code <user>}-child node and returns the protocol-specific result. The
- * shared result type is {@link UsyncProtocolResult}.
- *
- * <p>The eleven permitted implementations correspond one-to-one with the
- * eleven {@code WAWebUsync*Protocol} JS classes.
+ * @implSpec
+ * Implementations must be stateless apart from constructor parameters; the
+ * same instance is invoked for every user in the query and may be shared
+ * across queries. {@link #name()} must return the literal tag name used both
+ * inside the {@code <query>} element and inside each {@code <user>} response
+ * so {@link UsyncQuery#parseResponse(Node)} can match per-user children.
  */
 @WhatsAppWebModule(moduleName = "WAWebUsync")
 public sealed interface UsyncProtocol permits
@@ -51,20 +50,27 @@ public sealed interface UsyncProtocol permits
         UsyncTextStatusProtocol {
 
     /**
-     * Returns the literal protocol name as it appears on the wire. Examples
-     * include {@code "contact"}, {@code "devices"}, and {@code "feature"}.
+     * Returns the protocol's literal wire tag name.
      *
-     * @return the protocol's tag name
+     * @apiNote
+     * Used by {@link UsyncQuery#parseResponse(Node)} to look up the matching
+     * child inside each {@code <user>} response and by
+     * {@link UsyncBackoff} to key per-protocol backoff state.
+     *
+     * @return the tag name (e.g. {@code "contact"}, {@code "devices"},
+     *     {@code "feature"})
      */
     String name();
 
     /**
-     * Builds the protocol's child of the {@code <query>} element.
+     * Builds the protocol's child element of the outbound {@code <query>}
+     * block.
      *
-     * <p>Most protocols emit an empty element such as {@code <picture/>}. The
-     * device protocol carries a {@code version="2"} attribute, the contact
-     * protocol optionally carries {@code addressing_mode="lid"}, and the
-     * feature protocol carries one empty child per requested feature key.
+     * @apiNote
+     * Most protocols emit an empty element (e.g. {@code <picture/>}); the
+     * device protocol carries {@code version="2"}; the contact protocol
+     * conditionally carries {@code addressing_mode="lid"}; the feature
+     * protocol carries one empty child per requested feature key.
      *
      * @return the query-element node
      */
@@ -73,27 +79,35 @@ public sealed interface UsyncProtocol permits
     /**
      * Builds the optional per-user child inside a {@code <user>} entry.
      *
-     * <p>Many protocols return {@link Optional#empty()} because they have no
-     * per-user payload. The protocol's mere presence in the {@code <query>}
-     * element is enough.
+     * @apiNote
+     * Returns {@link Optional#empty()} when the protocol has no per-user
+     * payload to ship. The device, lid, bot-profile, contact, and status
+     * protocols use this slot to attach hints (device hash, lid hint,
+     * persona id, addressing data, trusted-contact token) that the relay
+     * needs to compute the response.
      *
      * @param user the user the {@code <user>} entry refers to
-     * @return the protocol-specific child element, or empty
+     * @return the per-user element, or empty
      */
     Optional<Node> buildUserElement(UsyncUser user);
 
     /**
-     * Parses the protocol's child of a {@code <user>} response into a Java
+     * Parses the protocol's child of one {@code <user>} response into a Java
      * result.
      *
-     * <p>If the relay returned a per-protocol error, the implementation
-     * returns a {@link com.github.auties00.cobalt.node.usync.result.UsyncProtocolError}.
-     * Otherwise it returns the protocol-specific success variant declared by
-     * the corresponding permit of {@link UsyncProtocolResult}.
+     * @apiNote
+     * Returns a {@link com.github.auties00.cobalt.node.usync.result.UsyncProtocolError}
+     * when the relay attached an {@code <error/>} child, otherwise returns
+     * the protocol-specific success variant declared by the matching permit
+     * of {@link com.github.auties00.cobalt.node.usync.result.UsyncProtocolResponse}.
+     *
+     * @implSpec
+     * Implementations must throw {@link IllegalStateException} when invoked
+     * on a node whose tag is not {@link #name()}; this matches the JS
+     * {@code node.assertTag(...)} guard at the top of every parser.
      *
      * @param userChild the child node tagged with this protocol's
-     *                  {@link #name()}, located inside a {@code <user>} result
-     *                  entry
+     *                  {@link #name()}, located inside a {@code <user>} entry
      * @return the parsed result, never {@code null}
      */
     UsyncProtocolResult parseUserResult(Node userChild);

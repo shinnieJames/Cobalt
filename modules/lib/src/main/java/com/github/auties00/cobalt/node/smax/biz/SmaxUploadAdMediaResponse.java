@@ -14,24 +14,60 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxUploadAdMediaRequest}.
+ * The sealed family of inbound reply variants produced by the relay
+ * in response to a {@link SmaxUploadAdMediaRequest}.
+ *
+ * @apiNote
+ * Surfaced by the CTWA (click-to-WhatsApp) native-ad media linking
+ * flow whose JS caller
+ * {@code WAWebLinkAdMediaInFacebook.linkAdMediaInFacebook} registers
+ * an already-uploaded WA media handle ({@code mediaId},
+ * {@code mediaType: "image"}) against the connected Facebook ad
+ * account; the three variants split the wire outcome into
+ * {@link Success} (relay echoed the linked {@code (id, type)}
+ * entries via a {@code <media>} and/or {@code <media_list>} tree),
+ * {@link ClientError} (relay rejected the link with one of two
+ * documented {@code 4xx} arms: {@code (bad-request, 400)} or
+ * {@code (forbidden, 403)}) and {@link ServerError} (one of two
+ * documented {@code 5xx} arms: {@code (internal-server-error, 500)}
+ * or {@code (service-unavailable, 503)}). The JS caller collapses
+ * any error branch into the UI literal {@code "error"}.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code WASmaxBizCtwaNativeAdUploadAdMediaRPC.sendUploadAdMediaRPC}
+ * by trying each variant in priority order via {@link #of} and
+ * returning the first successful parse.
  */
 public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
         permits SmaxUploadAdMediaResponse.Success, SmaxUploadAdMediaResponse.ClientError, SmaxUploadAdMediaResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxUploadAdMediaResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Tries each {@link SmaxUploadAdMediaResponse} variant in
+     * priority order and returns the first that parses cleanly.
+     *
+     * @apiNote
+     * Invoked by the smax reply pump after dispatching a
+     * {@link SmaxUploadAdMediaRequest}; the priority order matches
+     * WA Web's {@code parsing} dispatch table so that a malformed
+     * {@code Success} stanza falls through to {@link ClientError}
+     * rather than masking an error.
+     *
+     * @implNote
+     * This implementation invokes {@link Success#of(Node, Node)}
+     * first, then {@link ClientError#of(Node, Node)}, then
+     * {@link ServerError#of(Node, Node)}; an unrecognised stanza
+     * shape returns {@link Optional#empty()}.
      *
      * @param node    the inbound IQ stanza received from the relay;
      *                never {@code null}
-     * @param request the original outbound stanza. Used to validate
+     * @param request the original outbound stanza, used to validate
      *                echoed identifiers; never {@code null}
      * @return an {@link Optional} carrying the parsed variant, or
      *         {@link Optional#empty()} when no documented variant
      *         matched the stanza shape
-     * @throws NullPointerException if either argument is {@code null}
+     * @throws NullPointerException if either argument is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxBizCtwaNativeAdUploadAdMediaRPC",
             exports = "sendUploadAdMediaRPC", adaptation = WhatsAppAdaptation.ADAPTED)
@@ -50,23 +86,40 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code Success} reply variant. The relay echoed the media
-     * registrations.
+     * The {@code Success} reply variant carrying the relay's echoed
+     * media registrations.
+     *
+     * @apiNote
+     * Projected by {@link SmaxUploadAdMediaResponse#of(Node, Node)}
+     * when the relay returns the documented {@code <iq>} envelope
+     * with an optional {@code <media>} child and a {@code 0..10}
+     * sequence of {@code <media_list>} siblings; the JS caller
+     * collapses this branch to the UI literal {@code "success"}
+     * without consuming the projected fields.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess")
     final class Success implements SmaxUploadAdMediaResponse {
         /**
-         * The optional primary {@code <media/>} echo.
+         * The optional primary {@code <media/>} echo carrying the
+         * registered {@code (id, type)} pair, or {@code null} when
+         * the relay omitted the child.
          */
         private final SmaxUploadAdMediaMediaEntry media;
 
         /**
-         * The list of {@code <media_list/>} echoes (0..10 entries).
+         * The list of {@code <media_list/>} sibling echoes, each
+         * carrying a registered {@code (id, type)} pair; admits
+         * {@code 0..10} entries by the
+         * {@code mapChildrenWithTag(..., 0, 10, e)} contract.
          */
         private final List<SmaxUploadAdMediaMediaEntry> mediaList;
 
         /**
          * Constructs a new successful reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after the {@code <iq>}
+         * envelope and both echo trees have been validated.
          *
          * @param media     the optional primary media echo; may be
          *                  {@code null}
@@ -81,7 +134,7 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the optional primary media echo.
+         * Returns the optional primary {@code <media/>} echo.
          *
          * @return an {@link Optional} carrying the entry, or empty
          *         when the relay omitted the {@code <media/>} child
@@ -91,10 +144,10 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
         }
 
         /**
-         * Returns the media-list echoes.
+         * Returns the {@code <media_list/>} sibling echoes.
          *
-         * @return an unmodifiable list of 0..10 entries; never
-         *         {@code null}
+         * @return an unmodifiable list of {@code 0..10} entries;
+         *         never {@code null}
          */
         public List<SmaxUploadAdMediaMediaEntry> mediaList() {
             return mediaList;
@@ -104,11 +157,32 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
          * Tries to parse a {@link Success} variant from the given
          * inbound stanza.
          *
+         * @implNote
+         * This implementation enforces the
+         * {@link SmaxIqResultResponseMixin} envelope check up front,
+         * then walks the optional {@code <media>} child followed by
+         * the {@code <media_list>} sequence; the
+         * {@link SmaxIqResultResponseMixin#validate(Node, Node)}
+         * call subsumes WA Web's
+         * {@code assertTag(iq) + parseHackBaseIQResultResponseMixin}
+         * prefix, while the same {@code parseEntry} helper drives
+         * both echo trees (their per-child shapes are byte
+         * identical aside from the tag name, which the caller
+         * already filtered by tag). The hard cap of ten
+         * {@code <media_list>} entries reflects the
+         * {@code mapChildrenWithTag(..., 0, 10, e)} contract;
+         * exceeding it rejects the parse. Cobalt's
+         * {@code Node#getChild} silently picks the first matching
+         * child when more than one {@code <media>} is present,
+         * whereas WA Web's {@code optionalChildWithTag} rejects;
+         * the relay never emits multiple {@code <media>} children so
+         * this divergence is unreachable in practice.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant,
+         *         or empty when the stanza does not match the
+         *         success schema
          */
         @WhatsAppWebExport(moduleName = "WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess",
                 exports = "parseUploadAdMediaResponseSuccess",
@@ -116,22 +190,9 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
         public static Optional<Success> of(Node node, Node request) {
             Objects.requireNonNull(node, "node cannot be null");
             Objects.requireNonNull(request, "request cannot be null");
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess.parseUploadAdMediaResponseSuccess: assertTag(t, "iq")
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess.parseUploadAdMediaResponseSuccess: parseHackBaseIQResultResponseMixin(t, n)
-            // WASmaxInBizCtwaNativeAdHackBaseIQResultResponseMixin.parseHackBaseIQResultResponseMixin:
-            //   assertTag(iq) + optional(attrUserJid, "to") + parseIQResultResponseMixin(t, n)
-            // The optional "to" projection is a no-op: WA never reads it (see SmaxIqResultResponseMixin javadoc).
-            // ADAPTED: WA orders assertTag(iq) -> optionalChildWithTag(media) -> parseHackBase... -> mapChildrenWithTag(media_list);
-            // Cobalt fuses assertTag(iq) + parseHackBase... into validate() up-front. All checks are still applied
-            // and a stanza succeeds iff every WA check would have succeeded.
             if (!SmaxIqResultResponseMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess.parseUploadAdMediaResponseSuccess:
-            //   optionalChildWithTag(t, "media", s) where s = parseUploadAdMediaResponseSuccessMedia
-            // ADAPTED: WA's optionalChild rejects when more than one <media/> child is present; Cobalt's
-            // getChild silently picks the first. The relay never emits multiple <media/> children, so this
-            // divergence is unreachable in practice and consistent with the rest of the SMAX package.
             SmaxUploadAdMediaMediaEntry media = null;
             var mediaNode = node.getChild("media").orElse(null);
             if (mediaNode != null) {
@@ -141,8 +202,6 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                 }
                 media = parsed.get();
             }
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseSuccess.parseUploadAdMediaResponseSuccess:
-            //   mapChildrenWithTag(t, "media_list", 0, 10, e) where e = parseUploadAdMediaResponseSuccessMediaList
             var entries = new ArrayList<SmaxUploadAdMediaMediaEntry>();
             var iter = node.streamChildren("media_list").iterator();
             while (iter.hasNext()) {
@@ -153,30 +212,38 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                 }
                 entries.add(parsed.get());
             }
-            // WASmaxParseUtils.mapChildrenWithTag enforces the [0, 10] cardinality range.
             if (entries.size() > 10) {
                 return Optional.empty();
             }
-            // WAResultOrError.makeResult({...mixin_result, media: a.value, mediaList: l.value})
             return Optional.of(new Success(media, entries));
         }
 
         /**
-         * Parses a single {@code (id, type)} entry from the given
-         * {@code <media/>} or {@code <media_list/>} node.
+         * Parses a single {@code (id, type)} entry from a
+         * {@code <media/>} or {@code <media_list/>} echo node.
          *
-         * <p>Consolidates WA Web's two byte-identical parsers
+         * @apiNote
+         * Used internally by {@link #of(Node, Node)} to drive both
+         * echo trees through a single byte-identical parser.
+         *
+         * @implNote
+         * This implementation consolidates WA Web's two
+         * byte-identical parsers
          * {@code parseUploadAdMediaResponseSuccessMedia} and
          * {@code parseUploadAdMediaResponseSuccessMediaList}, which
-         * differ only in the asserted tag name. The tag check is
-         * already enforced by the call sites: {@code <media>} arrives
-         * from {@code Node#getChild("media")} and {@code <media_list>}
-         * arrives from {@code Node#streamChildren("media_list")}, so
-         * a redundant {@code assertTag} in the helper would be a
-         * no-op.
+         * differ only in the asserted tag name; the tag check is
+         * already enforced by the call sites
+         * ({@link Node#getChild(String)} for {@code <media>} and
+         * {@link Node#streamChildren(String)} for
+         * {@code <media_list>}), so a redundant {@code assertTag}
+         * here would be a no-op. The {@code id} attribute is
+         * required as a non-empty string; the {@code type}
+         * attribute is required to match the lowercase
+         * {@code {"image", "video"}} dictionary via
+         * {@link SmaxUploadAdMediaMediaType#of(String)}.
          *
-         * @param node the {@code <media>} or {@code <media_list>}
-         *             node
+         * @param node the {@code <media/>} or {@code <media_list/>}
+         *             child node
          * @return an {@link Optional} carrying the parsed entry, or
          *         empty when either attribute is missing or
          *         malformed
@@ -188,13 +255,10 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                 exports = "parseUploadAdMediaResponseSuccessMediaList",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         private static Optional<SmaxUploadAdMediaMediaEntry> parseEntry(Node node) {
-            // WASmaxParseUtils.attrString(e, "id"): required string attribute
             var id = node.getAttributeAsString("id").orElse(null);
             if (id == null) {
                 return Optional.empty();
             }
-            // WASmaxParseUtils.attrStringEnum(e, "type", ENUM_IMAGE_VIDEO):
-            // required attribute keyed against the lowercase {image,video} dictionary.
             var typeStr = node.getAttributeAsString("type").orElse(null);
             if (typeStr == null) {
                 return Optional.empty();
@@ -203,10 +267,12 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
             if (type == null) {
                 return Optional.empty();
             }
-            // WAResultOrError.makeResult({id: n.value, type: r.value})
             return Optional.of(new SmaxUploadAdMediaMediaEntry(id, type));
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -220,11 +286,17 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                     && Objects.equals(this.mediaList, that.mediaList);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(media, mediaList);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxUploadAdMediaResponse.Success[media=" + media
@@ -233,13 +305,18 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ClientError} reply variant. The relay rejected the
-     * request with one of the two {@code 4xx} error codes drawn from
-     * the native-ad-error catalogue: either
+     * The {@code ClientError} reply variant carrying one of two
+     * documented {@code 4xx} native-ad rejection pairs.
+     *
+     * @apiNote
+     * Surfaced when the relay rejected the link via either
      * {@code (text="bad-request", code=400)} from
      * {@code WASmaxInBizCtwaNativeAdIQErrorBadRequestMixin} or
      * {@code (text="forbidden", code=403)} from
-     * {@code WASmaxInBizCtwaNativeAdIQErrorForbiddenMixin}.
+     * {@code WASmaxInBizCtwaNativeAdIQErrorForbiddenMixin}; any
+     * other {@code (code, text)} pair falls through the
+     * disjunction and is rejected by
+     * {@link #of(Node, Node)} the same way WA Web rejects it.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdUploadAdMediaResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdNativeAdErrors")
@@ -247,18 +324,24 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdIQErrorForbiddenMixin")
     final class ClientError implements SmaxUploadAdMediaResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code; one of {@code 400} or
+         * {@code 403}.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text; one of
+         * {@code "bad-request"} or {@code "forbidden"} when the pair
+         * matches a documented arm.
          */
         private final String errorText;
 
         /**
          * Constructs a new client-error reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after one of the two
+         * documented {@code (code, text)} pairs has been matched.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -292,6 +375,19 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
          * Tries to parse a {@link ClientError} variant from the
          * given inbound stanza.
          *
+         * @implNote
+         * This implementation runs the
+         * {@link SmaxDeprecatedIqErrorResponseOptionalFromMixin}
+         * envelope check first (mirroring
+         * {@code parseDeprecatedIQErrorResponseOptionalFromMixin}),
+         * then flattens the {@code <error/>} child via
+         * {@link SmaxIqErrorResponseMixin#parseError(Node)}, and
+         * finally requires the {@code (code, text)} pair to match
+         * one of the two documented client-error arms via
+         * {@link #matchClientErrorPair(int, String)}; non-matching
+         * pairs fall through the disjunction so the smax dispatch
+         * can drop to {@link ServerError}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant,
@@ -314,49 +410,53 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                 exports = "parseIQErrorForbiddenMixin",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<ClientError> of(Node node, Node request) {
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseError.parseUploadAdMediaResponseError: parseDeprecatedIQErrorResponseOptionalFromMixin(e, t)
             if (!SmaxDeprecatedIqErrorResponseOptionalFromMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseError.parseUploadAdMediaResponseError: flattenedChildWithTag(e, "error")
-            // (the parseError helper extracts the <error code text/> child; the assertTag(error) check
-            // run by each native-ad-error mixin is implicit because parseError pulls the <error/> child by tag)
             var envelope = SmaxIqErrorResponseMixin.parseError(node).orElse(null);
             if (envelope == null) {
                 return Optional.empty();
             }
-            // WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors: tries IQErrorBadRequestMixin first
-            // WASmaxInBizCtwaNativeAdIQErrorBadRequestMixin.parseIQErrorBadRequestMixin: literal(attrString, e, "text", "bad-request") + literal(attrInt, e, "code", 400)
-            // WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors: then IQErrorForbiddenMixin
-            // WASmaxInBizCtwaNativeAdIQErrorForbiddenMixin.parseIQErrorForbiddenMixin: literal(attrString, e, "text", "forbidden") + literal(attrInt, e, "code", 403)
             return matchClientErrorPair(envelope.code(), envelope.text())
                     ? Optional.of(new ClientError(envelope.code(), envelope.text()))
                     : Optional.empty();
         }
 
         /**
-         * Returns whether the supplied {@code (code, text)} pair
-         * matches one of the two {@code ClientError} arms enumerated by
+         * Reports whether the supplied {@code (code, text)} pair
+         * matches one of the two documented {@code ClientError}
+         * arms enumerated by
          * {@code WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors}.
          *
-         * <p>The 4xx half of the disjunction admits exactly two pairs:
-         * {@code ("bad-request", 400)} and
-         * {@code ("forbidden", 403)}. Stanzas whose {@code <error/>}
-         * child carries any other 4xx code or any other text are
-         * rejected: WA Web propagates the failure of the last mixin
-         * arm, and the upstream {@code parseUploadAdMediaResponseError}
-         * caller treats that as a no-parse.
+         * @apiNote
+         * Used internally by {@link #of(Node, Node)} to enforce the
+         * narrow {@code 4xx} disjunction; the two admitted pairs
+         * are {@code ("bad-request", 400)} and
+         * {@code ("forbidden", 403)}.
+         *
+         * @implNote
+         * This implementation hard-codes the literal pairs that the
+         * WA Web mixins enforce via
+         * {@code literal(attrString, "text", "...")} +
+         * {@code literal(attrInt, "code", ...)} so a malformed pair
+         * fails the parse the same way WA Web's
+         * {@code parseNativeAdErrors} propagates the last mixin
+         * arm's failure.
          *
          * @param code the parsed error code
          * @param text the parsed error text; may be {@code null}
          * @return {@code true} when the pair matches one of the
-         *         enumerated client-error arms; {@code false} otherwise
+         *         enumerated client-error arms; {@code false}
+         *         otherwise
          */
         private static boolean matchClientErrorPair(int code, String text) {
             return ("bad-request".equals(text) && code == 400)
                     || ("forbidden".equals(text) && code == 403);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -369,11 +469,17 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxUploadAdMediaResponse.ClientError[errorCode=" + errorCode
@@ -382,14 +488,16 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
     }
 
     /**
-     * The {@code ServerError} reply variant. The relay encountered a
-     * transient internal failure while processing the request and
-     * replied with one of the two {@code 5xx} pairs enumerated by
-     * {@code WASmaxInBizCtwaNativeAdNativeAdErrors}: either
+     * The {@code ServerError} reply variant carrying one of two
+     * documented {@code 5xx} native-ad transient failure pairs.
+     *
+     * @apiNote
+     * Surfaced when the relay returned either
      * {@code (text="internal-server-error", code=500)} from
      * {@code WASmaxInBizCtwaNativeAdIQErrorInternalServerErrorMixin}
      * or {@code (text="service-unavailable", code=503)} from
-     * {@code WASmaxInBizCtwaNativeAdIQErrorServiceUnavailableMixin}.
+     * {@code WASmaxInBizCtwaNativeAdIQErrorServiceUnavailableMixin};
+     * the caller can re-issue the request with backoff.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdUploadAdMediaResponseError")
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdNativeAdErrors")
@@ -397,18 +505,25 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
     @WhatsAppWebModule(moduleName = "WASmaxInBizCtwaNativeAdIQErrorServiceUnavailableMixin")
     final class ServerError implements SmaxUploadAdMediaResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric server-side error code; one of {@code 500} or
+         * {@code 503}.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when the relay supplied
-         * one.
+         * The human-readable error text; one of
+         * {@code "internal-server-error"} or
+         * {@code "service-unavailable"} when the pair matches a
+         * documented arm.
          */
         private final String errorText;
 
         /**
          * Constructs a new server-error reply.
+         *
+         * @apiNote
+         * Invoked by {@link #of(Node, Node)} after one of the two
+         * documented {@code (code, text)} pairs has been matched.
          *
          * @param errorCode the numeric error code
          * @param errorText the optional human-readable text; may be
@@ -442,6 +557,19 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
          * Tries to parse a {@link ServerError} variant from the
          * given inbound stanza.
          *
+         * @implNote
+         * This implementation runs the
+         * {@link SmaxDeprecatedIqErrorResponseOptionalFromMixin}
+         * envelope check first (mirroring
+         * {@code parseDeprecatedIQErrorResponseOptionalFromMixin}),
+         * then flattens the {@code <error/>} child via
+         * {@link SmaxIqErrorResponseMixin#parseError(Node)}, and
+         * finally requires the {@code (code, text)} pair to match
+         * one of the two documented server-error arms via
+         * {@link #matchServerErrorPair(int, String)}; non-matching
+         * pairs fall through the disjunction and yield
+         * {@link Optional#empty()}.
+         *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
          * @return an {@link Optional} carrying the parsed variant,
@@ -464,47 +592,53 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
                 exports = "parseIQErrorServiceUnavailableMixin",
                 adaptation = WhatsAppAdaptation.ADAPTED)
         public static Optional<ServerError> of(Node node, Node request) {
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseError.parseUploadAdMediaResponseError: parseDeprecatedIQErrorResponseOptionalFromMixin(e, t)
             if (!SmaxDeprecatedIqErrorResponseOptionalFromMixin.validate(node, request)) {
                 return Optional.empty();
             }
-            // WASmaxInBizCtwaNativeAdUploadAdMediaResponseError.parseUploadAdMediaResponseError: flattenedChildWithTag(e, "error")
             var envelope = SmaxIqErrorResponseMixin.parseError(node).orElse(null);
             if (envelope == null) {
                 return Optional.empty();
             }
-            // WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors: third arm IQErrorInternalServerErrorMixin
-            // WASmaxInBizCtwaNativeAdIQErrorInternalServerErrorMixin.parseIQErrorInternalServerErrorMixin: literal(attrString, e, "text", "internal-server-error") + literal(attrInt, e, "code", 500)
-            // WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors: fourth arm IQErrorServiceUnavailableMixin
-            // WASmaxInBizCtwaNativeAdIQErrorServiceUnavailableMixin.parseIQErrorServiceUnavailableMixin: literal(attrString, e, "text", "service-unavailable") + literal(attrInt, e, "code", 503)
             return matchServerErrorPair(envelope.code(), envelope.text())
                     ? Optional.of(new ServerError(envelope.code(), envelope.text()))
                     : Optional.empty();
         }
 
         /**
-         * Returns whether the supplied {@code (code, text)} pair
-         * matches one of the two {@code ServerError} arms enumerated
-         * by
+         * Reports whether the supplied {@code (code, text)} pair
+         * matches one of the two documented {@code ServerError}
+         * arms enumerated by
          * {@code WASmaxInBizCtwaNativeAdNativeAdErrors.parseNativeAdErrors}.
          *
-         * <p>The 5xx half of the disjunction admits exactly two pairs:
-         * {@code ("internal-server-error", 500)} and
-         * {@code ("service-unavailable", 503)}. Stanzas whose
-         * {@code <error/>} child carries any other 5xx code or any
-         * other text are rejected and fall through the disjunction the
-         * same way they do in WA Web.
+         * @apiNote
+         * Used internally by {@link #of(Node, Node)} to enforce the
+         * narrow {@code 5xx} disjunction; the two admitted pairs
+         * are {@code ("internal-server-error", 500)} and
+         * {@code ("service-unavailable", 503)}.
+         *
+         * @implNote
+         * This implementation hard-codes the literal pairs that the
+         * WA Web mixins enforce via
+         * {@code literal(attrString, "text", "...")} +
+         * {@code literal(attrInt, "code", ...)}; any other
+         * {@code 5xx} pair falls through the disjunction the same
+         * way WA Web's {@code parseNativeAdErrors} propagates the
+         * last mixin arm's failure.
          *
          * @param code the parsed error code
          * @param text the parsed error text; may be {@code null}
          * @return {@code true} when the pair matches one of the
-         *         enumerated server-error arms; {@code false} otherwise
+         *         enumerated server-error arms; {@code false}
+         *         otherwise
          */
         private static boolean matchServerErrorPair(int code, String text) {
             return ("internal-server-error".equals(text) && code == 500)
                     || ("service-unavailable".equals(text) && code == 503);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -517,11 +651,17 @@ public sealed interface SmaxUploadAdMediaResponse extends SmaxOperation.Response
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "SmaxUploadAdMediaResponse.ServerError[errorCode=" + errorCode

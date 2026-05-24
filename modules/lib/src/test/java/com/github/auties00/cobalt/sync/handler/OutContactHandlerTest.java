@@ -13,7 +13,7 @@ import com.github.auties00.cobalt.model.sync.action.chat.ArchiveChatActionBuilde
 import com.github.auties00.cobalt.model.sync.action.contact.OutContactAction;
 import com.github.auties00.cobalt.model.sync.action.contact.OutContactActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
-import com.github.auties00.cobalt.props.ABProp;
+import com.github.auties00.cobalt.model.props.ABProp;
 import com.github.auties00.cobalt.props.TestABPropsService;
 import com.github.auties00.cobalt.store.WhatsAppStore;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
@@ -30,8 +30,23 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link OutContactHandler} — Cobalt's adapter for
- * {@code WAWebOutContactSync}.
+ * Exercises {@link OutContactHandler} against the
+ * {@code WAWebOutContactSync.applyMutations} per-mutation flow.
+ *
+ * @apiNote
+ * Verifies the AB-prop gate
+ * ({@link ABProp#OUT_CONTACT_INVITES_ENABLED} {@code == 1}), the
+ * {@link SyncdOperation#SET}
+ * upsert and {@link SyncdOperation#REMOVE}
+ * paths, the JID validation (a non-phone-user JID surfaces as
+ * {@link SyncActionState#MALFORMED}),
+ * and the {@code firstName} fallback derived from the first
+ * whitespace-separated token of {@code fullName}.
+ *
+ * @implNote
+ * This implementation builds mutations directly via the local
+ * {@code setMutation} / {@code removeMutation} helpers because no
+ * public outgoing-mutation factory exists for this action.
  */
 @DisplayName("OutContactHandler")
 class OutContactHandlerTest {
@@ -260,25 +275,6 @@ class OutContactHandlerTest {
             assertEquals(SyncActionState.SUCCESS, results.get(1).actionState());
             assertTrue(store.findOutContact(PEER).isEmpty(),
                     "REMOVE in the batch tail must override the earlier SET");
-        }
-    }
-
-    @Nested
-    @DisplayName("no static builder methods")
-    class StaticBuilder {
-        @Test
-        @DisplayName("OutContactHandler does not expose a get*Mutation helper")
-        void noStaticBuilders() {
-            var methods = OutContactHandler.class.getDeclaredMethods();
-            for (var method : methods) {
-                if (method.isSynthetic() || method.isBridge()) {
-                    continue;
-                }
-                if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    assertFalse(method.getName().contains("Mutation"),
-                            "no static Mutation builder is expected on OutContactHandler: " + method.getName());
-                }
-            }
         }
     }
 

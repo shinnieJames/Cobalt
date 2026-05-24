@@ -18,30 +18,43 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Parsed response for the about-status fetch query. Carries the per-user about-status update history projected from
- * {@code data.xwa2_users_updates_since}.
+ * Decoded reply to the about-status fetch query.
+ *
+ * @apiNote Consume after dispatching {@link FetchAboutStatusMexRequest}.
+ * Each {@link Item} corresponds to a {@code xwa2_users_updates_since}
+ * entry; WA Web takes the head of {@link Item#updates()} and projects its
+ * {@code text} as the user's current about-status. Empty {@link #items()}
+ * indicates the relay returned no rows for any requested user.
+ *
+ * @see FetchAboutStatusMexRequest
  */
 @WhatsAppWebModule(moduleName = "WAWebMexFetchAboutStatusJob")
 public final class FetchAboutStatusMexResponse implements MexOperation.Response.Json {
     /**
-     * The per-user about-status records returned by the relay.
+     * The decoded {@code xwa2_users_updates_since} array, one entry per user.
      */
     private final List<Item> items;
 
     /**
-     * Constructs a new response carrying the given items.
+     * Wraps a pre-parsed list of per-user records.
      *
-     * @param items the per-user about-status records
+     * @param items the per-user records produced by {@link #of(byte[])}
      */
     private FetchAboutStatusMexResponse(List<Item> items) {
         this.items = items;
     }
 
     /**
-     * Parses the MEX response carried by an inbound IQ stanza.
+     * Decodes the {@code <result>} child of an inbound MEX IQ.
      *
-     * @param node the inbound IQ stanza carrying the {@code <result>} child
-     * @return the parsed response, or {@link Optional#empty()} if the expected JSON shape is absent
+     * @apiNote Pass the IQ node received in reply to a stanza dispatched
+     * with {@link FetchAboutStatusMexRequest#toNode()}. The reply is empty
+     * when the IQ does not carry a {@code <result>} child or when its
+     * payload bytes are absent or unreadable JSON.
+     *
+     * @param node the IQ reply stanza
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload is missing or malformed
      */
     @WhatsAppWebExport(moduleName = "WAWebMexFetchAboutStatusJob", exports = "mexGetAbout",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -52,74 +65,99 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Returns the per-user records carried by this response.
+     * Returns the decoded {@code xwa2_users_updates_since} entries.
      *
-     * @return the list of items, empty if absent
+     * @apiNote The list reflects the order the relay returned, which mirrors
+     * the order of the queried users. An empty list indicates the relay
+     * accepted the query but had no rows to return.
+     *
+     * @return the per-user records; may be empty, never {@code null}
      */
     public List<Item> items() {
         return items;
     }
 
     /**
-     * Single {@code xwa2_users_updates_since} entry. Wraps the chronological list of about-status updates known for a
-     * single user.
+     * A single {@code xwa2_users_updates_since} entry wrapping the update
+     * history for one user.
+     *
+     * @apiNote WA Web's
+     * {@link FetchAboutStatusMexResponse.Item.Updates}
+     * head ({@code updates[0].text}) is the user's current about-status;
+     * older entries form the history surfaced by the profile screen.
      */
     public static final class Item {
         /**
-         * The chronological list of about-status updates for this user.
+         * The decoded {@code updates} array carrying the history entries
+         * for this user, head-first.
          */
         private final List<Updates> updates;
 
         /**
-         * Constructs a new entry with the given updates list.
+         * Wraps a pre-parsed list of update entries.
          *
-         * @param updates the chronological list of updates
+         * @param updates the update entries returned by the relay for this
+         *                user
          */
         private Item(List<Updates> updates) {
             this.updates = updates;
         }
 
         /**
-         * Returns the chronological list of about-status updates for this user.
+         * Returns the decoded update entries for this user.
          *
-         * @return the list of updates, empty if absent
+         * @apiNote The head entry is the current about-status; subsequent
+         * entries are historical updates ordered most-recent-first.
+         *
+         * @return the update entries; may be empty, never {@code null}
          */
         public List<Updates> updates() {
             return updates;
         }
 
         /**
-         * A single about-status update entry.
+         * A single about-status revision exposing only the text payload.
+         *
+         * @apiNote WA Web reads the {@code text} field of
+         * {@code updates[0]} to compute the {@code status} on the result
+         * passed to {@code WAWebGetAboutQueryJob} callers.
          */
         public static final class Updates {
             /**
-             * The about-status text recorded by this update.
+             * The {@code text} field of this revision, possibly {@code null}.
              */
             private final String text;
 
             /**
-             * Constructs a new update entry.
+             * Wraps the text payload of a decoded revision.
              *
-             * @param text the about-status text
+             * @param text the {@code text} field of this revision
              */
             private Updates(String text) {
                 this.text = text;
             }
 
             /**
-             * Returns the about-status text recorded by this update.
+             * Returns the about-status text recorded by this revision.
              *
-             * @return an {@link Optional} containing the text, or empty if absent
+             * @return the text wrapped in an {@link Optional}, or
+             *         {@link Optional#empty()} when the relay omitted the
+             *         field
              */
             public Optional<String> text() {
                 return Optional.ofNullable(text);
             }
 
             /**
-             * Parses a single update entry from the given JSON object.
+             * Decodes a single revision from a {@link JSONObject}.
              *
-             * @param obj the JSON object to parse
-             * @return an {@link Optional} containing the parsed entry, or empty if {@code obj} is {@code null}
+             * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
+             * {@code updates} array of a {@link Item}; not part of the
+             * public API.
+             *
+             * @param obj the JSON object to decode, possibly {@code null}
+             * @return the decoded revision, or {@link Optional#empty()}
+             *         when {@code obj} is {@code null}
              */
             static Optional<Updates> of(JSONObject obj) {
                 if (obj == null) {
@@ -131,10 +169,15 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
             }
 
             /**
-             * Parses a list of update entries from the given JSON array.
+             * Decodes the {@code updates} array of a {@link Item}.
              *
-             * @param arr the JSON array to parse
-             * @return the list of parsed entries, empty if {@code arr} is {@code null}
+             * @apiNote Used by {@link Item#of(JSONObject)} to project the
+             * array nested inside each user record; not part of the public
+             * API.
+             *
+             * @param arr the JSON array to decode, possibly {@code null}
+             * @return the decoded revisions in source order; empty when
+             *         {@code arr} is {@code null}
              */
             static List<Updates> ofArray(JSONArray arr) {
                 if (arr == null) {
@@ -150,10 +193,15 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a single {@code Item} from the given JSON object.
+         * Decodes a single user record from a {@link JSONObject}.
          *
-         * @param obj the JSON object to parse
-         * @return an {@link Optional} containing the parsed item, or empty if {@code obj} is {@code null}
+         * @apiNote Used by {@link #ofArray(JSONArray)} while walking the
+         * {@code xwa2_users_updates_since} array; not part of the public
+         * API.
+         *
+         * @param obj the JSON object to decode, possibly {@code null}
+         * @return the decoded record, or {@link Optional#empty()} when
+         *         {@code obj} is {@code null}
          */
         static Optional<Item> of(JSONObject obj) {
             if (obj == null) {
@@ -165,10 +213,16 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
         }
 
         /**
-         * Parses a list of items from the given JSON array.
+         * Decodes the {@code xwa2_users_updates_since} array of the MEX
+         * payload.
          *
-         * @param arr the JSON array to parse
-         * @return the list of parsed items, empty if {@code arr} is {@code null}
+         * @apiNote Used by the package-level decoder to project the array
+         * nested under {@code data} of the {@code <result>} payload; not
+         * part of the public API.
+         *
+         * @param arr the JSON array to decode, possibly {@code null}
+         * @return the decoded records in source order; empty when
+         *         {@code arr} is {@code null}
          */
         static List<Item> ofArray(JSONArray arr) {
             if (arr == null) {
@@ -184,10 +238,17 @@ public final class FetchAboutStatusMexResponse implements MexOperation.Response.
     }
 
     /**
-     * Parses the response from the raw JSON payload bytes.
+     * Decodes the {@code <result>} payload bytes into a {@link FetchAboutStatusMexResponse}.
      *
-     * @param json the raw JSON bytes from the {@code <result>} child
-     * @return an {@link Optional} containing the parsed response, or empty if the envelope is missing
+     * @implNote This implementation projects {@code data.xwa2_users_updates_since};
+     * a missing {@code data} envelope or root array yields
+     * {@link Optional#empty()}. A present-but-empty array yields a response
+     * carrying an empty {@link #items()} list.
+     *
+     * @param json the raw {@code <result>} payload bytes
+     * @return the decoded reply, or {@link Optional#empty()} when the
+     *         payload does not parse as a JSON object or lacks the
+     *         {@code data} envelope
      */
     private static Optional<FetchAboutStatusMexResponse> of(byte[] json) {
         var jsonObject = JSON.parseObject(json);

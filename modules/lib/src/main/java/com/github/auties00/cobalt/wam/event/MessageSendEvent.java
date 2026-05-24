@@ -30,6 +30,7 @@ import com.github.auties00.cobalt.wam.type.PairedMediaType;
 import com.github.auties00.cobalt.wam.type.PrivateAiFeatureName;
 import com.github.auties00.cobalt.wam.type.ReachabilityStatus;
 import com.github.auties00.cobalt.wam.type.RevokeType;
+import com.github.auties00.cobalt.wam.type.SessionScopeType;
 import com.github.auties00.cobalt.wam.type.SizeBucket;
 import com.github.auties00.cobalt.wam.type.StickerMakerSourceType;
 import com.github.auties00.cobalt.wam.type.TypeOfGroupEnum;
@@ -260,6 +261,9 @@ public interface MessageSendEvent extends WamEventSpec {
 
     @WamProperty(index = 56, type = WamType.INTEGER)
     OptionalInt serverErrorCode();
+
+    @WamProperty(index = 91, type = WamType.ENUM)
+    Optional<SessionScopeType> sessionScope();
 
     @WamProperty(index = 84, type = WamType.STRING)
     Optional<String> sharedContactCardType();

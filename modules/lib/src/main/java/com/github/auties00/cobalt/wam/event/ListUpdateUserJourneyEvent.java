@@ -17,6 +17,9 @@ import java.util.OptionalInt;
 @WhatsAppWebModule(moduleName = "WAWebListUpdateUserJourneyWamEvent")
 @WamEvent(id = 5958)
 public interface ListUpdateUserJourneyEvent extends WamEventSpec {
+    @WamProperty(index = 7, type = WamType.INTEGER)
+    OptionalInt customListCount();
+
     @WamProperty(index = 1, type = WamType.ENUM)
     Optional<ListAction> listAction();
 
@@ -31,6 +34,9 @@ public interface ListUpdateUserJourneyEvent extends WamEventSpec {
 
     @WamProperty(index = 5, type = WamType.INTEGER)
     OptionalInt predefinedId();
+
+    @WamProperty(index = 8, type = WamType.INTEGER)
+    OptionalInt presetListCount();
 
     @WamProperty(index = 6, type = WamType.ENUM)
     Optional<UpdateEntryPoint> updateEntryPoint();

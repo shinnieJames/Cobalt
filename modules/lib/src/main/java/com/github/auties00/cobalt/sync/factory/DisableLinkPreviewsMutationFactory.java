@@ -14,37 +14,51 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing disable-link-previews sync mutations.
+ * Builds outgoing app-state mutations that toggle the global "disable link previews" privacy setting.
  *
- * <p>Mirrors the {@code getMutation} export of WhatsApp Web's
- * {@code WAWebDisableLinkPreviewsSync} module. The factory is the
- * outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the privacy-pane "disable link previews" switch:
+ * {@code WAWebDisableLinkPreviewsSync.sendMutation} pushes the result of
+ * this factory through {@code WAWebSyncdCoreApi.lockForSync} so every
+ * linked device updates
+ * {@code WAWebDisableLinkPreviewsAction.setDisableLinkPreviewsToUserPrefs}.
+ * The factory is the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.DisableLinkPreviewsHandler}.
  */
 public final class DisableLinkPreviewsMutationFactory {
     /**
-     * Constructs a disable-link-previews mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public DisableLinkPreviewsMutationFactory() {
 
     }
 
     /**
-     * Builds a pending SET mutation for the disable link previews setting.
+     * Returns a SET mutation that toggles the global link-preview privacy setting.
      *
-     * <p>Per WhatsApp Web {@code WAWebDisableLinkPreviewsSync.getMutation}:
-     * <ol>
-     *   <li>Wraps the value in a {@code privacySettingDisableLinkPreviewsAction}
-     *       object: {@code {isPreviewsDisabled: n}}</li>
-     *   <li>Delegates to {@code WAWebSyncdActionUtils.buildPendingMutation} with
-     *       collection={@code Regular}, indexArgs={@code []},
-     *       operation={@code SET}, version={@code 8},
-     *       action={@code "setting_disableLinkPreviews"}</li>
-     * </ol>
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["setting_disableLinkPreviews"]
+     * }
+     * with no per-row segment because the setting is account-wide; the
+     * {@link PrivacySettingDisableLinkPreviewsAction} sub-message carries
+     * the {@code isPreviewsDisabled} flag.
+     *
+     * @implNote
+     * This implementation takes the timestamp from the caller, mirroring the
+     * {@code WAWebDisableLinkPreviewsSync.getMutation(timestamp, value)}
+     * shape; the sister WA Web export {@code sendMutation} captures
+     * {@code WATimeUtils.unixTimeMs()} inline and then calls
+     * {@code getMutation} the same way.
      *
      * @param timestamp          the mutation timestamp
-     * @param isPreviewsDisabled whether link previews should be disabled
-     * @return the pending mutation ready for sync upload
+     * @param isPreviewsDisabled {@code true} to disable link previews account-wide, {@code false} to re-enable them
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebDisableLinkPreviewsSync", exports = "getMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getDisableLinkPreviewsMutation(Instant timestamp, boolean isPreviewsDisabled) {

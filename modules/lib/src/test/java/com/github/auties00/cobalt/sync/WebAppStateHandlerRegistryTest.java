@@ -1,11 +1,15 @@
 package com.github.auties00.cobalt.sync;
 
 import com.github.auties00.cobalt.client.TestWhatsAppClient;
+import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceFixtures;
 import com.github.auties00.cobalt.migration.LidMigrationService;
 import com.github.auties00.cobalt.model.jid.Jid;
+import com.github.auties00.cobalt.model.sync.MutationApplicationResult;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
+import com.github.auties00.cobalt.props.ABPropsService;
 import com.github.auties00.cobalt.props.TestABPropsService;
+import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.handler.WebAppStateActionHandler;
 import com.github.auties00.cobalt.wam.DefaultWamService;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,29 +26,52 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link WebAppStateHandlerRegistry} — Cobalt's adapter for
+ * Pins the structural contract of
+ * {@link WebAppStateHandlerRegistry} against WhatsApp Web's
  * {@code WAWebSyncdGetActionHandler.setActionHandlers}.
  *
- * <p>The registry is constructed once by {@link WebAppStateService} with the
- * full default handler set. These tests verify the registry's structural
- * guarantees that the rest of the sync pipeline relies on:
- * <ul>
- *   <li>Every default handler is registered.</li>
- *   <li>Lookup by action name returns the registered handler.</li>
- *   <li>Lookup miss returns {@link java.util.Optional#empty()}.</li>
- *   <li>Each handler's {@code collectionName()} resolves to a real
- *       {@link SyncPatchType}.</li>
- *   <li>{@code maxSupportedVersion} matches the highest registered version.</li>
- *   <li>Registering a new handler overrides a duplicate {@code actionName()}.</li>
- * </ul>
+ * @apiNote Cobalt-internal exercise of the registry: the
+ * incoming-mutation router relies on every default handler being
+ * registered, on lookup-by-action-name working in both
+ * present-and-missing branches, on every handler declaring a non-null
+ * collection and a non-negative version, on
+ * {@link WebAppStateHandlerRegistry#maxSupportedVersion()} being a true
+ * maximum, and on subsequent
+ * {@link WebAppStateHandlerRegistry#registerHandler(WebAppStateActionHandler)}
+ * calls overriding earlier ones for the same action name.
+ *
+ * @implNote This implementation builds a real registry through
+ * {@link WebAppStateHandlerRegistry#WebAppStateHandlerRegistry(ABPropsService, LidMigrationService, com.github.auties00.cobalt.wam.WamService)}
+ * with the same dependency wiring as
+ * {@link WebAppStateService}, so the assertions exercise the
+ * production handler set rather than a synthetic one. A trivial
+ * {@link RecordingHandler} is used for the override / new-registration
+ * cases.
  */
 @DisplayName("WebAppStateHandlerRegistry")
 class WebAppStateHandlerRegistryTest {
+    /**
+     * The local user's PN-form JID baked into the test store.
+     */
     private static final Jid SELF_PN = Jid.of("19250000001@s.whatsapp.net");
+
+    /**
+     * The local user's LID-form JID baked into the test store.
+     */
     private static final Jid SELF_LID = Jid.of("83116928594000@lid");
 
+    /**
+     * The registry under test, freshly created per test.
+     */
     private WebAppStateHandlerRegistry registry;
 
+    /**
+     * Builds a fresh registry per test with the same dependency
+     * wiring as the production code path.
+     *
+     * @apiNote JUnit-managed setup; not invoked manually from the
+     * tests.
+     */
     @BeforeEach
     void setUp() {
         var props = TestABPropsService.builder().build();
@@ -55,24 +82,31 @@ class WebAppStateHandlerRegistryTest {
         registry = new WebAppStateHandlerRegistry(props, lidMigration, wam);
     }
 
+    /**
+     * Pins the default-handler population done by the constructor.
+     */
     @Nested
-    @DisplayName("default registration — every WAWeb*Sync handler is wired")
+    @DisplayName("default registration -- every WAWeb*Sync handler is wired")
     class DefaultRegistration {
+        /**
+         * Looks up one bedrock action to catch a complete-failure
+         * regression early.
+         */
         @Test
         @DisplayName("a known action name resolves to its handler")
         void knownActionResolves() {
-            // archive is one of the bedrock sync actions; if it's not registered, the rest of
-            // the registry is also broken.
             var handler = registry.findHandler("archive").orElseThrow(
                     () -> new AssertionError("archive handler must be registered by default"));
             assertNotNull(handler);
         }
 
+        /**
+         * Looks up one action name per family to catch missing-family
+         * regressions.
+         */
         @Test
         @DisplayName("a representative selection of action names all resolve")
         void representativeSelectionResolves() {
-            // One handler per family — chat, message, contact, label, business, payment, settings.
-            // The strings here are the WA Web wire names (matching *Action.ACTION_NAME constants).
             for (var actionName : new String[]{
                     "archive", "pin_v1", "mute", "markChatAsRead", "deleteChat",
                     "star", "deleteMessageForMe",
@@ -90,15 +124,27 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
+    /**
+     * Pins the lookup-miss behaviour of
+     * {@link WebAppStateHandlerRegistry#findHandler(String)}.
+     */
     @Nested
-    @DisplayName("lookup — unknown action")
+    @DisplayName("lookup -- unknown action")
     class UnknownAction {
+        /**
+         * Unknown action names produce
+         * {@link java.util.Optional#empty()}.
+         */
         @Test
         @DisplayName("findHandler on an unknown name returns Optional.empty()")
         void unknownReturnsEmpty() {
             assertTrue(registry.findHandler("not_a_real_action_name").isEmpty());
         }
 
+        /**
+         * The empty string is treated like any other unknown action
+         * name.
+         */
         @Test
         @DisplayName("findHandler on an empty string returns Optional.empty()")
         void emptyStringReturnsEmpty() {
@@ -106,9 +152,17 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
+    /**
+     * Pins per-handler invariants the rest of the sync pipeline
+     * relies on.
+     */
     @Nested
-    @DisplayName("collection consistency — every handler points at a valid SyncPatchType")
+    @DisplayName("collection consistency -- every handler points at a valid SyncPatchType")
     class CollectionConsistency {
+        /**
+         * Every default handler declares a non-{@code null}
+         * {@link SyncPatchType}.
+         */
         @Test
         @DisplayName("every registered handler resolves to a non-null SyncPatchType")
         void allCollectionsNonNull() {
@@ -119,6 +173,10 @@ class WebAppStateHandlerRegistryTest {
             }
         }
 
+        /**
+         * Every default handler declares a non-negative version
+         * number.
+         */
         @Test
         @DisplayName("every handler's version is non-negative")
         void allVersionsNonNegative() {
@@ -130,9 +188,17 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
+    /**
+     * Pins the maximum-version reduction of
+     * {@link WebAppStateHandlerRegistry#maxSupportedVersion()}.
+     */
     @Nested
     @DisplayName("maxSupportedVersion")
     class MaxSupportedVersion {
+        /**
+         * The reported max is at least the version of every
+         * registered handler in the sample set.
+         */
         @Test
         @DisplayName("maxSupportedVersion equals the maximum of all registered handlers' versions")
         void matchesMaxOverAll() {
@@ -148,9 +214,17 @@ class WebAppStateHandlerRegistryTest {
         }
     }
 
+    /**
+     * Pins the override semantics of
+     * {@link WebAppStateHandlerRegistry#registerHandler(WebAppStateActionHandler)}.
+     */
     @Nested
-    @DisplayName("registerHandler — override on duplicate actionName")
+    @DisplayName("registerHandler -- override on duplicate actionName")
     class RegisterHandler {
+        /**
+         * A second {@code registerHandler} call on the same action
+         * name replaces the first.
+         */
         @Test
         @DisplayName("a second handler with the same actionName replaces the first")
         void duplicateNameOverrides() {
@@ -163,6 +237,10 @@ class WebAppStateHandlerRegistryTest {
                     "second register call overrides the first per WAWebSyncdGetActionHandler.setActionHandlers");
         }
 
+        /**
+         * A new handler under a previously unused action name is
+         * lookable.
+         */
         @Test
         @DisplayName("registering a new handler under a new actionName makes it lookable")
         void newRegistrationLookable() {
@@ -176,9 +254,15 @@ class WebAppStateHandlerRegistryTest {
     }
 
     /**
-     * A sample of action names known to be registered by
-     * {@link WebAppStateHandlerRegistry#registerDefaultHandlers} — used by tests
-     * that iterate the registry without instrumenting it.
+     * Returns the sample of action names every iteration test walks.
+     *
+     * @apiNote Helper used by the {@code CollectionConsistency} and
+     * {@code MaxSupportedVersion} blocks. Kept in sync by hand with
+     * {@code WebAppStateHandlerRegistry.registerDefaultHandlers}: a
+     * missing action here only weakens coverage, not correctness.
+     *
+     * @return a set of action names that are guaranteed to be
+     *         registered by the default constructor
      */
     private static Set<String> sampleRegisteredActionNames() {
         var set = new HashSet<String>();
@@ -200,18 +284,39 @@ class WebAppStateHandlerRegistryTest {
     }
 
     /**
-     * Minimal handler stub used to assert override / new-registration semantics.
+     * A minimal {@link WebAppStateActionHandler} implementation that
+     * carries explicit identity fields and a no-op
+     * {@code applyMutation}.
+     *
+     * @apiNote Used by the override / new-registration tests to
+     * substitute a known instance under an existing or fresh action
+     * name without touching a real handler implementation.
+     *
+     * @param actionName     the action name returned by
+     *                       {@link WebAppStateActionHandler#actionName()}
+     * @param collectionName the collection returned by
+     *                       {@link WebAppStateActionHandler#collectionName()}
+     * @param version        the version returned by
+     *                       {@link WebAppStateActionHandler#version()}
      */
     private record RecordingHandler(
             String actionName,
             SyncPatchType collectionName,
             int version
     ) implements WebAppStateActionHandler {
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote This implementation always returns
+         * {@code MutationApplicationResult.success()}; the test
+         * suite only inspects identity, never invokes
+         * {@code applyMutation}.
+         */
         @Override
-        public com.github.auties00.cobalt.model.sync.MutationApplicationResult applyMutation(
-                com.github.auties00.cobalt.client.WhatsAppClient client,
-                com.github.auties00.cobalt.sync.crypto.DecryptedMutation.Trusted mutation) {
-            return com.github.auties00.cobalt.model.sync.MutationApplicationResult.success();
+        public MutationApplicationResult applyMutation(
+                WhatsAppClient client,
+                DecryptedMutation.Trusted mutation) {
+            return MutationApplicationResult.success();
         }
     }
 }

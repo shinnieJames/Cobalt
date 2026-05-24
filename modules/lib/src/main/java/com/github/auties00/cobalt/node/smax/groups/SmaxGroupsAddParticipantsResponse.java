@@ -15,23 +15,31 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Sealed family of inbound reply variants produced by the relay in
- * response to a {@link SmaxGroupsAddParticipantsRequest}.
+ * The sealed reply family for a {@link SmaxGroupsAddParticipantsRequest}.
+ *
+ * @apiNote The three variants mirror the WA Web RPC dispatcher's
+ * {@code Success}/{@code ClientError}/{@code ServerError} cases. {@link Success} always wraps the
+ * per-participant outcome list returned by {@code WAWebGroupModifyParticipantsJob}; a successful envelope still
+ * carries individual rejections, so callers must walk {@link Success#participants()} to detect partial
+ * failures.
  */
 public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.Response
         permits SmaxGroupsAddParticipantsResponse.Success, SmaxGroupsAddParticipantsResponse.ClientError, SmaxGroupsAddParticipantsResponse.ServerError {
 
     /**
-     * Tries each {@link SmaxGroupsAddParticipantsResponse} variant in priority order and
-     * returns the first that parses cleanly.
+     * Dispatches the inbound IQ across each {@link SmaxGroupsAddParticipantsResponse} variant in priority order
+     * and returns the first that parses cleanly.
      *
-     * @param node    the inbound IQ stanza received from the relay;
-     *                never {@code null}
-     * @param request the original outbound stanza — used to validate
-     *                echoed identifiers; never {@code null}
-     * @return an {@link Optional} carrying the parsed variant, or
-     *         {@link Optional#empty()} when no documented variant
-     *         matched the stanza shape
+     * @apiNote The priority order matches the WA Web RPC dispatcher in {@code WASmaxGroupsAddParticipantsRPC}.
+     *
+     * @implNote The empty {@link Optional} surfaces when the stanza shape matches none of the documented
+     * variants; WA Web throws {@code SmaxParsingFailure} on the same path, but Cobalt defers the decision to the
+     * caller so it can apply its own error-handling policy.
+     *
+     * @param node    the inbound IQ stanza
+     * @param request the original outbound {@link SmaxGroupsAddParticipantsRequest} stanza, used to validate
+     *                echoed identifiers
+     * @return an {@link Optional} carrying the parsed variant, or empty when no variant matched
      * @throws NullPointerException if either argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WASmaxGroupsAddParticipantsRPC",
@@ -51,38 +59,32 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The {@code Success} reply variant — the relay processed the
-     * request and returned a per-participant outcome list.
+     * The reply variant carrying the per-participant outcome list when the relay accepted the request envelope.
      *
-     * <p>The IQ envelope itself succeeds even when every candidate
-     * was rejected at the participant-policy level; callers must
-     * walk {@link #participants()} to detect partial / total
-     * rejections.
+     * @apiNote The IQ envelope succeeds even when every candidate is rejected at the participant-policy level
+     * (private accounts, blocked contacts, non-WA users); callers must walk {@link #participants()} to detect
+     * partial or total rejection.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseSuccess")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsParticipantAddedOrNonRegisteredWaUserParticipantErrorLidResponseMixinGroup")
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsGroupAddressingModeMixin")
     final class Success implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The optional {@code addressing_mode} attribute echoed by
-         * the relay on the {@code <iq>} envelope; {@code "lid"} or
-         * {@code "pn"} when present, {@code null} otherwise.
+         * The optional {@code addressing_mode} attribute echoed on the IQ envelope.
          */
         private final String addressingMode;
 
         /**
-         * The per-participant outcome entries projected from the
-         * {@code <add>} child.
+         * The per-participant outcome rows projected from the {@code <add>} child.
          */
         private final List<AddParticipantResult> participants;
 
         /**
-         * Constructs a new successful reply.
+         * Constructs a {@link Success}.
          *
-         * @param addressingMode the optional addressing mode echo;
-         *                       may be {@code null}
-         * @param participants   the per-participant outcomes; never
+         * @param addressingMode the optional addressing-mode echo ({@code "lid"} or {@code "pn"}); may be
          *                       {@code null}
+         * @param participants   the per-participant outcomes; defensively copied, {@code null} treated as empty
          */
         public Success(String addressingMode, List<AddParticipantResult> participants) {
             this.addressingMode = addressingMode;
@@ -92,32 +94,34 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         /**
          * Returns the optional {@code addressing_mode} echo.
          *
-         * @return an {@link Optional} carrying the addressing mode,
-         *         or empty when the relay omitted it
+         * @apiNote The relay flips between {@code "lid"} and {@code "pn"} according to the group's addressing
+         * mode; the field is omitted on legacy groups.
+         *
+         * @return an {@link Optional} carrying the mode, or empty when the relay omitted it
          */
         public Optional<String> addressingMode() {
             return Optional.ofNullable(addressingMode);
         }
 
         /**
-         * Returns the per-participant outcome entries.
+         * Returns the per-participant outcome rows.
          *
-         * @return an unmodifiable list of outcomes; never
-         *         {@code null}
+         * @return an unmodifiable list of outcome rows; never {@code null}
          */
         public List<AddParticipantResult> participants() {
             return participants;
         }
 
         /**
-         * Tries to parse a {@link Success} variant from the given
-         * inbound stanza.
+         * Tries to parse a {@link Success} variant from {@code node}.
+         *
+         * @apiNote Matches the WA Web parser {@code parseAddParticipantsResponseSuccess}: the IQ must be a valid
+         * {@code type="result"} echo of the request, must carry an {@code <add>} child, and every
+         * {@code <participant>} grand-child must satisfy {@link AddParticipantResult#of(Node)}.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the success
-         *         schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAddParticipantsResponseSuccess",
                 exports = "parseAddParticipantsResponseSuccess",
@@ -142,6 +146,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             return Optional.of(new Success(addressingMode, participants));
         }
 
+        /**
+         * Compares this success to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link Success} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -155,11 +165,21 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                     && Objects.equals(this.participants, that.participants);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(addressingMode, participants);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAddParticipantsResponse.Success[addressingMode=" + addressingMode
@@ -167,57 +187,50 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * The per-participant outcome entry produced by the relay
-         * for a single candidate JID.
+         * The per-participant outcome row produced by the relay for a single candidate JID.
          *
-         * <p>WhatsApp Web models this as a 2-arm disjunction
-         * ({@code AddParticipantsParticipantAddedResponse} vs
-         * {@code NonRegisteredWaUserParticipantErrorLidResponse});
-         * Cobalt fuses the disjunction into a single class that
-         * exposes the always-present {@code jid} plus an optional
-         * {@link NonRegisteredWaUser} payload distinguishing the two
-         * arms.
+         * @apiNote The WA Web wire-level shape is a two-arm disjunction
+         * ({@code AddParticipantsParticipantAddedResponse} for accepted candidates,
+         * {@code NonRegisteredWaUserParticipantErrorLidResponse} for rejected ones). Cobalt fuses the two arms
+         * into a single class exposing the always-present {@link #jid()} plus an optional
+         * {@link #nonRegisteredUser()} payload that distinguishes the arms.
+         *
+         * @implNote The fusion keeps the response shape stable across both arms so callers do not need to
+         * pattern-match on the disjunction at every call site; the {@code nonRegisteredUser} {@link Optional}
+         * is the discriminator.
          */
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsParticipantAddedResponseMixin")
         @WhatsAppWebModule(moduleName = "WASmaxInGroupsNonRegisteredWaUserParticipantErrorLidResponseMixin")
         public static final class AddParticipantResult {
             /**
-             * The participant JID (always present on both arms).
+             * The participant {@link Jid}, always present on both disjunction arms.
              */
             private final Jid jid;
 
             /**
-             * The optional echoed {@code phone_number} attribute.
+             * The optional {@code phone_number} attribute echoed by the relay.
              */
             private final String phoneNumber;
 
             /**
-             * The optional echoed {@code username} attribute.
+             * The optional {@code username} attribute echoed by the relay.
              */
             private final String username;
 
             /**
-             * The optional non-registered-user payload — present only
-             * when this entry represents the
-             * {@code NonRegisteredWaUserParticipantErrorLidResponse}
-             * arm of the disjunction.
+             * The optional non-registered-user payload populated only on the
+             * {@code NonRegisteredWaUserParticipantErrorLidResponse} arm.
              */
             private final NonRegisteredWaUser nonRegisteredUser;
 
             /**
-             * Constructs a new outcome entry.
+             * Constructs an {@link AddParticipantResult} row.
              *
-             * @param jid               the participant JID; never
-             *                          {@code null}
-             * @param phoneNumber       the optional phone-number
-             *                          echo; may be {@code null}
-             * @param username          the optional username echo;
-             *                          may be {@code null}
-             * @param nonRegisteredUser the optional
-             *                          non-registered-user payload;
-             *                          may be {@code null}
-             * @throws NullPointerException if {@code jid} is
-             *                              {@code null}
+             * @param jid               the participant {@link Jid}
+             * @param phoneNumber       the optional {@code phone_number} echo; may be {@code null}
+             * @param username          the optional {@code username} echo; may be {@code null}
+             * @param nonRegisteredUser the optional rejection payload; may be {@code null}
+             * @throws NullPointerException if {@code jid} is {@code null}
              */
             public AddParticipantResult(Jid jid, String phoneNumber, String username,
                                         NonRegisteredWaUser nonRegisteredUser) {
@@ -228,27 +241,27 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             }
 
             /**
-             * Returns the participant JID.
+             * Returns the participant {@link Jid}.
              *
-             * @return the JID; never {@code null}
+             * @return the {@link Jid}; never {@code null}
              */
             public Jid jid() {
                 return jid;
             }
 
             /**
-             * Returns the optional phone-number echo.
+             * Returns the optional {@code phone_number} echo.
              *
-             * @return an {@link Optional} carrying the phone number
+             * @return an {@link Optional} carrying the phone number, or empty when the relay omitted it
              */
             public Optional<String> phoneNumber() {
                 return Optional.ofNullable(phoneNumber);
             }
 
             /**
-             * Returns the optional username echo.
+             * Returns the optional {@code username} echo.
              *
-             * @return an {@link Optional} carrying the username
+             * @return an {@link Optional} carrying the username, or empty when the relay omitted it
              */
             public Optional<String> username() {
                 return Optional.ofNullable(username);
@@ -257,24 +270,26 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             /**
              * Returns the optional non-registered-user payload.
              *
-             * @return an {@link Optional} carrying the payload, or
-             *         empty when this entry is the
-             *         {@code Added}-arm of the disjunction
+             * @apiNote An empty value identifies this row as the accepted-candidate arm; a present value
+             * identifies it as the rejected arm and carries the reason code via
+             * {@link NonRegisteredWaUser#errorCode()}.
+             *
+             * @return an {@link Optional} carrying the rejection payload
              */
             public Optional<NonRegisteredWaUser> nonRegisteredUser() {
                 return Optional.ofNullable(nonRegisteredUser);
             }
 
             /**
-             * Tries to parse an outcome entry from a single
-             * {@code <participant>} child of the {@code <add>}
+             * Tries to parse an outcome row from a single {@code <participant>} child of the {@code <add>}
              * payload.
              *
-             * @param node the {@code <participant>} child; never
-             *             {@code null}
-             * @return an {@link Optional} carrying the parsed entry,
-             *         or empty when the node does not match either
-             *         disjunction arm
+             * @apiNote Matches the WA Web parser {@code parseAddParticipantsResponseSuccessAddParticipant}: the
+             * node must be a {@code <participant>} carrying a {@code jid} attribute, with an optional
+             * {@code error} attribute discriminating the rejected arm.
+             *
+             * @param node the {@code <participant>} child
+             * @return an {@link Optional} carrying the parsed row, or empty when the node does not match
              */
             @WhatsAppWebExport(moduleName = "WASmaxInGroupsAddParticipantsResponseSuccess",
                     exports = "parseAddParticipantsResponseSuccessAddParticipant",
@@ -295,6 +310,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                         nonRegisteredUser));
             }
 
+            /**
+             * Compares this row to {@code obj} for value equality across every field.
+             *
+             * @param obj the other object
+             * @return {@code true} when {@code obj} is an {@link AddParticipantResult} with identical fields
+             */
             @Override
             public boolean equals(Object obj) {
                 if (obj == this) {
@@ -310,11 +331,21 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                         && Objects.equals(this.nonRegisteredUser, that.nonRegisteredUser);
             }
 
+            /**
+             * Returns a hash composed of every field.
+             *
+             * @return the hash code
+             */
             @Override
             public int hashCode() {
                 return Objects.hash(jid, phoneNumber, username, nonRegisteredUser);
             }
 
+            /**
+             * Returns a debug string carrying every field.
+             *
+             * @return the debug representation
+             */
             @Override
             public String toString() {
                 return "SmaxGroupsAddParticipantsResponse.Success.AddParticipantResult[jid=" + jid
@@ -324,35 +355,31 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             }
 
             /**
-             * The {@code NonRegisteredWaUserParticipantErrorLidResponse}
-             * arm payload — surfaces why a candidate could not be
-             * added because the supplied phone number / LID does not
-             * map to a registered WhatsApp user.
+             * The rejection payload for a candidate whose supplied phone number or LID did not map to a
+             * registered WhatsApp user.
              *
-             * <p>Carries the error code lifted from the inner
-             * {@code WASmaxInGroupsParticipantRequestCodeCanBeSentOrRequestCodeCannotBeCreatedForLegalConcernsOrHasInvalidPNMixinGroup}
-             * disjunction; the phone-number echo is also surfaced
-             * for diagnostic display.
+             * @apiNote The {@link #errorCode()} is lifted from the inner WA Web mixin family
+             * (request-code-can-be-sent vs. cannot-be-created-for-legal-concerns vs. has-invalid-PN); callers
+             * surface it as the displayed error in the contact-picker rejection toast.
              */
             @WhatsAppWebModule(moduleName = "WASmaxInGroupsParticipantRequestCodeCanBeSentOrRequestCodeCannotBeCreatedForLegalConcernsOrHasInvalidPNMixinGroup")
             public static final class NonRegisteredWaUser {
                 /**
-                 * The numeric error code documenting why the
-                 * candidate was rejected.
+                 * The numeric reason code identifying why the candidate was rejected.
                  */
                 private final int errorCode;
 
                 /**
-                 * Constructs a new non-registered-user payload.
+                 * Constructs a {@link NonRegisteredWaUser} payload.
                  *
-                 * @param errorCode the numeric error code
+                 * @param errorCode the numeric reason code
                  */
                 public NonRegisteredWaUser(int errorCode) {
                     this.errorCode = errorCode;
                 }
 
                 /**
-                 * Returns the numeric error code.
+                 * Returns the numeric reason code.
                  *
                  * @return the error code
                  */
@@ -361,14 +388,14 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                 }
 
                 /**
-                 * Tries to parse a non-registered-user payload from
-                 * a {@code <participant>} child.
+                 * Tries to parse a {@link NonRegisteredWaUser} payload from a {@code <participant>} child.
+                 *
+                 * @apiNote The presence of a non-negative {@code error} attribute discriminates the rejected arm
+                 * from the accepted-candidate arm; an empty value signals the accepted arm.
                  *
                  * @param node the {@code <participant>} child
-                 * @return an {@link Optional} carrying the parsed
-                 *         payload, or empty when the participant has
-                 *         no error attribute (it's the
-                 *         {@code Added}-arm of the outer disjunction)
+                 * @return an {@link Optional} carrying the parsed payload, or empty when the node is on the
+                 *         accepted arm
                  */
                 public static Optional<NonRegisteredWaUser> of(Node node) {
                     Objects.requireNonNull(node, "node cannot be null");
@@ -379,6 +406,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                     return Optional.of(new NonRegisteredWaUser(error));
                 }
 
+                /**
+                 * Compares this payload to {@code obj} for value equality on {@link #errorCode()}.
+                 *
+                 * @param obj the other object
+                 * @return {@code true} when {@code obj} is a {@link NonRegisteredWaUser} with the same code
+                 */
                 @Override
                 public boolean equals(Object obj) {
                     if (obj == this) {
@@ -391,11 +424,21 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
                     return this.errorCode == that.errorCode;
                 }
 
+                /**
+                 * Returns a hash derived from {@link #errorCode()}.
+                 *
+                 * @return the hash code
+                 */
                 @Override
                 public int hashCode() {
                     return Objects.hash(errorCode);
                 }
 
+                /**
+                 * Returns a debug string carrying {@link #errorCode()}.
+                 *
+                 * @return the debug representation
+                 */
                 @Override
                 public String toString() {
                     return "SmaxGroupsAddParticipantsResponse.Success.AddParticipantResult.NonRegisteredWaUser[errorCode="
@@ -406,28 +449,26 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The {@code ClientError} reply variant — the relay rejected the
-     * request as malformed, unauthorised, or referencing a
-     * non-existent group.
+     * The reply variant emitted when the relay rejected the request envelope as malformed, unauthorised, or
+     * referencing a non-existent group.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseClientError")
     final class ClientError implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when supplied.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new client-error reply.
+         * Constructs a {@link ClientError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ClientError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -435,7 +476,7 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -444,23 +485,23 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text, or
-         *         empty when the relay omitted it
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ClientError} variant.
+         * Tries to parse a {@link ClientError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseClientError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant, or
-         *         empty when the stanza does not match the
-         *         client-error schema
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAddParticipantsResponseClientError",
                 exports = "parseAddParticipantsResponseClientError",
@@ -473,6 +514,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             return Optional.of(new ClientError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ClientError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -485,11 +532,21 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAddParticipantsResponse.ClientError[errorCode=" + errorCode
@@ -498,27 +555,25 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
     }
 
     /**
-     * The {@code ServerError} reply variant — the relay encountered a
-     * transient internal failure while processing the request.
+     * The reply variant emitted on transient relay-side failure.
      */
     @WhatsAppWebModule(moduleName = "WASmaxInGroupsAddParticipantsResponseServerError")
     final class ServerError implements SmaxGroupsAddParticipantsResponse {
         /**
-         * The numeric server-side error code.
+         * The numeric error code echoed by the relay.
          */
         private final int errorCode;
 
         /**
-         * The human-readable error text, when supplied.
+         * The optional human-readable error text echoed by the relay.
          */
         private final String errorText;
 
         /**
-         * Constructs a new server-error reply.
+         * Constructs a {@link ServerError} from raw error attributes.
          *
          * @param errorCode the numeric error code
-         * @param errorText the optional human-readable text; may be
-         *                  {@code null}
+         * @param errorText the optional error text; may be {@code null}
          */
         public ServerError(int errorCode, String errorText) {
             this.errorCode = errorCode;
@@ -526,7 +581,7 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * Returns the numeric error code.
+         * Returns the numeric error code echoed by the relay.
          *
          * @return the error code
          */
@@ -535,20 +590,23 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
         }
 
         /**
-         * Returns the optional human-readable error text.
+         * Returns the optional human-readable error text echoed by the relay.
          *
-         * @return an {@link Optional} carrying the error text
+         * @return an {@link Optional} carrying the error text, or empty when the relay omitted it
          */
         public Optional<String> errorText() {
             return Optional.ofNullable(errorText);
         }
 
         /**
-         * Tries to parse a {@link ServerError} variant.
+         * Tries to parse a {@link ServerError} variant from {@code node}.
+         *
+         * @apiNote Delegates to {@link SmaxBaseServerErrorMixin#parseServerError(Node, Node)} which validates the
+         * shared {@code <iq type="error"><error code="..." text="..."/></iq>} envelope.
          *
          * @param node    the inbound IQ stanza
          * @param request the original outbound request
-         * @return an {@link Optional} carrying the parsed variant
+         * @return an {@link Optional} carrying the parsed variant, or empty when the stanza does not match
          */
         @WhatsAppWebExport(moduleName = "WASmaxInGroupsAddParticipantsResponseServerError",
                 exports = "parseAddParticipantsResponseServerError",
@@ -561,6 +619,12 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             return Optional.of(new ServerError(envelope.code(), envelope.text()));
         }
 
+        /**
+         * Compares this error to {@code obj} for value equality across both fields.
+         *
+         * @param obj the other object
+         * @return {@code true} when {@code obj} is a {@link ServerError} with identical fields
+         */
         @Override
         public boolean equals(Object obj) {
             if (obj == this) {
@@ -573,11 +637,21 @@ public sealed interface SmaxGroupsAddParticipantsResponse extends SmaxOperation.
             return this.errorCode == that.errorCode && Objects.equals(this.errorText, that.errorText);
         }
 
+        /**
+         * Returns a hash composed of both fields.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return Objects.hash(errorCode, errorText);
         }
 
+        /**
+         * Returns a debug string carrying both fields.
+         *
+         * @return the debug representation
+         */
         @Override
         public String toString() {
             return "SmaxGroupsAddParticipantsResponse.ServerError[errorCode=" + errorCode

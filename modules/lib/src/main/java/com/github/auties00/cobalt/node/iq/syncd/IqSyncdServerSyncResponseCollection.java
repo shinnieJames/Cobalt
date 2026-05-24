@@ -8,57 +8,71 @@ import java.util.Optional;
 import java.util.SequencedCollection;
 
 /**
- * A single {@code <collection/>} entry projected from the inbound syncd
- * sync IQ response.
+ * A single {@code <collection/>} projection inside an inbound
+ * {@link IqSyncdServerSyncResponse.Success} reply.
  *
- * <p>Each entry carries the {@link IqSyncdServerSyncCollectionState wire
- * state} derived by {@link IqSyncdServerSyncResponse} from the
- * {@code <collection type? error? has_more_patches?>} attributes, plus
- * the optional {@code version} attribute and the optional
- * {@code <snapshot/>} / {@code <patches/>} payloads.
+ * @apiNote
+ * Each entry carries the wire-derived
+ * {@link IqSyncdServerSyncCollectionState state} (computed by the parser from the
+ * {@code type}, {@code <error code>} and {@code has_more_patches} attributes), the
+ * relay-issued {@code version}, plus the optional {@code <patches>} and
+ * {@code <snapshot>} payloads. Apply the state-specific transition to drive the
+ * sync loop: {@code SUCCESS*} arms apply the payloads, {@code CONFLICT*} arms
+ * reconcile, and {@code ERROR_*} arms drop or schedule a retry.
+ *
+ * @implNote
+ * This implementation surfaces both {@code <patches>} entries and the
+ * {@code <snapshot>} body as raw byte arrays; the encrypted-patch decoding (LtHash
+ * verification, per-mutation decryption) happens in the caller's apply pipeline
+ * rather than at parse time.
  */
 public final class IqSyncdServerSyncResponseCollection {
     /**
-     * The collection name.
+     * Holds the collection name (one of the values in WA Web's
+     * {@code WASyncdConst.CollectionName}).
      */
     private final String name;
 
     /**
-     * The wire-derived collection state.
+     * Holds the wire-derived collection state.
      */
     private final IqSyncdServerSyncCollectionState state;
 
     /**
-     * The relay-issued collection version, or {@code null} when the
-     * relay omitted it (typically alongside an error state).
+     * Holds the relay-issued collection version, or {@code null} when the relay
+     * omitted the attribute.
      */
     private final Long version;
 
     /**
-     * The list of encoded patch payloads when the relay returned a
-     * {@code <patches/>} child. Never {@code null}, possibly empty.
+     * Holds the encoded patch payloads returned in the {@code <patches/>} child,
+     * one entry per {@code <patch/>} grandchild.
      */
     private final List<byte[]> patches;
 
     /**
-     * The encoded snapshot payload when the relay returned a
-     * {@code <snapshot/>} child, or {@code null} when absent. The
-     * payload is the encoded {@code ExternalBlobReference} protobuf
-     * pointing at the actual snapshot blob in MMS.
+     * Holds the encoded snapshot payload returned in the {@code <snapshot/>}
+     * child, or {@code null} when absent.
      */
     private final byte[] snapshot;
 
     /**
      * Constructs a new inbound collection projection.
      *
-     * @param name     the collection name. Never {@code null}
-     * @param state    the wire-derived state. Never {@code null}
+     * @apiNote
+     * The {@code snapshot} bytes encode an {@code ExternalBlobReference} protobuf
+     * that points at the actual snapshot blob in MMS; the caller dereferences it
+     * via {@code WAWebSyncdDecode.decodeExternalBlobReference}. The {@code patches}
+     * bytes encode raw {@code SyncdPatch} protobufs the caller decodes via
+     * {@code WAWebSyncdDecode.decodeSyncdPatch}.
+     *
+     * @param name     the collection name; never {@code null}
+     * @param state    the wire-derived state; never {@code null}
      * @param version  the relay-issued version, or {@code null}
-     * @param patches  the encoded patch payloads. {@code null} is
-     *                 treated as an empty list
+     * @param patches  the encoded patch payloads; {@code null} is treated as an
+     *                 empty list
      * @param snapshot the encoded snapshot payload, or {@code null}
-     * @throws NullPointerException if {@code name} or {@code state}
-     *                              is {@code null}
+     * @throws NullPointerException if {@code name} or {@code state} is {@code null}
      */
     public IqSyncdServerSyncResponseCollection(String name,
                                                IqSyncdServerSyncCollectionState state,
@@ -75,7 +89,7 @@ public final class IqSyncdServerSyncResponseCollection {
     /**
      * Returns the collection name.
      *
-     * @return the name. Never {@code null}
+     * @return the name; never {@code null}
      */
     public String name() {
         return name;
@@ -84,7 +98,7 @@ public final class IqSyncdServerSyncResponseCollection {
     /**
      * Returns the wire-derived collection state.
      *
-     * @return the state. Never {@code null}
+     * @return the state; never {@code null}
      */
     public IqSyncdServerSyncCollectionState state() {
         return state;
@@ -93,8 +107,7 @@ public final class IqSyncdServerSyncResponseCollection {
     /**
      * Returns the relay-issued collection version.
      *
-     * @return an {@link Optional} containing the version, or
-     *         {@link Optional#empty()} when absent
+     * @return an {@link Optional} containing the version, or empty when absent
      */
     public Optional<Long> version() {
         return Optional.ofNullable(version);
@@ -103,8 +116,8 @@ public final class IqSyncdServerSyncResponseCollection {
     /**
      * Returns the list of encoded patch payloads.
      *
-     * @return an unmodifiable view of the patches. Never {@code null},
-     *         possibly empty
+     * @return an unmodifiable view of the patches; never {@code null}, possibly
+     *         empty
      */
     public SequencedCollection<byte[]> patches() {
         return Collections.unmodifiableSequencedCollection(patches);
@@ -113,8 +126,8 @@ public final class IqSyncdServerSyncResponseCollection {
     /**
      * Returns the encoded snapshot payload.
      *
-     * @return an {@link Optional} containing the snapshot bytes, or
-     *         {@link Optional#empty()} when absent
+     * @return an {@link Optional} containing the snapshot bytes, or empty when
+     *         absent
      */
     public Optional<byte[]> snapshot() {
         return Optional.ofNullable(snapshot);

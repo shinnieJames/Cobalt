@@ -3,24 +3,45 @@ package com.github.auties00.cobalt.pairing;
 import com.github.auties00.libsignal.key.SignalIdentityKeyPair;
 
 /**
- * Carries the intermediate state that the companion retains between
- * sending {@code companion_hello} and receiving {@code primary_hello}.
+ * Carries the intermediate state retained between sending
+ * {@code companion_hello} and receiving {@code primary_hello}.
  *
- * <p>The {@link #linkCodePairingSecret} is the human-visible code shown
- * to the user. The {@link #linkCodePairingWrappedCompanionEphemeralPub}
- * is the wire-format payload, structured as a 32-byte PBKDF2 salt,
- * followed by a 16-byte AES-CTR initial counter, followed by the
- * AES-CTR ciphertext of the companion ephemeral public key. The
- * {@link #companionEphemeralKeyPair} is held back so its private key
- * can be used during companion finish to derive the ephemeral X25519
- * shared secret.
+ * @apiNote
+ * Internal handshake intermediate; embedders do not see this type.
+ * The {@link #linkCodePairingSecret} is surfaced to the user through
+ * the {@link com.github.auties00.cobalt.client.WhatsAppClientVerificationHandler.Web.PairingCode}
+ * handler. The other two fields are cached on the
+ * {@link CompanionPairingService} and consulted when a
+ * {@code primary_hello} notification later arrives.
+ *
+ * @implNote
+ * This implementation collapses WA Web's {@code companionHello} return
+ * shape ({@code linkCodePairingWrappedCompanionEphemeralPub},
+ * {@code linkCodeKey}, {@code linkCodePairingCompanionADVEphemeralKeyPair},
+ * {@code linkCodePairingSecret}) into a single record and discards
+ * {@code linkCodeKey}: WA Web caches the imported PBKDF2 key for reuse
+ * during {@code companionFinish}, but Cobalt re-derives it from the
+ * pairing code and the primary's salt at finish time, so retaining the
+ * cached key would serve no purpose. The
+ * {@link #linkCodePairingWrappedCompanionEphemeralPub} layout is a
+ * 32-byte PBKDF2 salt followed by a 16-byte AES-CTR counter followed
+ * by the AES-CTR ciphertext of the companion's ephemeral X25519 public
+ * key.
  *
  * @param linkCodePairingSecret                       the eight-character
- *     pairing code displayed to the user
- * @param linkCodePairingWrappedCompanionEphemeralPub the wrapped
- *     companion ephemeral public key bytes carried in the IQ
- * @param companionEphemeralKeyPair                   the companion ADV
- *     ephemeral Curve25519 keypair generated for this attempt
+ *                                                    Crockford base32
+ *                                                    pairing code shown
+ *                                                    to the user
+ * @param linkCodePairingWrappedCompanionEphemeralPub the salt || counter
+ *                                                    || AES-CTR
+ *                                                    ciphertext payload
+ *                                                    carried in the
+ *                                                    {@code companion_hello}
+ *                                                    IQ
+ * @param companionEphemeralKeyPair                   the companion's ADV
+ *                                                    ephemeral
+ *                                                    Curve25519 keypair
+ *                                                    for this attempt
  */
 record CompanionPairingCompanionHello(
         String linkCodePairingSecret,

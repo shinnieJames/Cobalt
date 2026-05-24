@@ -5,20 +5,26 @@ import com.github.auties00.cobalt.meta.annotation.WhatsAppWebModule;
 import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 
 /**
- * Outcome of inspecting an incoming message's ICDC metadata for hosted (business
- * coexistence) transitions.
+ * Outcome of inspecting an inbound message's ICDC metadata for hosted
+ * business-coexistence transitions.
  *
- * <p>WhatsApp's business coexistence feature lets a chat migrate between the
- * end-to-end encrypted account and a hosted business account. Every incoming message
- * carries a metadata block declaring the sender's and recipient's account types;
- * Cobalt inspects that block as messages arrive so the UI can flag mismatches and
- * the local device record can be refreshed against the server.
+ * @apiNote
+ * Returned by {@link com.github.auties00.cobalt.device.DeviceService#handleHostedIcdcMetadataInline}
+ * as part of the inbound-message processing pipeline. The two booleans drive two
+ * distinct downstream effects: {@link #hostedBizEncMismatch()} tells the
+ * caller that the cached account type disagrees with the incoming HOSTED type
+ * (so the device list must be refreshed via USync), while
+ * {@link #senderOrRecipientAccountTypeHosted()} tells the UI that either side
+ * of the chat is a hosted business account (so the coexistence system message
+ * may need to be inserted).
  *
- * @param hostedBizEncMismatch               {@code true} when the local ADV account type
- *                                           disagrees with the incoming {@code HOSTED} type
- *                                           and a device list refresh is required
- * @param senderOrRecipientAccountTypeHosted {@code true} when either the sender or recipient
- *                                           in the message metadata is a hosted account
+ * @param hostedBizEncMismatch               {@code true} when the local ADV
+ *                                           account type disagrees with the
+ *                                           incoming HOSTED type and a device
+ *                                           list refresh is required
+ * @param senderOrRecipientAccountTypeHosted {@code true} when either side of
+ *                                           the chat in the inbound metadata
+ *                                           is a hosted account
  */
 @WhatsAppWebModule(moduleName = "WAWebIcdcHandlerApi")
 public record HostedIcdcResult(
@@ -26,9 +32,15 @@ public record HostedIcdcResult(
         boolean senderOrRecipientAccountTypeHosted
 ) {
     /**
-     * No-op outcome returned when the hosted devices feature is disabled, the chat is
-     * with self, the chat is not a user chat, or the message carries no hosted
-     * metadata.
+     * No-op outcome returned on every code path that short-circuits before any
+     * hosted-coexistence work happens.
+     *
+     * @apiNote
+     * Returned when the {@code adv_accept_hosted_devices} AB prop is off, when
+     * the chat is with self, when the chat is not a user chat, when the
+     * inbound message carries no {@code deviceListMetadata}, or when the
+     * relevant party's account type is missing or already E2EE. Equivalent to
+     * "nothing to do; do not flag the UI and do not refresh the device list".
      */
     @WhatsAppWebExport(moduleName = "WAWebIcdcHandlerApi",
             exports = "handleHostedIcdcMetadataInline",

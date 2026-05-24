@@ -11,27 +11,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant — wraps the {@code <invite code="..."/>}
- * payload in the canonical {@code <iq xmlns="w:g2" type="get" to="g.us">}
- * envelope.
+ * The outbound {@code <iq xmlns="w:g2" type="get" to="g.us">} stanza that previews a group via its public invite code.
+ *
+ * @apiNote Drives the "preview group from invite link" flow surfaced by {@code WAWebGroupQueryJob.queryGroupInviteCode}.
+ * Pass the suffix of a {@code chat.whatsapp.com/<code>} URL and dispatch through the matching
+ * {@link SmaxGroupsGetInviteGroupInfoResponse} parser to materialise the inviting group's preview metadata before
+ * the caller commits to joining.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsGetInviteGroupInfoRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseGetServerMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutGroupsBaseIQGetRequestMixin")
 public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.Request {
     /**
-     * The public group-invite code the caller wants to inspect.
-     * Mandatory — the relay rejects the request when this attribute is
-     * absent or empty.
+     * The public invite code surfaced under the {@code <invite code="..."/>} child.
      */
     private final String inviteCode;
 
     /**
      * Constructs a request for the given invite code.
      *
-     * @param inviteCode the public invite code (the suffix of a
-     *                   {@code chat.whatsapp.com/<code>} URL); never
-     *                   {@code null}
+     * @apiNote Pass the suffix of a {@code chat.whatsapp.com/<code>} URL verbatim; the relay rejects empty codes
+     * and treats unknown codes as a client error.
+     *
+     * @param inviteCode the public invite code; never {@code null}
      * @throws NullPointerException if {@code inviteCode} is {@code null}
      */
     public SmaxGroupsGetInviteGroupInfoRequest(String inviteCode) {
@@ -41,6 +43,8 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
     /**
      * Returns the invite code carried by this request.
      *
+     * @apiNote Surfaced verbatim under {@code <invite code="..."/>}.
+     *
      * @return the invite code; never {@code null}
      */
     public String inviteCode() {
@@ -48,10 +52,16 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
     }
 
     /**
-     * Builds the outbound IQ stanza ready for dispatch.
+     * Materialises the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         serialised invite payload
+     * @apiNote The resulting envelope is
+     * {@snippet :
+     *     <iq xmlns="w:g2" to="g.us" type="get">
+     *         <invite code="<inviteCode>"/>
+     *     </iq>
+     * }
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and the {@code <invite/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutGroupsGetInviteGroupInfoRequest",
@@ -69,6 +79,12 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
                 .content(inviteNode);
     }
 
+    /**
+     * Compares this request to {@code obj} for value equality across every field.
+     *
+     * @param obj the other object
+     * @return {@code true} when {@code obj} is a {@link SmaxGroupsGetInviteGroupInfoRequest} with the same invite code
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -81,11 +97,21 @@ public final class SmaxGroupsGetInviteGroupInfoRequest implements SmaxOperation.
         return Objects.equals(this.inviteCode, that.inviteCode);
     }
 
+    /**
+     * Returns a hash composed of every field.
+     *
+     * @return the hash code
+     */
     @Override
     public int hashCode() {
         return Objects.hash(inviteCode);
     }
 
+    /**
+     * Returns a debug string carrying every field.
+     *
+     * @return the debug representation
+     */
     @Override
     public String toString() {
         return "SmaxGroupsGetInviteGroupInfoRequest[inviteCode=" + inviteCode + ']';

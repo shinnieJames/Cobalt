@@ -2,7 +2,6 @@ package com.github.auties00.cobalt.store;
 
 import com.github.auties00.cobalt.client.*;
 import com.github.auties00.cobalt.client.info.WhatsAppClientInfo;
-import com.github.auties00.cobalt.media.MediaConnection;
 import com.github.auties00.cobalt.model.bot.AiThreadTitle;
 import com.github.auties00.cobalt.model.bot.BotWelcomeRequestState;
 import com.github.auties00.cobalt.model.business.AgentState;
@@ -63,10 +62,14 @@ import com.github.auties00.cobalt.model.preference.QuickReply;
 import com.github.auties00.cobalt.model.preference.Sticker;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingEntry;
 import com.github.auties00.cobalt.model.privacy.PrivacySettingType;
+import com.github.auties00.cobalt.model.privacy.AccountDisappearingMode;
+import com.github.auties00.cobalt.model.privacy.StatusPrivacySetting;
+import com.github.auties00.cobalt.model.setting.AppTheme;
 import com.github.auties00.cobalt.model.setting.ChatLockSettings;
+import com.github.auties00.cobalt.model.setting.privacy.OptOutEntry;
 import com.github.auties00.cobalt.model.sync.*;
 import com.github.auties00.cobalt.model.sync.action.bot.MaibaAIFeaturesControlAction;
-import com.github.auties00.cobalt.client.proxy.WhatsAppProxy;
+import com.github.auties00.cobalt.client.WhatsAppProxy;
 import com.github.auties00.cobalt.sync.SyncPendingMutation;
 import com.github.auties00.cobalt.model.sync.action.chat.UsernameChatStartModeAction;
 import com.github.auties00.cobalt.model.sync.action.device.WaffleAccountLinkStateAction;
@@ -77,6 +80,7 @@ import com.github.auties00.cobalt.model.sync.action.payment.MerchantPaymentPartn
 import com.github.auties00.cobalt.model.sync.action.payment.PaymentTosAction;
 import com.github.auties00.cobalt.model.sync.action.privacy.PrivateProcessingSettingAction;
 import com.github.auties00.cobalt.model.sync.action.setting.NotificationActivitySettingAction;
+import com.github.auties00.cobalt.model.sync.action.setting.SettingsSyncAction;
 import com.github.auties00.cobalt.sync.crypto.MutationLTHash;
 import com.github.auties00.cobalt.sync.key.SyncKeyUtils;
 import com.github.auties00.cobalt.util.DataUtils;
@@ -112,482 +116,1933 @@ import java.util.concurrent.atomic.AtomicLong;
 import static java.util.Objects.requireNonNullElseGet;
 
 /**
- * Abstract base implementation of the public {@link WhatsAppStore}
- * interface. Holds the storage-agnostic state common to every concrete
- * {@link WhatsAppStore} implementation, defines the protobuf wire layout for
- * that state, and implements every accessor on the {@link WhatsAppStore}
- * interface (and on {@link com.github.auties00.libsignal.SignalProtocolStore},
- * which {@link WhatsAppStore} extends) in terms of in-memory fields.
+ * Holds the storage-agnostic state for a {@link WhatsAppStore} and implements every
+ * accessor on that interface (and on {@link com.github.auties00.libsignal.SignalProtocolStore},
+ * which {@link WhatsAppStore} extends) against in-memory fields.
  *
- * <p>Concrete subclasses inherit the entire field set and the entire body of
- * accessor logic from this class. They are only responsible for deciding
- * <em>how</em> the aggregate is persisted.
+ * <p>Concrete subclasses inherit every field and every accessor body, and are only
+ * responsible for deciding <em>how</em> the aggregate is persisted: a single root
+ * protobuf, per-entity files, or no persistence at all. This class never touches
+ * the filesystem on its own; it leaves {@link WhatsAppStore#save()},
+ * {@link WhatsAppStore#delete()} and {@link WhatsAppStore#await()} unimplemented.
  *
- * <p>Every field corresponds to one logical store on WhatsApp Web:
+ * <p>Each field group collapses one or more WhatsApp Web stores into a single
+ * in-memory structure:
  * <ul>
- *   <li>Scalar protobuf fields (UUID, phone number, locale, profile metadata,
- *       sync flags, AB-props bundle, ADV secret, and so on) flatten the
- *       UserPrefs key-value store and the per-session metadata that WA Web
- *       scatters across {@code WAWebUserPrefsBase}, {@code WAWebUserPrefsKeys}
- *       and {@code WAWebPermanentStorage}.
- *   <li>Typed {@link ConcurrentHashMap} fields (chats are
- *       held by the concrete subclass; contacts, calls, privacy settings,
- *       sender keys, sessions, remote identities, app-state hash states,
- *       missing sync keys, mention-everyone mute expirations, orphan mutation
- *       entries, out-contacts, X3DH base-key dedupe, …) collapse the dozen
- *       IndexedDB databases and the in-memory reactive collections that WA Web
- *       maintains in {@code WAWebModelStorageInitialize} and
- *       {@code WAWebCollections}.
- *   <li>Signal-protocol fields (registration ID, Noise key pair, identity key
- *       pair, signed pre-key, pre-key map, sender keys, sessions, remote
- *       identities, app-state sync keys) are laid out so that
- *       {@link AbstractWhatsAppStore} itself can be used directly as a
- *       {@link com.github.auties00.libsignal.SignalProtocolStore}, mirroring
- *       what WA Web's {@code WAWebSignalStorage} exposes via per-table
- *       accessors.
- *   <li>Per-collection {@code SyncHashValue} entries, orphan mutations and
- *       missing sync keys back the syncd state machine that WA Web drives
- *       from {@code WAWebSyncdCollectionsStateMachine}, {@code WAWebSyncdOrphan}
- *       and {@code WAWebSyncdStoreMissingKeys}.
+ *   <li>Scalar fields (UUID, phone number, locale, profile metadata, sync flags,
+ *       AB-props bundle, ADV secret) flatten the UserPrefs key-value layer that WA
+ *       Web scatters across {@code WAWebUserPrefsKeys} and
+ *       {@code WAWebPermanentStorage}.
+ *   <li>Typed {@link ConcurrentHashMap} fields (contacts, calls, privacy settings,
+ *       sender keys, sessions, remote identities, app-state hash states, missing
+ *       sync keys, mention-everyone mute expirations, orphan mutation entries,
+ *       out-contacts, X3DH base-key dedupe) collapse the WA Web IndexedDB tables
+ *       and the in-memory reactive collections of {@code WAWebContactCollection},
+ *       {@code WAWebChatCollection}, {@code WAWebMsgInfoCollection} and peers.
+ *   <li>Signal-protocol fields (registration id, Noise key pair, identity key pair,
+ *       signed pre-key, pre-key map, sender keys, sessions, remote identities,
+ *       app-state sync keys) make this class directly usable as a
+ *       {@link com.github.auties00.libsignal.SignalProtocolStore}, mirroring the
+ *       per-table accessors exposed by {@code WAWebSignalProtocolStoreCacheApi}.
+ *   <li>Per-collection sync hash states, orphan mutation entries and missing-key
+ *       entries back the syncd state machine that WA Web drives from
+ *       {@code WAWebSyncdCollectionsStateMachine}, {@code WAWebSyncdOrphan} and
+ *       {@code WAWebSyncdStoreMissingKeys}.
  * </ul>
  *
- * <p>Persistence boundary. This class never reads from or writes to disk on
- * its own. It exposes everything as in-memory state and leaves
- * {@link WhatsAppStore#save()}, {@link WhatsAppStore#delete()} and
- * {@link WhatsAppStore#await()} unimplemented so that subclasses can choose
- * the persistence strategy (single root protobuf, per-entity files, no
- * persistence at all, …).
+ * @implNote
+ * This implementation deliberately collapses WA Web's roughly twelve IndexedDB
+ * databases, hundred-odd tables, forty-odd reactive in-memory collections, and the
+ * UserPrefs key-value layer into a single object. WA Web needs the split because
+ * the browser imposes a per-database transactional boundary, an async IndexedDB
+ * API, and a worker context that mediates access; none of those constraints apply
+ * on the JVM, so a flat field set keyed by entity type is both simpler and faster.
  *
  * @see WhatsAppStore
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 @ProtobufMessage
 public abstract class AbstractWhatsAppStore implements WhatsAppStore {
+    /**
+     * The fallback display name returned by {@link #name()} when no profile name
+     * has been pushed by the server or set by the caller.
+     *
+     * @apiNote
+     * Surfaces in UI strings and outbound stanzas that require a non-null
+     * sender name; matches the literal placeholder WA Web shows in chat-list
+     * cells for accounts whose pushname has not propagated yet.
+     */
     protected static final String DEFAULT_NAME = "User";
+
+    /**
+     * The maximum number of per-user device-list entries kept in the device cache
+     * before the oldest entry is evicted.
+     *
+     * @apiNote
+     * Caps the working set of {@link DeviceList}
+     * entries the store retains during a long-running session; recent senders are
+     * kept hot while idle contacts age out.
+     *
+     * @implNote
+     * This implementation uses a {@link ConcurrentLinkedHashMap}
+     * with insertion-order eviction; WA Web has no comparable cap because each
+     * device list is row-keyed in the {@code deviceList} IndexedDB table and is
+     * not held in memory.
+     */
     protected static final int MAX_DEVICE_LISTS = 5000;
+
+    /**
+     * The time-to-live for a cached device-list entry before it is considered stale
+     * and a fresh {@code usync} round trip is required.
+     *
+     * @apiNote
+     * Limits how long stale per-recipient device fan-out lists may be reused for
+     * outgoing message sessions; one day matches the refresh cadence that the
+     * companion fleet honours via the {@code usync} pipeline.
+     */
     protected static final Duration DEVICE_TTL = Duration.ofDays(1);
 
+    /**
+     * The filename prefix used by {@link #openWamPendingBufferWriter} when staging
+     * a WAM event buffer to disk.
+     *
+     * @apiNote
+     * Files in {@link #directory} whose name matches
+     * {@code WAM_BUFFER_PREFIX + saveKey + WAM_BUFFER_SUFFIX} are recovered via
+     * {@link #openWamPendingBufferReader} on next initialise so unsent batches
+     * survive process exit.
+     */
     private static final String WAM_BUFFER_PREFIX = "wam_buffer_";
 
+    /**
+     * The filename suffix paired with {@link #WAM_BUFFER_PREFIX} for staged WAM
+     * event buffers.
+     *
+     * @apiNote
+     * Lets {@link #clearWamPendingBuffers} distinguish buffer files from any
+     * other content a subclass may have written to {@link #directory}.
+     */
     private static final String WAM_BUFFER_SUFFIX = ".bin";
 
+    /**
+     * The stable per-account identifier used to scope on-disk session state, log
+     * tags and the session pairing handshake.
+     *
+     * @apiNote
+     * Returned by {@link #uuid()}; never changes for the life of a logged-in
+     * account and is the directory key under which session files are persisted.
+     */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     protected final UUID uuid;
 
+    /**
+     * The E.164 phone number of the logged-in account, as a raw {@code Long}, or
+     * {@code null} until the server confirms registration.
+     *
+     * @apiNote
+     * Exposed through {@link #phoneNumber()} as an {@link OptionalLong};
+     * remains {@code null} on freshly-created mobile registrations until the SMS
+     * code round trip completes, and on web sessions until QR pairing finishes.
+     */
     @ProtobufProperty(index = 2, type = ProtobufType.UINT64)
     protected Long phoneNumber;
 
+    /**
+     * The flavour of WhatsApp client this store was initialised for.
+     *
+     * @apiNote
+     * Determines which pairing handshake, which connection profile, and which
+     * persistence layout the surrounding client uses; immutable after construction
+     * so a single store cannot be reused as both web and mobile.
+     */
     @ProtobufProperty(index = 3, type = ProtobufType.ENUM)
     protected final WhatsAppClientType clientType;
 
+    /**
+     * The wall-clock timestamp at which this store was first created.
+     *
+     * @apiNote
+     * Used to age-rate session artefacts (for example the ADV revalidation cadence)
+     * and to surface session age in diagnostics; serialised at second granularity
+     * to keep the protobuf wire form compact.
+     */
     @ProtobufProperty(index = 4, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
     protected final Instant initializationTimeStamp;
 
+    /**
+     * The device descriptor (manufacturer, model, operating system family, version)
+     * advertised during pairing and bundled into every outgoing client payload.
+     *
+     * @apiNote
+     * Drives what the companion fleet sees as the linked-device identity; mutable
+     * because users may rebrand a session through {@link #setDevice}.
+     */
     @ProtobufProperty(index = 6, type = ProtobufType.MESSAGE)
     protected WhatsAppDevice device;
 
+    /**
+     * The release channel ({@code RELEASE}, {@code BETA}, {@code ALPHA}, etc.)
+     * advertised to the server during connection.
+     *
+     * @apiNote
+     * Controls which server-side feature gates the session is bucketed into;
+     * changing it forces a reconnect for the new value to take effect.
+     */
     @ProtobufProperty(index = 7, type = ProtobufType.ENUM)
     protected ClientReleaseChannel releaseChannel;
 
+    /**
+     * Whether the local account is currently advertising itself as online via
+     * presence stanzas.
+     *
+     * @apiNote
+     * Read/written by the presence subsystem; flipping it to {@code false} causes
+     * the server to stop reporting this client as available to peers and gates
+     * receipt fan-out behind the user privacy preferences.
+     */
     @ProtobufProperty(index = 9, type = ProtobufType.BOOL)
     protected boolean online;
 
+    /**
+     * The IETF language tag advertised to the server (for example {@code "en_US"})
+     * for server-rendered notifications and system messages.
+     */
     @ProtobufProperty(index = 10, type = ProtobufType.STRING)
     protected String locale;
 
+    /**
+     * The pushname (display name) the account broadcasts to its peers.
+     *
+     * @apiNote
+     * Accessed through {@link #name()}, which substitutes {@link #DEFAULT_NAME}
+     * when the field is {@code null}; mutated via {@link #setName}.
+     */
     @ProtobufProperty(index = 11, type = ProtobufType.STRING)
     protected String name;
 
+    /**
+     * The server-attested business display name on Business Verified accounts.
+     *
+     * @apiNote
+     * Set only on the business client flavour by the verification handshake;
+     * peers render it with the green check on chat headers.
+     */
     @ProtobufProperty(index = 12, type = ProtobufType.STRING)
     protected String verifiedName;
 
+    /**
+     * The CDN URI for the most recently fetched copy of the local account
+     * profile picture, or {@code null} if none has been fetched yet.
+     */
     @ProtobufProperty(index = 13, type = ProtobufType.STRING)
     protected URI profilePicture;
 
+    /**
+     * The local account published "About" text status.
+     *
+     * @apiNote
+     * Mirrors what other contacts will see under the local profile name; updated
+     * by direct user action and rebroadcast through a status push.
+     */
     @ProtobufProperty(index = 14, type = ProtobufType.MESSAGE)
     protected ContactTextStatus selfTextStatus;
 
+    /**
+     * The local account phone-number JID (for example
+     * {@code 1234567890@s.whatsapp.net}).
+     *
+     * @apiNote
+     * Distinct from {@link #lid}; this is the long-lived identifier rooted in the
+     * registered phone number and is the credential used for direct chats.
+     */
     @ProtobufProperty(index = 15, type = ProtobufType.STRING)
     protected Jid jid;
 
+    /**
+     * The local account LID, an opaque {@code @lid} identifier that hides the
+     * phone number in groups, communities and Channels.
+     *
+     * @apiNote
+     * Always paired with {@link #jid} in the {@link #lidToPhoneMappings} table;
+     * may be {@code null} on pre-LID sessions.
+     */
     @ProtobufProperty(index = 16, type = ProtobufType.STRING)
     protected Jid lid;
 
+    /**
+     * The free-text street address shown on the business profile.
+     */
     @ProtobufProperty(index = 17, type = ProtobufType.STRING)
     protected String businessAddress;
 
+    /**
+     * The longitude paired with {@link #businessLatitude} for the pin shown on
+     * the business profile map; {@code null} if no location has been published.
+     */
     @ProtobufProperty(index = 18, type = ProtobufType.DOUBLE)
     protected Double businessLongitude;
 
+    /**
+     * The latitude paired with {@link #businessLongitude} for the business
+     * profile map pin.
+     */
     @ProtobufProperty(index = 19, type = ProtobufType.DOUBLE)
     protected Double businessLatitude;
 
+    /**
+     * The free-text "About this business" description rendered on the business
+     * profile screen.
+     */
     @ProtobufProperty(index = 20, type = ProtobufType.STRING)
     protected String businessDescription;
 
+    /**
+     * The ordered list of website URIs published on the business profile.
+     *
+     * @apiNote
+     * Rendered as clickable links in the business-info sheet; reordering changes
+     * which website appears first.
+     */
     @ProtobufProperty(index = 21, type = ProtobufType.STRING)
     protected List<URI> businessWebsites;
 
+    /**
+     * The contact email shown on the business profile.
+     */
     @ProtobufProperty(index = 22, type = ProtobufType.STRING)
     protected String businessEmail;
 
+    /**
+     * The Meta-defined business categories assigned to the business profile.
+     *
+     * @apiNote
+     * Drives discovery surfaces such as Business Search and ad targeting; chosen
+     * from the canonical list the server publishes through a dedicated query.
+     */
     @ProtobufProperty(index = 23, type = ProtobufType.MESSAGE)
     protected List<BusinessCategory> businessCategories;
 
+    /**
+     * The map of every contact known to the local account, keyed by JID.
+     *
+     * @apiNote
+     * Backs {@link #contacts()}, {@link #findContactByJid}, {@link #addContact}
+     * and {@link #removeContact}; the entries are the union of address-book sync,
+     * sender-side cache fills, and group/community member discovery.
+     *
+     * @implNote
+     * This implementation collapses WA Web's {@code WAWebContactCollection}
+     * in-memory reactive collection plus its IndexedDB {@code contact} table into
+     * a single map; lookups are tried by the supplied JID first and then by the
+     * paired LID/phone JID through {@link #findLidByPhone} / {@link #findPhoneByLid}.
+     */
     @ProtobufProperty(index = 24, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentHashMap<Jid, Contact> contacts;
+    /**
+     * The cache of contact "About" text statuses, keyed by contact user JID.
+     *
+     * @apiNote
+     * Populated lazily as the server pushes status updates; queried via
+     * {@link #findContactTextStatus} which transparently retries under the paired
+     * LID/phone JID.
+     *
+     * @implNote
+     * Not annotated {@code @ProtobufProperty}: WA Web rehydrates the equivalent
+     * cache from the {@code contactTextStatus} IndexedDB table on every page
+     * reload, and Cobalt rebuilds it on demand instead of persisting it.
+     */
     protected final ConcurrentHashMap<Jid, ContactTextStatus> contactTextStatuses;
 
+    /**
+     * The map of currently tracked incoming calls, keyed by call id.
+     *
+     * @apiNote
+     * Populated by the call-signaling pipeline as {@code <call>} stanzas land and
+     * pruned as terminal call states are processed; queried by
+     * {@link #findCallById}.
+     *
+     * @implNote
+     * Not persisted because calls are entirely ephemeral: an in-flight call cannot
+     * meaningfully survive a process restart, and WA Web likewise keeps the
+     * equivalent table only in memory.
+     */
     protected final ConcurrentHashMap<String, IncomingCall> calls;
 
+    /**
+     * The current value of every privacy setting (last-seen, profile picture,
+     * about, status, read receipts, groups, calls), keyed by setting type.
+     *
+     * @apiNote
+     * Mirrors the user privacy preferences round trip; reads land through
+     * {@link #privacySettings()} and writes through the privacy-settings sender.
+     */
     @ProtobufProperty(index = 26, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings;
 
+    /**
+     * The "Keep chats archived" setting that controls whether an archived chat
+     * is automatically un-archived when a new message lands on it.
+     */
     @ProtobufProperty(index = 28, type = ProtobufType.BOOL)
     protected boolean unarchiveChats;
 
+    /**
+     * Whether timestamps should be rendered in 24-hour rather than 12-hour form.
+     */
     @ProtobufProperty(index = 29, type = ProtobufType.BOOL)
     protected boolean twentyFourHourFormat;
 
+    /**
+     * The default disappearing-message timer applied to newly created chats.
+     *
+     * @apiNote
+     * Surfaces in the privacy settings screen; defaults to
+     * {@link ChatEphemeralTimer#OFF} until
+     * the user opts in.
+     */
     @ProtobufProperty(index = 30, type = ProtobufType.ENUM)
     protected ChatEphemeralTimer newChatsEphemeralTimer;
 
+    /**
+     * The history-sync policy that governs how much prior chat history the server
+     * may push down during the initial bootstrap.
+     *
+     * @apiNote
+     * Set during pairing and serialised so a re-pair on the same store does not
+     * re-trigger the largest sync tier.
+     */
     @ProtobufProperty(index = 31, type = ProtobufType.MESSAGE)
     protected WhatsAppWebClientHistory webHistoryPolicy;
 
-    @ProtobufProperty(index = 32, type = ProtobufType.BOOL)
-    protected boolean automaticPresenceUpdates;
-
-    @ProtobufProperty(index = 33, type = ProtobufType.BOOL)
-    protected boolean automaticMessageReceipts;
-
+    /**
+     * Whether app-state patch MACs are verified during sync.
+     *
+     * @apiNote
+     * Defaults to {@code true} for production; set {@code false} only to step
+     * through corrupted captures where strict verification would refuse to apply
+     * the patch.
+     */
     @ProtobufProperty(index = 34, type = ProtobufType.BOOL)
     protected boolean checkPatchMacs;
 
+    /**
+     * Whether the initial chat history sync has completed for this session.
+     *
+     * @apiNote
+     * Flipped once by the history-sync handler; serialised so the bootstrap
+     * pipeline does not re-fire on every reconnect.
+     */
     @ProtobufProperty(index = 35, type = ProtobufType.BOOL)
     protected boolean syncedChats;
 
+    /**
+     * Whether the initial contacts history sync has completed for this session.
+     */
     @ProtobufProperty(index = 36, type = ProtobufType.BOOL)
     protected boolean syncedContacts;
 
+    /**
+     * Whether the initial newsletter (Channels) subscription sync has completed
+     * for this session.
+     */
     @ProtobufProperty(index = 37, type = ProtobufType.BOOL)
     protected boolean syncedNewsletters;
 
+    /**
+     * Whether the initial status (stories) history sync has completed for this
+     * session.
+     */
     @ProtobufProperty(index = 38, type = ProtobufType.BOOL)
     protected boolean syncedStatus;
 
+    /**
+     * Whether the business-verified-name certificate has been fetched for this
+     * session.
+     *
+     * @apiNote
+     * Only meaningful on business client flavours; gates the rendering of the
+     * verified-business badge.
+     */
     @ProtobufProperty(index = 40, type = ProtobufType.BOOL)
     protected boolean syncedBusinessCertificate;
 
+    /**
+     * The 14-bit Signal registration identifier randomly chosen at session creation
+     * and pinned into the Signal prekey bundles published on this device.
+     *
+     * @apiNote
+     * Forms part of {@link com.github.auties00.libsignal.SignalProtocolStore}; the
+     * server uses it to deduplicate prekey bundles when this device republishes.
+     */
     @ProtobufProperty(index = 41, type = ProtobufType.INT32)
     protected final Integer registrationId;
 
+    /**
+     * The long-lived Noise XX static key pair used for the outer transport
+     * handshake with the WhatsApp server.
+     *
+     * @apiNote
+     * Distinct from {@link #identityKeyPair}; the Noise key authenticates the
+     * socket-level connection, the Signal identity key authenticates messages.
+     */
     @ProtobufProperty(index = 42, type = ProtobufType.MESSAGE)
     protected final SignalIdentityKeyPair noiseKeyPair;
 
+    /**
+     * The long-lived Signal identity key pair used to sign prekey bundles and to
+     * derive per-recipient session keys.
+     *
+     * @apiNote
+     * Disclosure of the corresponding public key to peers via prekey bundles is
+     * what lets them perform an X3DH handshake against this device.
+     */
     @ProtobufProperty(index = 44, type = ProtobufType.MESSAGE)
     protected final SignalIdentityKeyPair identityKeyPair;
 
+    /**
+     * The ADV (advanced-device-verification) certificate proving this companion
+     * device was authorised by the primary device.
+     *
+     * @apiNote
+     * Refetched on the cadence implied by {@link #lastAdvCheckTime}; absent until
+     * the first successful pairing handshake completes.
+     */
     @ProtobufProperty(index = 46, type = ProtobufType.MESSAGE)
     protected ADVSignedDeviceIdentity signedDeviceIdentity;
 
+    /**
+     * The currently published signed pre-key, with its server-side identifier and
+     * the ECDSA signature over its public component.
+     *
+     * @apiNote
+     * Periodically rotated; old versions remain in {@link #preKeys} until the
+     * server confirms the new rotation has been ingested.
+     */
     @ProtobufProperty(index = 47, type = ProtobufType.MESSAGE)
     protected final SignalSignedKeyPair signedKeyPair;
 
+    /**
+     * The map of unsigned one-time pre-keys keyed by the server-assigned id, used
+     * by remote peers to start a fresh Signal session against this device.
+     *
+     * @apiNote
+     * Insertion-ordered so the consumption order matches the publication order;
+     * exhaustion triggers a top-up via the prekey upload pipeline.
+     */
     @ProtobufProperty(index = 48, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
     protected final LinkedHashMap<Integer, SignalPreKeyPair> preKeys;
 
+    /**
+     * The Facebook device identifier (FDID) bundled into every client payload so
+     * that Meta can correlate this WhatsApp session with other Meta-app installs
+     * on the same hardware.
+     */
     @ProtobufProperty(index = 49, type = ProtobufType.STRING)
     protected final UUID fdid;
 
+    /**
+     * The 16-byte stable device identifier announced during pairing and reused on
+     * every reconnect.
+     */
     @ProtobufProperty(index = 50, type = ProtobufType.BYTES)
     protected final byte[] deviceId;
 
+    /**
+     * The advertising identifier surfaced by the host platform.
+     *
+     * @apiNote
+     * Bundled into client payloads and WAM events so that ads attribution can
+     * correlate the WhatsApp session with the platform-level advertising id.
+     */
     @ProtobufProperty(index = 51, type = ProtobufType.STRING)
     protected final UUID advertisingId;
 
+    /**
+     * The 16-byte randomly generated identity buffer used to seed deterministic
+     * per-account derivations.
+     */
     @ProtobufProperty(index = 52, type = ProtobufType.BYTES)
     protected final byte[] identityId;
 
+    /**
+     * The 20-byte token announced to the server as the backup credential for
+     * encrypted-history recovery.
+     */
     @ProtobufProperty(index = 53, type = ProtobufType.BYTES)
     protected final byte[] backupToken;
 
+    /**
+     * The map of Signal group-session sender keys, keyed by the (group id, sender
+     * device) pair.
+     *
+     * @apiNote
+     * Read and written by the Signal sender-key protocol when encrypting and
+     * decrypting group messages; backs the {@code loadSenderKey} /
+     * {@code storeSenderKey} operations on
+     * {@link com.github.auties00.libsignal.SignalProtocolStore}.
+     */
     @ProtobufProperty(index = 54, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys;
 
+    /**
+     * The map of app-state sync keys, keyed by their base64-encoded id.
+     *
+     * @apiNote
+     * Used by the syncd patch decoder to unwrap encrypted mutations; new keys
+     * arrive through history-sync notifications and via key-share peer messages.
+     */
     @ProtobufProperty(index = 55, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final LinkedHashMap<String, AppStateSyncKey> appStateKeys;
 
+    /**
+     * The map of Signal sessions for each remote (user, device) pair.
+     *
+     * @apiNote
+     * Backs the {@code loadSession} / {@code storeSession} operations on
+     * {@link com.github.auties00.libsignal.SignalProtocolStore}; sessions are
+     * established lazily via X3DH the first time a message is sent to or received
+     * from a remote.
+     */
     @ProtobufProperty(index = 56, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions;
 
+    /**
+     * The per-syncd-collection LT-Hash and version pair tracking the cumulative
+     * applied state of every app-state collection.
+     *
+     * @apiNote
+     * Updated atomically with every mutation batch applied through the syncd
+     * pipeline; compared against the server-supplied snapshot hash to detect
+     * tampering or divergence.
+     */
     @ProtobufProperty(index = 57, type = ProtobufType.MESSAGE, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<SyncPatchType, SyncHashValue> hashStates;
 
+    /**
+     * Whether this device has completed the pairing handshake and is currently
+     * registered with the server.
+     *
+     * @apiNote
+     * Flipped to {@code true} once a pairing handshake completes and never
+     * reverted; logout deletes the entire store rather than clearing this flag.
+     */
     @ProtobufProperty(index = 58, type = ProtobufType.BOOL)
     protected boolean registered;
 
+    /**
+     * Whether security-code-change notifications are displayed in chats when a
+     * remote contact rotates their identity key.
+     */
     @ProtobufProperty(index = 59, type = ProtobufType.BOOL)
     protected boolean showSecurityNotifications;
 
+    /**
+     * The recently used stickers keyed by sticker hash.
+     *
+     * @apiNote
+     * Drives the "Recent" tab in the sticker picker; populated by user picks and
+     * truncated by the sticker store to the most recent set.
+     */
     @ProtobufProperty(index = 60, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, Sticker> recentStickers;
 
+    /**
+     * The user-favourited stickers keyed by sticker hash.
+     *
+     * @apiNote
+     * Drives the starred "Favourites" tab in the sticker picker and survives
+     * across reinstalls via the encrypted app-state sync.
+     */
     @ProtobufProperty(index = 61, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, Sticker> favouriteStickers;
 
+    /**
+     * The map of business "Quick Replies" keyed by shortcut.
+     *
+     * @apiNote
+     * Only meaningful on business client flavours; lets the user trigger a saved
+     * canned reply by typing its shortcut.
+     */
     @ProtobufProperty(index = 62, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, QuickReply> quickReplies;
 
+    /**
+     * The map of business labels keyed by label id.
+     *
+     * @apiNote
+     * Backs the chat-tagging and contact-tagging surface in the WhatsApp Business
+     * UI; round-trips through app-state sync so labels stay consistent across
+     * linked devices.
+     */
     @ProtobufProperty(index = 63, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, Label> labels;
 
+    /**
+     * The advertised application version this client identifies itself with on
+     * the server.
+     *
+     * @apiNote
+     * Read on every reconnect; mutating it forces a reconnect for the new version
+     * banner to take effect. Volatile because the version refresher and the
+     * connection thread may both touch it.
+     */
     @ProtobufProperty(index = 64, type = ProtobufType.MESSAGE)
     protected volatile ClientAppVersion clientVersion;
 
+    /**
+     * The currently observed application version of the primary device this
+     * companion is paired with.
+     *
+     * @apiNote
+     * Updated whenever the primary sends a version-bearing payload (notification
+     * or ADV revalidation); used to gate features behind primary support.
+     */
     @ProtobufProperty(index = 65, type = ProtobufType.MESSAGE)
     protected ClientAppVersion companionVersion;
 
+    /**
+     * The timestamp of the most recent successful ADV revalidation against the
+     * primary device.
+     *
+     * @apiNote
+     * Compared against a cadence threshold to decide whether to initiate the
+     * next ADV revalidation round trip; persisted at millisecond granularity.
+     */
     @ProtobufProperty(index = 66, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
     protected Instant lastAdvCheckTime;
 
+    /**
+     * The map of trusted remote Signal identity keys, keyed by (user, device).
+     *
+     * @apiNote
+     * Backs the trust-on-first-use identity store; subsequent mismatches surface
+     * through {@link #unconfirmedIdentityChanges} for explicit confirmation.
+     */
     @ProtobufProperty(index = 67, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.BYTES)
     protected final ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities;
 
+    /**
+     * The map of app-state sync keys the device knows are missing, keyed by the
+     * base64-encoded key id.
+     *
+     * @apiNote
+     * Populated when a syncd patch references a key that has not yet propagated;
+     * the syncd request pipeline drains this map by asking the primary device
+     * to reshare each missing key.
+     */
     @ProtobufProperty(index = 68, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys;
 
+    /**
+     * The shared secret used to derive the ADV (advanced-device-verification)
+     * MAC key on this companion.
+     *
+     * @apiNote
+     * Pinned during pairing; rotated only on full re-pair. Disclosure of this
+     * secret would let an attacker forge ADV signatures from the local device.
+     */
     @ProtobufProperty(index = 69, type = ProtobufType.BYTES)
     protected byte[] advSecretKey;
 
+    /**
+     * The cache of business-verified-name certificates, keyed by the verified
+     * business JID.
+     *
+     * @apiNote
+     * Drives rendering of the verified-business badge in chats with business
+     * accounts; refilled lazily as new verified businesses are interacted with.
+     */
     @ProtobufProperty(index = 70, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<Jid, BusinessVerifiedName> verifiedBusinessNames;
 
+    /**
+     * The on-disk directory under which subclasses persist this store; may be
+     * {@code null} on in-memory stores.
+     *
+     * @apiNote
+     * Resolved relative to the session root via
+     * {@link StorePathUtils}; used both for the
+     * persistence layer and for WAM event buffer staging.
+     */
     @ProtobufProperty(index = 71, type = ProtobufType.STRING, mixins = {PathMixin.class, ProtobufLazyMixin.class})
     protected final Path directory;
 
+    /**
+     * Whether the paired primary device advertises support for the syncd snapshot
+     * recovery flow.
+     *
+     * @apiNote
+     * Gates whether this companion may request a fresh snapshot when local
+     * app-state collections diverge from the server.
+     */
     @ProtobufProperty(index = 72, type = ProtobufType.BOOL)
     protected boolean primaryDeviceSupportsSyncdRecovery;
 
+    /**
+     * Whether outbound link previews are suppressed (the "Disable link previews"
+     * preference).
+     */
     @ProtobufProperty(index = 73, type = ProtobufType.BOOL)
     protected boolean disableLinkPreviews;
 
+    /**
+     * Whether the user has opted into "relay all calls" mode which forces every
+     * VoIP call through Meta TURN servers instead of peer-to-peer.
+     *
+     * @apiNote
+     * Trades a small latency hit for IP-address privacy from the call peer.
+     */
     @ProtobufProperty(index = 74, type = ProtobufType.BOOL)
     protected boolean relayAllCalls;
 
+    /**
+     * Whether this client has opted into the external-web-beta AB-prop bucket.
+     *
+     * @apiNote
+     * Required for VoIP-on-web capture: WAM only enables the VoIP signaling
+     * receiver on opted-in sessions; toggled programmatically via the
+     * external-web-beta opt-in action documented in the call-capture memory.
+     */
     @ProtobufProperty(index = 75, type = ProtobufType.BOOL)
     protected boolean externalWebBeta;
 
+    /**
+     * The current "Chat Lock" feature configuration (per-device passphrase, lock
+     * surfaces, lock timeout).
+     */
     @ProtobufProperty(index = 76, type = ProtobufType.MESSAGE)
     protected ChatLockSettings chatLockSettings;
 
+    /**
+     * The ordered list of pinned (favourite) chat JIDs.
+     *
+     * @apiNote
+     * Drives the order of the pinned section at the top of the chat list;
+     * round-trips through app-state sync.
+     */
     @ProtobufProperty(index = 77, type = ProtobufType.STRING)
     protected List<Jid> favoriteChats;
 
+    /**
+     * The list of feature gates the primary device has reported it understands.
+     *
+     * @apiNote
+     * Used to short-circuit features the primary cannot interpret, avoiding
+     * round trips that the primary will discard.
+     */
     @ProtobufProperty(index = 78, type = ProtobufType.STRING)
     protected List<String> primaryFeatures;
 
+    /**
+     * The map of per-group mute expirations for the "Mention everyone" announcement
+     * style, keyed by group JID.
+     *
+     * @apiNote
+     * Lets the notification pipeline suppress @everyone notifications on muted
+     * groups; entries naturally expire at the encoded {@link ChatMute} timestamp.
+     */
     @ProtobufProperty(index = 79, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.UINT64)
     protected final ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations;
 
+    /**
+     * The per-collection set of orphan app-state mutations awaiting their parent
+     * entity to appear.
+     *
+     * @apiNote
+     * Backs the orphan-mutation queue drained by {@code WAWebSyncdOrphan}-style
+     * pipelines; entries persist across reconnects until the missing entity
+     * arrives or is explicitly garbage-collected.
+     */
     @ProtobufProperty(index = 80, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.MESSAGE)
     protected final ConcurrentMap<SyncPatchType, OrphanMutationEntries> orphanMutationEntries;
 
+    /**
+     * The map of contacts the local account has received messages from but does
+     * not have a saved address-book entry for, keyed by JID.
+     *
+     * @apiNote
+     * Drives the "Unknown sender" surface; queried by {@link #findOutContact}
+     * and exposed via {@link #outContacts()}.
+     */
     @ProtobufProperty(index = 81, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.MESSAGE)
     protected ConcurrentHashMap<Jid, OutContact> outContacts;
 
+    /**
+     * The observed skew between the local wall clock and the server clock, in
+     * seconds.
+     *
+     * @apiNote
+     * Estimated from response timestamps during the handshake; applied wherever
+     * a server-comparable timestamp is required so that local skew does not
+     * trigger spurious replay or expiration logic.
+     */
     @ProtobufProperty(index = 84, type = ProtobufType.INT64)
     protected long clockSkewSeconds;
 
+    /**
+     * The timestamp of the most recent emergency push of group-scoped AB props.
+     *
+     * @apiNote
+     * Compared against {@link #groupAbPropsRefreshId} to decide whether a fresh
+     * fetch is required even when the standard refresh cadence has not yet
+     * elapsed.
+     */
     @ProtobufProperty(index = 85, type = ProtobufType.UINT64, mixins = InstantSecondsMixin.class)
     protected Instant groupAbPropsEmergencyPushTimestamp;
 
+    /**
+     * The opaque AB-key handed back by the server on the most recent AB-props
+     * refresh.
+     *
+     * @apiNote
+     * Echoed on the next AB-props refresh request so the server can compute a
+     * deterministic delta against the last delivered bundle.
+     */
     @ProtobufProperty(index = 86, type = ProtobufType.STRING)
     protected String abPropsAbKey;
 
+    /**
+     * The content-hash of the currently cached AB-props bundle.
+     */
     @ProtobufProperty(index = 87, type = ProtobufType.STRING)
     protected String abPropsHash;
 
+    /**
+     * The server-suggested refresh interval, in seconds, between two consecutive
+     * AB-props fetches.
+     */
     @ProtobufProperty(index = 88, type = ProtobufType.INT64)
     protected long abPropsRefresh;
 
+    /**
+     * The timestamp of the most recent successful AB-props fetch.
+     */
     @ProtobufProperty(index = 89, type = ProtobufType.UINT64, mixins = InstantMillisMixin.class)
     protected Instant abPropsLastSyncTime;
 
+    /**
+     * The opaque server-issued refresh id for the device-scoped AB-props bundle.
+     */
     @ProtobufProperty(index = 90, type = ProtobufType.INT64)
     protected long abPropsRefreshId;
 
+    /**
+     * The opaque server-issued refresh id for the web-scoped AB-props bundle.
+     */
     @ProtobufProperty(index = 91, type = ProtobufType.INT64)
     protected long abPropsWebRefreshId;
 
+    /**
+     * The opaque server-issued refresh id for the group-scoped AB-props bundle.
+     */
     @ProtobufProperty(index = 92, type = ProtobufType.INT64)
     protected long groupAbPropsRefreshId;
 
+    /**
+     * The map of X3DH base keys seen on prekey messages, keyed by the
+     * derived-message id.
+     *
+     * @apiNote
+     * Used by the Signal session decoder to deduplicate prekey messages that the
+     * server may redeliver during retransmits; entries are evicted as the
+     * encrypted-message-id rotation overwrites them.
+     */
     @ProtobufProperty(index = 93, type = ProtobufType.MAP, mapKeyType = ProtobufType.STRING, mapValueType = ProtobufType.BYTES)
     protected final ConcurrentMap<String, byte[]> baseKeys;
 
+    /**
+     * The map of monotonic per-channel sequence numbers used to tag outgoing WAM
+     * batches, keyed by the {@link WamChannel} id.
+     *
+     * @apiNote
+     * Persisted across restarts so that uploaded WAM batches keep advancing
+     * regardless of process lifetime.
+     */
     @ProtobufProperty(index = 94, type = ProtobufType.MAP, mapKeyType = ProtobufType.INT32, mapValueType = ProtobufType.INT32)
     protected final ConcurrentMap<Integer, Integer> wamSequenceNumbers;
 
+    /**
+     * The per-remote-device counter tracking the last Signal-encrypted message
+     * sequence number observed in flight.
+     *
+     * @apiNote
+     * Read and written by the encryption pipeline to bound prekey-message replay;
+     * not persisted because it is reconstructed from session state on reload.
+     */
     protected final ConcurrentMap<SignalProtocolAddress, Long> identityEncryptionRange;
 
+    /**
+     * The monotonic counter providing the per-process sequence component of
+     * locally generated message ids.
+     */
     protected final AtomicLong encryptionSequence;
 
+    /**
+     * The optional proxy configuration (HTTP CONNECT or SOCKS5) that the socket
+     * subsystem should route through; {@code null} for a direct connection.
+     */
     protected WhatsAppProxy proxy;
 
+    /**
+     * The set of registered listeners that receive client lifecycle and message
+     * delivery callbacks.
+     *
+     * @apiNote
+     * Backed by {@link ConcurrentHashMap#newKeySet()} so concurrent
+     * adds and removes during a callback dispatch are safe.
+     */
     protected final KeySetView<WhatsAppClientListener, Boolean> listeners;
 
+    /**
+     * The map of normalized LID JID to the paired phone-number JID.
+     *
+     * @apiNote
+     * The forward index of the LID/phone mapping table; queried by
+     * {@link #findPhoneByLid} and maintained by
+     * {@link #registerLidMapping(Jid, Jid, Instant)}.
+     *
+     * @implNote
+     * This implementation mirrors WA Web {@code WAWebLidPnCache} with an
+     * additional {@link #lidMappingTimestamps} sidecar to honour late-arriving
+     * mappings.
+     */
     protected final ConcurrentHashMap<Jid, Jid> lidToPhoneMappings;
 
+    /**
+     * The reverse map of normalized phone-number JID to the paired LID JID.
+     *
+     * @apiNote
+     * Queried by {@link #findLidByPhone} and kept in sync with
+     * {@link #lidToPhoneMappings} on every {@link #registerLidMapping} call.
+     */
     protected final ConcurrentHashMap<Jid, Jid> phoneToLidMappings;
 
+    /**
+     * The map of LID JID to the timestamp at which the current mapping was
+     * recorded.
+     *
+     * @apiNote
+     * Used by {@link #registerLidMapping(Jid, Jid, Instant)} to ignore stale
+     * mapping updates that arrive after a newer one has already been applied.
+     */
     protected final ConcurrentHashMap<Jid, Instant> lidMappingTimestamps;
 
-    protected volatile MediaConnection mediaConnection;
-
-    protected final Object mediaConnectionLock;
-
+    /**
+     * The current state of the offline-resume bootstrap: whether the server is
+     * still draining buffered notifications, has completed, or has been skipped.
+     *
+     * @apiNote
+     * Read by {@link WhatsAppClient} entry
+     * points that must wait until offline delivery has drained before sending.
+     */
     protected volatile WhatsAppClientOfflineResumeState offlineResumeState;
 
+    /**
+     * The latch counted down once the offline-delivery drain reaches
+     * {@link WhatsAppClientOfflineResumeState} terminal.
+     *
+     * @apiNote
+     * Reset on every reconnect so callers wait on the right generation; reads
+     * and writes are volatile because reconnect installs a fresh latch.
+     */
     protected volatile CountDownLatch offlineDeliveryLatch;
 
+    /**
+     * The set of group JIDs for which the local device must rotate and reshare
+     * the Signal sender key on the next outbound message.
+     *
+     * @apiNote
+     * Filled by participant-change notifications (member removed, member key
+     * rotated) and drained as the sender-key rotation send completes.
+     */
     protected final KeySetView<Jid, Boolean> usersNeedingSenderKeyRotation;
 
+    /**
+     * The per-collection FIFO of pending app-state mutations awaiting batch
+     * upload to the server.
+     *
+     * @apiNote
+     * Drained by the syncd upload pipeline on every mutation flush cycle;
+     * insertion order is preserved so the server sees mutations in the order the
+     * user produced them.
+     */
     protected final ConcurrentMap<SyncPatchType, SequencedCollection<SyncPendingMutation>> webAppStatePendingMutations;
 
+    /**
+     * The per-collection metadata (current version, snapshot version, recovery
+     * state) tracked alongside the syncd state machine.
+     */
     protected final ConcurrentMap<SyncPatchType, SyncCollectionMetadata> webAppStateCollections;
 
+    /**
+     * The per-collection in-memory index of applied sync actions, keyed by the
+     * action's stable index id.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code syncActions} IndexedDB table; used to answer
+     * "do I already have this mutation?" queries during patch decoding.
+     */
     protected final ConcurrentMap<SyncPatchType, ConcurrentMap<String, SyncActionEntry>> syncActionEntries;
 
+    /**
+     * The map of in-flight outgoing message id to the set of recipients the
+     * message is still pending delivery to.
+     *
+     * @apiNote
+     * Drained as per-recipient delivery receipts land; lets the send pipeline
+     * resolve the awaiting future once every recipient has either acked or
+     * timed out.
+     */
     protected final ConcurrentMap<String, Set<Jid>> pendingMessageRecipients;
 
+    /**
+     * The lock guarding the single in-flight {@link #clientVersion} probe so
+     * concurrent reconnects do not duplicate the version refresh.
+     */
     protected final Object clientVersionLock;
 
+    /**
+     * The map of group/community metadata (subject, description, picture, settings,
+     * participant set), keyed by chat JID.
+     *
+     * @apiNote
+     * Backs {@link GroupMetadata}
+     * lookups; refilled lazily as groups are interacted with.
+     */
     protected final ConcurrentMap<Jid, ChatMetadata> chatMetadata;
 
+    /**
+     * The bounded LRU cache of per-recipient device fan-out lists, capped at
+     * {@link #MAX_DEVICE_LISTS} entries.
+     *
+     * @apiNote
+     * Drives outgoing message fan-out: each entry maps a user JID to the set of
+     * companion devices that must receive a copy of every direct message; aged
+     * out per {@link #DEVICE_TTL}.
+     */
     protected final ConcurrentLinkedHashMap<Jid, DeviceList> deviceLists;
 
+    /**
+     * The set of remote JIDs whose Signal identity key has changed since the
+     * device last accepted it and which the user has not yet confirmed.
+     */
     protected final Set<Jid> unconfirmedIdentityChanges;
 
+    /**
+     * The set of JIDs already verified as belonging to a third-party messenger
+     * federated under the WhatsApp interop framework.
+     *
+     * @apiNote
+     * Caches the result of the hosted-add verification probe so subsequent
+     * conversations with the same federated identity skip the round trip.
+     */
     protected final Set<Jid> interopHostedVerificationCache;
 
+    /**
+     * The set of chat JIDs for which the click-through analytics tag has already
+     * been recorded.
+     *
+     * @apiNote
+     * Backs deduplication of UTM-tagged chat-open events; entries are not
+     * persisted because UTM is a per-session metric.
+     */
     protected final Set<Jid> utmReadChatIds;
 
+    /**
+     * The set of JIDs the local account has explicitly blocked.
+     */
     protected final Set<Jid> blockedContacts;
 
+    /**
+     * The last server-supplied blocklist digest, or {@code null} when no
+     * fetch has succeeded yet.
+     *
+     * @apiNote
+     * Backs {@link #blocklistHash()}/{@link #setBlocklistHash(String)};
+     * surfaces WA Web's {@code WAWebUserPrefsMultiDevice.{get,set}BlocklistHash}
+     * UserPrefs entry. The digest is passed back on the next
+     * {@code <iq xmlns="blocklist" type="get">} so the relay can answer
+     * with the cache-match short-circuit when the local cache is still
+     * authoritative.
+     */
+    protected volatile String blocklistHash;
+
+    /**
+     * Whether the local blocklist has been migrated from PN to LID
+     * addressing.
+     *
+     * @apiNote
+     * Mirrors WA Web's {@code WAWebBlocklistMigration.isBlocklistMigrated}
+     * UserPrefs flag. The flag flips to {@code true} the first time the
+     * relay returns a LID-addressed blocklist after the device itself has
+     * completed the 1:1 LID migration, and flips back to {@code false}
+     * when a migrated device receives an unexpected PN-addressed
+     * blocklist.
+     */
+    protected volatile boolean blocklistMigrated;
+
+    /**
+     * Whether the relay has delivered a LID-addressed blocklist before
+     * the device has completed its own 1:1 LID migration.
+     *
+     * @apiNote
+     * Mirrors WA Web's
+     * {@code WAReceivedBlocklistMigrationBefore1x1Migration} UserPrefs
+     * entry. Set when {@link WhatsAppClient}
+     * receives a LID-addressed blocklist while the LID migration is still
+     * in flight; the deferred blocklist migration runs after the 1:1
+     * migration completes.
+     */
+    protected volatile boolean receivedBlocklistMigrationBefore1x1Migration;
+
+    /**
+     * The cached server-supplied digests of marketing-message opt-out
+     * lists, keyed by category.
+     *
+     * @apiNote
+     * Drives the digest-based cache-match short-circuit on the next
+     * {@code <iq xmlns="optoutlist" type="get" category="...">} so
+     * the relay can return a cache-hit shape when the local view is
+     * still authoritative.
+     */
+    protected final ConcurrentMap<String, String> optOutListHashes;
+
+    /**
+     * The cached entries of marketing-message opt-out lists, keyed by
+     * category.
+     */
+    protected final ConcurrentMap<String, List<OptOutEntry>> optOutListEntries;
+
+    /**
+     * The cached server-supplied digests of per-axis privacy contact
+     * blacklists, keyed by the privacy category name.
+     *
+     * @apiNote
+     * Drives the digest-based cache-match short-circuit on the next
+     * privacy-disallowed-list fetch; the addressing mode the relay
+     * used is implicit per session, so the key is the category name
+     * alone.
+     */
+    protected final ConcurrentMap<String, String> contactBlacklistHashes;
+
+    /**
+     * The cached entries of per-axis privacy contact blacklists, keyed
+     * by the privacy category name.
+     */
+    protected final ConcurrentMap<String, List<Jid>> contactBlacklistEntries;
+
+    /**
+     * The cached server-authoritative Status story privacy setting.
+     */
+    protected volatile StatusPrivacySetting statusPrivacy;
+
+    /**
+     * The cached server-authoritative account-level Disappearing
+     * Messages setting.
+     */
+    protected volatile AccountDisappearingMode disappearingMode;
+
+    /**
+     * The cached server-authoritative list of devices linked to this
+     * account.
+     */
+    protected volatile List<Jid> linkedDevices;
+
+    /**
+     * The current state of the link between this WhatsApp account and the user
+     * Meta Accounts Center identity ("Waffle").
+     *
+     * @apiNote
+     * Volatile because the link state may be flipped from background sync
+     * threads; exposed through {@link #linkedMetaAccountState()}.
+     */
     protected volatile WaffleAccountLinkStateAction.AccountLinkState linkedMetaAccountState;
 
+    /**
+     * The timestamp of the most recent {@link #linkedMetaAccountState} transition.
+     *
+     * @apiNote
+     * Used to discard older link-state updates that arrive out of order on the
+     * sync pipeline.
+     */
     protected volatile Instant linkedMetaAccountStateTimestamp;
 
+    /**
+     * Whether the local account has completed onboarding for the
+     * business-automation hosted runtime.
+     */
     protected volatile boolean hostedAutomationOnboarded;
 
+    /**
+     * The FIFO queue of device-list sync results yet to be applied to peer
+     * sessions.
+     *
+     * @apiNote
+     * Drained by the device-sync handler on every reconnect tick; persisted only
+     * for the duration of the process.
+     */
     protected final ConcurrentLinkedQueue<PendingDeviceSync> pendingDeviceSyncs;
 
+    /**
+     * The map of group id to the set of device ids that have already been issued
+     * the current sender-key distribution.
+     *
+     * @apiNote
+     * Lets the sender-key distribution sender avoid resending the same key to
+     * the same recipient on every group message.
+     */
     protected final ConcurrentMap<String, Set<String>> groupSenderKeyDistribution;
 
+    /**
+     * The map of pending payment notifications whose triggering message has not
+     * yet been received, keyed by the absent message id.
+     *
+     * @apiNote
+     * Queried by {@link #findOrphanPaymentNotification}; cleared by
+     * {@link #removeOrphanPaymentNotification} once the parent message arrives.
+     */
     protected final ConcurrentMap<String, OrphanPaymentNotification> orphanPaymentNotifications;
 
+    /**
+     * The opaque routing bytes handed back by the server on the most recent
+     * connection; replayed on the next handshake so the server can place this
+     * session on the same backend shard.
+     */
     protected byte[] routingInfo;
 
+    /**
+     * The hostname returned by the server alongside {@link #routingInfo} for the
+     * subsequent reconnect.
+     */
     protected String routingDomain;
 
+    /**
+     * The instant at which the server will stop accepting this client version
+     * and force an upgrade.
+     */
     protected Instant clientExpiration;
 
+    /**
+     * The set of Terms-of-Service notice ids the user has been shown and either
+     * dismissed or acknowledged.
+     */
     protected Set<String> tosNoticeIds;
 
+    /**
+     * Whether the server has reported that AI features are available to this
+     * account.
+     */
     protected boolean aiAvailable;
 
+    /**
+     * The content-hash of the most recently received business opt-out list,
+     * compared against the server-supplied hash to decide whether a refetch is
+     * required.
+     */
     protected String businessOptOutListHash;
 
+    /**
+     * The map of business-feature gates keyed by name.
+     *
+     * @apiNote
+     * Drives runtime gating of the business UI; queried by
+     * {@link #findBusinessFeatureFlag} and reset by
+     * {@link #clearBusinessFeatureFlags}.
+     */
     protected ConcurrentMap<String, BusinessFeatureFlag> businessFeatureFlags;
 
+    /**
+     * The map of business-marketing-campaign statuses keyed by campaign id.
+     */
     protected ConcurrentMap<String, BusinessCampaignStatus> businessCampaignStatuses;
 
+    /**
+     * The map of business subscription records keyed by subscription id.
+     */
     protected ConcurrentMap<String, BusinessSubscription> businessSubscriptions;
 
+    /**
+     * The opaque nonce associated with the current business-account session;
+     * used to scope business-only round trips.
+     */
     protected String businessAccountNonce;
 
+    /**
+     * The map of Click-To-WhatsApp data-sharing preferences keyed by ads account
+     * LID, recording the consent the user has granted on each CTWA ad account.
+     */
     protected ConcurrentMap<String, CtwaDataSharingPreference> ctwaDataSharingPreferences;
 
+    /**
+     * The current Small-Business data-sharing consent string echoed back to the
+     * server in subsequent SMB requests.
+     */
     protected String smbDataSharingConsent;
 
+    /**
+     * Whether server-side outcome detection (the auto-classification of customer
+     * chats into "sold" / "lost" outcomes) is enabled for the current account.
+     */
     protected boolean detectedOutcomesEnabled;
 
+    /**
+     * Whether the paired primary device advertises that it can absorb every
+     * companion-originated mutation, bypassing the standard allow-list.
+     */
     protected boolean primaryAllowsAllMutations;
 
+    /**
+     * The map of business-agent state records keyed by agent identifier.
+     *
+     * @apiNote
+     * Drives multi-agent message routing on business accounts; each entry
+     * records the current online/offline state of an assigned agent.
+     */
     protected ConcurrentMap<String, AgentState> agentStates;
 
+    /**
+     * The map of chat-to-agent assignments keyed by chat JID.
+     *
+     * @apiNote
+     * Pairs with {@link #agentStates}: which agent currently owns each customer
+     * chat on a multi-agent business account.
+     */
     protected ConcurrentMap<Jid, ChatAssignment> chatAssignments;
 
+    /**
+     * The configured Customer-Payment-Instructions identifier surfaced when the
+     * business sends a payment-request message.
+     */
     protected String paymentInstructionCpi;
 
+    /**
+     * The ordered list of custom payment methods configured on this business
+     * account, in the order they should appear in the payment-method picker.
+     */
     protected List<CustomPaymentMethod> customPaymentMethods;
 
+    /**
+     * The currently selected merchant payment partner the business is integrated
+     * with for native payments.
+     */
     protected MerchantPaymentPartnerAction merchantPaymentPartner;
 
+    /**
+     * The current state of the payment Terms-of-Service acknowledgement; mirrors
+     * what was last applied via the payment-ToS sync action.
+     */
     protected PaymentTosAction paymentTos;
 
+    /**
+     * The map of saved business marketing messages keyed by id.
+     */
     protected ConcurrentMap<String, MarketingMessage> marketingMessages;
 
+    /**
+     * The map of marketing-message broadcasts keyed by id, recording which
+     * marketing template was sent to which list and when.
+     */
     protected ConcurrentMap<String, MarketingMessageBroadcast> marketingMessageBroadcasts;
 
+    /**
+     * The map of configured business broadcast lists keyed by list id.
+     */
     protected ConcurrentMap<String, BusinessBroadcastList> businessBroadcastLists;
 
+    /**
+     * The map of business broadcast campaigns keyed by campaign id.
+     */
     protected ConcurrentMap<String, BusinessBroadcastCampaign> businessBroadcastCampaigns;
 
+    /**
+     * The map of per-campaign broadcast insight records keyed by campaign id.
+     */
     protected ConcurrentMap<String, BusinessBroadcastInsight> businessBroadcastInsights;
 
+    /**
+     * The salt used to derive per-recipient notification-content tokens, refreshed
+     * by the notification subsystem when the server rotates it.
+     */
     protected byte[] notificationContentTokenSalt;
 
+    /**
+     * The companion-side authentication nonce that authorises this device against
+     * WhatsApp's MMS (Media Management Service) when asking it to release the
+     * just-applied history-sync blob from the CDN.
+     *
+     * @apiNote
+     * Delivered once with the
+     * {@link com.github.auties00.cobalt.model.message.system.history.HistorySyncType#INITIAL_BOOTSTRAP}
+     * chunk and consumed by the post-apply MMS blob-deletion call; absent until
+     * the first bootstrap completes.
+     */
+    @ProtobufProperty(index = 95, type = ProtobufType.STRING)
+    protected String companionMmsAuthNonce;
+
+    /**
+     * The per-account key that protects the opaque chat identifier embedded in
+     * WhatsApp's shareable-chat links (the {@code wa.me/} and QR deep-link
+     * surface).
+     *
+     * @apiNote
+     * Delivered with the
+     * {@link com.github.auties00.cobalt.model.message.system.history.HistorySyncType#INITIAL_BOOTSTRAP}
+     * chunk and persisted for completeness; the deep-link generator runs
+     * entirely server-side, so neither WA Web nor Cobalt ever invokes any
+     * local encryption routine with this key. Absent until the first
+     * bootstrap completes.
+     */
+    @ProtobufProperty(index = 96, type = ProtobufType.BYTES)
+    protected byte[] shareableChatLinkKey;
+
+    /**
+     * Whether the desktop client launches automatically at OS login.
+     */
+    @ProtobufProperty(index = 97, type = ProtobufType.BOOL)
+    protected Boolean startAtLogin;
+
+    /**
+     * Whether closing the main window minimises the client to the system tray
+     * instead of terminating the process.
+     */
+    @ProtobufProperty(index = 98, type = ProtobufType.BOOL)
+    protected Boolean minimizeToTray;
+
+    /**
+     * Whether typed emoticons are automatically replaced with their graphical
+     * emoji equivalents while composing.
+     */
+    @ProtobufProperty(index = 99, type = ProtobufType.BOOL)
+    protected Boolean replaceTextWithEmoji;
+
+    /**
+     * When banner notifications are shown on the desktop.
+     */
+    @ProtobufProperty(index = 100, type = ProtobufType.ENUM)
+    protected SettingsSyncAction.DisplayMode bannerNotificationDisplayMode;
+
+    /**
+     * When the unread counter badge is shown on the application icon.
+     */
+    @ProtobufProperty(index = 101, type = ProtobufType.ENUM)
+    protected SettingsSyncAction.DisplayMode unreadCounterBadgeDisplayMode;
+
+    /**
+     * Whether incoming message notifications are delivered at all.
+     */
+    @ProtobufProperty(index = 102, type = ProtobufType.BOOL)
+    protected Boolean messagesNotificationEnabled;
+
+    /**
+     * Whether incoming call notifications are delivered.
+     */
+    @ProtobufProperty(index = 103, type = ProtobufType.BOOL)
+    protected Boolean callsNotificationEnabled;
+
+    /**
+     * Whether reaction notifications are delivered for one-to-one chats.
+     */
+    @ProtobufProperty(index = 104, type = ProtobufType.BOOL)
+    protected Boolean reactionsNotificationEnabled;
+
+    /**
+     * Whether status reaction notifications are delivered.
+     */
+    @ProtobufProperty(index = 105, type = ProtobufType.BOOL)
+    protected Boolean statusReactionsNotificationEnabled;
+
+    /**
+     * Whether notification banners include a text preview of the message body.
+     */
+    @ProtobufProperty(index = 106, type = ProtobufType.BOOL)
+    protected Boolean textPreviewForNotificationEnabled;
+
+    /**
+     * Default tone identifier used for one-to-one chat notifications.
+     */
+    @ProtobufProperty(index = 107, type = ProtobufType.INT32)
+    protected Integer defaultNotificationToneId;
+
+    /**
+     * Default tone identifier used for group chat notifications.
+     */
+    @ProtobufProperty(index = 108, type = ProtobufType.INT32)
+    protected Integer groupDefaultNotificationToneId;
+
+    /**
+     * Selected application theme (light, dark, system-default).
+     */
+    @ProtobufProperty(index = 109, type = ProtobufType.ENUM)
+    protected AppTheme appTheme;
+
+    /**
+     * Identifier of the selected chat wallpaper.
+     */
+    @ProtobufProperty(index = 110, type = ProtobufType.INT32)
+    protected Integer wallpaperId;
+
+    /**
+     * Whether the doodle overlay is drawn on top of the chat wallpaper.
+     */
+    @ProtobufProperty(index = 111, type = ProtobufType.BOOL)
+    protected Boolean doodleWallpaperEnabled;
+
+    /**
+     * Selected font size preset for chat rendering.
+     */
+    @ProtobufProperty(index = 112, type = ProtobufType.INT32)
+    protected Integer fontSize;
+
+    /**
+     * Whether incoming images are automatically downloaded.
+     */
+    @ProtobufProperty(index = 113, type = ProtobufType.BOOL)
+    protected Boolean photosAutodownloadEnabled;
+
+    /**
+     * Whether incoming audio messages are automatically downloaded.
+     */
+    @ProtobufProperty(index = 114, type = ProtobufType.BOOL)
+    protected Boolean audiosAutodownloadEnabled;
+
+    /**
+     * Whether incoming videos are automatically downloaded.
+     */
+    @ProtobufProperty(index = 115, type = ProtobufType.BOOL)
+    protected Boolean videosAutodownloadEnabled;
+
+    /**
+     * Whether incoming documents are automatically downloaded.
+     */
+    @ProtobufProperty(index = 116, type = ProtobufType.BOOL)
+    protected Boolean documentsAutodownloadEnabled;
+
+    /**
+     * Identifier of the chat notification tone override, if set.
+     */
+    @ProtobufProperty(index = 117, type = ProtobufType.INT32)
+    protected Integer notificationToneId;
+
+    /**
+     * Quality preset applied when uploading photos and videos.
+     */
+    @ProtobufProperty(index = 118, type = ProtobufType.ENUM)
+    protected SettingsSyncAction.MediaQualitySetting mediaUploadQuality;
+
+    /**
+     * Whether spell check is enabled in the message composer.
+     */
+    @ProtobufProperty(index = 119, type = ProtobufType.BOOL)
+    protected Boolean spellCheckEnabled;
+
+    /**
+     * Whether pressing Enter sends the current message instead of inserting a
+     * newline.
+     */
+    @ProtobufProperty(index = 120, type = ProtobufType.BOOL)
+    protected Boolean enterToSendEnabled;
+
+    /**
+     * Whether group message notifications are delivered.
+     */
+    @ProtobufProperty(index = 121, type = ProtobufType.BOOL)
+    protected Boolean groupMessageNotificationEnabled;
+
+    /**
+     * Whether group reaction notifications are delivered.
+     */
+    @ProtobufProperty(index = 122, type = ProtobufType.BOOL)
+    protected Boolean groupReactionsNotificationEnabled;
+
+    /**
+     * Whether status update notifications are delivered.
+     */
+    @ProtobufProperty(index = 123, type = ProtobufType.BOOL)
+    protected Boolean statusNotificationEnabled;
+
+    /**
+     * Identifier of the status notification tone.
+     */
+    @ProtobufProperty(index = 124, type = ProtobufType.INT32)
+    protected Integer statusNotificationToneId;
+
+    /**
+     * Whether call notifications play a ringtone in addition to showing the
+     * banner.
+     */
+    @ProtobufProperty(index = 125, type = ProtobufType.BOOL)
+    protected Boolean playSoundForCallNotification;
+
+    /**
+     * The map of onboarding-hint state records keyed by hint id, recording which
+     * of the onboarding nudges the user has dismissed or completed.
+     */
     protected ConcurrentMap<String, OnboardingHintState> onboardingHintStates;
 
+    /**
+     * The capabilities snapshot of the paired primary device, recording which
+     * companion-routed features the primary advertises support for.
+     */
     protected DeviceCapabilities primaryDeviceCapabilities;
 
+    /**
+     * The per-peer device capabilities cache keyed by user JID.
+     *
+     * @apiNote
+     * Lets fan-out short-circuit features no peer device can interpret; entries
+     * are filled from the {@code <usync>} capabilities probe.
+     */
     protected ConcurrentMap<Jid, DeviceCapabilitiesEntry> deviceCapabilitiesStates;
 
+    /**
+     * The map of per-message interactive state records (list-message selection,
+     * template-button presses) keyed by message id.
+     */
     protected ConcurrentMap<String, InteractiveMessageState> interactiveMessageStates;
 
+    /**
+     * The map of business "Notes" records keyed by note id, recording the local
+     * annotations attached to a customer chat.
+     */
     protected ConcurrentMap<String, NoteState> noteStates;
 
+    /**
+     * The map of newsletter (Channels) pin states keyed by newsletter JID.
+     */
     protected ConcurrentMap<Jid, NewsletterPin> newsletterPinStates;
 
+    /**
+     * Whether the local account has published a profile picture; {@code null}
+     * until the server reports the value.
+     */
     protected Boolean hasAvatar;
 
+    /**
+     * The map of call-log entries keyed by call id.
+     *
+     * @apiNote
+     * Drives the "Calls" tab; round-trips through app-state sync so call history
+     * stays consistent across linked devices.
+     */
     protected ConcurrentMap<String, CallLog> callLogStates;
 
+    /**
+     * The map tracking whether each bot has been sent the initial welcome
+     * request, keyed by bot JID.
+     */
     protected ConcurrentMap<Jid, BotWelcomeRequestState> botWelcomeRequestStates;
 
+    /**
+     * The map of AI-thread titles keyed by thread id, used by the AI chat surface
+     * to label recent conversations in the side rail.
+     */
     protected ConcurrentMap<String, AiThreadTitle> aiThreadTitles;
 
+    /**
+     * The current "start chat by username" preference, mirroring the value last
+     * applied through the chat-start-mode sync action.
+     */
     protected UsernameChatStartModeAction.ChatStartMode usernameChatStartMode;
 
+    /**
+     * The current notification-activity preference (which surfaces may trigger
+     * push notifications) last applied through sync action.
+     */
     protected NotificationActivitySettingAction.NotificationActivitySetting notificationActivitySetting;
 
+    /**
+     * The ordered list of recently used emoji with their decayed usage weights.
+     *
+     * @apiNote
+     * Drives the order of the "Frequently used" tab in the emoji picker; held
+     * as a copy-on-write list because reads dominate writes.
+     */
     protected List<RecentEmojiWeight> recentEmojiWeights;
 
+    /**
+     * The opaque identifier announced with newsletter (Channels) subscriptions
+     * so the server can correlate this device's subscriptions across reconnects.
+     */
     protected String newsletterSubscriptionUserIdentifier;
 
+    /**
+     * The last applied music-user-id action; records the cross-app music
+     * identifier so status posts can attribute the played track.
+     */
     protected MusicUserIdAction musicUserIdState;
 
+    /**
+     * The opaque interest-graph blob recording which newsletter (Channels)
+     * topics the user has subscribed to or explicitly muted.
+     */
     protected String newsletterSavedInterests;
 
+    /**
+     * Whether the user has opted into status-post notification preferences;
+     * {@code null} until the server reports a value.
+     */
     protected Boolean statusPostOptInNotificationPreferencesEnabled;
 
+    /**
+     * The current state of the "Private Processing" feature consent.
+     */
     protected PrivateProcessingSettingAction.PrivateProcessingStatus privateProcessingStatus;
 
+    /**
+     * Whether the user has opted out of personalised newsletter (Channels)
+     * recommendations; {@code null} until the server reports a value.
+     */
     protected Boolean channelsPersonalisedRecommendationOptOut;
 
+    /**
+     * The serialised definition of the user-created bot, if any.
+     */
     protected byte[] userCreatedBotDefinition;
 
+    /**
+     * The current state of the "MAIBA" AI business agent control toggle.
+     */
     protected MaibaAIFeaturesControlAction.MaibaAIFeatureStatus aiBusinessAgentStatus;
 
+    /**
+     * The timestamp of the most recent successful pairing handshake, used to
+     * age-rate session credentials and to surface the pairing date in
+     * diagnostics.
+     */
     protected Instant pairingTimestamp;
 
+    /**
+     * The map of peer-message dedupe records keyed by peer message id.
+     *
+     * @apiNote
+     * Lets the peer-message receiver drop redeliveries of an in-band peer
+     * message that has already been processed; entries are pruned as their
+     * dedupe window expires.
+     */
     protected final ConcurrentMap<String, ChatMessageInfo> peerMessages;
 
+    /**
+     * The platform logger lazily resolved against the concrete subclass name.
+     *
+     * @apiNote
+     * Allows subclasses to inherit a consistent logger naming scheme without
+     * declaring their own static logger.
+     */
     protected final System.Logger logger;
 
-    public AbstractWhatsAppStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, WhatsAppDevice device, ClientPayload.ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean automaticPresenceUpdates, boolean automaticMessageReceipts, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<String, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedName> verifiedBusinessNames, Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures, ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations, ConcurrentMap<SyncPatchType, AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, ConcurrentHashMap<Jid, OutContact> outContacts, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<String, byte[]> baseKeys, ConcurrentMap<Integer, Integer> wamSequenceNumbers) {
+    /**
+     * Builds an {@link AbstractWhatsAppStore} from the canonical set of protobuf
+     * fields, generating any missing crypto material and seeding the transient
+     * in-memory collections.
+     *
+     * @apiNote
+     * Invoked by the protobuf deserialiser and by every subclass constructor;
+     * non-protobuf state (listeners, locks, transient sets) is allocated here so
+     * subclasses do not have to repeat the wiring. Crypto fields that arrive as
+     * {@code null} ({@link #registrationId}, {@link #noiseKeyPair},
+     * {@link #identityKeyPair}, {@link #signedKeyPair}, {@link #fdid},
+     * {@link #deviceId}, {@link #advertisingId}, {@link #identityId},
+     * {@link #backupToken}) are generated on the fly so a freshly built store is
+     * immediately usable as a {@link com.github.auties00.libsignal.SignalProtocolStore}.
+     *
+     * @implNote
+     * This implementation walks the contact map once to populate
+     * {@link #lidToPhoneMappings} / {@link #phoneToLidMappings} so that LID/phone
+     * lookups work on the first call after deserialisation, without waiting for
+     * the syncd pipeline to repopulate them.
+     *
+     * @param uuid                                see {@link #uuid}
+     * @param phoneNumber                         see {@link #phoneNumber}
+     * @param clientType                          see {@link #clientType}
+     * @param initializationTimeStamp             see {@link #initializationTimeStamp}
+     * @param device                              see {@link #device}
+     * @param releaseChannel                      see {@link #releaseChannel}
+     * @param online                              see {@link #online}
+     * @param locale                              see {@link #locale}
+     * @param name                                see {@link #name}
+     * @param verifiedName                        see {@link #verifiedName}
+     * @param profilePicture                      see {@link #profilePicture}
+     * @param selfTextStatus                      see {@link #selfTextStatus}
+     * @param jid                                 see {@link #jid}
+     * @param lid                                 see {@link #lid}
+     * @param businessAddress                     see {@link #businessAddress}
+     * @param businessLongitude                   see {@link #businessLongitude}
+     * @param businessLatitude                    see {@link #businessLatitude}
+     * @param businessDescription                 see {@link #businessDescription}
+     * @param businessWebsites                    see {@link #businessWebsites}
+     * @param businessEmail                       see {@link #businessEmail}
+     * @param businessCategories                  see {@link #businessCategories}
+     * @param contacts                            see {@link #contacts}
+     * @param privacySettings                     see {@link #privacySettings}
+     * @param unarchiveChats                      see {@link #unarchiveChats}
+     * @param twentyFourHourFormat                see {@link #twentyFourHourFormat}
+     * @param newChatsEphemeralTimer              see {@link #newChatsEphemeralTimer}
+     * @param webHistoryPolicy                    see {@link #webHistoryPolicy}
+     * @param checkPatchMacs                      see {@link #checkPatchMacs}
+     * @param syncedChats                         see {@link #syncedChats}
+     * @param syncedContacts                      see {@link #syncedContacts}
+     * @param syncedNewsletters                   see {@link #syncedNewsletters}
+     * @param syncedStatus                        see {@link #syncedStatus}
+     * @param syncedBusinessCertificate           see {@link #syncedBusinessCertificate}
+     * @param registrationId                      see {@link #registrationId}; randomised when {@code null}
+     * @param noiseKeyPair                        see {@link #noiseKeyPair}; randomised when {@code null}
+     * @param identityKeyPair                     see {@link #identityKeyPair}; randomised when {@code null}
+     * @param signedDeviceIdentity                see {@link #signedDeviceIdentity}
+     * @param signedKeyPair                       see {@link #signedKeyPair}; derived from the identity key when {@code null}
+     * @param preKeys                             see {@link #preKeys}
+     * @param fdid                                see {@link #fdid}; randomised when {@code null}
+     * @param deviceId                            see {@link #deviceId}; randomised when {@code null}
+     * @param advertisingId                       see {@link #advertisingId}; randomised when {@code null}
+     * @param identityId                          see {@link #identityId}; randomised when {@code null}
+     * @param backupToken                         see {@link #backupToken}; randomised when {@code null}
+     * @param senderKeys                          see {@link #senderKeys}
+     * @param appStateKeys                        see {@link #appStateKeys}
+     * @param sessions                            see {@link #sessions}
+     * @param hashStates                          see {@link #hashStates}
+     * @param registered                          see {@link #registered}
+     * @param showSecurityNotifications           see {@link #showSecurityNotifications}
+     * @param recentStickers                      see {@link #recentStickers}
+     * @param favouriteStickers                   see {@link #favouriteStickers}
+     * @param quickReplies                        see {@link #quickReplies}
+     * @param labels                              see {@link #labels}
+     * @param clientVersion                       see {@link #clientVersion}
+     * @param companionVersion                    see {@link #companionVersion}
+     * @param lastAdvCheckTime                    see {@link #lastAdvCheckTime}
+     * @param remoteIdentities                    see {@link #remoteIdentities}
+     * @param missingSyncKeys                     see {@link #missingSyncKeys}
+     * @param advSecretKey                        see {@link #advSecretKey}
+     * @param verifiedBusinessNames               see {@link #verifiedBusinessNames}
+     * @param directory                           see {@link #directory}
+     * @param primaryDeviceSupportsSyncdRecovery  see {@link #primaryDeviceSupportsSyncdRecovery}
+     * @param disableLinkPreviews                 see {@link #disableLinkPreviews}
+     * @param relayAllCalls                       see {@link #relayAllCalls}
+     * @param externalWebBeta                     see {@link #externalWebBeta}
+     * @param chatLockSettings                    see {@link #chatLockSettings}
+     * @param favoriteChats                       see {@link #favoriteChats}
+     * @param primaryFeatures                     see {@link #primaryFeatures}
+     * @param mentionEveryoneMuteExpirations      see {@link #mentionEveryoneMuteExpirations}
+     * @param orphanMutationEntries               see {@link #orphanMutationEntries}
+     * @param outContacts                         see {@link #outContacts}
+     * @param clockSkewSeconds                    see {@link #clockSkewSeconds}
+     * @param groupAbPropsEmergencyPushTimestamp  see {@link #groupAbPropsEmergencyPushTimestamp}
+     * @param abPropsAbKey                        see {@link #abPropsAbKey}
+     * @param abPropsHash                         see {@link #abPropsHash}
+     * @param abPropsRefresh                      see {@link #abPropsRefresh}
+     * @param abPropsLastSyncTime                 see {@link #abPropsLastSyncTime}
+     * @param abPropsRefreshId                    see {@link #abPropsRefreshId}
+     * @param abPropsWebRefreshId                 see {@link #abPropsWebRefreshId}
+     * @param groupAbPropsRefreshId               see {@link #groupAbPropsRefreshId}
+     * @param baseKeys                            see {@link #baseKeys}
+     * @param wamSequenceNumbers                  see {@link #wamSequenceNumbers}
+     * @param companionMmsAuthNonce               see {@link #companionMmsAuthNonce}
+     * @param shareableChatLinkKey                see {@link #shareableChatLinkKey}
+     * @throws NullPointerException if any of the non-nullable arguments
+     *         ({@code uuid}, {@code clientType}, {@code device},
+     *         {@code contacts}, {@code privacySettings}, {@code preKeys},
+     *         {@code senderKeys}, {@code appStateKeys}, {@code sessions},
+     *         {@code hashStates}) is {@code null}
+     */
+    public AbstractWhatsAppStore(UUID uuid, Long phoneNumber, WhatsAppClientType clientType, Instant initializationTimeStamp, WhatsAppDevice device, ClientPayload.ClientReleaseChannel releaseChannel, boolean online, String locale, String name, String verifiedName, URI profilePicture, ContactTextStatus selfTextStatus, Jid jid, Jid lid, String businessAddress, Double businessLongitude, Double businessLatitude, String businessDescription, List<URI> businessWebsites, String businessEmail, List<BusinessCategory> businessCategories, ConcurrentHashMap<Jid, Contact> contacts, ConcurrentHashMap<PrivacySettingType, PrivacySettingEntry> privacySettings, boolean unarchiveChats, boolean twentyFourHourFormat, ChatEphemeralTimer newChatsEphemeralTimer, WhatsAppWebClientHistory webHistoryPolicy, boolean checkPatchMacs, boolean syncedChats, boolean syncedContacts, boolean syncedNewsletters, boolean syncedStatus, boolean syncedBusinessCertificate, Integer registrationId, SignalIdentityKeyPair noiseKeyPair, SignalIdentityKeyPair identityKeyPair, ADVSignedDeviceIdentity signedDeviceIdentity, SignalSignedKeyPair signedKeyPair, LinkedHashMap<Integer, SignalPreKeyPair> preKeys, UUID fdid, byte[] deviceId, UUID advertisingId, byte[] identityId, byte[] backupToken, ConcurrentMap<SignalSenderKeyName, SignalSenderKeyRecord> senderKeys, LinkedHashMap<String, AppStateSyncKey> appStateKeys, ConcurrentMap<SignalProtocolAddress, SignalSessionRecord> sessions, ConcurrentMap<SyncPatchType, SyncHashValue> hashStates, boolean registered, boolean showSecurityNotifications, ConcurrentMap<String, Sticker> recentStickers, ConcurrentMap<String, Sticker> favouriteStickers, ConcurrentMap<String, QuickReply> quickReplies, ConcurrentMap<String, Label> labels, ClientAppVersion clientVersion, ClientAppVersion companionVersion, Instant lastAdvCheckTime, ConcurrentMap<SignalProtocolAddress, SignalIdentityPublicKey> remoteIdentities, ConcurrentMap<String, MissingDeviceSyncKey> missingSyncKeys, byte[] advSecretKey, ConcurrentMap<Jid, BusinessVerifiedName> verifiedBusinessNames, Path directory, boolean primaryDeviceSupportsSyncdRecovery, boolean disableLinkPreviews, boolean relayAllCalls, boolean externalWebBeta, ChatLockSettings chatLockSettings, List<Jid> favoriteChats, List<String> primaryFeatures, ConcurrentMap<Jid, ChatMute> mentionEveryoneMuteExpirations, ConcurrentMap<SyncPatchType, AbstractWhatsAppStore.OrphanMutationEntries> orphanMutationEntries, ConcurrentHashMap<Jid, OutContact> outContacts, long clockSkewSeconds, Instant groupAbPropsEmergencyPushTimestamp, String abPropsAbKey, String abPropsHash, long abPropsRefresh, Instant abPropsLastSyncTime, long abPropsRefreshId, long abPropsWebRefreshId, long groupAbPropsRefreshId, ConcurrentMap<String, byte[]> baseKeys, ConcurrentMap<Integer, Integer> wamSequenceNumbers, String companionMmsAuthNonce, byte[] shareableChatLinkKey, Boolean startAtLogin, Boolean minimizeToTray, Boolean replaceTextWithEmoji, SettingsSyncAction.DisplayMode bannerNotificationDisplayMode, SettingsSyncAction.DisplayMode unreadCounterBadgeDisplayMode, Boolean messagesNotificationEnabled, Boolean callsNotificationEnabled, Boolean reactionsNotificationEnabled, Boolean statusReactionsNotificationEnabled, Boolean textPreviewForNotificationEnabled, Integer defaultNotificationToneId, Integer groupDefaultNotificationToneId, AppTheme appTheme, Integer wallpaperId, Boolean doodleWallpaperEnabled, Integer fontSize, Boolean photosAutodownloadEnabled, Boolean audiosAutodownloadEnabled, Boolean videosAutodownloadEnabled, Boolean documentsAutodownloadEnabled, Integer notificationToneId, SettingsSyncAction.MediaQualitySetting mediaUploadQuality, Boolean spellCheckEnabled, Boolean enterToSendEnabled, Boolean groupMessageNotificationEnabled, Boolean groupReactionsNotificationEnabled, Boolean statusNotificationEnabled, Integer statusNotificationToneId, Boolean playSoundForCallNotification) {
         this.uuid = Objects.requireNonNull(uuid, "uuid cannot be null");
         this.phoneNumber = phoneNumber;
         this.clientType = Objects.requireNonNull(clientType, "clientType cannot be null");
@@ -626,8 +2081,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.initializationTimeStamp = requireNonNullElseGet(initializationTimeStamp, Instant::now);
         this.newChatsEphemeralTimer = Objects.requireNonNullElse(newChatsEphemeralTimer, ChatEphemeralTimer.OFF);
         this.webHistoryPolicy = webHistoryPolicy;
-        this.automaticPresenceUpdates = automaticPresenceUpdates;
-        this.automaticMessageReceipts = automaticMessageReceipts;
         this.releaseChannel = Objects.requireNonNullElse(releaseChannel, ClientReleaseChannel.RELEASE);
         this.device = Objects.requireNonNull(device, "device cannot be null");
         this.checkPatchMacs = checkPatchMacs;
@@ -678,6 +2131,10 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.interopHostedVerificationCache = ConcurrentHashMap.newKeySet();
         this.utmReadChatIds = ConcurrentHashMap.newKeySet();
         this.blockedContacts = ConcurrentHashMap.newKeySet();
+        this.optOutListHashes = new ConcurrentHashMap<>();
+        this.optOutListEntries = new ConcurrentHashMap<>();
+        this.contactBlacklistHashes = new ConcurrentHashMap<>();
+        this.contactBlacklistEntries = new ConcurrentHashMap<>();
         this.pendingDeviceSyncs = new ConcurrentLinkedQueue<>();
         this.groupSenderKeyDistribution = new ConcurrentHashMap<>();
         this.orphanPaymentNotifications = new ConcurrentHashMap<>();
@@ -721,15 +2178,57 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         this.identityEncryptionRange = new ConcurrentHashMap<>();
         this.baseKeys = requireNonNullElseGet(baseKeys, ConcurrentHashMap::new);
         this.wamSequenceNumbers = requireNonNullElseGet(wamSequenceNumbers, ConcurrentHashMap::new);
+        this.companionMmsAuthNonce = companionMmsAuthNonce;
+        this.shareableChatLinkKey = shareableChatLinkKey;
+        this.startAtLogin = startAtLogin;
+        this.minimizeToTray = minimizeToTray;
+        this.replaceTextWithEmoji = replaceTextWithEmoji;
+        this.bannerNotificationDisplayMode = bannerNotificationDisplayMode;
+        this.unreadCounterBadgeDisplayMode = unreadCounterBadgeDisplayMode;
+        this.messagesNotificationEnabled = messagesNotificationEnabled;
+        this.callsNotificationEnabled = callsNotificationEnabled;
+        this.reactionsNotificationEnabled = reactionsNotificationEnabled;
+        this.statusReactionsNotificationEnabled = statusReactionsNotificationEnabled;
+        this.textPreviewForNotificationEnabled = textPreviewForNotificationEnabled;
+        this.defaultNotificationToneId = defaultNotificationToneId;
+        this.groupDefaultNotificationToneId = groupDefaultNotificationToneId;
+        this.appTheme = appTheme;
+        this.wallpaperId = wallpaperId;
+        this.doodleWallpaperEnabled = doodleWallpaperEnabled;
+        this.fontSize = fontSize;
+        this.photosAutodownloadEnabled = photosAutodownloadEnabled;
+        this.audiosAutodownloadEnabled = audiosAutodownloadEnabled;
+        this.videosAutodownloadEnabled = videosAutodownloadEnabled;
+        this.documentsAutodownloadEnabled = documentsAutodownloadEnabled;
+        this.notificationToneId = notificationToneId;
+        this.mediaUploadQuality = mediaUploadQuality;
+        this.spellCheckEnabled = spellCheckEnabled;
+        this.enterToSendEnabled = enterToSendEnabled;
+        this.groupMessageNotificationEnabled = groupMessageNotificationEnabled;
+        this.groupReactionsNotificationEnabled = groupReactionsNotificationEnabled;
+        this.statusNotificationEnabled = statusNotificationEnabled;
+        this.statusNotificationToneId = statusNotificationToneId;
+        this.playSoundForCallNotification = playSoundForCallNotification;
         this.encryptionSequence = new AtomicLong();
         this.logger = System.getLogger(this.getClass().getName());
-        this.mediaConnectionLock = new Object();
         this.offlineResumeState = WhatsAppClientOfflineResumeState.INIT;
         this.offlineDeliveryLatch = new CountDownLatch(1);
         this.usersNeedingSenderKeyRotation = ConcurrentHashMap.newKeySet();
         this.peerMessages = new ConcurrentHashMap<>();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation short-circuits to the {@link Contact} case when the
+     * supplied {@link JidProvider} is itself a {@link Contact}, then routes the
+     * lookup by JID server. For phone-server JIDs (regular and bot user JIDs)
+     * the direct lookup is tried first, then a fallback through
+     * {@link #findLidByPhone}; for LID-server JIDs the symmetric fallback runs
+     * through {@link #findPhoneByLid}; for any other server type only the direct
+     * lookup is attempted.
+     */
     @Override
     public Optional<Contact> findContactByJid(JidProvider jid) {
         return switch (jid) {
@@ -788,6 +2287,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return contact;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation normalises the supplied JID through
+     * {@link Jid#toUserJid()} and then mirrors the LID/phone fallback chain of
+     * {@link #findContactByJid} so a status cached under one identity surfaces
+     * when queried by the paired identity.
+     */
     @Override
     public Optional<ContactTextStatus> findContactTextStatus(JidProvider jid) {
         if (jid == null) {
@@ -821,6 +2329,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         contactTextStatuses.put(contactJid.toUserJid(), status);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation tries the direct removal first and, if that misses,
+     * mirrors the LID/phone fallback chain of {@link #findContactTextStatus} so
+     * a status cached under one identity is removed when called by the paired
+     * identity.
+     */
     @Override
     public Optional<ContactTextStatus> removeContactTextStatus(JidProvider jid) {
         if (jid == null) {
@@ -931,6 +2448,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return Collections.unmodifiableSet(tosNoticeIds);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation copies the supplied set into a fresh
+     * {@link ConcurrentHashMap#newKeySet} so subsequent caller mutations cannot
+     * leak into the stored backing set; a {@code null} argument is treated as
+     * "clear".
+     */
     @Override
     public WhatsAppStore setTosNoticeIds(Set<String> noticeIds) {
         this.tosNoticeIds = noticeIds == null ? ConcurrentHashMap.newKeySet() : ConcurrentHashMap.newKeySet(noticeIds.size());
@@ -1131,6 +2657,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return this;
     }
 
+    /**
+     * Exposes the live {@link #outContacts} map to concrete subclasses that need
+     * mutable access during persistence.
+     *
+     * @apiNote
+     * Returns the backing map rather than a copy so subclasses persisting
+     * incremental updates do not have to round-trip through
+     * {@link #outContacts()} which returns an unmodifiable view.
+     *
+     * @return the live backing map for {@link #outContacts}
+     */
     protected ConcurrentHashMap<Jid, OutContact> outContactsField() {
         return outContacts;
     }
@@ -1148,6 +2685,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return Optional.ofNullable(outContacts.get(jid));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation merges into any existing {@link OutContact} for the
+     * same JID rather than overwriting it: only {@code fullName} and
+     * {@code firstName} are taken from the incoming entry, preserving any
+     * additional state the existing record accumulated.
+     */
     @Override
     public WhatsAppStore addOutContact(OutContact outContact) {
         Objects.requireNonNull(outContact, "outContact cannot be null");
@@ -1173,6 +2719,14 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return this;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation mirrors the LID/phone fallback chain of
+     * {@link #findContactByJid} so that a contact stored under one identity is
+     * removed when called by the paired identity.
+     */
     @Override
     public Optional<Contact> removeContact(JidProvider contactJid) {
         if(contactJid == null) {
@@ -1207,6 +2761,16 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         registerLidMapping(phoneJid, lidJid, null);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation normalises both JIDs through {@link Jid#withoutData()}
+     * before indexing so that mappings stay stable across device-suffix changes.
+     * When a non-null timestamp is supplied it is compared against
+     * {@link #lidMappingTimestamps}, and a strictly older value is dropped so
+     * out-of-order delivery of mapping events cannot rewrite a fresher binding.
+     */
     @Override
     public void registerLidMapping(Jid phoneJid, Jid lidJid, Instant timestamp) {
         if (phoneJid == null || lidJid == null) {
@@ -1225,6 +2789,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         phoneToLidMappings.put(normalizedPhone, normalizedLid);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation short-circuits when the supplied LID belongs to the
+     * local account and otherwise consults {@link #lidToPhoneMappings} first.
+     * On a miss it falls back to scanning {@link #contacts} for any entry whose
+     * {@link Contact#lid()} matches because tests and partial-state stores may
+     * have populated only the contact-side LID without registering an entry in
+     * the mapping table.
+     */
     @Override
     public Optional<Jid> findPhoneByLid(Jid lidJid) {
         if (lidJid == null) {
@@ -1235,23 +2810,52 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
             return Optional.ofNullable(jid)
                     .map(pn -> pn.withDevice(lidJid.device()));
         }
-        return Optional.ofNullable(lidToPhoneMappings.get(lidJid.withoutData()));
+        var mapped = lidToPhoneMappings.get(lidJid.withoutData());
+        if (mapped != null) {
+            return Optional.of(mapped);
+        }
+        return contacts.values()
+                .stream()
+                .filter(contact -> contact.lid().filter(lidJid::equals).isPresent())
+                .findFirst()
+                .map(Contact::jid);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation short-circuits when the supplied JID already targets
+     * the LID server or belongs to the local account, then consults
+     * {@link #phoneToLidMappings}. On a miss it reads {@link Contact#lid()}
+     * straight from the {@link #contacts} map for the same dual-source reason as
+     * {@link #findPhoneByLid}; the lookup deliberately bypasses
+     * {@link #findContactByJid} because that method calls back into this one
+     * for cross-LID resolution and would recurse forever.
+     */
     @Override
     public Optional<Jid> findLidByPhone(Jid phoneJid) {
         if (phoneJid == null) {
             return Optional.empty();
-        } else {
-            var localJid = jid;
-            if(localJid != null && Objects.equals(phoneJid.user(), localJid.user())) {
-                return Optional.ofNullable(lid)
-                        .map(lid -> lid.withDevice(phoneJid.device()));
-            } else {
-                var result = phoneToLidMappings.get(phoneJid.withoutData());
-                return Optional.ofNullable(result);
-            }
         }
+        if (phoneJid.hasLidServer()) {
+            return Optional.of(phoneJid);
+        }
+        var localJid = jid;
+        if (localJid != null && Objects.equals(phoneJid.user(), localJid.user())) {
+            return Optional.ofNullable(lid)
+                    .map(lid -> lid.withDevice(phoneJid.device()));
+        }
+        var normalisedPhone = phoneJid.withoutData();
+        var mapped = phoneToLidMappings.get(normalisedPhone);
+        if (mapped != null) {
+            return Optional.of(mapped);
+        }
+        var contact = contacts.get(normalisedPhone);
+        if (contact != null) {
+            return contact.lid();
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -1351,6 +2955,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return this;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation substitutes {@link #DEFAULT_NAME} when the underlying
+     * {@link #name} field is {@code null} so that callers never have to guard
+     * against a missing display name; mutating {@link #name} via
+     * {@link #setName} swaps it back in.
+     */
     @Override
     public String name() {
         return Objects.requireNonNullElse(name, DEFAULT_NAME);
@@ -1554,28 +3167,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public boolean automaticPresenceUpdates() {
-        return automaticPresenceUpdates;
-    }
-
-    @Override
-    public WhatsAppStore setAutomaticPresenceUpdates(boolean automaticPresenceUpdates) {
-        this.automaticPresenceUpdates = automaticPresenceUpdates;
-        return this;
-    }
-
-    @Override
-    public boolean automaticMessageReceipts() {
-        return automaticMessageReceipts;
-    }
-
-    @Override
-    public WhatsAppStore setAutomaticMessageReceipts(boolean automaticMessageReceipts) {
-        this.automaticMessageReceipts = automaticMessageReceipts;
-        return this;
-    }
-
-    @Override
     public boolean checkPatchMacs() {
         return checkPatchMacs;
     }
@@ -1669,43 +3260,44 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public MediaConnection awaitMediaConnection() throws InterruptedException {
-        if(mediaConnection == null) {
-            synchronized (mediaConnectionLock) {
-                if(mediaConnection == null) {
-                    mediaConnectionLock.wait();
-                }
-            }
-        }
-        return mediaConnection;
-    }
-
-    @Override
-    public WhatsAppStore setMediaConnection(MediaConnection mediaConnection) {
-        this.mediaConnection = mediaConnection;
-        synchronized (mediaConnectionLock) {
-            this.mediaConnectionLock.notifyAll();
-        }
-        return this;
-    }
-
-    @Override
     public WhatsAppClientOfflineResumeState offlineResumeState() {
         return offlineResumeState;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation drives the {@link #offlineDeliveryLatch} alongside the
+     * state field so that {@link #waitForOfflineDeliveryEnd} unblocks as soon as
+     * the offline resume completes. A transition into
+     * {@link WhatsAppClientOfflineResumeState#COMPLETE} counts the latch down;
+     * a transition into {@link WhatsAppClientOfflineResumeState#INIT} replaces
+     * the latch with a fresh one so a subsequent reconnect can wait again on
+     * the same store instance.
+     */
     @Override
     public WhatsAppStore setOfflineResumeState(WhatsAppClientOfflineResumeState state) {
         this.offlineResumeState = Objects.requireNonNull(state, "state cannot be null");
         if (state == WhatsAppClientOfflineResumeState.COMPLETE) {
             offlineDeliveryLatch.countDown();
         } else if (state == WhatsAppClientOfflineResumeState.INIT) {
-            // Reset latch on reconnect
             offlineDeliveryLatch = new CountDownLatch(1);
         }
         return this;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation caps the wait at five minutes and swallows
+     * {@link InterruptedException} after restoring the interrupt flag, so
+     * callers can treat the method as a best-effort barrier rather than a
+     * blocking dependency. When {@link #offlineResumeState} already reports
+     * {@link WhatsAppClientOfflineResumeState#COMPLETE} the call returns
+     * immediately without touching {@link #offlineDeliveryLatch}.
+     */
     @Override
     public void waitForOfflineDeliveryEnd() {
         if (offlineResumeState == WhatsAppClientOfflineResumeState.COMPLETE) {
@@ -1801,6 +3393,20 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return !preKeys.isEmpty();
     }
 
+    /**
+     * Looks up a one-time {@link SignalPreKeyPair} by its numeric id.
+     *
+     * @apiNote
+     * Drives the recipient-side of the Signal X3DH handshake; when a peer
+     * sends a {@code PreKeyWhisperMessage} citing a particular pre-key id,
+     * the session builder calls this method to locate the matching private
+     * key in {@link #preKeys}. Returns {@link Optional#empty()} for an
+     * unknown id or a {@code null} argument so callers can fail soft when
+     * the peer references a key that has already been rotated out.
+     *
+     * @param id the pre-key id, or {@code null}
+     * @return the matching pre-key pair, or {@link Optional#empty()} when no entry matches
+     */
     public Optional<SignalPreKeyPair> findPreKeyById(Integer id) {
         return id == null ? Optional.empty() : Optional.ofNullable(preKeys.get(id));
     }
@@ -1816,11 +3422,33 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return preKeys.remove(id) != null;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation stores a single {@link #signedKeyPair} and matches
+     * solely against its {@link SignalSignedKeyPair#id()}; any other id
+     * yields {@link Optional#empty()}. Rotation is performed by replacing the
+     * field via the dedicated setter, not by accumulating signed pre-keys.
+     */
     @Override
     public Optional<SignalSignedKeyPair> findSignedPreKeyById(Integer id) {
         return id == signedKeyPair.id() ? Optional.of(signedKeyPair) : Optional.empty();
     }
 
+    /**
+     * Always throws {@link UnsupportedOperationException}.
+     *
+     * @apiNote
+     * The signed pre-key is a singleton in this store; new signed pre-keys
+     * are installed by replacing {@link #signedKeyPair} via its setter, not
+     * by appending. The {@link com.github.auties00.libsignal.SignalProtocolStore}
+     * contract that accepts arbitrary signed pre-keys is therefore not
+     * supported here, and any call is a programmer error.
+     *
+     * @param signalSignedKeyPair ignored
+     * @throws UnsupportedOperationException always
+     */
     @Override
     public void addSignedPreKey(SignalSignedKeyPair signalSignedKeyPair) {
         throw new UnsupportedOperationException("Cannot add signed pre keys to a Keys instance");
@@ -1872,6 +3500,22 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         removeSenderKeys(deviceJid);
     }
 
+    /**
+     * Composes the {@link #baseKeys} map key from a Signal address and the
+     * upstream message id.
+     *
+     * @apiNote
+     * Centralises the key shape so that {@link #saveSessionBaseKey},
+     * {@link #findSessionBaseKey}, {@link #hasSameBaseKey}, and
+     * {@link #removeSessionBaseKey} always hash on the same string. The
+     * pipe character is used as a separator because neither
+     * {@link SignalProtocolAddress#toString()} nor a Signal message id can
+     * contain it, which keeps the encoding unambiguous and reversible.
+     *
+     * @param address the Signal protocol address that owns the base key
+     * @param originalMsgId the upstream message id that introduced the base key
+     * @return the composite map key
+     */
     private static String encodeBaseKeyKey(SignalProtocolAddress address, String originalMsgId) {
         return address.toString() + "|" + originalMsgId;
     }
@@ -2615,6 +4259,16 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return List.copyOf(quickReplies.values());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation lazily resolves the version from
+     * {@link WhatsAppClientInfo} under a double-checked lock on
+     * {@link #clientVersionLock} so the version probe runs at most once per
+     * store, and only when actually required, even though the field is
+     * observed by many call sites.
+     */
     @Override
     public ClientAppVersion clientVersion() {
         if(clientVersion == null) {
@@ -2662,6 +4316,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         chatMetadata.remove(groupJid);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation only applies the local-only sync fields exposed by
+     * {@link GroupMetadataEdit}; subject, description, picture, and the
+     * server-controlled settings toggles are authoritative on the server and
+     * round-trip through a dedicated notification, so applying them here
+     * would risk overwriting fresher state. Returns {@link Optional#empty()}
+     * when no group is cached for {@code groupJid}.
+     */
     @Override
     public Optional<GroupMetadata> applyGroupMetadataEdit(Jid groupJid, GroupMetadataEdit edit) {
         Objects.requireNonNull(groupJid, "groupJid cannot be null");
@@ -2670,8 +4335,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         if (!(existing instanceof GroupMetadata group)) {
             return Optional.empty();
         }
-        // Only the local-only sync fields are merged here; subject / description / picture /
-        // settings toggles are server-authoritative and round-trip through a notification.
         edit.statusMuted().ifPresent(group::setStatusMuted);
         return Optional.of(group);
     }
@@ -2695,6 +4358,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         verifiedBusinessNames.remove(jid.toUserJid());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation falls back to the paired phone/LID identity when
+     * the direct lookup misses, mirroring the dual-key fallback in
+     * {@link #findContactByJid}, because the device-list cache may have been
+     * populated under either identity for the same user. Only phone-server
+     * and LID-server JIDs trigger the alternate lookup; other JID shapes
+     * return {@link Optional#empty()} immediately on a direct miss.
+     */
     @Override
     public Optional<DeviceList> findDeviceList(Jid userJid) {
         Objects.requireNonNull(userJid, "userJid cannot be null");
@@ -2726,18 +4400,27 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return List.copyOf(deviceLists.sequencedValues());
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation enforces an LRU-style cap of {@link #MAX_DEVICE_LISTS}
+     * entries: when the cache is full and the {@code userJid} is not already
+     * present, the eldest entry is evicted via
+     * {@link ConcurrentLinkedHashMap#pollLastEntry()} before the new mapping
+     * is inserted. Repeated puts for an existing JID overwrite without
+     * touching the cap.
+     */
     @Override
     public void addDeviceList(DeviceList deviceList) {
         Objects.requireNonNull(deviceList, "deviceList cannot be null");
 
         var userJid = deviceList.userJid();
 
-        // Evict oldest entry if cache is full
         if (deviceLists.size() >= MAX_DEVICE_LISTS && !deviceLists.containsKey(userJid)) {
             deviceLists.pollLastEntry();
         }
 
-        // Update or add entry
         deviceLists.put(userJid, deviceList);
     }
 
@@ -2881,40 +4564,118 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
-    public Optional<Jid> getPhoneNumberByLid(Jid lidJid) {
-        if (lidJid == null || !lidJid.hasLidServer()) {
-            return Optional.empty();
-        }
-        // Try to find phone number from contact with matching LID
-        return contacts.values().stream()
-                .filter(contact -> contact.lid().map(lid -> lid.equals(lidJid)).orElse(false))
-                .findFirst()
-                .map(Contact::jid);
+    public Optional<String> blocklistHash() {
+        return Optional.ofNullable(blocklistHash);
     }
 
     @Override
-    public Optional<Jid> getLidByPhoneNumber(Jid phoneNumberJid) {
-        if (phoneNumberJid == null) {
-            return Optional.empty();
+    public WhatsAppStore setBlocklistHash(String blocklistHash) {
+        this.blocklistHash = blocklistHash;
+        return this;
+    }
+
+    @Override
+    public boolean blocklistMigrated() {
+        return blocklistMigrated;
+    }
+
+    @Override
+    public WhatsAppStore setBlocklistMigrated(boolean blocklistMigrated) {
+        this.blocklistMigrated = blocklistMigrated;
+        return this;
+    }
+
+    @Override
+    public boolean receivedBlocklistMigrationBefore1x1Migration() {
+        return receivedBlocklistMigrationBefore1x1Migration;
+    }
+
+    @Override
+    public WhatsAppStore setReceivedBlocklistMigrationBefore1x1Migration(boolean value) {
+        this.receivedBlocklistMigrationBefore1x1Migration = value;
+        return this;
+    }
+
+    @Override
+    public Optional<String> optOutListHash(String category) {
+        return Optional.ofNullable(optOutListHashes.get(Objects.requireNonNull(category, "category cannot be null")));
+    }
+
+    @Override
+    public List<OptOutEntry> optOutListEntries(String category) {
+        var entries = optOutListEntries.get(Objects.requireNonNull(category, "category cannot be null"));
+        return entries == null ? List.of() : entries;
+    }
+
+    @Override
+    public WhatsAppStore setOptOutList(String category, String hash, List<OptOutEntry> entries) {
+        Objects.requireNonNull(category, "category cannot be null");
+        Objects.requireNonNull(entries, "entries cannot be null");
+        if (hash == null) {
+            optOutListHashes.remove(category);
+        } else {
+            optOutListHashes.put(category, hash);
         }
-        // Check if already a LID
-        if (phoneNumberJid.hasLidServer()) {
-            return Optional.of(phoneNumberJid);
+        optOutListEntries.put(category, List.copyOf(entries));
+        return this;
+    }
+
+    @Override
+    public Optional<String> contactBlacklistHash(String category) {
+        return Optional.ofNullable(contactBlacklistHashes.get(Objects.requireNonNull(category, "category cannot be null")));
+    }
+
+    @Override
+    public List<Jid> contactBlacklistEntries(String category) {
+        var entries = contactBlacklistEntries.get(Objects.requireNonNull(category, "category cannot be null"));
+        return entries == null ? List.of() : entries;
+    }
+
+    @Override
+    public WhatsAppStore setContactBlacklist(String category, String hash, List<Jid> entries) {
+        Objects.requireNonNull(category, "category cannot be null");
+        Objects.requireNonNull(entries, "entries cannot be null");
+        if (hash == null) {
+            contactBlacklistHashes.remove(category);
+        } else {
+            contactBlacklistHashes.put(category, hash);
         }
-        // Try to find LID from contact
-        var contact = findContactByJid(phoneNumberJid).orElse(null);
-        if (contact != null) {
-            var contactLid = contact.lid();
-            if (contactLid.isPresent()) {
-                return contactLid;
-            }
-        }
-        // Try to find LID from chat
-        var chat = findChatByJid(phoneNumberJid).orElse(null);
-        if (chat != null) {
-            return chat.accountLid();
-        }
-        return Optional.empty();
+        contactBlacklistEntries.put(category, List.copyOf(entries));
+        return this;
+    }
+
+    @Override
+    public Optional<StatusPrivacySetting> statusPrivacy() {
+        return Optional.ofNullable(statusPrivacy);
+    }
+
+    @Override
+    public WhatsAppStore setStatusPrivacy(StatusPrivacySetting statusPrivacy) {
+        this.statusPrivacy = statusPrivacy;
+        return this;
+    }
+
+    @Override
+    public Optional<AccountDisappearingMode> disappearingMode() {
+        return Optional.ofNullable(disappearingMode);
+    }
+
+    @Override
+    public WhatsAppStore setDisappearingMode(AccountDisappearingMode disappearingMode) {
+        this.disappearingMode = disappearingMode;
+        return this;
+    }
+
+    @Override
+    public List<Jid> linkedDevices() {
+        var current = linkedDevices;
+        return current == null ? List.of() : current;
+    }
+
+    @Override
+    public WhatsAppStore setLinkedDevices(Collection<Jid> linkedDevices) {
+        this.linkedDevices = linkedDevices == null ? null : List.copyOf(linkedDevices);
+        return this;
     }
 
     @Override
@@ -3295,6 +5056,347 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     @Override
+    public Optional<String> companionMmsAuthNonce() {
+        return Optional.ofNullable(companionMmsAuthNonce);
+    }
+
+    @Override
+    public WhatsAppStore setCompanionMmsAuthNonce(String nonce) {
+        this.companionMmsAuthNonce = nonce;
+        return this;
+    }
+
+    @Override
+    public Optional<byte[]> shareableChatLinkKey() {
+        return Optional.ofNullable(shareableChatLinkKey);
+    }
+
+    @Override
+    public WhatsAppStore setShareableChatLinkKey(byte[] key) {
+        this.shareableChatLinkKey = key;
+        return this;
+    }
+
+    @Override
+    public boolean startAtLogin() {
+        return startAtLogin != null && startAtLogin;
+    }
+
+    @Override
+    public WhatsAppStore setStartAtLogin(boolean startAtLogin) {
+        this.startAtLogin = startAtLogin;
+        return this;
+    }
+
+    @Override
+    public boolean minimizeToTray() {
+        return minimizeToTray != null && minimizeToTray;
+    }
+
+    @Override
+    public WhatsAppStore setMinimizeToTray(boolean minimizeToTray) {
+        this.minimizeToTray = minimizeToTray;
+        return this;
+    }
+
+    @Override
+    public boolean replaceTextWithEmoji() {
+        return replaceTextWithEmoji != null && replaceTextWithEmoji;
+    }
+
+    @Override
+    public WhatsAppStore setReplaceTextWithEmoji(boolean replaceTextWithEmoji) {
+        this.replaceTextWithEmoji = replaceTextWithEmoji;
+        return this;
+    }
+
+    @Override
+    public Optional<SettingsSyncAction.DisplayMode> bannerNotificationDisplayMode() {
+        return Optional.ofNullable(bannerNotificationDisplayMode);
+    }
+
+    @Override
+    public WhatsAppStore setBannerNotificationDisplayMode(SettingsSyncAction.DisplayMode mode) {
+        this.bannerNotificationDisplayMode = mode;
+        return this;
+    }
+
+    @Override
+    public Optional<SettingsSyncAction.DisplayMode> unreadCounterBadgeDisplayMode() {
+        return Optional.ofNullable(unreadCounterBadgeDisplayMode);
+    }
+
+    @Override
+    public WhatsAppStore setUnreadCounterBadgeDisplayMode(SettingsSyncAction.DisplayMode mode) {
+        this.unreadCounterBadgeDisplayMode = mode;
+        return this;
+    }
+
+    @Override
+    public boolean messagesNotificationEnabled() {
+        return messagesNotificationEnabled != null && messagesNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setMessagesNotificationEnabled(boolean enabled) {
+        this.messagesNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean callsNotificationEnabled() {
+        return callsNotificationEnabled != null && callsNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setCallsNotificationEnabled(boolean enabled) {
+        this.callsNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean reactionsNotificationEnabled() {
+        return reactionsNotificationEnabled != null && reactionsNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setReactionsNotificationEnabled(boolean enabled) {
+        this.reactionsNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean statusReactionsNotificationEnabled() {
+        return statusReactionsNotificationEnabled != null && statusReactionsNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setStatusReactionsNotificationEnabled(boolean enabled) {
+        this.statusReactionsNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean textPreviewForNotificationEnabled() {
+        return textPreviewForNotificationEnabled != null && textPreviewForNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setTextPreviewForNotificationEnabled(boolean enabled) {
+        this.textPreviewForNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public OptionalInt defaultNotificationToneId() {
+        return defaultNotificationToneId == null ? OptionalInt.empty() : OptionalInt.of(defaultNotificationToneId);
+    }
+
+    @Override
+    public WhatsAppStore setDefaultNotificationToneId(Integer toneId) {
+        this.defaultNotificationToneId = toneId;
+        return this;
+    }
+
+    @Override
+    public OptionalInt groupDefaultNotificationToneId() {
+        return groupDefaultNotificationToneId == null ? OptionalInt.empty() : OptionalInt.of(groupDefaultNotificationToneId);
+    }
+
+    @Override
+    public WhatsAppStore setGroupDefaultNotificationToneId(Integer toneId) {
+        this.groupDefaultNotificationToneId = toneId;
+        return this;
+    }
+
+    @Override
+    public Optional<AppTheme> appTheme() {
+        return Optional.ofNullable(appTheme);
+    }
+
+    @Override
+    public WhatsAppStore setAppTheme(AppTheme appTheme) {
+        this.appTheme = appTheme;
+        return this;
+    }
+
+    @Override
+    public OptionalInt wallpaperId() {
+        return wallpaperId == null ? OptionalInt.empty() : OptionalInt.of(wallpaperId);
+    }
+
+    @Override
+    public WhatsAppStore setWallpaperId(Integer wallpaperId) {
+        this.wallpaperId = wallpaperId;
+        return this;
+    }
+
+    @Override
+    public boolean doodleWallpaperEnabled() {
+        return doodleWallpaperEnabled != null && doodleWallpaperEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setDoodleWallpaperEnabled(boolean enabled) {
+        this.doodleWallpaperEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public OptionalInt fontSize() {
+        return fontSize == null ? OptionalInt.empty() : OptionalInt.of(fontSize);
+    }
+
+    @Override
+    public WhatsAppStore setFontSize(Integer fontSize) {
+        this.fontSize = fontSize;
+        return this;
+    }
+
+    @Override
+    public boolean photosAutodownloadEnabled() {
+        return photosAutodownloadEnabled != null && photosAutodownloadEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setPhotosAutodownloadEnabled(boolean enabled) {
+        this.photosAutodownloadEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean audiosAutodownloadEnabled() {
+        return audiosAutodownloadEnabled != null && audiosAutodownloadEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setAudiosAutodownloadEnabled(boolean enabled) {
+        this.audiosAutodownloadEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean videosAutodownloadEnabled() {
+        return videosAutodownloadEnabled != null && videosAutodownloadEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setVideosAutodownloadEnabled(boolean enabled) {
+        this.videosAutodownloadEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean documentsAutodownloadEnabled() {
+        return documentsAutodownloadEnabled != null && documentsAutodownloadEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setDocumentsAutodownloadEnabled(boolean enabled) {
+        this.documentsAutodownloadEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public OptionalInt notificationToneId() {
+        return notificationToneId == null ? OptionalInt.empty() : OptionalInt.of(notificationToneId);
+    }
+
+    @Override
+    public WhatsAppStore setNotificationToneId(Integer toneId) {
+        this.notificationToneId = toneId;
+        return this;
+    }
+
+    @Override
+    public Optional<SettingsSyncAction.MediaQualitySetting> mediaUploadQuality() {
+        return Optional.ofNullable(mediaUploadQuality);
+    }
+
+    @Override
+    public WhatsAppStore setMediaUploadQuality(SettingsSyncAction.MediaQualitySetting quality) {
+        this.mediaUploadQuality = quality;
+        return this;
+    }
+
+    @Override
+    public boolean spellCheckEnabled() {
+        return spellCheckEnabled != null && spellCheckEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setSpellCheckEnabled(boolean enabled) {
+        this.spellCheckEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean enterToSendEnabled() {
+        return enterToSendEnabled != null && enterToSendEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setEnterToSendEnabled(boolean enabled) {
+        this.enterToSendEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean groupMessageNotificationEnabled() {
+        return groupMessageNotificationEnabled != null && groupMessageNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setGroupMessageNotificationEnabled(boolean enabled) {
+        this.groupMessageNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean groupReactionsNotificationEnabled() {
+        return groupReactionsNotificationEnabled != null && groupReactionsNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setGroupReactionsNotificationEnabled(boolean enabled) {
+        this.groupReactionsNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public boolean statusNotificationEnabled() {
+        return statusNotificationEnabled != null && statusNotificationEnabled;
+    }
+
+    @Override
+    public WhatsAppStore setStatusNotificationEnabled(boolean enabled) {
+        this.statusNotificationEnabled = enabled;
+        return this;
+    }
+
+    @Override
+    public OptionalInt statusNotificationToneId() {
+        return statusNotificationToneId == null ? OptionalInt.empty() : OptionalInt.of(statusNotificationToneId);
+    }
+
+    @Override
+    public WhatsAppStore setStatusNotificationToneId(Integer toneId) {
+        this.statusNotificationToneId = toneId;
+        return this;
+    }
+
+    @Override
+    public boolean playSoundForCallNotification() {
+        return playSoundForCallNotification != null && playSoundForCallNotification;
+    }
+
+    @Override
+    public WhatsAppStore setPlaySoundForCallNotification(boolean enabled) {
+        this.playSoundForCallNotification = enabled;
+        return this;
+    }
+
+    @Override
     public Collection<OnboardingHintState> onboardingHintStates() {
         return Collections.unmodifiableCollection(onboardingHintStates.values());
     }
@@ -3589,6 +5691,18 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return this;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation enumerates the session directory, retains every
+     * file whose name matches {@code WAM_BUFFER_PREFIX + key + WAM_BUFFER_SUFFIX},
+     * and strips the prefix and suffix to recover the bare save key.
+     * Returns an empty list when {@link #directory} is unset, when the
+     * session directory cannot be resolved, or when listing the directory
+     * fails; both failure modes log at {@link System.Logger.Level#WARNING}
+     * rather than propagating because the WAM pipeline is best-effort.
+     */
     @Override
     public Collection<String> wamPendingBufferKeys() {
         if (directory == null) {
@@ -3616,6 +5730,18 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation writes to a sibling temp file and atomically
+     * renames it over the target on close via {@link AtomicMoveOutputStream},
+     * so a crash mid-write never leaves a partially-flushed WAM buffer
+     * visible. When {@link #directory} is unset the call returns
+     * {@link OutputStream#nullOutputStream()} so a session running without
+     * disk persistence can still go through the same code path without
+     * special-casing.
+     */
     @Override
     public OutputStream openWamPendingBufferWriter(String saveKey) throws IOException {
         Objects.requireNonNull(saveKey, "saveKey cannot be null");
@@ -3629,6 +5755,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return new AtomicMoveOutputStream(Files.newOutputStream(temp), temp, target);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation returns {@link Optional#empty()} when persistence
+     * is disabled ({@link #directory} is {@code null}) or when no buffer
+     * file exists for the supplied key, so callers can use the {@code Optional}
+     * shape to skip the upload without distinguishing the two cases.
+     */
     @Override
     public Optional<InputStream> openWamPendingBufferReader(String saveKey) throws IOException {
         Objects.requireNonNull(saveKey, "saveKey cannot be null");
@@ -3643,6 +5778,15 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return Optional.of(Files.newInputStream(path));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation delegates to
+     * {@link Files#deleteIfExists(Path)} so a concurrent caller that already
+     * removed the buffer reports as {@code false} rather than throwing.
+     * Returns {@code false} immediately when {@link #directory} is unset.
+     */
     @Override
     public boolean removeWamPendingBuffer(String saveKey) throws IOException {
         Objects.requireNonNull(saveKey, "saveKey cannot be null");
@@ -3653,6 +5797,17 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return Files.deleteIfExists(wamBufferPath(saveKey));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation walks the session directory once and deletes
+     * every file whose name carries the WAM buffer prefix/suffix pair,
+     * matching the inverse of the enumeration in
+     * {@link #wamPendingBufferKeys()}. When {@link #directory} is unset or
+     * the session directory does not exist the call is a no-op so a session
+     * that never persisted any buffer can still call this safely.
+     */
     @Override
     public WhatsAppStore clearWamPendingBuffers() throws IOException {
         if (directory == null) {
@@ -3687,12 +5842,40 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
         return this;
     }
 
+    /**
+     * Resolves the on-disk path of the WAM buffer file for {@code saveKey}.
+     *
+     * @apiNote
+     * Centralises the file-name shape ({@code WAM_BUFFER_PREFIX + key + WAM_BUFFER_SUFFIX})
+     * so the reader, writer, deleter, and enumerator all agree on where the
+     * buffer lives. Callers must validate the key via {@link #validateSaveKey}
+     * before invoking this helper because the path is composed by direct
+     * string concatenation without further sanitisation.
+     *
+     * @param saveKey the bare save key, already validated
+     * @return the path of the file that backs the buffer
+     * @throws IOException if the session directory cannot be resolved or created
+     */
     private Path wamBufferPath(String saveKey) throws IOException {
         return StorePathUtils.getSessionFile(
                 clientType, directory, uuid.toString(),
                 WAM_BUFFER_PREFIX + saveKey + WAM_BUFFER_SUFFIX);
     }
 
+    /**
+     * Rejects any save key that could resolve outside the session directory.
+     *
+     * @apiNote
+     * Defends every WAM buffer file operation against path traversal by
+     * forbidding empty keys, slashes, backslashes, embedded NUL characters,
+     * and a leading dot. The key is concatenated verbatim into the file
+     * name by {@link #wamBufferPath}, so without this guard a malicious or
+     * mis-typed key could read or overwrite an arbitrary file in the
+     * session directory.
+     *
+     * @param saveKey the bare save key
+     * @throws IllegalArgumentException if {@code saveKey} is empty or contains a forbidden character
+     */
     private static void validateSaveKey(String saveKey) {
         if (saveKey.isEmpty()) {
             throw new IllegalArgumentException("saveKey cannot be empty");
@@ -3706,26 +5889,83 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
     }
 
     /**
-     * Output stream that delegates writes to a temporary file and, on
-     * {@link #close}, atomically renames it over the target so partial
-     * writes never become visible.
+     * Buffers writes to a sibling temp file and, on {@link #close()},
+     * atomically renames it over the target path.
+     *
+     * @apiNote
+     * Used by {@link #openWamPendingBufferWriter(String)} so that a crash
+     * mid-write never leaves a partially-flushed WAM buffer visible to a
+     * subsequent {@link #openWamPendingBufferReader(String)} call. Callers
+     * must {@code close()} the stream for the rename to occur; the rename
+     * is the commit point, and a closed-without-write stream still produces
+     * an empty target file.
+     *
+     * @implNote
+     * This implementation extends {@link FilterOutputStream} and overrides
+     * {@code write(byte[], int, int)} to skip the per-byte loop the default
+     * implementation performs, which would call {@link #write(int)} once
+     * per byte and dominate the cost of writing large buffers.
      */
     private static final class AtomicMoveOutputStream extends FilterOutputStream {
+        /**
+         * The temporary sibling file that receives every write.
+         */
         private final Path tempFile;
+
+        /**
+         * The destination path that the temp file is renamed over on close.
+         */
         private final Path targetFile;
+
+        /**
+         * Guards against a double-close that would attempt to rename a file
+         * that has already been moved.
+         */
         private boolean closed;
 
+        /**
+         * Wraps the supplied delegate stream with the atomic-move
+         * close-time semantics.
+         *
+         * @param delegate the {@link OutputStream} that writes to {@code tempFile}
+         * @param tempFile the sibling temp file that receives every write
+         * @param targetFile the destination path renamed over on close
+         */
         AtomicMoveOutputStream(OutputStream delegate, Path tempFile, Path targetFile) {
             super(delegate);
             this.tempFile = tempFile;
             this.targetFile = targetFile;
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation forwards the range write directly to the
+         * delegate stream instead of going through the default per-byte
+         * loop {@link FilterOutputStream} inherits from
+         * {@link OutputStream}, which would multiply WAM buffer flush cost
+         * by the buffer size.
+         */
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
             out.write(b, off, len);
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * @implNote
+         * This implementation flushes and closes the delegate, then renames
+         * the temp file over the target with both
+         * {@link StandardCopyOption#REPLACE_EXISTING} and
+         * {@link StandardCopyOption#ATOMIC_MOVE}; the rename is the
+         * publication point that makes the new buffer visible. On any
+         * {@link IOException} during close or rename the temp file is
+         * removed so a failed write never accumulates orphan temp files.
+         * A second close is a no-op so callers can use the stream inside
+         * a try-with-resources alongside an explicit {@code close}.
+         */
         @Override
         public void close() throws IOException {
             if (closed) {
@@ -4009,8 +6249,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && online == that.online
                             && unarchiveChats == that.unarchiveChats
                             && twentyFourHourFormat == that.twentyFourHourFormat
-                            && automaticPresenceUpdates == that.automaticPresenceUpdates
-                            && automaticMessageReceipts == that.automaticMessageReceipts
                             && checkPatchMacs == that.checkPatchMacs
                             && syncedChats == that.syncedChats
                             && syncedContacts == that.syncedContacts
@@ -4076,8 +6314,6 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && Objects.equals(listeners, that.listeners)
                             && Objects.equals(lidToPhoneMappings, that.lidToPhoneMappings)
                             && Objects.equals(phoneToLidMappings, that.phoneToLidMappings)
-                            && Objects.equals(mediaConnection, that.mediaConnection)
-                            && Objects.equals(mediaConnectionLock, that.mediaConnectionLock)
                             && offlineResumeState == that.offlineResumeState
                             && Objects.equals(offlineDeliveryLatch, that.offlineDeliveryLatch)
                             && Objects.equals(usersNeedingSenderKeyRotation, that.usersNeedingSenderKeyRotation)
@@ -4100,7 +6336,38 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                             && Objects.equals(primaryFeatures, that.primaryFeatures)
                             && Objects.equals(mentionEveryoneMuteExpirations, that.mentionEveryoneMuteExpirations)
                             && Objects.equals(baseKeys, that.baseKeys)
-                            && Objects.equals(wamSequenceNumbers, that.wamSequenceNumbers);
+                            && Objects.equals(wamSequenceNumbers, that.wamSequenceNumbers)
+                            && Objects.equals(companionMmsAuthNonce, that.companionMmsAuthNonce)
+                            && Arrays.equals(shareableChatLinkKey, that.shareableChatLinkKey)
+                            && Objects.equals(startAtLogin, that.startAtLogin)
+                            && Objects.equals(minimizeToTray, that.minimizeToTray)
+                            && Objects.equals(replaceTextWithEmoji, that.replaceTextWithEmoji)
+                            && bannerNotificationDisplayMode == that.bannerNotificationDisplayMode
+                            && unreadCounterBadgeDisplayMode == that.unreadCounterBadgeDisplayMode
+                            && Objects.equals(messagesNotificationEnabled, that.messagesNotificationEnabled)
+                            && Objects.equals(callsNotificationEnabled, that.callsNotificationEnabled)
+                            && Objects.equals(reactionsNotificationEnabled, that.reactionsNotificationEnabled)
+                            && Objects.equals(statusReactionsNotificationEnabled, that.statusReactionsNotificationEnabled)
+                            && Objects.equals(textPreviewForNotificationEnabled, that.textPreviewForNotificationEnabled)
+                            && Objects.equals(defaultNotificationToneId, that.defaultNotificationToneId)
+                            && Objects.equals(groupDefaultNotificationToneId, that.groupDefaultNotificationToneId)
+                            && appTheme == that.appTheme
+                            && Objects.equals(wallpaperId, that.wallpaperId)
+                            && Objects.equals(doodleWallpaperEnabled, that.doodleWallpaperEnabled)
+                            && Objects.equals(fontSize, that.fontSize)
+                            && Objects.equals(photosAutodownloadEnabled, that.photosAutodownloadEnabled)
+                            && Objects.equals(audiosAutodownloadEnabled, that.audiosAutodownloadEnabled)
+                            && Objects.equals(videosAutodownloadEnabled, that.videosAutodownloadEnabled)
+                            && Objects.equals(documentsAutodownloadEnabled, that.documentsAutodownloadEnabled)
+                            && Objects.equals(notificationToneId, that.notificationToneId)
+                            && mediaUploadQuality == that.mediaUploadQuality
+                            && Objects.equals(spellCheckEnabled, that.spellCheckEnabled)
+                            && Objects.equals(enterToSendEnabled, that.enterToSendEnabled)
+                            && Objects.equals(groupMessageNotificationEnabled, that.groupMessageNotificationEnabled)
+                            && Objects.equals(groupReactionsNotificationEnabled, that.groupReactionsNotificationEnabled)
+                            && Objects.equals(statusNotificationEnabled, that.statusNotificationEnabled)
+                            && Objects.equals(statusNotificationToneId, that.statusNotificationToneId)
+                            && Objects.equals(playSoundForCallNotification, that.playSoundForCallNotification);
     }
 
     @Override
@@ -4111,7 +6378,7 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                 businessLatitude, businessDescription, businessWebsites, businessEmail,
                 businessCategories, contacts, calls, privacySettings,
                 unarchiveChats, twentyFourHourFormat, newChatsEphemeralTimer, webHistoryPolicy,
-                automaticPresenceUpdates, automaticMessageReceipts, checkPatchMacs, syncedChats,
+                checkPatchMacs, syncedChats,
                 syncedContacts, syncedNewsletters, syncedStatus, syncedBusinessCertificate,
                 registrationId, noiseKeyPair, identityKeyPair, signedDeviceIdentity, signedKeyPair, preKeys,
                 fdid, Arrays.hashCode(deviceId), advertisingId, Arrays.hashCode(identityId), Arrays.hashCode(backupToken),
@@ -4119,11 +6386,22 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                 favouriteStickers, quickReplies, labels, clientVersion, companionVersion, lastAdvCheckTime,
                 remoteIdentities, identityEncryptionRange, encryptionSequence, missingSyncKeys, Arrays.hashCode(advSecretKey),
                 verifiedBusinessNames, proxy, directory, listeners, lidToPhoneMappings, phoneToLidMappings,
-                mediaConnection, mediaConnectionLock, offlineResumeState, offlineDeliveryLatch, usersNeedingSenderKeyRotation,
+                offlineResumeState, offlineDeliveryLatch, usersNeedingSenderKeyRotation,
                 webAppStatePendingMutations, webAppStateCollections, pendingMessageRecipients, clientVersionLock, chatMetadata,
                 deviceLists, unconfirmedIdentityChanges, interopHostedVerificationCache, utmReadChatIds, pendingDeviceSyncs, groupSenderKeyDistribution,
                 disableLinkPreviews, relayAllCalls, externalWebBeta, chatLockSettings, favoriteChats, primaryFeatures,
-                mentionEveryoneMuteExpirations, baseKeys, wamSequenceNumbers);
+                mentionEveryoneMuteExpirations, baseKeys, wamSequenceNumbers,
+                companionMmsAuthNonce, Arrays.hashCode(shareableChatLinkKey),
+                startAtLogin, minimizeToTray, replaceTextWithEmoji,
+                bannerNotificationDisplayMode, unreadCounterBadgeDisplayMode,
+                messagesNotificationEnabled, callsNotificationEnabled, reactionsNotificationEnabled,
+                statusReactionsNotificationEnabled, textPreviewForNotificationEnabled,
+                defaultNotificationToneId, groupDefaultNotificationToneId, appTheme, wallpaperId,
+                doodleWallpaperEnabled, fontSize, photosAutodownloadEnabled, audiosAutodownloadEnabled,
+                videosAutodownloadEnabled, documentsAutodownloadEnabled, notificationToneId,
+                mediaUploadQuality, spellCheckEnabled, enterToSendEnabled,
+                groupMessageNotificationEnabled, groupReactionsNotificationEnabled,
+                statusNotificationEnabled, statusNotificationToneId, playSoundForCallNotification);
     }
 
     @Override
@@ -4136,6 +6414,19 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                ']';
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation walks the contextual chain
+     * {@code message -> contextualContent -> contextInfo} and then resolves
+     * the quoted message through {@link #findMessageById(JidProvider, String)}
+     * keyed on the quoted-message id and parent JID. The parent JID falls
+     * back to the enclosing message's {@code key.parentJid()} so quotes
+     * that omit the explicit parent (the common case for one-on-one chats)
+     * still resolve. Returns {@link Optional#empty()} when any link in the
+     * chain is missing.
+     */
     @Override
     public Optional<? extends MessageInfo> findQuotedMessage(MessageInfo info) {
         return info.message()
@@ -4154,19 +6445,74 @@ public abstract class AbstractWhatsAppStore implements WhatsAppStore {
                 });
     }
 
+    /**
+     * Concurrent envelope around the per-collection list of
+     * {@link OrphanMutationEntry} records.
+     *
+     * @apiNote
+     * Wraps the mutation list in a protobuf message so the syncd state
+     * machine can persist orphan mutations as a single field on the
+     * enclosing store. The list itself is the only payload; this type
+     * exists because the protobuf encoding requires a message wrapper for
+     * any repeated field that needs its own deserialization seam.
+     *
+     * @implNote
+     * The backing list is a {@link CopyOnWriteArrayList} so reader streams
+     * spawned by {@link #findOrphanMutations} and
+     * {@link #findOrphanMutationsByModel} can safely iterate while another
+     * thread mutates the collection through
+     * {@link #addOrphanMutation} or
+     * {@link #removeOrphanMutations(SyncPatchType, Collection)}.
+     */
     @ProtobufMessage
     public static final class OrphanMutationEntries {
+        /**
+         * The underlying mutation entries, keyed by collection on the
+         * enclosing {@link AbstractWhatsAppStore#orphanMutationEntries} map.
+         */
         @ProtobufProperty(index = 1, type = ProtobufType.MESSAGE)
         final List<OrphanMutationEntry> data;
 
+        /**
+         * Deserialization constructor that adopts the supplied list as the
+         * backing storage.
+         *
+         * @apiNote
+         * Used by the protobuf code generator; embedders should call
+         * {@link #OrphanMutationEntries()} to construct an empty container
+         * because the protobuf path does not guarantee the supplied list
+         * is the concurrent variant required by the readers.
+         *
+         * @param data the list to adopt as the backing storage
+         */
         OrphanMutationEntries(List<OrphanMutationEntry> data) {
             this.data = data;
         }
 
+        /**
+         * Creates an empty container backed by a thread-safe list.
+         *
+         * @apiNote
+         * Initial constructor used by {@link #addOrphanMutation} when no
+         * envelope exists yet for a collection; allocates the list as a
+         * {@link CopyOnWriteArrayList} so concurrent readers may iterate
+         * the data safely.
+         */
         OrphanMutationEntries() {
             this.data = new CopyOnWriteArrayList<>();
         }
 
+        /**
+         * Returns the backing list of orphan mutation entries.
+         *
+         * @apiNote
+         * Returns the live list, not a copy, because callers need both
+         * read access via streams and write access via direct mutation;
+         * the {@link CopyOnWriteArrayList} contract ensures iteration is
+         * safe even while another thread appends or removes elements.
+         *
+         * @return the live list of orphan mutation entries
+         */
         public List<OrphanMutationEntry> data() {
             return data;
         }

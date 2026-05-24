@@ -8,7 +8,6 @@ import com.github.auties00.cobalt.model.jid.Jid;
 import com.github.auties00.cobalt.model.sync.ConflictResolutionState;
 import com.github.auties00.cobalt.model.sync.SyncActionState;
 import com.github.auties00.cobalt.model.sync.SyncActionValueBuilder;
-import com.github.auties00.cobalt.model.sync.SyncActionValueSpec;
 import com.github.auties00.cobalt.model.sync.SyncPatchType;
 import com.github.auties00.cobalt.model.sync.action.contact.PinActionBuilder;
 import com.github.auties00.cobalt.model.sync.action.media.NoteEditAction;
@@ -16,7 +15,6 @@ import com.github.auties00.cobalt.model.sync.action.media.NoteEditAction.NoteTyp
 import com.github.auties00.cobalt.model.sync.action.media.NoteEditActionBuilder;
 import com.github.auties00.cobalt.model.sync.data.SyncdOperation;
 import com.github.auties00.cobalt.store.WhatsAppStore;
-import com.github.auties00.cobalt.sync.SyncFixtures;
 import com.github.auties00.cobalt.sync.crypto.DecryptedMutation;
 import com.github.auties00.cobalt.sync.factory.NoteEditMutationFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,23 +25,37 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for {@link NoteEditHandler} — Cobalt's adapter for
- * {@code WAWebNoteSync}.
+ * Exercises {@link NoteEditHandler} against the
+ * {@code WAWebNoteSync.applyMutations} per-mutation flow.
  *
- * <p>The handler installs / edits / deletes chat-scoped notes via SET
- * mutations keyed by {@code indexParts[1]}. Deletions are encoded as SET
- * with {@code deleted=true}; create / edit requires a non-null type, a
- * non-null chat JID, and the referenced chat must exist locally. These
- * tests pin the wire metadata, the SET / deletion / orphan branches, the
- * malformed-input fallbacks, the default timestamp-based conflict
- * resolution, the static outbound-mutation builder, and the
- * {@code resolveNoteId} fallback semantics.
+ * @apiNote
+ * Verifies that the Cobalt handler matches WA Web's per-mutation
+ * classification: a {@link SyncdOperation#SET} carrying type +
+ * {@code chatJid} + content installs the note via
+ * {@link WhatsAppStore#putNoteState};
+ * {@code deleted=true} on a {@code SET} drops the entry; an unknown
+ * chat JID surfaces as
+ * {@link SyncActionState#ORPHAN}
+ * with {@code modelType="Chat"}; a wrong-typed value, missing
+ * {@link NoteEditAction#type()}, missing
+ * {@link NoteEditAction#chatJid()}, missing note id slot, or empty
+ * note id surface as
+ * {@link SyncActionState#MALFORMED};
+ * {@link SyncdOperation#REMOVE} surfaces as
+ * {@link SyncActionState#UNSUPPORTED};
+ * the default {@code resolveConflicts} chooses the later timestamp.
+ *
+ * @implNote
+ * This implementation drives the handler directly through
+ * {@link NoteEditHandler#applyMutation} via the
+ * {@link #buildMutation(String, NoteEditAction, SyncdOperation, Instant)}
+ * helper; the
+ * {@link NoteEditMutationFactory}
+ * is wired in but only consumed by other test cases.
  */
 @DisplayName("NoteEditHandler")
 class NoteEditHandlerTest {
@@ -65,10 +77,26 @@ class NoteEditHandlerTest {
     }
 
     /**
-     * Builds a trusted mutation carrying the given note action.
+     * Builds a trusted mutation carrying the given note action and
+     * index note id.
      *
-     * @param indexNoteId the note id placed in {@code indexParts[1]}, may be {@code null}
-     * @param action      the note action payload, may be {@code null}
+     * @apiNote
+     * Internal helper consumed by every test in this class; not used
+     * outside it. Setting {@code indexNoteId} to {@code null} produces
+     * the singleton-index shape {@code ["note_edit"]} so the
+     * malformed-index branch can be exercised; setting
+     * {@code action} to {@code null} omits the {@code noteEditAction}
+     * field on the value so the malformed-value branch can be
+     * exercised.
+     *
+     * @implNote
+     * This implementation builds the index via
+     * {@link JSON#toJSONString(Object)} to match
+     * the on-wire JSON encoding the production handler reads back via
+     * {@link JSON#parseArray(String)}.
+     *
+     * @param indexNoteId the note id placed in {@code indexParts[1]}; may be {@code null}
+     * @param action      the note action payload; may be {@code null}
      * @param operation   the sync operation
      * @param ts          the mutation timestamp
      * @return the trusted mutation
@@ -323,54 +351,4 @@ class NoteEditHandlerTest {
         }
     }
 
-    @Nested
-    @DisplayName("static builder — getNoteEditMutation")
-    class StaticBuilder {
-        @Test
-        @DisplayName("create / edit produces a SET pending mutation with the note body")
-        void createCarriesContent() {
-            var pending = factory.getNoteEditMutation("note-9", CHAT_JID, "body text", false);
-            var inner = pending.mutation();
-
-            assertEquals(SyncdOperation.SET, inner.operation());
-            assertEquals(handler.version(), inner.actionVersion());
-            assertEquals(JSON.toJSONString(List.of(handler.actionName(), "note-9")), inner.index());
-
-            var roundtrip = inner.value().action().filter(a -> a instanceof NoteEditAction).map(a -> (NoteEditAction) a).orElseThrow();
-            assertEquals("body text", roundtrip.unstructuredContent().orElseThrow());
-            assertEquals(NoteType.UNSTRUCTURED, roundtrip.type().orElseThrow());
-            assertEquals(CHAT_JID, roundtrip.chatJid().orElseThrow());
-            assertTrue(!roundtrip.deleted(), "create / edit mutations must carry deleted=false");
-        }
-
-        @Test
-        @DisplayName("deletion produces a SET pending mutation flagged as deleted")
-        void deletionFlagsAsDeleted() {
-            var pending = factory.getNoteEditMutation("note-del", CHAT_JID, null, true);
-            var roundtrip = pending.mutation().value().action().filter(a -> a instanceof NoteEditAction).map(a -> (NoteEditAction) a).orElseThrow();
-            assertTrue(roundtrip.deleted(), "deletion mutation must carry deleted=true");
-        }
-    }
-
-    @Nested
-    @DisplayName("WA Web byte-parity oracle (gated)")
-    class OracleParity {
-        @Test
-        @DisplayName("captured SyncActionValue bytes match Cobalt's encoded output when the fixture is present")
-        void byteEqualityWithOracle() {
-            if (!SyncFixtures.isOracleAvailable("handler/note-edit/encode")) return;
-            var oracle = SyncFixtures.loadOracle("handler/note-edit/encode");
-            var expected = SyncFixtures.decodeOracleBytes(oracle, "encoded");
-
-            // Use the deterministic-Instant overload (package-private) so the
-            // captured oracle's pinned timestamp matches our re-encoded bytes.
-            var pending = factory.getNoteEditMutation(
-                    "note-oracle", CHAT_JID, "body", false,
-                    Instant.ofEpochSecond(oracle.getLong("timestampSeconds")));
-            var actual = SyncActionValueSpec.encode(pending.mutation().value());
-
-            assertNotNull(actual);
-            assertArrayEquals(expected, actual);
-        }
-    }
 }

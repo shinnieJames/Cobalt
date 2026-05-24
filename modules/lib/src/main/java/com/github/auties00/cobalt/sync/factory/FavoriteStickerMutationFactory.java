@@ -14,42 +14,60 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Builds outgoing favourite-sticker sync mutations.
+ * Builds outgoing app-state mutations that favourite or unfavourite a sticker.
  *
- * <p>Mirrors the {@code generateFavoriteSyncMutation} export of WhatsApp
- * Web's {@code WAWebStickersFavoriteSyncAction} module. The factory is the
- * outgoing-mutation counterpart of
+ * @apiNote
+ * Drives the sticker-tray "add to favourites" affordance: the resulting
+ * mutation flips the sticker's {@code isFavorite} flag on every linked
+ * device, which the receive-side handler reconciles by adding or removing
+ * the sticker from {@code WAWebFavoriteStickerCollection}. The factory is
+ * the outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.FavoriteStickerHandler}.
+ *
+ * @implNote
+ * This implementation only sets the {@code isFavorite} flag on the
+ * {@link StickerAction}. WA Web's
+ * {@code WAWebStickersFavoriteSyncAction.generateFavoriteSyncMutation}
+ * additionally serializes the full media descriptor
+ * ({@code fileEncSha256}, {@code mediaKey}, {@code mimetype},
+ * dimensions, {@code directPath}, {@code deviceIdHint}); Cobalt omits
+ * those because the receive-side path falls back to the existing sticker
+ * record on the primary device when the mutation round-trips, and the
+ * downstream {@code addOrUpdateStickers} call still has the descriptor
+ * locally available.
  */
 public final class FavoriteStickerMutationFactory {
     /**
-     * Constructs a favourite-sticker mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public FavoriteStickerMutationFactory() {
 
     }
 
     /**
-     * Builds a pending outgoing mutation for favouriting or unfavouriting a
-     * sticker identified by its file hash.
+     * Returns a SET mutation that favourites or unfavourites the sticker with the given file hash.
      *
-     * <p>Per WhatsApp Web {@code WAWebFavoriteStickerSyncActionUtils.getFavoriteStickerMutation}:
-     * constructs the {@code stickerAction} sub-message with at minimum the
-     * {@code isFavorite} flag and dispatches it at
-     * {@code ["favoriteSticker", stickerFileHash]} in the REGULAR_LOW
-     * collection with {@code version = 7}.
+     * @apiNote
+     * The mutation index follows
+     * {@snippet :
+     *     ["favoriteSticker", stickerHash]
+     * }
+     * where {@code stickerHash} is the sticker's {@code filehash}; the
+     * {@link StickerAction} sub-message carries only the {@code isFavorite}
+     * flag.
      *
-     * <p>Outgoing favourite mutations only need to carry the
-     * {@code isFavorite} flag; the full media descriptor is propagated from
-     * the original sticker record on the primary device when the mutation
-     * round-trips through app-state sync, so this helper intentionally leaves
-     * the media fields unset.
+     * @implNote
+     * This implementation captures the timestamp via {@link Instant#now()};
+     * WA Web's {@code generateFavoriteSyncMutation} accepts the timestamp
+     * as a parameter (caller passes {@code WATimeUtils.unixTime()}).
      *
-     * @param stickerHash the sticker file hash used as the mutation index
-     * @param favorite    {@code true} to mark the sticker as favourite,
-     *                    {@code false} to unfavourite it
-     * @return the pending mutation ready to be pushed via
-     *         {@link com.github.auties00.cobalt.sync.WebAppStateService#pushPatches}
+     * @param stickerHash the sticker's file hash (Base64 string) used as the mutation index
+     * @param favorite    {@code true} to favourite the sticker, {@code false} to unfavourite it
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebStickersFavoriteSyncAction", exports = "generateFavoriteSyncMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation getFavoriteStickerMutation(String stickerHash, boolean favorite) {

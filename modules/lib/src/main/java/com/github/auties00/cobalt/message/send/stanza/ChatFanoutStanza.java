@@ -15,67 +15,128 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Builds the outgoing {@code <message>} stanza for 1:1 chat and group-direct fanout.
+ * Builds the outer {@code <message>} stanza for 1:1 chat sends and
+ * group-direct (per-device) fanout, wrapping per-device
+ * {@link MessageEncryptedPayload} entries and every auxiliary child node
+ * the server expects.
  *
- * <p>In this mode the protobuf is encrypted individually for each device. When there is
- * exactly one payload, it targets a primary device (device ID 0), and the message is not
- * bot related, the {@code <enc>} node is placed directly under {@code <message>};
- * otherwise all {@code <enc>} nodes are wrapped in a {@code <participants>} container.
+ * @apiNote
+ * This is the top-level composer for the chat fanout family. Outbound
+ * dispatchers ({@code ChatMessageSender}, the resend pipeline,
+ * peer-to-peer fanout) call {@link #build} with the per-device payloads and
+ * the optional child nodes ({@code <biz>}, {@code <bot>}, {@code <meta>},
+ * {@code <reporting>}, {@code <tctoken>}, {@code <cstoken>},
+ * {@code <ctwa_attribution>}, {@code <device-identity>},
+ * {@code <sender_content_binding>}, group-direct {@code <enc type="skmsg">})
+ * already prepared by their respective stanza builders. The returned
+ * {@link NodeBuilder} is finalised and sent to the relay.
  *
- * @see GroupSkmsgFanoutStanza
- * @see ParticipantsStanza
- * @see TcTokenStanza
- * @see CsTokenStanza
+ * @implNote
+ * This implementation places the single {@code <enc>} directly under
+ * {@code <message>} only when there is exactly one payload, that payload
+ * targets a primary device ({@code device == 0}), and the message is not
+ * bot-related; otherwise every {@code <enc>} is wrapped under
+ * {@code <participants>}. The {@code <tctoken>} child takes precedence
+ * over {@code <cstoken>}: the latter is emitted only when the former is
+ * absent.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateFanoutStanza")
 @WhatsAppWebModule(moduleName = "WAWebSendDirectMsgToDeviceList")
 public final class ChatFanoutStanza {
     /**
-     * Prevents instantiation of this utility class.
+     * Prevents instantiation; this is a static composer.
      */
     private ChatFanoutStanza() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
     /**
-     * Builds the {@code <message>} stanza for chat or group-direct fanout.
+     * Builds the outer {@code <message>} stanza for chat or group-direct
+     * fanout.
      *
-     * @param messageId             the message stanza ID
-     * @param chatJid               the chat JID
-     * @param type                  the stanza type attribute ({@code "text"},
-     *                              {@code "media"}, {@code "reaction"}, {@code "poll"},
+     * @apiNote
+     * The 27 parameters mirror the {@code createFanoutMsgStanza} output
+     * shape one-for-one. The boolean {@code isBotRelated} forces the
+     * multi-{@code <enc>} branch even for a single payload (so the bot
+     * sibling {@code <enc>} can coexist), and {@code deviceFanout="false"}
+     * is set by the caller for resends and bot-feedback sends to suppress
+     * server-side fanout. {@code peer_recipient_lid}, {@code peer_recipient_pn},
+     * {@code recipient_pn}, and {@code peer_recipient_username} carry the
+     * peer-id metadata that the server uses for LID 1:1 migration. The
+     * trailing child-node arguments are inlined verbatim in WA Web's wire
+     * order and {@code null} children are simply elided by
+     * {@link NodeBuilder#content(Node...)}.
+     *
+     * @implNote
+     * This implementation falls back to {@code cstokenNode} when
+     * {@code tctokenNode} is {@code null}; WA Web ships the same precedence
+     * inline at the call site. Calls to
+     * {@link ParticipantsStanza#requiresIdentityNode(List)} suppress the
+     * caller-supplied {@code identityNode} when no payload is a PreKey
+     * message (matching WA Web's {@code shouldHaveIdentity} flag).
+     *
+     * @param messageId             the stanza id (typically the 22-char
+     *                              upper-hex id)
+     * @param chatJid               the recipient chat {@link Jid}
+     * @param type                  the stanza {@code type} attribute (one
+     *                              of {@code "text"}, {@code "media"},
+     *                              {@code "reaction"}, {@code "poll"},
      *                              {@code "event"})
      * @param payloads              the per-device encrypted payloads
-     * @param editAttribute         the edit attribute, or {@code null}
-     * @param addressingMode        {@code "pn"} or {@code "lid"}, or {@code null}
-     * @param deviceFanout          {@code "false"} for resends or bot feedback, or
+     * @param editAttribute         the {@code edit} attribute (e.g.
+     *                              {@code "1"} for edits, {@code "7"} for
+     *                              revokes), or {@code null}
+     * @param addressingMode        {@code "pn"} or {@code "lid"}, or
      *                              {@code null}
-     * @param mediaType             the enc mediatype attribute, or {@code null}
-     * @param decryptFail           the enc decrypt-fail attribute, or {@code null}
-     * @param nativeFlowName        the enc native_flow_name attribute, or {@code null}
-     * @param contentBindings       per-recipient RCAT tags keyed by user JID, or
+     * @param deviceFanout          {@code "false"} for resends and
+     *                              bot-feedback sends, or {@code null}
+     * @param mediaType             the per-{@code <enc>} {@code mediatype},
+     *                              or {@code null}
+     * @param decryptFail           the per-{@code <enc>} {@code decrypt-fail}
+     *                              attribute, or {@code null}
+     * @param nativeFlowName        the per-{@code <enc>}
+     *                              {@code native_flow_name} attribute, or
      *                              {@code null}
-     * @param isBotRelated          whether this is a bot feedback or bot-targeted message
-     * @param peerRecipientLid      the peer_recipient_lid, or {@code null}
-     * @param peerRecipientPn       the peer_recipient_pn, or {@code null}
-     * @param recipientPn           the recipient_pn, or {@code null}
-     * @param peerRecipientUsername the peer_recipient_username, or {@code null}
-     * @param identityNode          optional {@code <device-identity>}
-     * @param metaNode              optional {@code <meta>}
-     * @param bizNode               optional {@code <biz>}
-     * @param botNode               optional {@code <bot>}
-     * @param reportingNode         optional {@code <reporting>}
-     * @param senderContentBinding  optional {@code <sender_content_binding>}
-     * @param botMetadataNode       optional metadata-only {@code <bot>}
-     * @param tctokenNode           optional {@code <tctoken>}
-     * @param cstokenNode           optional {@code <cstoken>}, used as fallback when
-     *                              {@code tctokenNode} is {@code null}
-     * @param ctwaNode              optional {@code <ctwa_attribution>}
-     * @param groupDirectSkmsgNode  optional empty {@code <enc type="skmsg">} for
-     *                              group-direct fanout
-     * @return a {@link NodeBuilder} for the {@code <message>} stanza
-     * @throws NullPointerException if {@code messageId}, {@code chatJid}, {@code type},
-     *                              or {@code payloads} is {@code null}
+     * @param contentBindings       per-recipient RCAT tags keyed by user
+     *                              {@link Jid}, or {@code null}
+     * @param isBotRelated          whether the message targets a bot
+     *                              (forces the multi-{@code <enc>} branch)
+     * @param peerRecipientLid      the peer LID for 1:1 LID migration, or
+     *                              {@code null}
+     * @param peerRecipientPn       the peer PN for 1:1 LID migration, or
+     *                              {@code null}
+     * @param recipientPn           the recipient PN attribute, or
+     *                              {@code null}
+     * @param peerRecipientUsername the peer username for usernames feature,
+     *                              or {@code null}
+     * @param identityNode          the {@code <device-identity>} child, or
+     *                              {@code null}
+     * @param metaNode              the {@code <meta>} child, or
+     *                              {@code null}
+     * @param bizNode               the {@code <biz>} child, or
+     *                              {@code null}
+     * @param botNode               the encrypted-bot {@code <bot>} child,
+     *                              or {@code null}
+     * @param reportingNode         the {@code <reporting>} child, or
+     *                              {@code null}
+     * @param senderContentBinding  the {@code <sender_content_binding>}
+     *                              child, or {@code null}
+     * @param botMetadataNode       the metadata-only {@code <bot>} child,
+     *                              or {@code null}
+     * @param tctokenNode           the {@code <tctoken>} child, or
+     *                              {@code null}
+     * @param cstokenNode           the {@code <cstoken>} child used only
+     *                              when {@code tctokenNode} is
+     *                              {@code null}
+     * @param ctwaNode              the {@code <ctwa_attribution>} child,
+     *                              or {@code null}
+     * @param groupDirectSkmsgNode  an empty {@code <enc type="skmsg">}
+     *                              sibling emitted on group-direct fanout,
+     *                              or {@code null}
+     * @return the {@link NodeBuilder} for the outer {@code <message>}
+     * @throws NullPointerException if {@code messageId}, {@code chatJid},
+     *                              {@code type}, or {@code payloads} is
+     *                              {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -141,7 +202,6 @@ public final class ChatFanoutStanza {
             builder.content(buildParticipantsNode(payloads, mediaType, decryptFail, nativeFlowName, contentBindings));
         }
 
-        // tctoken takes precedence; cstoken is the fallback when tctoken is absent
         var tokenNode = tctokenNode != null ? tctokenNode : cstokenNode;
         builder.content(
                 botNode,
@@ -160,41 +220,56 @@ public final class ChatFanoutStanza {
     }
 
     /**
-     * Builds the {@code <message>} stanza for chat or group-direct fanout without a
-     * {@code <cstoken>} fallback.
+     * Builds the outer {@code <message>} stanza without a {@code <cstoken>}
+     * fallback.
      *
-     * <p>Convenience overload that delegates to the full
-     * {@link #build(String, Jid, String, List, String, String, String, String, String,
-     * String, Map, boolean, Jid, Jid, Jid, String, Node, Node, Node, Node, Node, Node,
-     * Node, Node, Node, Node, Node)} with {@code null} for {@code cstokenNode}.
+     * @apiNote
+     * Convenience overload for callers that do not need the NCT token
+     * fallback path; delegates to the 27-arg form with {@code cstokenNode}
+     * set to {@code null}.
      *
-     * @param messageId             the message stanza ID
-     * @param chatJid               the chat JID
-     * @param type                  the stanza type attribute
+     * @param messageId             the stanza id
+     * @param chatJid               the recipient chat {@link Jid}
+     * @param type                  the stanza {@code type} attribute
      * @param payloads              the per-device encrypted payloads
-     * @param editAttribute         the edit attribute, or {@code null}
-     * @param addressingMode        the addressing mode, or {@code null}
-     * @param deviceFanout          the device fanout flag, or {@code null}
-     * @param mediaType             the enc mediatype attribute, or {@code null}
-     * @param decryptFail           the enc decrypt-fail attribute, or {@code null}
-     * @param nativeFlowName        the enc native_flow_name attribute, or {@code null}
-     * @param contentBindings       per-recipient RCAT tags, or {@code null}
-     * @param isBotRelated          whether this is a bot related message
-     * @param peerRecipientLid      the peer_recipient_lid, or {@code null}
-     * @param peerRecipientPn       the peer_recipient_pn, or {@code null}
-     * @param recipientPn           the recipient_pn, or {@code null}
-     * @param peerRecipientUsername the peer_recipient_username, or {@code null}
-     * @param identityNode          optional {@code <device-identity>}
-     * @param metaNode              optional {@code <meta>}
-     * @param bizNode               optional {@code <biz>}
-     * @param botNode               optional {@code <bot>}
-     * @param reportingNode         optional {@code <reporting>}
-     * @param senderContentBinding  optional {@code <sender_content_binding>}
-     * @param botMetadataNode       optional metadata-only {@code <bot>}
-     * @param tctokenNode           optional {@code <tctoken>}
-     * @param ctwaNode              optional {@code <ctwa_attribution>}
-     * @param groupDirectSkmsgNode  optional group-direct skmsg node
-     * @return a {@link NodeBuilder} for the {@code <message>} stanza
+     * @param editAttribute         the {@code edit} attribute, or
+     *                              {@code null}
+     * @param addressingMode        the {@code addressing_mode}, or
+     *                              {@code null}
+     * @param deviceFanout          the {@code device_fanout} flag, or
+     *                              {@code null}
+     * @param mediaType             the per-{@code <enc>} {@code mediatype},
+     *                              or {@code null}
+     * @param decryptFail           the per-{@code <enc>} {@code decrypt-fail},
+     *                              or {@code null}
+     * @param nativeFlowName        the per-{@code <enc>}
+     *                              {@code native_flow_name}, or
+     *                              {@code null}
+     * @param contentBindings       per-recipient RCAT tags, or
+     *                              {@code null}
+     * @param isBotRelated          whether the message targets a bot
+     * @param peerRecipientLid      the peer LID, or {@code null}
+     * @param peerRecipientPn       the peer PN, or {@code null}
+     * @param recipientPn           the recipient PN, or {@code null}
+     * @param peerRecipientUsername the peer username, or {@code null}
+     * @param identityNode          the {@code <device-identity>}, or
+     *                              {@code null}
+     * @param metaNode              the {@code <meta>}, or {@code null}
+     * @param bizNode               the {@code <biz>}, or {@code null}
+     * @param botNode               the encrypted-bot {@code <bot>}, or
+     *                              {@code null}
+     * @param reportingNode         the {@code <reporting>}, or
+     *                              {@code null}
+     * @param senderContentBinding  the {@code <sender_content_binding>},
+     *                              or {@code null}
+     * @param botMetadataNode       the metadata-only {@code <bot>}, or
+     *                              {@code null}
+     * @param tctokenNode           the {@code <tctoken>}, or {@code null}
+     * @param ctwaNode              the {@code <ctwa_attribution>}, or
+     *                              {@code null}
+     * @param groupDirectSkmsgNode  the group-direct {@code <enc type="skmsg">},
+     *                              or {@code null}
+     * @return the {@link NodeBuilder} for the outer {@code <message>}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -240,14 +315,22 @@ public final class ChatFanoutStanza {
     }
 
     /**
-     * Builds an {@code <enc>} node for a single device payload with all protocol
-     * attributes.
+     * Builds a single {@code <enc>} node for one device payload.
      *
-     * @param payload        the encrypted payload
-     * @param mediaType      the mediatype attribute, or {@code null}
-     * @param decryptFail    the decrypt-fail attribute, or {@code null}
-     * @param nativeFlowName the native_flow_name attribute, or {@code null}
-     * @return the enc node
+     * @apiNote
+     * Used both for the single-primary top-level {@code <enc>} and as the
+     * inner {@code <enc>} of every {@code <participants><to>} child. The
+     * {@code v} attribute always carries
+     * {@link MessageEncryption#CIPHERTEXT_VERSION}.
+     *
+     * @param payload        the {@link MessageEncryptedPayload}
+     * @param mediaType      the {@code mediatype} attribute, or
+     *                       {@code null}
+     * @param decryptFail    the {@code decrypt-fail} attribute, or
+     *                       {@code null}
+     * @param nativeFlowName the {@code native_flow_name} attribute, or
+     *                       {@code null}
+     * @return the {@code <enc>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)
@@ -269,15 +352,32 @@ public final class ChatFanoutStanza {
     }
 
     /**
-     * Builds the {@code <participants>} node for multi-device chat fanout, including
-     * per-device content bindings when present.
+     * Builds the {@code <participants>} container for multi-device chat
+     * fanout, attaching per-device content bindings when present.
+     *
+     * @apiNote
+     * Each device payload becomes a
+     * {@code <to jid="..."><enc .../><content_binding .../></to>} child.
+     * Payloads with a {@code null}
+     * {@link MessageEncryptedPayload#recipientJid()} are skipped (those
+     * represent the sender-key cipher in WA Web).
+     *
+     * @implNote
+     * This implementation resolves each content binding by hashing on
+     * {@link Jid#toUserJid()} rather than the device JID; the RCAT map is
+     * keyed by user JID per WA Web's
+     * {@code WAWebMsgRcatUtils.genContentBindingForMsg}.
      *
      * @param payloads        the per-device encrypted payloads
-     * @param mediaType       the mediatype attribute, or {@code null}
-     * @param decryptFail     the decrypt-fail attribute, or {@code null}
-     * @param nativeFlowName  the native_flow_name attribute, or {@code null}
-     * @param contentBindings per-recipient RCAT tags, or {@code null}
-     * @return the participants node
+     * @param mediaType       the {@code mediatype} attribute, or
+     *                        {@code null}
+     * @param decryptFail     the {@code decrypt-fail} attribute, or
+     *                        {@code null}
+     * @param nativeFlowName  the {@code native_flow_name} attribute, or
+     *                        {@code null}
+     * @param contentBindings per-recipient RCAT tags keyed by user
+     *                        {@link Jid}, or {@code null}
+     * @return the {@code <participants>} {@link Node}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendMsgCreateFanoutStanza", exports = "createFanoutMsgStanza",
             adaptation = WhatsAppAdaptation.DIRECT)

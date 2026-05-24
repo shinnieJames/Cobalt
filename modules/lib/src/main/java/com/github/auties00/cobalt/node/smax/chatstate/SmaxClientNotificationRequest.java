@@ -9,32 +9,40 @@ import com.github.auties00.cobalt.node.smax.SmaxOperation;
 import java.util.Objects;
 
 /**
- * The outbound stanza variant. Wraps the {@code to} (chat JID)
- * attribute and one of the two state-type children
- * ({@link SmaxClientNotificationComposing} or {@link SmaxClientNotificationPaused}) into a
- * {@code <chatstate/>} envelope.
+ * The outbound {@code <chatstate to="..."><composing|paused/></chatstate>}
+ * stanza that broadcasts the local user's typing or paused state to a peer
+ * or group.
+ *
+ * @apiNote
+ * Surfaces {@code WAWebChatStateBridge}'s
+ * {@code sendChatStateComposing} / {@code sendChatStateRecording} /
+ * {@code sendChatStatePaused} indicators. The stanza is fire-and-forget on
+ * the wire ({@code WAComms.castSmaxStanza}); the relay does not ack.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstateClientNotificationRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutChatstateStateTypes")
 public final class SmaxClientNotificationRequest implements SmaxOperation.Request {
     /**
      * The chat JID receiving the indicator.
+     *
+     * @apiNote
+     * For 1:1 chats this is the peer user JID; for group chats this is the
+     * group JID. The relay fans out to active participants.
      */
     private final Jid chatstateTo;
 
     /**
-     * The state-type. Either a {@link SmaxClientNotificationComposing} or a
-     * {@link SmaxClientNotificationPaused}; never {@code null}.
+     * The state-type payload; either {@link SmaxClientNotificationComposing}
+     * or {@link SmaxClientNotificationPaused}.
      */
     private final SmaxClientNotificationStateType stateType;
 
     /**
-     * Constructs a new client-notification request.
+     * Constructs a client-notification request.
      *
      * @param chatstateTo the chat JID; never {@code null}
      * @param stateType   the state-type payload; never {@code null}
-     * @throws NullPointerException if either argument is
-     *                              {@code null}
+     * @throws NullPointerException if either argument is {@code null}
      */
     public SmaxClientNotificationRequest(Jid chatstateTo, SmaxClientNotificationStateType stateType) {
         this.chatstateTo = Objects.requireNonNull(chatstateTo, "chatstateTo cannot be null");
@@ -42,7 +50,7 @@ public final class SmaxClientNotificationRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Returns the chat JID being notified.
+     * Returns the chat JID receiving the indicator.
      *
      * @return the chat JID; never {@code null}
      */
@@ -60,11 +68,19 @@ public final class SmaxClientNotificationRequest implements SmaxOperation.Reques
     }
 
     /**
-     * Builds the outbound chatstate stanza ready for dispatch.
+     * {@inheritDoc}
+     *
+     * @implNote
+     * This implementation emits a {@code <chatstate to="...">} envelope and
+     * delegates the inner child to
+     * {@link SmaxClientNotificationStateType#toNode()}, mirroring the
+     * {@code makeClientNotificationRequest} +
+     * {@code mergeStateTypes} composition. The WA Web optional
+     * {@code internalTestMixin} child (a dev-only debug payload) is not
+     * emitted by Cobalt.
      *
      * @return a {@link NodeBuilder} carrying the
-     *         {@code <chatstate to=…><composing|paused/></chatstate>}
-     *         envelope
+     *         {@code <chatstate><composing|paused/></chatstate>} stanza
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutChatstateClientNotificationRequest",

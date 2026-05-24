@@ -17,39 +17,67 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Builds outgoing delete-message-for-me sync mutations.
+ * Builds outgoing app-state mutations that perform a one-sided message delete (only on the current user's devices).
  *
- * <p>Mirrors the {@code getDeleteForMeMutations} and
- * {@code buildDeleteForMeMutation} exports of WhatsApp Web's
- * {@code WAWebDeleteMessageForMeSync} module. The factory is the
+ * @apiNote
+ * Drives the "delete for me" UI affordance that
+ * {@code WAWebChatSendDeleteMsgsBridge} and
+ * {@code WAWebAddonDeleteAddons} dispatch through: the mutation describes
+ * one or more messages that should disappear from the current user's
+ * devices without touching the original sender or peer. The factory is the
  * outgoing-mutation counterpart of
  * {@link com.github.auties00.cobalt.sync.handler.DeleteMessageForMeHandler}.
+ *
+ * @implNote
+ * This implementation takes pre-resolved {@link MessageKey} instances and
+ * parallel lists of message timestamps and group flags. WA Web's
+ * {@code WAWebDeleteMessageForMeSync.getDeleteForMeMutations} reads those
+ * fields off the live message model via
+ * {@code WAWebMsgGetters.getSender}, {@code getT}, and
+ * {@code getIsGroupMsg}; Cobalt does not run that live-message model so the
+ * caller hands the data in already projected.
  */
 public final class DeleteMessageForMeMutationFactory {
     /**
-     * Constructs a delete-message-for-me mutation factory.
+     * Creates an instance with no collaborators.
+     *
+     * @apiNote
+     * The factory is stateless; a single instance may be shared across the
+     * lifetime of the client.
      */
     public DeleteMessageForMeMutationFactory() {
 
     }
 
     /**
-     * Builds a pending mutation for a delete-for-me action on a single message.
+     * Returns a SET mutation that deletes a single message for the current user.
      *
-     * <p>Per WhatsApp Web {@code WAWebDeleteMessageForMeSync.buildDeleteForMeMutation}:
-     * constructs a {@code deleteMessageForMeAction} value with the given
-     * {@code deleteMedia} and {@code messageTimestamp} fields, builds the index
-     * via {@code WAWebSyncdActionUtils.buildMessageKey} using the remaining
-     * parameters, and delegates to {@code WAWebSyncdActionUtils.buildPendingMutation}.
+     * @apiNote
+     * Call this when fanning out a delete for one specific
+     * {@code (remoteJid, id, fromMe, participant)} tuple. The mutation
+     * index follows
+     * {@snippet :
+     *     ["deleteMessageForMe", remoteJid.toString(), id, fromMe ? "1" : "0", participant != null && !fromMe ? participant.toString() : "0"]
+     * }
+     * and the {@link DeleteMessageForMeAction} sub-message carries the
+     * {@code deleteMedia} flag plus the original message timestamp.
      *
-     * @param timestamp        the mutation timestamp (current time)
-     * @param deleteMedia      whether to also delete associated media
-     * @param messageTimestamp the original message timestamp
-     * @param remoteJid        the chat JID (resolved for mutation index)
-     * @param id               the message ID
-     * @param fromMe           whether the message was sent by the current user
-     * @param participant      the participant JID for group messages, or {@code null}
-     * @return the pending mutation for the delete-for-me action
+     * @implNote
+     * This implementation builds the index inline instead of delegating to
+     * a {@code WAWebSyncdActionUtils.buildMessageKey} helper; the wire shape
+     * is identical to WA Web's. The participant segment is written as
+     * {@code "0"} when the message is either non-group or sent by the
+     * current user, matching the receive-side parser's expectations in
+     * {@code WAWebSyncdIndexUtils.syncKeyToMsgKey}.
+     *
+     * @param timestamp        the mutation timestamp
+     * @param deleteMedia      {@code true} if the on-disk media must be deleted as well
+     * @param messageTimestamp the timestamp of the message being deleted (carried in the action body for receive-side conflict resolution)
+     * @param remoteJid        the remote {@link Jid} of the chat the message belongs to
+     * @param id               the message identifier
+     * @param fromMe           {@code true} if the current user sent the message
+     * @param participant      the participant {@link Jid} for group messages received from someone else, or {@code null}
+     * @return the pending mutation ready to be queued for outbound app-state sync
      */
     @WhatsAppWebExport(moduleName = "WAWebDeleteMessageForMeSync", exports = "buildDeleteForMeMutation", adaptation = WhatsAppAdaptation.ADAPTED)
     public SyncPendingMutation buildDeleteForMeMutation(
@@ -95,23 +123,29 @@ public final class DeleteMessageForMeMutationFactory {
     }
 
     /**
-     * Builds pending mutations for deleting multiple messages for the current user.
+     * Returns one SET mutation per message in the supplied batch, sharing a single timestamp.
      *
-     * <p>Per WhatsApp Web {@code WAWebDeleteMessageForMeSync.getDeleteForMeMutations}:
-     * iterates over each message, resolves its chat JID for the mutation index,
-     * determines the sender, and delegates to
-     * {@link #buildDeleteForMeMutation(Instant, boolean, Instant, Jid, String, boolean, Jid)}.
+     * @apiNote
+     * Use this for the multi-select "delete for me" path; the three lists
+     * are parallel arrays indexed together. Messages whose
+     * {@link MessageKey#parentJid()} is empty are skipped silently.
      *
-     * <p>In Cobalt, the caller provides pre-resolved {@link MessageKey} instances
-     * and the chat JID rather than raw message models, since Cobalt does not have
-     * the WA Web message model accessors ({@code getSender}, {@code getT},
-     * {@code getIsGroupMsg}).
+     * @implNote
+     * This implementation derives the participant segment as
+     * {@code key.senderJid()} converted to its user-JID form, then includes
+     * it only when the message is a group message that the current user
+     * did not author. WA Web reads {@code getSender(msg)} from the live
+     * message model and runs the same {@code widToUserJid} conversion. A
+     * single timestamp is reused across the batch so the mutations land
+     * together on the wire, matching WA Web's
+     * {@code getDeleteForMeMutations} which calls
+     * {@code WATimeUtils.unixTimeMs()} once outside the loop.
      *
-     * @param keys              the message keys to delete
-     * @param deleteMedia       whether to also delete associated media
-     * @param messageTimestamps the original message timestamps, parallel to {@code keys}
-     * @param isGroupMessages   whether each message is a group message, parallel to {@code keys}
-     * @return the list of pending mutations for all messages
+     * @param keys              the per-message {@link MessageKey}s; {@link MessageKey#parentJid()} is required
+     * @param deleteMedia       {@code true} if the on-disk media must be deleted as well
+     * @param messageTimestamps parallel array of original message timestamps
+     * @param isGroupMessages   parallel array of group-message flags
+     * @return the ordered list of pending mutations, with one entry per non-skipped input
      */
     @WhatsAppWebExport(moduleName = "WAWebDeleteMessageForMeSync", exports = "getDeleteForMeMutations", adaptation = WhatsAppAdaptation.ADAPTED)
     public List<SyncPendingMutation> getDeleteForMeMutations(
@@ -127,14 +161,13 @@ public final class DeleteMessageForMeMutationFactory {
             var messageTimestamp = messageTimestamps.get(i);
             var isGroup = isGroupMessages.get(i);
 
-            var senderJid = key.senderJid().map(Jid::toUserJid).orElse(null); // ADAPTED: WAWebDeleteMessageForMeSync.getDeleteForMeMutations — getSender + widToUserJid
+            var senderJid = key.senderJid().map(Jid::toUserJid).orElse(null);
 
             var participant = isGroup && !key.fromMe() ? senderJid : null;
 
-            // ADAPTED: Cobalt uses the message's parentJid directly
             var remoteJid = key.parentJid().orElse(null);
             if (remoteJid == null) {
-                continue; // ADAPTED: defensive null check — WA Web would throw via getChatJidMutationIndexForChat
+                continue;
             }
 
             results.add(buildDeleteForMeMutation(

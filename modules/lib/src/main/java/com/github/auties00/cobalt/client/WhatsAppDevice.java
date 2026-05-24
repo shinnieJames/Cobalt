@@ -15,36 +15,48 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Describes the hardware and platform identity that a Cobalt client
- * advertises as its underlying device.
+ * The hardware and platform identity a Cobalt client advertises as its
+ * underlying device.
  *
- * <p>When Cobalt connects to the WhatsApp servers it must claim a device
- * identity: model name, manufacturer, operating system version, and
- * client platform (Android, iOS, Web, Desktop). That identity is embedded
- * into the handshake payload so the server can categorise the device for
- * telemetry, feature gating and User-Agent construction. Cobalt does not
- * auto-detect the host machine; it instead advertises a synthetic device
- * picked by the caller or by the provided factories.
+ * @apiNote
+ * Picked at builder time and embedded into the connection handshake so
+ * the WhatsApp servers categorise the session for telemetry, feature
+ * gating, and User-Agent construction. Cobalt does not auto-detect the
+ * host machine; the caller picks one of the pre-built profiles
+ * ({@link #web()}, {@link #desktop()}, {@link #ios(boolean)},
+ * {@link #android(boolean)}) or constructs one explicitly. Mobile
+ * factories randomise the model and OS version from a curated list to
+ * reduce fingerprintability.
  *
- * <p>Pre-built profiles are available via {@link #web()},
- * {@link #desktop()}, {@link #ios(boolean)}, and
- * {@link #android(boolean)}; the mobile factories randomise the
- * model/version tuple from a curated list to reduce
- * fingerprintability.
+ * @implNote
+ * This implementation is the wire-level counterpart of WA Web's
+ * {@code DeviceProps} message in
+ * {@code WAWebProtobufsCompanionReg.pb}. The {@link #platform} enum
+ * values map one-to-one to {@code DeviceProps$PlatformType}, with the
+ * desktop and web flavours pinned per host (Windows hosts pick
+ * {@code UWP}, Darwin hosts pick {@code CATALINA}).
  *
  * @see WhatsAppClientType
- * @see WhatsAppClientBuilder.Options#device(WhatsAppDevice)
  * @see DevicePlatformType
  */
 @ProtobufMessage
 @WhatsAppWebModule(moduleName = "WAWebProtobufsCompanionReg.pb")
 public final class WhatsAppDevice {
     /**
-     * A curated list of realistic iOS device configurations used by the
-     * {@link #ios(boolean)} factory method. Each entry represents a specific
-     * iPhone model running a particular iOS version with its corresponding
-     * build number and internal model identifier. A random entry is selected
-     * during factory invocation to reduce fingerprinting surface.
+     * The pool of iOS device fingerprints the {@link #ios(boolean)}
+     * factory samples from.
+     *
+     * @apiNote
+     * Each entry pairs a real iPhone model with a real iOS version,
+     * build number, and internal model identifier so the resulting
+     * {@code DeviceProps} payload looks plausible to server-side
+     * heuristics.
+     *
+     * @implNote
+     * This implementation samples uniformly via
+     * {@link DataUtils#randomInt(int)}
+     * on every call to {@link #ios(boolean)}; there is no caching so
+     * each registered session is independent.
      */
     private static final List<WhatsAppDevice> IOS_DEVICES = List.of(
             new WhatsAppDevice(
@@ -284,22 +296,29 @@ public final class WhatsAppDevice {
     );
 
     /**
-     * The user-facing model name of the device, such as {@code "iPhone 8"} or
-     * {@code "Pixel_5"}.
+     * The user-facing model name (for example {@code "iPhone 8"} or
+     * {@code "Pixel_5"}).
      */
     @ProtobufProperty(index = 1, type = ProtobufType.STRING)
     String model;
 
     /**
-     * The device manufacturer name, such as {@code "Apple"} or {@code "Google"}.
+     * The device manufacturer name (for example {@code "Apple"} or
+     * {@code "Google"}).
      */
     @ProtobufProperty(index = 2, type = ProtobufType.STRING)
     String manufacturer;
 
     /**
-     * The platform type identifying the operating system and client
-     * variant, such as {@link DevicePlatformType#IOS_PHONE} or
-     * {@link DevicePlatformType#ANDROID_PHONE}.
+     * The platform identifier the server uses to route the session.
+     *
+     * @apiNote
+     * Mirrors {@code DeviceProps$PlatformType} from
+     * {@code WAWebProtobufsCompanionReg.pb}; values include
+     * {@link ClientPlatformType#IOS_PHONE},
+     * {@link ClientPlatformType#ANDROID_PHONE},
+     * {@link ClientPlatformType#WEB}, {@link ClientPlatformType#WINDOWS},
+     * and {@link ClientPlatformType#MACOS}.
      */
     @WhatsAppWebExport(moduleName = "WAWebProtobufsCompanionReg.pb",
             exports = "DeviceProps$PlatformType", adaptation = WhatsAppAdaptation.DIRECT)
@@ -307,44 +326,64 @@ public final class WhatsAppDevice {
     ClientPlatformType platform;
 
     /**
-     * The operating system version running on the device, such as {@code 16.7.7} for
-     * iOS or {@code 14} for Android.
+     * The operating system version running on the device (for example
+     * {@code 16.7.7} for iOS or {@code 14} for Android).
      */
     @ProtobufProperty(index = 4, type = ProtobufType.MESSAGE)
     ClientAppVersion osDeviceAppVersion;
 
     /**
-     * The OS build number string, such as {@code "20H330"} for iOS. May be {@code null}
-     * for platforms where the build number is not applicable, in which case the
-     * {@link #osBuildNumber()} accessor returns the OS version string instead.
+     * The OS build number (for example {@code "20H330"} for iOS).
+     *
+     * @apiNote
+     * May be {@code null} on platforms where the build number is not
+     * applicable; in that case {@link #osBuildNumber()} falls back to
+     * the OS version string.
      */
     @ProtobufProperty(index = 5, type = ProtobufType.STRING)
     String osBuildNumber;
 
     /**
-     * The internal hardware model identifier, such as {@code "iPhone10,4"} for
-     * iPhone 8 or {@code "Pixel_5"} for Google Pixel 5. May be {@code null} for
-     * web and desktop clients.
+     * The internal hardware model identifier (for example
+     * {@code "iPhone10,4"} for iPhone 8 or {@code "Pixel_5"} for
+     * Google Pixel 5).
+     *
+     * @apiNote
+     * May be {@code null} for web and desktop clients where the host
+     * machine has no equivalent hardware identifier.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String modelId;
 
     /**
-     * The WhatsApp client type, distinguishing between mobile and web clients.
+     * The WhatsApp client flavour the device represents.
+     *
+     * @apiNote
+     * Distinguishes a {@link WhatsAppClientType#WEB} companion from a
+     * {@link WhatsAppClientType#MOBILE} primary client; the value
+     * drives transport selection and registration code paths.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.ENUM)
     WhatsAppClientType clientType;
 
     /**
-     * Constructs a new {@code WhatsAppDevice} with the specified properties.
+     * Constructs a new device descriptor from explicit components.
      *
-     * @param model         the user-facing model name
-     * @param manufacturer  the device manufacturer
-     * @param platform      the platform type, or {@code null}
-     * @param osDeviceAppVersion     the operating system version
-     * @param osBuildNumber the OS build number, or {@code null}
-     * @param modelId       the internal hardware model identifier, or {@code null}
-     * @param clientType    the WhatsApp client type
+     * @apiNote
+     * Package-private; instances reach embedders through the protobuf
+     * deserialiser and through the static factories
+     * ({@link #web()}, {@link #desktop()}, {@link #ios(boolean)},
+     * {@link #android(boolean)}).
+     *
+     * @param model              the user-facing model name
+     * @param manufacturer       the device manufacturer
+     * @param platform           the wire-level platform identifier, or
+     *                           {@code null}
+     * @param osDeviceAppVersion the operating system version
+     * @param osBuildNumber      the OS build number, or {@code null}
+     * @param modelId            the internal hardware model identifier,
+     *                           or {@code null}
+     * @param clientType         the WhatsApp client flavour
      */
     WhatsAppDevice(
             String model,
@@ -365,16 +404,21 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Creates a {@code WhatsAppDevice} configured as a browser-based
+     * Returns a device descriptor configured as a browser-based
      * WhatsApp Web companion.
      *
-     * <p>Mirrors what WA Web transmits in {@code ClientPayload.UserAgent}
-     * from {@code WAWebClientPayload.C}: the wire platform is hardcoded to
-     * {@link ClientPlatformType#WEB}, the app version block carries the
-     * Chrome-derived {@code appVersion}, and the human-visible device
-     * identity is Chrome on Windows so the server routes through the
-     * WebSocket {@code /ws/chat} endpoint used by genuine browser
-     * sessions.
+     * @apiNote
+     * Use this when the embedder wants to look like a Chrome
+     * WhatsApp Web tab. The wire platform is pinned to
+     * {@link ClientPlatformType#WEB} so the server routes through the
+     * WebSocket endpoint used by genuine browser sessions.
+     *
+     * @implNote
+     * This implementation hardcodes the Chrome 10.0 fingerprint that
+     * WA Web's {@code WAWebClientPayload} emits in
+     * {@code ClientPayload.UserAgent}; manufacturer and model match
+     * Chrome on Windows.
+     *
      * @return a new web-configured device descriptor
      */
     public static WhatsAppDevice web() {
@@ -390,20 +434,26 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Creates a {@code WhatsAppDevice} configured as a WhatsApp Desktop
+     * Returns a device descriptor configured as a WhatsApp Desktop
      * companion, auto-detecting the host platform.
      *
-     * <p>Picks {@link ClientPlatformType#MACOS} when the JVM reports a
-     * Darwin {@code os.name} and {@link ClientPlatformType#WINDOWS}
-     * otherwise (Linux hosts also default to Windows because that is the
-     * most common WA Desktop build in production and has no native
-     * Linux counterpart). WA Desktop ships as an Electron bundle but
-     * reuses the same {@code ClientPayload} shape as {@link #web()} over
-     * a raw TCP+TLS transport (see {@code WhatsAppSocketClient.Desktop}).
-     * Cobalt's socket layer selects that transport when the device
-     * platform is {@code MACOS} or {@code WINDOWS}.
-     * @return a new desktop-configured device descriptor matching the
-     *         host platform, or a Windows descriptor when the host is
+     * @apiNote
+     * Use this when the embedder wants to look like the native WhatsApp
+     * Desktop application. Cobalt's socket layer switches from
+     * WebSocket to raw TCP+TLS when the platform is
+     * {@link ClientPlatformType#WINDOWS} or
+     * {@link ClientPlatformType#MACOS}, matching the transport the
+     * Electron-era WhatsApp Desktop app uses.
+     *
+     * @implNote
+     * This implementation reads the JVM's {@code os.name} and picks
+     * {@link ClientPlatformType#MACOS} on Darwin hosts and
+     * {@link ClientPlatformType#WINDOWS} otherwise; Linux hosts fall
+     * back to Windows because there is no native Linux WA Desktop
+     * build.
+     *
+     * @return a desktop-configured device descriptor matching the host
+     *         platform, or a Windows descriptor when the host is
      *         neither Windows nor macOS
      */
     public static WhatsAppDevice desktop() {
@@ -433,14 +483,22 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Creates a {@code WhatsAppDevice} configured as a randomly selected iOS device.
+     * Returns a device descriptor configured as a randomly sampled iOS
+     * iPhone.
      *
-     * <p>A device configuration is chosen at random from an internal list of realistic
-     * iPhone models and iOS versions. The platform is set to
-     * {@link ClientPlatformType#IOS_BUSINESS} if the {@code business} parameter is
-     * {@code true}, or {@link ClientPlatformType#IOS} otherwise.
+     * @apiNote
+     * Use this when the embedder runs the iOS mobile registration flow
+     * and wants a plausible-looking device fingerprint. The model and
+     * iOS version are sampled uniformly from {@link #IOS_DEVICES} on
+     * every call.
      *
-     * @param business {@code true} to configure the device for WhatsApp Business,
+     * @implNote
+     * This implementation pins the wire platform to
+     * {@link ClientPlatformType#IOS_BUSINESS} when {@code business} is
+     * {@code true} and {@link ClientPlatformType#IOS} otherwise; the
+     * client type is always {@link WhatsAppClientType#MOBILE}.
+     *
+     * @param business {@code true} for the WhatsApp Business variant,
      *                 {@code false} for the consumer variant
      * @return a new iOS-configured device descriptor
      */
@@ -458,14 +516,22 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Creates a {@code WhatsAppDevice} configured as a randomly generated Android device.
+     * Returns a device descriptor configured as a randomly generated
+     * Google Pixel device.
      *
-     * <p>The device emulates a Google Pixel with a randomly selected model number
-     * (Pixel 2 through Pixel 8) and Android version (11 through 15). The platform
-     * is set to {@link ClientPlatformType#ANDROID_BUSINESS} if the {@code business}
-     * parameter is {@code true}, or {@link ClientPlatformType#ANDROID} otherwise.
+     * @apiNote
+     * Use this when the embedder runs the Android mobile registration
+     * flow and wants a plausible-looking device fingerprint. The Pixel
+     * model number is sampled in {@code [2, 8]} and the Android version
+     * in {@code [11, 15]} on every call.
      *
-     * @param business {@code true} to configure the device for WhatsApp Business,
+     * @implNote
+     * This implementation pins the wire platform to
+     * {@link ClientPlatformType#ANDROID_BUSINESS} when {@code business}
+     * is {@code true} and {@link ClientPlatformType#ANDROID} otherwise;
+     * the client type is always {@link WhatsAppClientType#MOBILE}.
+     *
+     * @param business {@code true} for the WhatsApp Business variant,
      *                 {@code false} for the consumer variant
      * @return a new Android-configured device descriptor
      */
@@ -483,8 +549,13 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns the OS build number, falling back to the OS version string if the
-     * build number is {@code null}.
+     * Returns the OS build number, falling back to the OS version
+     * string when the build number is {@code null}.
+     *
+     * @apiNote
+     * Web and desktop descriptors do not carry a build number; the
+     * fallback keeps every accessor non-null so registration code can
+     * attach the value to a request body without a null guard.
      *
      * @return the OS build number string, never {@code null}
      */
@@ -496,17 +567,19 @@ public final class WhatsAppDevice {
      * Returns a User-Agent string suitable for HTTP requests issued by
      * this device.
      *
-     * <p>Web and desktop platforms return a Chrome User-Agent (so
-     * companion linking HTTP requests look browser-like), while mobile
-     * platforms return the WhatsApp-specific User-Agent pattern
-     * ({@code WhatsApp/<version> <platform>/<os> Device/<model>}) that
-     * the official mobile clients emit.
+     * @apiNote
+     * Used by HTTP-shaped surfaces (companion-link asset fetches,
+     * media uploads, mobile registration). Web and desktop platforms
+     * return a stock Chrome User-Agent so the request looks browser-like;
+     * mobile platforms return the
+     * {@code WhatsApp/<version> <platform>/<os> Device/<model>} shape
+     * the native clients emit.
      *
-     * @param clientDeviceAppVersion the WhatsApp client version to embed
-     *                               in the User-Agent
+     * @param clientDeviceAppVersion the WhatsApp client version to
+     *                               embed in the User-Agent
      * @return the formatted User-Agent string
-     * @throws IllegalStateException if the underlying platform enum has an
-     *                               unexpected value
+     * @throws IllegalStateException if the underlying platform enum has
+     *                               an unexpected value
      */
     public String toUserAgent(ClientAppVersion clientDeviceAppVersion) {
         if(platform == ClientPlatformType.WINDOWS || platform == ClientPlatformType.MACOS || platform == ClientPlatformType.WEB) {
@@ -536,12 +609,17 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns a copy of this device with its platform switched to the personal
-     * (non-business) variant. If the platform is already a personal variant,
-     * {@code this} is returned.
+     * Returns a copy of this device with the platform switched to the
+     * personal (non-business) variant.
      *
-     * @return this device if already personal, otherwise a new device with the
-     *         personal platform variant
+     * @apiNote
+     * Use this to switch a Business device into a Consumer device
+     * mid-session (for example after a downgrade flow). Devices that
+     * are already Consumer or that have no business counterpart return
+     * {@code this} unchanged.
+     *
+     * @return this device if already personal, otherwise a new device
+     *         with the personal platform variant
      */
     public WhatsAppDevice toPersonal() {
         return switch (platform) {
@@ -552,12 +630,17 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns a copy of this device with its platform switched to the business
-     * variant. If the platform is already a business variant, {@code this} is
-     * returned.
+     * Returns a copy of this device with the platform switched to the
+     * business variant.
      *
-     * @return this device if already business, otherwise a new device with the
-     *         business platform variant
+     * @apiNote
+     * Use this to switch a Consumer device into a Business device
+     * mid-session (for example after upgrading to WhatsApp Business).
+     * Devices that are already Business or that have no business
+     * counterpart return {@code this} unchanged.
+     *
+     * @return this device if already business, otherwise a new device
+     *         with the business platform variant
      */
     public WhatsAppDevice toBusiness() {
         return switch (platform) {
@@ -568,10 +651,15 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns a copy of this device with the specified platform. If the given
-     * platform is {@code null}, the current platform is retained.
+     * Returns a copy of this device with the specified platform.
      *
-     * @param platform the new platform type, or {@code null} to keep the current one
+     * @apiNote
+     * General-purpose copy-with for the {@link #platform} field; used
+     * internally by {@link #toPersonal()} and {@link #toBusiness()}. A
+     * {@code null} argument keeps the current platform.
+     *
+     * @param platform the new platform type, or {@code null} to keep
+     *                 the current one
      * @return a new device with the given platform
      */
     public WhatsAppDevice withPlatform(ClientPlatformType platform) {
@@ -587,44 +675,47 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns the user-facing model name of this device.
+     * Returns the user-facing model name.
      *
-     * @return the model name, such as {@code "iPhone 8"} or {@code "Pixel_5"}
+     * @return the model name (for example {@code "iPhone 8"} or
+     *         {@code "Pixel_5"})
      */
     public String model() {
         return model;
     }
 
     /**
-     * Returns the internal hardware model identifier of this device.
+     * Returns the internal hardware model identifier.
      *
-     * @return the model identifier, such as {@code "iPhone10,4"}, or {@code null}
-     *         for web and desktop clients
+     * @return the model identifier (for example {@code "iPhone10,4"}),
+     *         or {@code null} for web and desktop descriptors
      */
     public String modelId() {
         return modelId;
     }
 
     /**
-     * Returns the manufacturer name of this device.
+     * Returns the manufacturer name.
      *
-     * @return the manufacturer, such as {@code "Apple"} or {@code "Google"}
+     * @return the manufacturer (for example {@code "Apple"} or
+     *         {@code "Google"})
      */
     public String manufacturer() {
         return manufacturer;
     }
 
     /**
-     * Returns the platform type of this device.
+     * Returns the wire-level platform identifier.
      *
-     * @return the platform type identifying the operating system and client variant
+     * @return the platform identifying the operating system and client
+     *         variant
      */
     public ClientPlatformType platform() {
         return platform;
     }
 
     /**
-     * Returns the operating system version of this device.
+     * Returns the operating system version.
      *
      * @return the OS version
      */
@@ -633,17 +724,22 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns the WhatsApp client type of this device.
+     * Returns the WhatsApp client flavour.
      *
-     * @return the client type, such as {@link WhatsAppClientType#MOBILE} or
-     *         {@link WhatsAppClientType#WEB}
+     * @return the client flavour, either {@link WhatsAppClientType#MOBILE}
+     *         or {@link WhatsAppClientType#WEB}
      */
     public WhatsAppClientType clientType() {
         return clientType;
     }
 
     /**
-     * Sets the user-facing model name of this device.
+     * Updates the user-facing model name in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field;
+     * application code should prefer {@link #withPlatform(ClientPlatformType)}
+     * style copy-withs to avoid mutating shared instances.
      *
      * @param model the new model name
      */
@@ -652,7 +748,10 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the manufacturer name of this device.
+     * Updates the manufacturer name in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field.
      *
      * @param manufacturer the new manufacturer name
      */
@@ -661,7 +760,11 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the platform type of this device.
+     * Updates the wire-level platform identifier in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field;
+     * application code should prefer {@link #withPlatform(ClientPlatformType)}.
      *
      * @param platform the new platform type
      */
@@ -670,7 +773,10 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the operating system version of this device.
+     * Updates the operating system version in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field.
      *
      * @param osDeviceAppVersion the new OS version
      */
@@ -679,7 +785,10 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the OS build number of this device.
+     * Updates the OS build number in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field.
      *
      * @param osBuildNumber the new OS build number, or {@code null}
      */
@@ -688,7 +797,10 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the internal hardware model identifier of this device.
+     * Updates the internal hardware model identifier in place.
+     *
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field.
      *
      * @param modelId the new model identifier, or {@code null}
      */
@@ -697,23 +809,27 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Sets the WhatsApp client type of this device.
+     * Updates the WhatsApp client flavour in place.
      *
-     * @param clientType the new client type
+     * @apiNote
+     * Provided so the protobuf deserialiser can populate the field.
+     *
+     * @param clientType the new client flavour
      */
     public void setClientType(WhatsAppClientType clientType) {
         this.clientType = clientType;
     }
 
     /**
-     * Compares this device to the specified object for equality.
+     * Compares this device to another object for structural equality.
      *
-     * <p>Two {@code WhatsAppDevice} instances are considered equal if and only if all of
-     * their properties (model, manufacturer, platform, OS version, OS build number,
-     * model identifier, and client type) are equal.
+     * @apiNote
+     * Two descriptors are equal when every component (model,
+     * manufacturer, platform, OS version, OS build number, model
+     * identifier, client flavour) matches.
      *
      * @param o the object to compare with
-     * @return {@code true} if the objects are equal, {@code false} otherwise
+     * @return {@code true} if the descriptors are structurally equal
      */
     @Override
     public boolean equals(Object o) {
@@ -728,7 +844,7 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns a hash code for this device based on all of its properties.
+     * Returns a hash code consistent with {@link #equals(Object)}.
      *
      * @return the hash code
      */
@@ -738,8 +854,7 @@ public final class WhatsAppDevice {
     }
 
     /**
-     * Returns a human-readable description of this device suitable for
-     * logs.
+     * Returns a human-readable description suitable for logs.
      *
      * @return the string representation
      */

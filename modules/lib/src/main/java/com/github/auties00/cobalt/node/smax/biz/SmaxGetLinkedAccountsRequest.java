@@ -12,36 +12,65 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The outbound stanza variant. Wraps a bare empty
- * {@code <linked_accounts/>} child in the canonical
- * {@code <iq xmlns="fb:thrift_iq" type="get" to="s.whatsapp.net">}
- * envelope.
+ * The outbound {@code GetLinkedAccounts} IQ request stanza for the
+ * SMB business-linking enumeration bridge.
+ *
+ * @apiNote
+ * Used by Cobalt clients that mirror WA Web's
+ * {@code WAWebLinkedAccountsJob.queryLinkedPagesInfo} flow, which
+ * is consulted from the CTWA ad-creation pipeline
+ * ({@code WAWebBizNativeAdsResolveRelayIdentityBundle},
+ * {@code WAWebResolveAccountTypeAndAdPage},
+ * {@code WAWebBizNativeAdsFlowLoadable}) and from the SMB
+ * linked-accounts settings surface to enumerate the linked
+ * Facebook page, Facebook business, Instagram-professional and
+ * WhatsApp ad-identity records associated with the active user.
+ *
+ * @implNote
+ * This implementation mirrors WA Web's
+ * {@code makeGetLinkedAccountsRequest} by stamping the static
+ * {@code xmlns="fb:thrift_iq"} envelope and emitting a bare
+ * {@code <linked_accounts/>} child; the {@code id} attribute is
+ * appended by Cobalt's send path, matching WA's
+ * {@code generateId()} insertion point.
  */
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingGetLinkedAccountsRequest")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingHackBaseIQGetRequestMixin")
 @WhatsAppWebModule(moduleName = "WASmaxOutBizLinkingBaseIQGetRequestMixin")
 public final class SmaxGetLinkedAccountsRequest implements SmaxOperation.Request {
     /**
-     * The optional {@code from} attribute echoed onto the outbound IQ
-     * via the {@code HackBaseIQGetRequestMixin}. The active user JID
-     * is the only legal value; {@code null} omits the attribute.
+     * The optional {@code from} attribute echoed onto the outbound
+     * IQ via the {@code HackBaseIQGetRequestMixin}; the active user
+     * {@link Jid} is the only legal value and {@code null} omits
+     * the attribute.
      */
     private final Jid fromUserJid;
 
     /**
-     * Constructs a new request with no {@code from} echo. The request
-     * carries no attributes other than the static envelope.
+     * Constructs a new request with no {@code from} echo.
+     *
+     * @apiNote
+     * The default shape invoked by
+     * {@code WAWebLinkedAccountsJob.queryLinkedPagesInfo}: a bare
+     * IQ-get with only the empty {@code <linked_accounts/>}
+     * payload.
      */
     public SmaxGetLinkedAccountsRequest() {
         this(null);
     }
 
     /**
-     * Constructs a new request optionally echoing the supplied user JID
-     * onto the {@code from} attribute.
+     * Constructs a new request optionally echoing the supplied user
+     * {@link Jid} onto the {@code from} attribute.
      *
-     * @param fromUserJid the optional user JID to echo onto the
-     *                    {@code from} attribute; may be {@code null}
+     * @apiNote
+     * Use when a companion linked device proxies the request on
+     * behalf of the active user; the relay validates that the
+     * echoed JID matches the authenticated session.
+     *
+     * @param fromUserJid the optional user {@link Jid} to echo
+     *                    onto the {@code from} attribute; may be
+     *                    {@code null}
      */
     public SmaxGetLinkedAccountsRequest(Jid fromUserJid) {
         this.fromUserJid = fromUserJid;
@@ -50,8 +79,8 @@ public final class SmaxGetLinkedAccountsRequest implements SmaxOperation.Request
     /**
      * Returns the optional {@code from} echo.
      *
-     * @return an {@link Optional} carrying the user JID, or empty when
-     *         no echo was supplied
+     * @return an {@link Optional} carrying the user {@link Jid}, or
+     *         empty when no echo was supplied
      */
     public Optional<Jid> fromUserJid() {
         return Optional.ofNullable(fromUserJid);
@@ -60,8 +89,17 @@ public final class SmaxGetLinkedAccountsRequest implements SmaxOperation.Request
     /**
      * Builds the outbound IQ stanza ready for dispatch.
      *
-     * @return a {@link NodeBuilder} carrying the IQ envelope and the
-     *         empty {@code <linked_accounts/>} payload
+     * @implNote
+     * This implementation composes three WA Web mixins in a single
+     * pass: {@code makeGetLinkedAccountsRequest} stamps the
+     * {@code xmlns="fb:thrift_iq"} envelope and the empty
+     * {@code <linked_accounts/>} child,
+     * {@code mergeHackBaseIQGetRequestMixin} stamps {@code to} and
+     * the optional {@code from}, and
+     * {@code mergeBaseIQGetRequestMixin} stamps {@code type="get"}.
+     *
+     * @return a {@link NodeBuilder} carrying the IQ envelope and
+     *         the empty {@code <linked_accounts/>} payload
      */
     @Override
     @WhatsAppWebExport(moduleName = "WASmaxOutBizLinkingGetLinkedAccountsRequest",
@@ -78,16 +116,19 @@ public final class SmaxGetLinkedAccountsRequest implements SmaxOperation.Request
                 .build();
         var builder = new NodeBuilder()
                 .description("iq")
-                .attribute("xmlns", "fb:thrift_iq") // WASmaxOutBizLinkingGetLinkedAccountsRequest.makeGetLinkedAccountsRequest: smax("iq", {xmlns: "fb:thrift_iq", smax_id: INT(42)})
-                .attribute("to", JidServer.user()) // WASmaxOutBizLinkingHackBaseIQGetRequestMixin.mergeHackBaseIQGetRequestMixin: to: WAWap.S_WHATSAPP_NET
-                .attribute("type", "get") // WASmaxOutBizLinkingBaseIQGetRequestMixin.mergeBaseIQGetRequestMixin: type: "get" (id=generateId() delegated to WhatsAppClient.sendNode)
+                .attribute("xmlns", "fb:thrift_iq")
+                .attribute("to", JidServer.user())
+                .attribute("type", "get")
                 .content(linkedAccountsNode);
         if (fromUserJid != null) {
-            builder.attribute("from", fromUserJid); // WASmaxOutBizLinkingHackBaseIQGetRequestMixin.mergeHackBaseIQGetRequestMixin: from: OPTIONAL(USER_JID, t)
+            builder.attribute("from", fromUserJid);
         }
         return builder;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object obj) {
         if (obj == this) {
@@ -100,11 +141,17 @@ public final class SmaxGetLinkedAccountsRequest implements SmaxOperation.Request
         return Objects.equals(this.fromUserJid, that.fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(fromUserJid);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "SmaxGetLinkedAccountsRequest[fromUserJid=" + fromUserJid + ']';

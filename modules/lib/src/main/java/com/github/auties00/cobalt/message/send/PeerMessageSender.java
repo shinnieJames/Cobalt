@@ -2,8 +2,8 @@ package com.github.auties00.cobalt.message.send;
 
 import com.github.auties00.cobalt.client.WhatsAppClient;
 import com.github.auties00.cobalt.device.DeviceService;
-import com.github.auties00.cobalt.message.send.ack.AckParser;
-import com.github.auties00.cobalt.message.send.ack.AckResult;
+import com.github.auties00.cobalt.ack.AckParser;
+import com.github.auties00.cobalt.ack.AckResult;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryptedPayload;
 import com.github.auties00.cobalt.message.send.crypto.MessageEncryption;
 import com.github.auties00.cobalt.meta.annotation.WhatsAppWebExport;
@@ -20,40 +20,52 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Sends peer protocol messages to one of the user's own devices. These cover
- * app-state-sync key shares and requests, fatal-exception notifications, peer
- * data operation requests and responses, and ephemeral-sync responses.
+ * Sends peer protocol messages to one of the user's own devices.
  *
- * <p>Peer messages are encrypted per device using the Signal session cipher
- * and are tagged on the wire with {@code category="peer"} and
- * {@code push_priority="high"} so they are dispatched promptly.
+ * <p>Used for app-state-sync key shares and requests, fatal-exception
+ * notifications, peer-data operation requests and responses, and
+ * ephemeral-sync responses. Each send produces a single
+ * {@code <message category="peer" push_priority="high">} stanza wrapping a
+ * per-device Signal envelope with no {@code <participants>} layer.
  */
 @WhatsAppWebModule(moduleName = "WAWebSendAppStateSyncMsgJob")
 @WhatsAppWebModule(moduleName = "WAWebSendMsgCreateDeviceStanza")
 final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
     /**
-     * Holds the logger used for peer-message diagnostics.
+     * The {@link System.Logger} used for peer-send diagnostics.
      */
     private static final System.Logger LOGGER = System.getLogger(PeerMessageSender.class.getName());
 
     /**
-     * Holds the encryption service used for per-device Signal encryption.
+     * The {@link MessageEncryption} service used for per-device Signal
+     * encryption.
      */
     private final MessageEncryption encryption;
 
     /**
-     * Holds the device service used to ensure an E2E session before encryption.
+     * The {@link DeviceService} used to ensure an E2E session is established
+     * before encryption.
      */
     private final DeviceService deviceService;
 
     /**
-     * Constructs a peer-message sender bound to the given dependencies.
+     * Constructs a {@link PeerMessageSender} bound to the supplied
+     * dependencies.
      *
-     * @param client         the WhatsApp client used to dispatch stanzas
-     * @param encryption     the message encryption service
-     * @param deviceService  the device service used to manage Signal sessions
-     * @param abPropsService the AB-props service consulted by the base sender
-     * @param wamService     the WAM telemetry service shared with the base sender
+     * @apiNote
+     * Constructed once by {@link MessageSendingService}; embedders should
+     * not instantiate directly.
+     *
+     * @param client         the {@link WhatsAppClient} used to dispatch
+     *                       stanzas
+     * @param encryption     the {@link MessageEncryption} service
+     * @param deviceService  the {@link DeviceService} used to manage Signal
+     *                       sessions
+     * @param abPropsService the {@link ABPropsService} consulted by the base
+     *                       sender
+     * @param wamService     the {@link WamService} shared with the base
+     *                       sender
+     * @throws NullPointerException if any argument is {@code null}
      */
     @WhatsAppWebExport(moduleName = "WAWebSendAppStateSyncMsgJob", exports = "encryptAndSendKeyMsg",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -70,13 +82,14 @@ final class PeerMessageSender extends MessageSender<ChatMessageInfo> {
     }
 
     /**
-     * Encrypts the given peer protocol message for the target device, builds a
-     * {@code <message>} stanza tagged with {@code category="peer"} and
-     * {@code push_priority="high"}, and waits for the server acknowledgement.
+     * {@inheritDoc}
      *
-     * @param targetDevice the target device JID, typically the user's primary device
-     * @param messageInfo  the outgoing peer protocol message
-     * @return the server ack result
+     * @apiNote
+     * Encrypts the payload for the supplied {@code targetDevice}, wraps the
+     * envelope in a {@code <message category="peer" push_priority="high">}
+     * stanza alongside a {@code <meta appdata="default">} child and an
+     * optional {@code <device-identity>} child (PKMSG only), and blocks
+     * until the server returns the ack.
      */
     @WhatsAppWebExport(moduleName = "WAWebSendAppStateSyncMsgJob", exports = "encryptAndSendKeyMsg",
             adaptation = WhatsAppAdaptation.DIRECT)

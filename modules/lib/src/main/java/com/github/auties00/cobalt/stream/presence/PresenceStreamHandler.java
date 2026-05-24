@@ -14,40 +14,69 @@ import java.time.Instant;
 import java.util.Set;
 
 /**
- * Handles incoming {@code <presence>} stanzas from the WhatsApp server.
+ * Updates the {@link Contact#lastKnownPresence()} and {@link Contact#lastSeen()}
+ * of the contact identified by a {@code <presence>} stanza.
  *
- * <p>Each presence stanza carries the online/offline status of a contact, along
- * with an optional last-seen timestamp. When the contact's privacy settings hide
- * the last-seen information, the stanza carries a {@code last="deny"} attribute
- * instead of a numeric timestamp.
+ * @apiNote
+ * Drives the "online/last seen" surface shown next to a contact's name in
+ * WhatsApp clients. The handler runs whenever the server pushes a presence
+ * update for any subscribed contact (presence subscription is requested
+ * elsewhere via {@code subscribePresence}). The privacy sentinels
+ * {@code "deny"}, {@code "none"} and {@code "error"} carried in the
+ * {@code last} attribute mean the peer's privacy settings hide their
+ * last-seen timestamp; in that case the existing timestamp is left untouched.
  *
- * <p>This handler updates the contact's {@linkplain Contact#lastKnownPresence()
- * presence state} and {@linkplain Contact#lastSeen() last-seen timestamp} in the
- * local store, then notifies registered listeners.
- *
+ * @implNote
+ * This implementation merges {@code WAWebHandlePresence} (the per-stanza
+ * router) with the {@code WAWebChangePresenceHandlerAction} default export
+ * (the action handler that mutates {@code PresenceCollection}). WA Web
+ * distinguishes a "GroupAvailable" / "GroupUnavailable" presence variant
+ * that updates the per-group viewer count; that path is not implemented
+ * here. WA Web also surfaces {@code deny} as a {@code forceDisplay} UI hint
+ * on the {@code Presence} model. Cobalt has no such UI hint, so the
+ * {@code last="deny"} sentinel is consumed by {@link #resolveLastSeen(String, ContactStatus)}
+ * and discarded.
  */
 @WhatsAppWebModule(moduleName = "WAWebHandlePresence")
 @WhatsAppWebModule(moduleName = "WAWebChangePresenceHandlerAction")
 public final class PresenceStreamHandler implements SocketStream.Handler {
     /**
-     * Logger for diagnostic messages related to presence handling.
+     * The {@link System.Logger} used to report stanzas that cannot be parsed
+     * or that carry malformed {@code last} timestamps.
      */
     private static final System.Logger LOGGER = System.getLogger(PresenceStreamHandler.class.getName());
 
     /**
-     * The set of {@code last} attribute values that indicate the contact has hidden their last-seen timestamp through privacy settings. When the {@code last} attribute matches one of these values, the last-seen timestamp is not updated and is instead cleared.
+     * The set of {@code last}-attribute sentinel strings that mean the peer
+     * has hidden their last-seen timestamp via privacy settings.
+     *
+     * @implNote
+     * This implementation mirrors the WA Web module-local constant
+     * {@code c = ["deny","none","error"]} in {@code WAWebHandlePresence}.
+     * When the {@code last} value matches one of these strings, the contact's
+     * existing {@link Contact#lastSeen()} is left untouched rather than
+     * overwritten with {@code null}.
      */
     private static final Set<String> HIDDEN_LAST_VALUES = Set.of("deny", "none", "error");
 
     /**
-     * The WhatsApp client used to access the store and notify listeners.
+     * The {@link WhatsAppClient} that owns the store this handler mutates and
+     * whose listeners receive the resulting {@code onContactPresence}
+     * notifications.
      */
     private final WhatsAppClient whatsapp;
 
     /**
-     * Constructs a new presence stream handler with the given WhatsApp client.
+     * Constructs a new {@link PresenceStreamHandler} bound to the given
+     * {@link WhatsAppClient}.
      *
-     * @param whatsapp the non-{@code null} WhatsApp client instance
+     * @apiNote
+     * Constructed by the {@link SocketStream} wiring; embedders do not call
+     * this directly. The supplied client must have an initialized
+     * {@link com.github.auties00.cobalt.store.AbstractWhatsAppStore store}.
+     *
+     * @param whatsapp the non-{@code null} client whose store is updated
+     *                 and whose listeners are notified
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePresence", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -56,21 +85,34 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Handles an incoming {@code <presence>} stanza by extracting the contact's
-     * online/offline status and optional last-seen timestamp, updating the
-     * corresponding {@link Contact} in the store, and notifying listeners.
+     * {@inheritDoc}
      *
-     * <p>The handler performs the following steps:
-     * <ol>
-     *   <li>Extracts the {@code from} attribute as a JID</li>
-     *   <li>Skips the update if the JID belongs to the current user's own account</li>
-     *   <li>Resolves the JID to a canonical contact identifier (LID to PN resolution)</li>
-     *   <li>Reads the {@code type} attribute (defaulting to {@code "available"})</li>
-     *   <li>Updates the contact's presence state and last-seen timestamp</li>
-     *   <li>Persists the contact and fires a presence change notification</li>
-     * </ol>
+     * @apiNote
+     * Consumes one {@code <presence>} stanza for a non-self contact, sets
+     * {@link ContactStatus#AVAILABLE} or {@link ContactStatus#UNAVAILABLE}
+     * on the matching {@link Contact}, updates {@link Contact#lastSeen()}
+     * via {@link #resolveLastSeen(String, ContactStatus)}, persists the
+     * contact and dispatches {@code onContactPresence} to every registered
+     * listener on a fresh virtual thread.
      *
-     * @param node the non-{@code null} presence stanza node
+     * @implNote
+     * This implementation diverges from WA Web in three places.
+     * <ul>
+     * <li>WA Web's {@code WAWebHandlePresence} default export dispatches
+     * {@code GroupAvailable} / {@code GroupUnavailable} variants to
+     * {@code WAWebChangeGroupPresenceHandlerAction}; Cobalt does not
+     * implement that group-viewer-count surface, so those variants flow
+     * through to the per-contact path here.</li>
+     * <li>WA Web gates the entire path behind
+     * {@code Lid1X1MigrationUtils.isLidMigrated()} and logs an error if a
+     * migrated client receives a PN presence; Cobalt does not maintain
+     * that gate and accepts both PN and LID {@code from} attributes.</li>
+     * <li>The {@code deny} flag that WA Web propagates as a
+     * {@code forceDisplay} UI hint on {@code Presence} is dropped, because
+     * Cobalt is headless and has no equivalent display state.</li>
+     * </ul>
+     *
+     * @param node {@inheritDoc}
      */
     @WhatsAppWebExport(moduleName = "WAWebHandlePresence", exports = "default",
             adaptation = WhatsAppAdaptation.ADAPTED)
@@ -98,35 +140,48 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
         var status = "unavailable".equals(type) ? ContactStatus.UNAVAILABLE : ContactStatus.AVAILABLE;
         contact.setLastKnownPresence(status);
 
-        // Only set lastSeen when type is "unavailable" and resolveLastSeen returns a value, mirroring WA Web's r.set({t: undefined}) which leaves the existing t field untouched.
         var lastValue = node.getAttributeAsString("last", null);
         var lastSeen = resolveLastSeen(lastValue, status);
         if (lastSeen != null) {
             contact.setLastSeen(lastSeen);
         }
-        // WA Web's deny flag is a UI forceDisplay hint that Cobalt's headless model does not surface; the last="deny" sentinel is already handled by resolveLastSeen returning null.
         whatsapp.store().addContact(contact);
         notifyPresence(contact.toJid(), contact.toJid());
     }
 
     /**
-     * Resolves the last-seen timestamp from the {@code last} attribute value and the
-     * presence status.
+     * Returns the {@link Instant} to store on {@link Contact#lastSeen()}
+     * given the raw {@code last} attribute value and the resolved presence
+     * {@code status}, or {@code null} when the existing timestamp should be
+     * preserved.
      *
-     * <p>The resolution logic mirrors the WA Web {@code d(e)} helper function:
-     * <ul>
-     *   <li>If the status is not {@link ContactStatus#UNAVAILABLE}, returns {@code null}
-     *       (last-seen is only meaningful for offline contacts)</li>
-     *   <li>If the {@code last} value is {@code null}, returns the current time
-     *       (the contact just went offline)</li>
-     *   <li>If the {@code last} value is one of the hidden values ({@code "deny"},
-     *       {@code "none"}, {@code "error"}), returns {@code null}</li>
-     *   <li>Otherwise, parses the value as a unix epoch second</li>
-     * </ul>
+     * @apiNote
+     * Encodes the four-way classifier that callers from
+     * {@link #handle(Node)} use to drive {@link Contact#setLastSeen(Instant)}.
+     * Returns {@code null} for an online contact (last-seen is only relevant
+     * to offline contacts), {@link Instant#now()} when an offline contact
+     * has no {@code last} attribute at all (the contact just went offline),
+     * {@code null} for any of the {@link #HIDDEN_LAST_VALUES} (privacy
+     * settings hide the timestamp), and otherwise the unix epoch second
+     * parsed from the attribute.
      *
-     * @param lastValue the raw {@code last} attribute value from the stanza, or {@code null}
-     * @param status    the resolved presence status
-     * @return the last-seen instant, or {@code null} if not applicable
+     * @implNote
+     * This implementation is the bit-for-bit equivalent of WA Web's helper
+     * {@code d(e)} inside {@code WAWebHandlePresence}, which calls
+     * {@code WATimeUtils.castToUnixTime(Number(e))} for numeric values and
+     * {@code WATimeUtils.unixTime()} when the attribute is absent. Cobalt
+     * additionally swallows {@link NumberFormatException} on malformed
+     * timestamps; WA Web's wrapping {@code Number(e)} would produce
+     * {@code NaN} and propagate. Returning {@code null} instead is
+     * consistent with the WA Web "leave existing timestamp untouched"
+     * semantic encoded in {@link #handle(Node)} above.
+     *
+     * @param lastValue the raw {@code last} attribute, or {@code null} when
+     *                  the stanza did not carry one
+     * @param status    the {@link ContactStatus} just derived from the
+     *                  {@code type} attribute
+     * @return the timestamp to store, or {@code null} to leave the existing
+     *         {@link Contact#lastSeen()} untouched
      */
     private Instant resolveLastSeen(String lastValue, ContactStatus status) {
         if (status != ContactStatus.UNAVAILABLE) {
@@ -151,16 +206,25 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Determines whether the given {@code from} JID represents the current user's
-     * own account.
+     * Returns {@code true} when the given {@code from} JID refers to the
+     * client's own account.
      *
-     * <p>This check mirrors WA Web's {@code isMeAccount} which compares both the
-     * phone-number user and the LID user. In Cobalt, the PN-based check is direct;
-     * LID-based from JIDs are resolved through the LID-to-PN cache.
+     * @apiNote
+     * Suppresses self-echoes: WA Web's {@code WAWebUserPrefsMeUser.isMeAccount}
+     * filters presence updates for the local user out of the presence-driven
+     * UI, and this method is the {@link #handle(Node)} equivalent.
      *
-     * @param from  the JID from the presence stanza
-     * @param meJid the current user's device JID
-     * @return {@code true} if the presence is for the current user's own account
+     * @implNote
+     * This implementation accepts a {@link Jid} on either the PN server or
+     * the LID server. The LID-server branch consults the store's
+     * LID-to-PN cache via {@code findPhoneByLid}; WA Web instead carries
+     * both ids inside {@code WAWebUserPrefsMeUser} and compares them
+     * directly without a cache lookup.
+     *
+     * @param from  the {@code from} attribute of the {@code <presence>} stanza
+     * @param meJid the client's own JID from {@code store().jid()}
+     * @return {@code true} when {@code from} and {@code meJid} resolve to the
+     *         same user; {@code false} otherwise
      */
     private boolean isSelfPresence(Jid from, Jid meJid) {
         var fromUser = from.toUserJid();
@@ -176,16 +240,27 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Resolves the given JID to a canonical contact, creating a new contact if none
-     * exists in the store.
+     * Returns the {@link Contact} stored under the canonical PN form of
+     * {@code jid}, creating a fresh entry when none exists.
      *
-     * <p>If the JID has a LID server, it is first resolved to a phone-number JID
-     * via the store's LID-to-PN cache. This mirrors the WA Web behavior where
-     * {@code WAWebApiContact.getPhoneNumber} converts LID JIDs to phone-number JIDs
-     * before looking up the contact.
+     * @apiNote
+     * Centralizes the LID-to-PN normalization every presence-driven contact
+     * lookup needs. Embedders that consume {@code onContactPresence} can
+     * therefore assume the {@link Contact#toJid()} they receive is on the
+     * PN server even when the wire stanza carried a LID-server {@code from}.
      *
-     * @param jid the JID from the presence stanza
-     * @return the resolved contact, or {@code null} if the JID cannot be resolved
+     * @implNote
+     * This implementation maps a LID-server {@link Jid} to its PN
+     * counterpart via the store's LID-to-PN cache and falls back to the LID
+     * form when the cache misses. WA Web's equivalent path goes through
+     * {@code WAWebJidToWid.userJidToUserWid} followed by
+     * {@code WAWebApiContact.getPhoneNumber}; Cobalt collapses the lookup
+     * into one store call because the LID-to-PN cache is the only source of
+     * truth for the mapping.
+     *
+     * @param jid the {@link Jid} read off the stanza, possibly {@code null}
+     * @return the resolved {@link Contact}, or {@code null} when
+     *         {@code jid} is {@code null}
      */
     private Contact getOrCreateContact(Jid jid) {
         if (jid == null) {
@@ -201,13 +276,22 @@ public final class PresenceStreamHandler implements SocketStream.Handler {
     }
 
     /**
-     * Notifies all registered listeners about a presence change for the given
-     * conversation and participant.
+     * Fans out an {@code onContactPresence} notification to every registered
+     * {@link com.github.auties00.cobalt.client.WhatsAppClientListener}.
      *
-     * <p>Each listener is invoked on a separate virtual thread to avoid blocking
-     * the handler.
+     * @apiNote
+     * The {@code conversation} and {@code participant} arguments are equal
+     * for {@code <presence>} stanzas (presence is always per-contact, never
+     * per-group); they are kept distinct in the listener signature so the
+     * same callback can also be invoked from {@code <chatstate>} handlers
+     * where the conversation is a group JID.
      *
-     * @param conversation the JID of the conversation where the presence changed
+     * @implNote
+     * This implementation starts one virtual thread per listener so that a
+     * blocking listener cannot stall the {@link SocketStream} dispatch loop.
+     *
+     * @param conversation the JID of the conversation that experienced the
+     *                     presence change
      * @param participant  the JID of the participant whose presence changed
      */
     private void notifyPresence(Jid conversation, Jid participant) {

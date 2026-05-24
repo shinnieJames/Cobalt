@@ -12,5 +12,7 @@ public enum HashVerificationFailureType {
     @WamEnumConstant(2) ENCRYPTED_SHA256_MISMATCH,
     @WamEnumConstant(3) PLAINTEXT_SHA256_MISMATCH,
     @WamEnumConstant(4) ENCRYPTED_SHA256_NULL,
-    @WamEnumConstant(5) PLAINTEXT_SHA256_NULL
+    @WamEnumConstant(5) PLAINTEXT_SHA256_NULL,
+    @WamEnumConstant(6) DECRYPTION_FAILED,
+    @WamEnumConstant(7) TRUNCATED_HMAC_VERIFICATION_FAILED
 }

@@ -9,17 +9,20 @@ import it.auties.protobuf.model.ProtobufType;
  * {@code android.clients.google.com/checkin}, the first step of the
  * Android device-registration handshake.
  *
- * <p>Field numbers come from Google's internal AndroidCheckin protobuf
- * (the public reference is the leaked {@code checkin.proto} schema).
- * Only the subset Cobalt actually needs is encoded.
- *
- * <p>The corresponding response is decoded by
- * {@link FcmCheckinResponse}.
+ * @apiNote
+ * Field numbers come from Google's internal AndroidCheckin protobuf
+ * (the public reference is the leaked {@code checkin.proto} schema);
+ * only the subset Cobalt actually needs is encoded. The corresponding
+ * response is decoded by {@link FcmCheckinResponse}.
  */
 @ProtobufMessage(name = "FcmCheckinRequest")
 public final class FcmCheckinRequest {
     /**
-     * Existing Android id. {@code 0} for a fresh registration.
+     * Existing Android id.
+     *
+     * @apiNote
+     * {@code 0} for a fresh registration; non-zero when the device
+     * is re-confirming a previously assigned id.
      */
     @ProtobufProperty(index = 2, type = ProtobufType.INT64)
     long id;
@@ -31,43 +34,75 @@ public final class FcmCheckinRequest {
     Checkin checkin;
 
     /**
-     * UI locale, e.g. {@code "en_US"}.
+     * UI locale.
+     *
+     * @apiNote
+     * Cobalt sends {@code "en_US"} unconditionally.
      */
     @ProtobufProperty(index = 6, type = ProtobufType.STRING)
     String locale;
 
     /**
-     * Random per-checkin logging id, ~{@code SecureRandom.nextLong() & MAX_LONG}.
+     * Random per-checkin logging id.
+     *
+     * @apiNote
+     * Generated as {@code SecureRandom.nextLong() & MAX_LONG} so the
+     * server cannot fingerprint Cobalt across calls via a stable
+     * value.
      */
     @ProtobufProperty(index = 7, type = ProtobufType.INT64)
     long loggingId;
 
     /**
-     * Time zone, always {@code "UTC"}.
+     * Time zone.
+     *
+     * @apiNote
+     * Cobalt sends {@code "UTC"} unconditionally.
      */
     @ProtobufProperty(index = 12, type = ProtobufType.STRING)
     String timeZone;
 
     /**
-     * Checkin version. The native Android client sends {@code 3}.
+     * Checkin protocol version.
+     *
+     * @apiNote
+     * The native Android client sends {@code 3}.
      */
     @ProtobufProperty(index = 14, type = ProtobufType.INT32)
     int version;
 
     /**
-     * Numeric flags Cobalt sets to {@code 0}. Carried so the wire body
-     * matches what the server expects.
+     * Numeric flag Cobalt sets to {@code 0}.
+     *
+     * @apiNote
+     * Carried so the wire body matches what the server expects;
+     * non-zero values are not modeled.
      */
     @ProtobufProperty(index = 20, type = ProtobufType.INT64)
     long fragment;
 
     /**
-     * Numeric flag Cobalt sets to {@code 0}. Same rationale as
-     * {@link #fragment}.
+     * Numeric flag Cobalt sets to {@code 0}.
+     *
+     * @apiNote
+     * Same rationale as {@link #fragment}: shipped to keep the wire
+     * body intact.
      */
     @ProtobufProperty(index = 22, type = ProtobufType.INT64)
     long userSerialNumber;
 
+    /**
+     * Constructs a new request with the given values.
+     *
+     * @param id               the existing Android id
+     * @param checkin          the nested device description
+     * @param locale           the UI locale
+     * @param loggingId        the random per-checkin logging id
+     * @param timeZone         the time zone
+     * @param version          the protocol version
+     * @param fragment         the fragment flag
+     * @param userSerialNumber the multi-user serial number flag
+     */
     FcmCheckinRequest(long id, Checkin checkin, String locale, long loggingId,
                       String timeZone, int version, long fragment, long userSerialNumber) {
         this.id = id;
@@ -92,24 +127,41 @@ public final class FcmCheckinRequest {
         Build build;
 
         /**
-         * Last-checkin timestamp, {@code 0} for a fresh registration.
+         * Last-checkin timestamp, in milliseconds since epoch.
+         *
+         * @apiNote
+         * {@code 0} for a fresh registration.
          */
         @ProtobufProperty(index = 2, type = ProtobufType.INT64)
         long lastCheckinMs;
 
         /**
-         * One synthetic {@code event_log_start} entry. The server expects
-         * at least one event to be present.
+         * One synthetic event entry.
+         *
+         * @apiNote
+         * Cobalt always sends a single {@code event_log_start}
+         * event; the server expects at least one event to be present.
          */
         @ProtobufProperty(index = 3, type = ProtobufType.MESSAGE)
         Event event;
 
         /**
-         * Multi-user serial number, {@code 0} on stock Android.
+         * Multi-user serial number.
+         *
+         * @apiNote
+         * {@code 0} on stock Android.
          */
         @ProtobufProperty(index = 9, type = ProtobufType.INT64)
         long userNumber;
 
+        /**
+         * Constructs a new checkin block.
+         *
+         * @param build         the device build description
+         * @param lastCheckinMs the last-checkin timestamp
+         * @param event         the synthetic event entry
+         * @param userNumber    the multi-user serial number
+         */
         Checkin(Build build, long lastCheckinMs, Event event, long userNumber) {
             this.build = build;
             this.lastCheckinMs = lastCheckinMs;
@@ -120,11 +172,17 @@ public final class FcmCheckinRequest {
 
     /**
      * Build description (field 1 of {@link Checkin}).
+     *
+     * @apiNote
+     * Cobalt impersonates a Nexus 7
+     * ({@code "google/razor/flo:5.0.1/..."}) running SDK 30; the
+     * synthetic profile is deliberately stable across embedders.
      */
     @ProtobufMessage(name = "FcmCheckinRequest.Build")
     public static final class Build {
         /**
-         * Build fingerprint, e.g. {@code "google/razor/flo:5.0.1/LRX22C/1602158:user/release-keys"}.
+         * Build fingerprint, e.g.
+         * {@code "google/razor/flo:5.0.1/LRX22C/1602158:user/release-keys"}.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String fingerprint;
@@ -142,7 +200,11 @@ public final class FcmCheckinRequest {
         String brand;
 
         /**
-         * Client identifier, always {@code "android-google"}.
+         * Client identifier.
+         *
+         * @apiNote
+         * Always {@code "android-google"} in Cobalt's synthetic
+         * profile.
          */
         @ProtobufProperty(index = 6, type = ProtobufType.STRING)
         String clientId;
@@ -154,7 +216,10 @@ public final class FcmCheckinRequest {
         long timeMs;
 
         /**
-         * SDK version (Android API level), e.g. {@code 30}.
+         * SDK version (Android API level).
+         *
+         * @apiNote
+         * Cobalt sends {@code 30}.
          */
         @ProtobufProperty(index = 10, type = ProtobufType.INT32)
         int sdkVersion;
@@ -178,12 +243,28 @@ public final class FcmCheckinRequest {
         String product;
 
         /**
-         * Whether an OTA update is installed; {@code false} for a fresh
-         * synthetic device.
+         * Whether an OTA update is installed.
+         *
+         * @apiNote
+         * {@code false} for a fresh synthetic device.
          */
         @ProtobufProperty(index = 14, type = ProtobufType.BOOL)
         boolean otaInstalled;
 
+        /**
+         * Constructs a new build block.
+         *
+         * @param fingerprint  the build fingerprint
+         * @param hardware     the hardware id
+         * @param brand        the brand
+         * @param clientId     the client identifier
+         * @param timeMs       the build timestamp
+         * @param sdkVersion   the SDK version
+         * @param model        the marketing model
+         * @param manufacturer the OEM
+         * @param product      the internal product code
+         * @param otaInstalled whether an OTA update is installed
+         */
         Build(String fingerprint, String hardware, String brand, String clientId,
               long timeMs, int sdkVersion, String model, String manufacturer,
               String product, boolean otaInstalled) {
@@ -206,18 +287,27 @@ public final class FcmCheckinRequest {
     @ProtobufMessage(name = "FcmCheckinRequest.Event")
     public static final class Event {
         /**
-         * Event tag, always {@code "event_log_start"} for a synthetic
-         * checkin.
+         * Event tag.
+         *
+         * @apiNote
+         * Cobalt always sends {@code "event_log_start"} for a
+         * synthetic checkin.
          */
         @ProtobufProperty(index = 1, type = ProtobufType.STRING)
         String tag;
 
         /**
-         * Event timestamp in epoch milliseconds.
+         * Event timestamp, in epoch milliseconds.
          */
         @ProtobufProperty(index = 3, type = ProtobufType.INT64)
         long timeMs;
 
+        /**
+         * Constructs a new event entry.
+         *
+         * @param tag    the event tag
+         * @param timeMs the event timestamp
+         */
         Event(String tag, long timeMs) {
             this.tag = tag;
             this.timeMs = timeMs;

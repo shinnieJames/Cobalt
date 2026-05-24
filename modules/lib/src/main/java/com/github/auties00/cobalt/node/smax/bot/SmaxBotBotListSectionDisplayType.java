@@ -7,9 +7,22 @@ import com.github.auties00.cobalt.meta.model.WhatsAppAdaptation;
 import java.util.Optional;
 
 /**
- * Section display-type discriminator (V3 only). Projects the
- * {@code <section display_type>} attribute through
- * {@code WASmaxInBotEnums.ENUM_HIDDEN_HSCROLL_HSCROLLICEBREAKERS_HSCROLLLARGE_HSCROLLSMALL_LISTVIEW}.
+ * The render mode hint the relay assigns to a V3 bot-directory
+ * section.
+ *
+ * @apiNote
+ * Used by callers consuming a {@link SmaxBotBotListResponse.SuccessV3.Section}
+ * to decide how the directory sheet should lay out the section's
+ * entries: hidden, a horizontal scroller in one of three sizes, an
+ * icebreaker-prompt scroller, or a plain vertical list. V2 directory
+ * replies do not carry this attribute; this discriminator is V3-only.
+ *
+ * @implNote
+ * This implementation projects the wire literal through
+ * {@link #ofWire(String)}; unknown literals collapse to
+ * {@link Optional#empty()} rather than the WA Web parser's rejection
+ * because the enclosing V3 section factory surfaces the failure to
+ * its caller.
  */
 @WhatsAppWebModule(moduleName = "WASmaxInBotEnums")
 @WhatsAppWebExport(
@@ -19,7 +32,10 @@ import java.util.Optional;
 )
 public enum SmaxBotBotListSectionDisplayType {
     /**
-     * The section is hidden from the directory sheet.
+     * Suppresses the section from the directory sheet.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "hidden"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -28,7 +44,10 @@ public enum SmaxBotBotListSectionDisplayType {
     )
     HIDDEN("hidden"),
     /**
-     * The section renders as a horizontal scroller (default).
+     * Renders the section as a default horizontal scroller.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "hscroll"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -37,8 +56,11 @@ public enum SmaxBotBotListSectionDisplayType {
     )
     HSCROLL("hscroll"),
     /**
-     * The section renders as a horizontal scroller carrying
-     * "icebreaker" prompt cards.
+     * Renders the section as a horizontal scroller carrying
+     * icebreaker prompt cards.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "hscroll_icebreakers"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -47,8 +69,11 @@ public enum SmaxBotBotListSectionDisplayType {
     )
     HSCROLL_ICEBREAKERS("hscroll_icebreakers"),
     /**
-     * The section renders as a horizontal scroller with large bot
+     * Renders the section as a horizontal scroller with large bot
      * cards.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "hscroll_large"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -57,8 +82,11 @@ public enum SmaxBotBotListSectionDisplayType {
     )
     HSCROLL_LARGE("hscroll_large"),
     /**
-     * The section renders as a horizontal scroller with small bot
+     * Renders the section as a horizontal scroller with small bot
      * cards.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "hscroll_small"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -67,7 +95,10 @@ public enum SmaxBotBotListSectionDisplayType {
     )
     HSCROLL_SMALL("hscroll_small"),
     /**
-     * The section renders as a vertical list.
+     * Renders the section as a vertical list.
+     *
+     * @apiNote
+     * Carried as the wire literal {@code "listview"}.
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",
@@ -77,22 +108,34 @@ public enum SmaxBotBotListSectionDisplayType {
     LISTVIEW("listview");
 
     /**
-     * The wire-level literal carried by the {@code display_type}
+     * The wire literal carried by the {@code <section display_type>}
      * attribute.
+     *
+     * @apiNote
+     * Read by {@link #wireValue()} when re-serialising and by
+     * {@link #ofWire(String)} during inbound parsing.
      */
     private final String wireValue;
 
     /**
-     * Constructs a new enum constant.
+     * Constructs an enum constant bound to its wire literal.
      *
-     * @param wireValue the wire-level literal; never {@code null}
+     * @apiNote
+     * Invoked only by the enum's constant initialisers.
+     *
+     * @param wireValue the on-the-wire literal; never {@code null}
      */
     SmaxBotBotListSectionDisplayType(String wireValue) {
         this.wireValue = wireValue;
     }
 
     /**
-     * Returns the wire-level literal.
+     * Returns the wire literal that {@code <section display_type>}
+     * carries for this render mode.
+     *
+     * @apiNote
+     * Use this when re-serialising a parsed constant or matching
+     * against captured wire bytes.
      *
      * @return the literal; never {@code null}
      */
@@ -101,12 +144,24 @@ public enum SmaxBotBotListSectionDisplayType {
     }
 
     /**
-     * Resolves a {@link SmaxBotBotListSectionDisplayType} from the wire-level
-     * literal.
+     * Resolves the constant associated with a
+     * {@code <section display_type>} wire literal.
      *
-     * @param wireValue the wire-level literal
-     * @return an {@link Optional} carrying the resolved enum
-     *         constant, or empty when the literal is unknown
+     * @apiNote
+     * Called by {@link SmaxBotBotListResponse.SuccessV3.Section#of(com.github.auties00.cobalt.node.Node)}
+     * during inbound parsing of a V3 directory reply. Returns
+     * {@link Optional#empty()} for {@code null} and for any literal
+     * outside the documented six values.
+     *
+     * @implNote
+     * This implementation performs a linear scan over {@link #values()};
+     * the enum has six constants so a hash-backed lookup would not
+     * pay off.
+     *
+     * @param wireValue the wire literal to resolve; may be {@code null}
+     * @return an {@link Optional} carrying the matching constant, or
+     *         {@link Optional#empty()} when the literal is {@code null}
+     *         or unrecognised
      */
     @WhatsAppWebExport(
             moduleName = "WASmaxInBotEnums",

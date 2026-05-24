@@ -13,47 +13,44 @@ import java.util.Objects;
  * A portable representation of a WhatsApp mobile account's long-lived
  * credentials, encoded as six comma-separated fields.
  *
- * <p>The six-parts format is a de-facto interchange format used by the
- * WhatsApp reverse-engineering community to transport the minimal set of
- * credentials needed to resume a mobile session: the phone number, the
- * Noise protocol key pair (used during handshake with the WhatsApp server)
- * and the Signal identity key pair (used for end-to-end encryption),
- * together with an identity identifier. Cobalt can load a store from these
- * keys via {@link WhatsAppClientBuilder.Client#createConnection(WhatsAppClientSixPartsKeys)}
- * and emit them back via {@link #toString()} for export.
- *
- * <p>The serialized form is:
- * <ol>
- *     <li>Phone number (with optional {@code +} prefix)</li>
- *     <li>Noise public key (Base64 encoded)</li>
- *     <li>Noise private key (Base64 encoded)</li>
- *     <li>Signal identity public key (Base64 encoded)</li>
- *     <li>Signal identity private key (Base64 encoded)</li>
- *     <li>Identity ID (Base64 encoded)</li>
- * </ol>
- *
- * <p>Parsing is tolerant of surrounding whitespace and embedded newlines so
- * that multi-line pasted input is handled correctly.
+ * @apiNote
+ * Used to import or export the minimal set of credentials needed to
+ * resume a mobile session across deployments. The format is the
+ * de-facto interchange shape used by the WhatsApp reverse-engineering
+ * community: phone number plus Noise key pair (server handshake) plus
+ * Signal identity key pair (end-to-end encryption) plus identity
+ * identifier. Cobalt loads a store from these via
+ * {@link WhatsAppClientBuilder.Client.Mobile#createConnection(WhatsAppClientSixPartsKeys)}
+ * and emits them back via {@link #toString()}. The serialised shape
+ * reads as
+ * {@snippet :
+ *     <phone>,<noisePub>,<noisePriv>,<sigPub>,<sigPriv>,<identityId>
+ * }
+ * where every cryptographic field is standard Base64 and the phone
+ * number is decimal with an optional {@code +} prefix.
  *
  * @see WhatsAppClientBuilder
  * @see SignalIdentityKeyPair
  */
 public final class WhatsAppClientSixPartsKeys {
     /**
-     * The account's phone number in E.164 form (without the leading
-     * {@code +}), stored as an unsigned long.
+     * The account phone number stored as an unsigned long without the
+     * leading {@code +}.
      */
     private final long phoneNumber;
+
     /**
      * The Noise protocol key pair used during the WhatsApp server
-     * handshake to establish the encrypted transport.
+     * handshake.
      */
     private final SignalIdentityKeyPair noiseKeyPair;
+
     /**
      * The Signal identity key pair used for end-to-end encrypted
-     * messaging with contacts.
+     * messaging.
      */
     private final SignalIdentityKeyPair identityKeyPair;
+
     /**
      * The opaque identity identifier issued by WhatsApp during account
      * registration.
@@ -61,7 +58,13 @@ public final class WhatsAppClientSixPartsKeys {
     private final byte[] identityId;
 
     /**
-     * Constructs a new credentials record from its four logical components.
+     * Constructs a new credentials record from its four logical
+     * components.
+     *
+     * @apiNote
+     * Most callers should prefer {@link #of(String)} to parse a
+     * serialised six-parts string. This constructor is the seam for
+     * applications that already hold the keys in object form.
      *
      * @param phoneNumber     the account phone number, stored as an
      *                        unsigned long
@@ -77,14 +80,21 @@ public final class WhatsAppClientSixPartsKeys {
     }
 
     /**
-     * Parses a six-parts credentials string into a
-     * {@code WhatsAppClientSixPartsKeys}.
+     * Parses a comma-separated six-parts credentials string into a
+     * {@link WhatsAppClientSixPartsKeys}.
      *
-     * <p>The input is expected to contain exactly six comma-separated
-     * fields (phone number, Noise public, Noise private, identity public,
-     * identity private, identity ID). Surrounding whitespace and any
-     * embedded newlines are stripped before parsing so multi-line pasted
-     * input is handled correctly.
+     * @apiNote
+     * Use this to import credentials minted elsewhere (typically by
+     * another Cobalt deployment or by a third-party WhatsApp
+     * reverse-engineering tool). The parser tolerates leading and
+     * trailing whitespace and strips embedded newlines so multi-line
+     * pasted input works without preprocessing.
+     *
+     * @implNote
+     * This implementation splits on the first five commas only ({@code split(",", 6)})
+     * so a Base64 trailing equals does not get truncated. The phone
+     * number field accepts an optional {@code +} prefix and is parsed
+     * as an unsigned decimal {@code long}.
      *
      * @param sixParts the comma-separated credentials string
      * @return the parsed credentials record
@@ -113,14 +123,20 @@ public final class WhatsAppClientSixPartsKeys {
     }
 
     /**
-     * Parses the phone number from the first element of the split six-parts
-     * array, honouring an optional {@code +} country-code prefix.
+     * Parses the phone number from the first element of the split
+     * six-parts array.
+     *
+     * @implNote
+     * This implementation strips a leading {@code +} when present and
+     * then defers to {@link Long#parseUnsignedLong(CharSequence, int, int, int)}
+     * over the remainder so country-code prefixed numbers are accepted
+     * without allocating a substring.
      *
      * @param parts the already-split six-parts array
-     * @return the phone number as an unsigned long
-     * @throws IllegalArgumentException if the phone number field is empty
-     *                                  or does not parse as an unsigned
-     *                                  decimal integer
+     * @return the phone number as an unsigned {@code long}
+     * @throws IllegalArgumentException if the phone number field is
+     *                                  empty or does not parse as an
+     *                                  unsigned decimal integer
      */
     private static long parsePhoneNumber(String[] parts) {
         var rawPhoneNumber = parts[0];
@@ -138,9 +154,11 @@ public final class WhatsAppClientSixPartsKeys {
      * Serialises this credentials record to its canonical six-parts
      * string form.
      *
-     * <p>The returned string is round-trippable through {@link #of(String)}
-     * and uses the standard Base64 alphabet (no padding is stripped) for
-     * every cryptographic field.
+     * @apiNote
+     * The returned string is round-trippable through {@link #of(String)}
+     * and is the canonical export shape every WhatsApp
+     * reverse-engineering tool understands. Cryptographic fields use the
+     * standard Base64 alphabet with padding preserved.
      *
      * @return the six-parts string representation
      */
@@ -169,8 +187,8 @@ public final class WhatsAppClientSixPartsKeys {
     }
 
     /**
-     * Returns the Noise protocol key pair used to establish the encrypted
-     * transport with the WhatsApp servers.
+     * Returns the Noise protocol key pair used to establish the
+     * encrypted transport with the WhatsApp servers.
      *
      * @return the Noise handshake key pair
      */
@@ -179,12 +197,13 @@ public final class WhatsAppClientSixPartsKeys {
     }
 
     /**
-     * Returns the Signal identity key pair used for end-to-end encrypted
-     * messaging.
+     * Returns the Signal identity key pair used for end-to-end
+     * encrypted messaging.
      *
-     * <p>This is the long-term key material that identifies the account
-     * across Signal sessions and feeds into the Double Ratchet algorithm
-     * used by WhatsApp.
+     * @apiNote
+     * The returned pair is the long-term key material that identifies
+     * the account across Signal sessions and feeds into the WhatsApp
+     * Double Ratchet derivation.
      *
      * @return the Signal identity key pair
      */
@@ -195,7 +214,8 @@ public final class WhatsAppClientSixPartsKeys {
     /**
      * Returns the opaque identity identifier bound to this account.
      *
-     * <p>The returned array is the internal backing storage; callers must
+     * @apiNote
+     * The returned array is the internal backing storage; callers must
      * not mutate it.
      *
      * @return the identity ID
@@ -208,7 +228,8 @@ public final class WhatsAppClientSixPartsKeys {
      * Compares this credentials record to another object for structural
      * equality.
      *
-     * <p>Two records are equal when their phone number, Noise key pair,
+     * @apiNote
+     * Two records are equal when their phone number, Noise key pair,
      * Signal identity key pair, and identity ID all match.
      *
      * @param o the object to compare with
